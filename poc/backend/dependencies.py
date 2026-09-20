@@ -20,17 +20,22 @@ if _poc_root not in sys.path:
 from config import config_manager, ConfigManager, AgentConfig, ProjectConfig, Skill
 from persistence import db_manager, DatabaseManager
 from runtime_adapter import runtime_adapter, ClaudeCodeRuntimeAdapter, AgentRun, TaskStatus
+from runtime.claude_adapter import ClaudeCodeAdapter
+from events import EventBus, EventService, PlatformEvent, EventType
 
 logger = logging.getLogger(__name__)
 
 # Service containers
 _services_initialized = False
 _background_tasks = set()
+_event_bus: Optional[EventBus] = None
+_event_service: Optional[EventService] = None
+_claude_adapter: Optional[ClaudeCodeAdapter] = None
 
 
 async def init_services():
     """Initialize all backend services."""
-    global _services_initialized
+    global _services_initialized, _event_bus, _event_service, _claude_adapter
 
     if _services_initialized:
         return
@@ -41,9 +46,16 @@ async def init_services():
         db_agents = db_manager.list_agents()
         db_projects = db_manager.list_projects()
 
+        if _event_bus is None:
+            _event_bus = EventBus()
+        if _event_service is None:
+            _event_service = EventService(db_manager=db_manager, event_bus=_event_bus)
+        if _claude_adapter is None:
+            _claude_adapter = ClaudeCodeAdapter(runtime_adapter)
+
         _services_initialized = True
         logger.info(
-            "Backend services initialized: %d config agents, %d DB agents, %d projects",
+            "Backend services initialized: %d config agents, %d DB agents, %d projects, event bus ready",
             len(agents), len(db_agents), len(db_projects)
         )
 
@@ -78,6 +90,25 @@ def get_db_manager() -> DatabaseManager:
     return db_manager
 
 
-def get_runtime_adapter() -> ClaudeCodeRuntimeAdapter:
-    """Get the runtime adapter instance."""
-    return runtime_adapter
+def get_event_bus() -> EventBus:
+    """Get the global EventBus singleton instance."""
+    global _event_bus
+    if _event_bus is None:
+        _event_bus = EventBus()
+    return _event_bus
+
+
+def get_event_service() -> EventService:
+    """Get the global EventService singleton instance."""
+    global _event_service
+    if _event_service is None:
+        _event_service = EventService(db_manager=get_db_manager(), event_bus=get_event_bus())
+    return _event_service
+
+
+def get_runtime_adapter() -> ClaudeCodeAdapter:
+    """Get the runtime adapter instance returning ClaudeCodeAdapter wrapping runtime_adapter."""
+    global _claude_adapter
+    if _claude_adapter is None:
+        _claude_adapter = ClaudeCodeAdapter(runtime_adapter)
+    return _claude_adapter

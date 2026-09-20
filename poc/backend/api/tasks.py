@@ -10,8 +10,8 @@ from datetime import datetime
 
 # All PoC imports go through the centralized dependencies module
 from ..dependencies import (
-    get_config_manager, get_db_manager, get_runtime_adapter,
-    AgentConfig, ProjectConfig, AgentRun, TaskStatus
+    get_config_manager, get_db_manager, get_runtime_adapter, get_event_service,
+    AgentConfig, ProjectConfig, AgentRun, TaskStatus, EventService, EventType
 )
 import asyncio
 import json
@@ -94,7 +94,8 @@ async def create_task(
     background_tasks: BackgroundTasks,
     config_manager = Depends(get_config_manager),
     db_manager = Depends(get_db_manager),
-    runtime_adapter = Depends(get_runtime_adapter)
+    runtime_adapter = Depends(get_runtime_adapter),
+    event_service: EventService = Depends(get_event_service)
 ):
     """Submit a new task for execution."""
     # Find agent from config or db
@@ -147,7 +148,28 @@ async def create_task(
     except Exception as e:
         print(f"Warning saving task run to DB: {e}")
 
-    return task_run_to_response(run)
+    resp = task_run_to_response(run)
+
+    # Emit task lifecycle events
+    event_service.emit(
+        event_type=EventType.TASK_CREATED,
+        payload=resp,
+        agent_id=run.agent_id,
+        task_id=run.run_id,
+        project_id=run.project_id,
+        source="tasks_api"
+    )
+    event_service.emit(
+        event_type=EventType.TASK_STARTED,
+        payload=resp,
+        agent_id=run.agent_id,
+        task_id=run.run_id,
+        project_id=run.project_id,
+        source="tasks_api"
+    )
+
+    return resp
+
 
 
 @router.get("/", response_model=List[TaskResponse])

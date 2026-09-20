@@ -7,7 +7,10 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 
 # All PoC imports go through the centralized dependencies module
-from ..dependencies import get_config_manager, get_db_manager, AgentConfig
+from ..dependencies import (
+    get_config_manager, get_db_manager, get_event_service,
+    AgentConfig, EventService, EventType
+)
 
 
 router = APIRouter()
@@ -99,7 +102,8 @@ async def list_agents(
 async def create_agent(
     agent_data: AgentCreate,
     config_manager = Depends(get_config_manager),
-    db_manager = Depends(get_db_manager)
+    db_manager = Depends(get_db_manager),
+    event_service: EventService = Depends(get_event_service)
 ):
     """Create a new agent."""
     agent_id = agent_data.name.lower().replace(" ", "-").replace("_", "-")
@@ -121,7 +125,14 @@ async def create_agent(
     config_manager.agents[agent_id] = agent_config
 
     saved = db_manager.get_agent(agent_id) or agent_config
-    return agent_to_response(saved)
+    resp = agent_to_response(saved)
+    event_service.emit(
+        event_type=EventType.AGENT_CREATED,
+        payload=resp,
+        agent_id=agent_id,
+        source="agents_api"
+    )
+    return resp
 
 
 @router.get("/{agent_id}", response_model=AgentResponse)
@@ -152,7 +163,8 @@ async def update_agent(
     agent_id: str,
     agent_data: AgentUpdate,
     config_manager = Depends(get_config_manager),
-    db_manager = Depends(get_db_manager)
+    db_manager = Depends(get_db_manager),
+    event_service: EventService = Depends(get_event_service)
 ):
     """Update an existing agent."""
     existing = db_manager.get_agent(agent_id) or config_manager.get_agent(agent_id)
@@ -170,7 +182,14 @@ async def update_agent(
     config_manager.agents[agent_id] = existing
 
     updated = db_manager.get_agent(agent_id) or existing
-    return agent_to_response(updated)
+    resp = agent_to_response(updated)
+    event_service.emit(
+        event_type=EventType.AGENT_UPDATED,
+        payload=resp,
+        agent_id=agent_id,
+        source="agents_api"
+    )
+    return resp
 
 
 @router.delete("/{agent_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -178,7 +197,8 @@ async def update_agent(
 async def delete_agent(
     agent_id: str,
     config_manager = Depends(get_config_manager),
-    db_manager = Depends(get_db_manager)
+    db_manager = Depends(get_db_manager),
+    event_service: EventService = Depends(get_event_service)
 ):
     """Delete an agent."""
     existing = db_manager.get_agent(agent_id)
@@ -200,4 +220,11 @@ async def delete_agent(
     db_manager.delete_agent(agent_id)
     if agent_id in config_manager.agents:
         del config_manager.agents[agent_id]
+
+    event_service.emit(
+        event_type=EventType.AGENT_DELETED,
+        payload={"id": agent_id, "deleted": True},
+        agent_id=agent_id,
+        source="agents_api"
+    )
     return None

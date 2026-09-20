@@ -7,13 +7,20 @@ import sqlite3
 import json
 import os
 import logging
+import uuid
 from datetime import datetime
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 from pathlib import Path
 
 # Import from local modules using absolute imports
 from config import AgentConfig, ProjectConfig, Skill
 from runtime_adapter import AgentRun, TaskStatus
+
+try:
+    from events.models import PlatformEvent
+except ImportError:
+    from poc.events.models import PlatformEvent
+
 
 
 POC_ROOT = Path(__file__).resolve().parent
@@ -135,7 +142,31 @@ class DatabaseManager:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_task_runs_status ON task_runs(status)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_task_runs_created ON task_runs(created_at)")
 
+            # Event log table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS event_log (
+                    id TEXT PRIMARY KEY,
+                    sequence_number INTEGER NOT NULL,
+                    event_type TEXT NOT NULL,
+                    agent_id TEXT,
+                    task_id TEXT,
+                    execution_id TEXT,
+                    parent_task_id TEXT,
+                    project_id TEXT,
+                    correlation_id TEXT,
+                    payload TEXT,
+                    source TEXT NOT NULL,
+                    timestamp TIMESTAMP NOT NULL
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_events_type ON event_log(event_type)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_events_agent ON event_log(agent_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_events_task ON event_log(task_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_events_seq ON event_log(sequence_number)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_events_time ON event_log(timestamp)")
+
             conn.commit()
+
 
     # Agent methods
     def save_agent(self, agent: AgentConfig):
@@ -463,6 +494,113 @@ class DatabaseManager:
         with self._get_connection() as conn:
             conn.execute("DELETE FROM task_runs WHERE run_id = ?", (run_id,))
             conn.commit()
+
+    # Event log methods
+    def get_next_sequence_number(self) -> int:
+        """Query SELECT COALESCE(MAX(sequence_number), 0) + 1 FROM event_log."""
+        with self._get_connection() as conn:
+            cursor = conn.execute("SELECT COALESCE(MAX(sequence_number), 0) + 1 AS next_seq FROM event_log")
+            row = cursor.fetchone()
+            return int(row["next_seq"]) if row else 1
+
+    def save_event(self, event: PlatformEvent) -> PlatformEvent:
+        """
+        Save an event to the persistent event log.
+        If event.sequence_number <= 0, assign self.get_next_sequence_number().
+        Insert row into event_log. Commit and return event.
+        """
+        if event.sequence_number <= 0:
+            event.sequence_number = self.get_next_sequence_number()
+
+        event_id = getattr(event, "event_id", None) or getattr(event, "id", None) or str(uuid.uuid4())
+        event.event_id = event_id
+
+        payload_str = json.dumps(event.payload) if isinstance(event.payload, (dict, list)) else (
+            event.payload if isinstance(event.payload, str) else "{}"
+        )
+        event_type_str = event.event_type.value if hasattr(event.event_type, "value") else str(event.event_type)
+        timestamp_str = event.timestamp.isoformat() if isinstance(event.timestamp, datetime) else str(event.timestamp)
+
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT INTO event_log (
+                    id, sequence_number, event_type, agent_id, task_id, execution_id,
+                    parent_task_id, project_id, correlation_id, payload, source, timestamp
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                event.event_id,
+                event.sequence_number,
+                event_type_str,
+                event.agent_id,
+                event.task_id,
+                event.execution_id,
+                event.parent_task_id,
+                event.project_id,
+                event.correlation_id,
+                payload_str,
+                event.source,
+                timestamp_str
+            ))
+            conn.commit()
+
+        return event
+
+    def get_events(
+        self,
+        agent_id: Optional[str] = None,
+        task_id: Optional[str] = None,
+        project_id: Optional[str] = None,
+        after_sequence: Optional[int] = None,
+        since: Optional[Union[str, datetime]] = None,
+        limit: int = 100
+    ) -> List[PlatformEvent]:
+        """
+        Query event_log with appropriate WHERE clauses, order by sequence_number ASC, limit.
+        Return list of PlatformEvent.
+        """
+        with self._get_connection() as conn:
+            query = "SELECT * FROM event_log WHERE 1=1"
+            params: List[Any] = []
+
+            if agent_id is not None:
+                query += " AND agent_id = ?"
+                params.append(agent_id)
+            if task_id is not None:
+                query += " AND task_id = ?"
+                params.append(task_id)
+            if project_id is not None:
+                query += " AND project_id = ?"
+                params.append(project_id)
+            if after_sequence is not None:
+                query += " AND sequence_number > ?"
+                params.append(after_sequence)
+            if since is not None:
+                since_str = since.isoformat() if isinstance(since, datetime) else str(since)
+                query += " AND timestamp >= ?"
+                params.append(since_str)
+
+            query += " ORDER BY sequence_number ASC LIMIT ?"
+            params.append(limit)
+
+            cursor = conn.execute(query, params)
+            events: List[PlatformEvent] = []
+            for row in cursor.fetchall():
+                payload = json.loads(row["payload"]) if row["payload"] else {}
+                events.append(PlatformEvent(
+                    event_id=row["id"],
+                    sequence_number=row["sequence_number"],
+                    event_type=row["event_type"],
+                    agent_id=row["agent_id"],
+                    task_id=row["task_id"],
+                    execution_id=row["execution_id"],
+                    parent_task_id=row["parent_task_id"],
+                    project_id=row["project_id"],
+                    correlation_id=row["correlation_id"],
+                    payload=payload,
+                    source=row["source"],
+                    timestamp=str(row["timestamp"])
+                ))
+            return events
 
 
 # Global database instance

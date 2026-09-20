@@ -2,17 +2,115 @@
 System events and monitoring API endpoints.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi.responses import StreamingResponse
+from typing import List, Optional, Any
 import asyncio
 import json
 from datetime import datetime, timedelta
 
 # All PoC imports go through the centralized dependencies module
-from ..dependencies import get_config_manager, get_db_manager, get_runtime_adapter, TaskStatus
+from ..dependencies import (
+    get_config_manager, get_db_manager, get_runtime_adapter,
+    get_event_bus, get_event_service,
+    TaskStatus, EventBus, EventService, PlatformEvent
+)
 
 
 router = APIRouter()
+
+
+@router.get("/stream")
+@router.get("/stream/")
+async def stream_events(
+    request: Request,
+    agent_id: Optional[str] = None,
+    task_id: Optional[str] = None,
+    project_id: Optional[str] = None,
+    after_sequence: Optional[int] = None,
+    since: Optional[str] = None,
+    live: bool = True,
+    limit: Optional[int] = None,
+    event_bus: EventBus = Depends(get_event_bus),
+    event_service: EventService = Depends(get_event_service)
+):
+    """
+    Global Server-Sent Events (SSE) stream endpoint.
+    Streams real-time platform events with support for filtering and historical replay.
+    """
+    async def event_generator():
+        # Match filter for live events
+        def matches_filter(event: PlatformEvent) -> bool:
+            if agent_id and event.agent_id != agent_id:
+                return False
+            if task_id and event.task_id != task_id:
+                return False
+            if project_id and event.project_id != project_id:
+                return False
+            return True
+
+        # Subscribe first to capture events while replay occurs
+        queue, unsubscribe = event_bus.subscribe(filter_fn=matches_filter)
+        last_seq = 0
+        sent_count = 0
+
+        try:
+            # 0. Send immediate connected event to commit response headers
+            yield f"event: connected\ndata: {json.dumps({'status': 'connected', 'timestamp': datetime.now().isoformat()})}\n\n"
+
+            # 1. Historical replay if requested
+            if after_sequence is not None or since is not None:
+                historical_events = event_service.get_events(
+                    agent_id=agent_id,
+                    task_id=task_id,
+                    project_id=project_id,
+                    after_sequence=after_sequence,
+                    since=since,
+                    limit=limit or 500
+                )
+                for e in historical_events:
+                    if e.sequence_number and e.sequence_number > last_seq:
+                        last_seq = e.sequence_number
+                    yield f"event: {e.event_type}\ndata: {json.dumps(e.to_dict())}\n\n"
+                    sent_count += 1
+                    if limit and sent_count >= limit:
+                        return
+
+            # If client only requested historical replay (live=False), finish stream cleanly
+            if not live:
+                return
+
+            # 2. Live event streaming with 2s heartbeat
+            while True:
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=2.0)
+                    # Deduplicate if event was already yielded in historical replay
+                    if last_seq and event.sequence_number and event.sequence_number <= last_seq:
+                        continue
+                    yield f"event: {event.event_type}\ndata: {json.dumps(event.to_dict())}\n\n"
+                    sent_count += 1
+                    if limit and sent_count >= limit:
+                        break
+                except asyncio.TimeoutError:
+                    heartbeat_payload = json.dumps({"timestamp": datetime.now().isoformat()})
+                    yield f"event: heartbeat\ndata: {heartbeat_payload}\n\n"
+
+        except asyncio.CancelledError:
+            # Client disconnected
+            pass
+        finally:
+            unsubscribe()
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
+    )
+
 
 
 @router.get("/system/stats")
