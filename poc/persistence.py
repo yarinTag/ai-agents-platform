@@ -6,6 +6,7 @@ Uses SQLite to store agents, projects, skills, and task runs.
 import sqlite3
 import json
 import os
+import logging
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 from pathlib import Path
@@ -35,6 +36,10 @@ class DatabaseManager:
         conn = sqlite3.connect(self.db_path)
         # Enable foreign keys
         conn.execute("PRAGMA foreign_keys = ON")
+        # Enable WAL mode for better concurrent access
+        conn.execute("PRAGMA journal_mode = WAL")
+        # Enable busy timeout (5000ms) to prevent immediate locking errors
+        conn.execute("PRAGMA busy_timeout = 5000")
         # Return rows as dictionaries
         conn.row_factory = sqlite3.Row
         return conn
@@ -136,10 +141,28 @@ class DatabaseManager:
     def save_agent(self, agent: AgentConfig):
         """Save or update an agent."""
         with self._get_connection() as conn:
+            existing = conn.execute("SELECT created_at FROM agents WHERE id = ?", (agent.id,)).fetchone()
+            created_at = existing['created_at'] if existing else (getattr(agent, "created_at", None) or datetime.now().isoformat())
+            updated_at = datetime.now().isoformat()
+
             conn.execute("""
-                INSERT OR REPLACE INTO agents
-                (id, name, description, system_prompt, skills, model, effort, max_tokens, temperature, repo_path, github_url, department, avatar, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO agents
+                (id, name, description, system_prompt, skills, model, effort, max_tokens, temperature, repo_path, github_url, department, avatar, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    name=excluded.name,
+                    description=excluded.description,
+                    system_prompt=excluded.system_prompt,
+                    skills=excluded.skills,
+                    model=excluded.model,
+                    effort=excluded.effort,
+                    max_tokens=excluded.max_tokens,
+                    temperature=excluded.temperature,
+                    repo_path=excluded.repo_path,
+                    github_url=excluded.github_url,
+                    department=excluded.department,
+                    avatar=excluded.avatar,
+                    updated_at=excluded.updated_at
             """, (
                 agent.id,
                 agent.name,
@@ -154,7 +177,8 @@ class DatabaseManager:
                 getattr(agent, "github_url", None),
                 getattr(agent, "department", "Engineering"),
                 getattr(agent, "avatar", None),
-                datetime.now()
+                str(created_at),
+                str(updated_at)
             ))
             conn.commit()
 
@@ -179,7 +203,9 @@ class DatabaseManager:
                     repo_path=row['repo_path'] if 'repo_path' in row.keys() else None,
                     github_url=row['github_url'] if 'github_url' in row.keys() else None,
                     department=row['department'] if 'department' in row.keys() else 'Engineering',
-                    avatar=row['avatar'] if 'avatar' in row.keys() else None
+                    avatar=row['avatar'] if 'avatar' in row.keys() else None,
+                    created_at=str(row['created_at']) if 'created_at' in row.keys() and row['created_at'] else None,
+                    updated_at=str(row['updated_at']) if 'updated_at' in row.keys() and row['updated_at'] else None
                 )
         return None
 
@@ -201,7 +227,9 @@ class DatabaseManager:
                     repo_path=row['repo_path'] if 'repo_path' in row.keys() else None,
                     github_url=row['github_url'] if 'github_url' in row.keys() else None,
                     department=row['department'] if 'department' in row.keys() else 'Engineering',
-                    avatar=row['avatar'] if 'avatar' in row.keys() else None
+                    avatar=row['avatar'] if 'avatar' in row.keys() else None,
+                    created_at=str(row['created_at']) if 'created_at' in row.keys() and row['created_at'] else None,
+                    updated_at=str(row['updated_at']) if 'updated_at' in row.keys() and row['updated_at'] else None
                 )
                 for row in cursor.fetchall()
             ]

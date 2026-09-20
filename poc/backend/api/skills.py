@@ -6,15 +6,12 @@ from fastapi import APIRouter, HTTPException, Depends, status
 from typing import List, Optional
 from pydantic import BaseModel, Field
 
-# Import from parent directory (backend)
-import sys
 import os
 import re
 from pathlib import Path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from dependencies import get_config_manager, get_db_manager
-from config import Skill
+# All PoC imports go through the centralized dependencies module
+from ..dependencies import get_config_manager, get_db_manager, Skill
 
 
 router = APIRouter()
@@ -174,12 +171,13 @@ async def delete_skill(
 
 @router.get("/plugins/scan")
 async def scan_plugins():
-    """Scan local plugin repositories (such as p-skills/marketplace and Projects/test) for available skills."""
-    potential_roots = [
-        os.path.expanduser(r"C:\Users\taguo\OneDrive\Desktop\Projects\p-skills\skills-marketplace\plugins"),
-        os.path.expanduser(r"C:\Users\taguo\OneDrive\Desktop\Projects\test"),
-        os.path.expanduser(r"C:\Users\taguo\Desktop\ai-agents-platform\poc\skills"),
-    ]
+    """Scan configured plugin repositories for available skills."""
+    scan_env = os.environ.get("SKILLS_SCAN_PATHS", "")
+    potential_roots = [p.strip() for p in scan_env.split(";") if p.strip()] if scan_env else []
+    # Add local platform skills directory relative to project root
+    poc_skills_dir = Path(__file__).resolve().parent.parent.parent / "skills"
+    poc_config_skills_dir = Path(__file__).resolve().parent.parent.parent / "config" / "skills"
+    potential_roots.extend([str(poc_skills_dir), str(poc_config_skills_dir)])
 
     plugins_data = []
 

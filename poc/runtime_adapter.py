@@ -13,6 +13,7 @@ from dataclasses import dataclass, asdict
 from typing import Dict, List, Optional, Callable, Any
 from enum import Enum
 import uuid
+import logging
 from datetime import datetime
 
 # Import from local modules using absolute imports
@@ -407,30 +408,18 @@ class ClaudeCodeRuntimeAdapter:
                     continue
 
         except Exception as e:
-            # Fallback to simulated execution if Claude Code CLI or proxy is not reachable
-            try:
-                time.sleep(1.0)
-                run.events.append({
-                    "type": "thought",
-                    "thought": f"Agent {agent_config.name} received prompt: {prompt}",
-                    "_timestamp": time.time(),
-                    "_run_id": run_id
-                })
-                time.sleep(1.2)
-                run.events.append({
-                    "type": "tool_use",
-                    "tool": "read_files",
-                    "input": {"repo": getattr(agent_config, 'repo_path', 'default')},
-                    "_timestamp": time.time(),
-                    "_run_id": run_id
-                })
-                time.sleep(1.5)
-                run.status = TaskStatus.COMPLETED
-                run.result = f"Task successfully completed by {agent_config.name}. Output: {prompt} executed with zero defects."
-                run.ended_at = datetime.now()
-            except Exception:
-                run.status = TaskStatus.FAILED
-                run.error = f"Execution error: {str(e)}"
+            # Report the real error — do not fabricate fake success results
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Runtime execution failed for run {run_id}: {e}", exc_info=True)
+            run.status = TaskStatus.FAILED
+            run.error = f"Runtime execution failed: {str(e)}"
+            run.events.append({
+                "type": "error",
+                "error": {"message": f"Runtime execution failed: {str(e)}"},
+                "_timestamp": time.time(),
+                "_run_id": run_id
+            })
         finally:
             # Clean up
             run.ended_at = datetime.now()
@@ -438,7 +427,7 @@ class ClaudeCodeRuntimeAdapter:
                 from persistence import db_manager
                 db_manager.save_task_run(run)
             except Exception as dbe:
-                print(f"Warning saving task run to DB: {dbe}")
+                logging.getLogger(__name__).warning(f"Failed to save task run to DB: {dbe}")
 
             # Signal output reader to stop
             if run_id in self._stop_events:

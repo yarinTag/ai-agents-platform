@@ -6,13 +6,8 @@ from fastapi import APIRouter, HTTPException, Depends, status
 from typing import List, Optional
 from pydantic import BaseModel, Field
 
-# Import from parent directory (backend)
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from dependencies import get_config_manager, get_db_manager
-from config import ProjectConfig
+# All PoC imports go through the centralized dependencies module
+from ..dependencies import get_config_manager, get_db_manager, ProjectConfig
 
 
 router = APIRouter()

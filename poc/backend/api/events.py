@@ -8,13 +8,8 @@ import asyncio
 import json
 from datetime import datetime, timedelta
 
-# Import from parent directory (backend)
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from dependencies import get_config_manager, get_db_manager, get_runtime_adapter
-from runtime_adapter import TaskStatus
+# All PoC imports go through the centralized dependencies module
+from ..dependencies import get_config_manager, get_db_manager, get_runtime_adapter, TaskStatus
 
 
 router = APIRouter()

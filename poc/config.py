@@ -25,6 +25,8 @@ class AgentConfig:
     github_url: Optional[str] = None
     department: str = "Engineering"
     avatar: Optional[str] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
 
     def __post_init__(self):
         if self.skills is None:

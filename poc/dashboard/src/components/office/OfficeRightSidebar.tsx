@@ -79,36 +79,6 @@ export const OfficeRightSidebar: React.FC<OfficeRightSidebarProps> = ({
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [activeFilter, setActiveFilter] = useState<'ALL' | 'BACKLOG' | 'IN PROGRESS' | 'WAITING' | 'DONE'>('ALL');
 
-  // Live real-time progressing percentage map
-  const [progressMap, setProgressMap] = useState<Record<string, number>>({});
-
-  // Real-time ticking effect for running tasks
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setProgressMap((prev) => {
-        let changed = false;
-        const nextMap = { ...prev };
-
-        tasks.forEach((t) => {
-          if (t.status === 'running') {
-            const current = nextMap[t.id] ?? 18;
-            if (current < 100) {
-              const increment = Math.floor(Math.random() * 8) + 4; // +4-12%
-              nextMap[t.id] = Math.min(100, current + increment);
-              changed = true;
-            }
-          } else if (t.status === 'completed') {
-            nextMap[t.id] = 100;
-          }
-        });
-
-        return changed ? nextMap : prev;
-      });
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [tasks]);
-
   const handleAddTask = async (customPrompt?: string) => {
     const promptToSend = (customPrompt || taskPrompt).trim();
     if (!promptToSend) return;
@@ -183,9 +153,9 @@ export const OfficeRightSidebar: React.FC<OfficeRightSidebarProps> = ({
   const displayTasks = tasks.map((t) => {
     const rawPrompt = (t.input_data as any)?.task || (t.input_data as any)?.prompt || (t as any).prompt || `Mission #${t.id.slice(0, 8)}`;
     const deptInTask = (t.input_data as any)?.department || 'GENERAL';
-    const currentPercent = t.status === 'completed' ? 100 : (progressMap[t.id] ?? (t.status === 'running' ? 35 : 0));
-    const isRunning = t.status === 'running' && currentPercent < 100;
-    const isDone = t.status === 'completed' || currentPercent >= 100;
+    const isRunning = t.status === 'running';
+    const isDone = t.status === 'completed';
+    const currentPercent = isDone ? 100 : isRunning ? 50 : 0;
 
     const matchedAgent = agents.find((a) => String(a.id) === String(t.agent_id));
 

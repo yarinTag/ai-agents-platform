@@ -6,13 +6,8 @@ from fastapi import APIRouter, HTTPException, Depends, status
 from typing import List, Optional
 from pydantic import BaseModel, Field
 
-# Import from parent directory (backend)
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from dependencies import get_config_manager, get_db_manager
-from config import AgentConfig
+# All PoC imports go through the centralized dependencies module
+from ..dependencies import get_config_manager, get_db_manager, AgentConfig
 
 
 router = APIRouter()
@@ -62,8 +57,14 @@ class AgentResponse(AgentBase):
         from_attributes = True
 
 
+from datetime import datetime
+import logging
+
+logger = logging.getLogger(__name__)
+
 # Helper function to convert AgentConfig to response dict
 def agent_to_response(agent: AgentConfig) -> dict:
+    now_iso = datetime.now().isoformat()
     return {
         "id": agent.id,
         "name": agent.name,
@@ -78,24 +79,19 @@ def agent_to_response(agent: AgentConfig) -> dict:
         "github_url": getattr(agent, "github_url", None),
         "department": getattr(agent, "department", "Engineering"),
         "avatar": getattr(agent, "avatar", None),
-        "created_at": "",  # Would come from DB in real implementation
-        "updated_at": ""   # Would come from DB in real implementation
+        "created_at": getattr(agent, "created_at", None) or now_iso,
+        "updated_at": getattr(agent, "updated_at", None) or now_iso
     }
 
 
 @router.get("/", response_model=List[AgentResponse])
 @router.get("", response_model=List[AgentResponse])
 async def list_agents(
-    config_manager = Depends(get_config_manager),
     db_manager = Depends(get_db_manager)
 ):
-    """List all registered agents from both config and database."""
-    agents_map = {}
-    for a in db_manager.list_agents():
-        agents_map[a.id] = a
-    for a in config_manager.list_agents():
-        agents_map[a.id] = a
-    return [agent_to_response(agent) for agent in agents_map.values()]
+    """List all registered agents from the database (single source of truth)."""
+    agents = db_manager.list_agents()
+    return [agent_to_response(agent) for agent in agents]
 
 
 @router.post("/", response_model=AgentResponse, status_code=status.HTTP_201_CREATED)
@@ -108,7 +104,7 @@ async def create_agent(
     """Create a new agent."""
     agent_id = agent_data.name.lower().replace(" ", "-").replace("_", "-")
 
-    existing = config_manager.get_agent(agent_id) or db_manager.get_agent(agent_id)
+    existing = db_manager.get_agent(agent_id) or config_manager.get_agent(agent_id)
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -120,21 +116,28 @@ async def create_agent(
         **agent_data.model_dump()
     )
 
-    config_manager.register_agent(agent_config)
     db_manager.save_agent(agent_config)
+    # Also update in-memory cache if available
+    config_manager.agents[agent_id] = agent_config
 
-    return agent_to_response(agent_config)
+    saved = db_manager.get_agent(agent_id) or agent_config
+    return agent_to_response(saved)
 
 
 @router.get("/{agent_id}", response_model=AgentResponse)
 @router.get("/{agent_id}/", response_model=AgentResponse)
 async def get_agent(
     agent_id: str,
-    config_manager = Depends(get_config_manager),
     db_manager = Depends(get_db_manager)
 ):
     """Get a specific agent by ID."""
-    agent = config_manager.get_agent(agent_id) or db_manager.get_agent(agent_id)
+    agent = db_manager.get_agent(agent_id)
+    if not agent:
+        # Fallback to case-insensitive match in db
+        for a in db_manager.list_agents():
+            if a.id.lower() == agent_id.lower():
+                agent = a
+                break
     if not agent:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -152,7 +155,7 @@ async def update_agent(
     db_manager = Depends(get_db_manager)
 ):
     """Update an existing agent."""
-    existing = config_manager.get_agent(agent_id) or db_manager.get_agent(agent_id)
+    existing = db_manager.get_agent(agent_id) or config_manager.get_agent(agent_id)
     if not existing:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -163,10 +166,11 @@ async def update_agent(
     for field, value in update_data.items():
         setattr(existing, field, value)
 
-    config_manager.register_agent(existing)
     db_manager.save_agent(existing)
+    config_manager.agents[agent_id] = existing
 
-    return agent_to_response(existing)
+    updated = db_manager.get_agent(agent_id) or existing
+    return agent_to_response(updated)
 
 
 @router.delete("/{agent_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -177,19 +181,15 @@ async def delete_agent(
     db_manager = Depends(get_db_manager)
 ):
     """Delete an agent."""
-    existing = config_manager.get_agent(agent_id) or db_manager.get_agent(agent_id)
-    if not existing:
-        for a in config_manager.list_agents():
-            if a.id.lower() == agent_id.lower():
-                existing = a
-                agent_id = a.id
-                break
+    existing = db_manager.get_agent(agent_id)
     if not existing:
         for a in db_manager.list_agents():
             if a.id.lower() == agent_id.lower():
                 existing = a
                 agent_id = a.id
                 break
+    if not existing:
+        existing = config_manager.get_agent(agent_id)
 
     if not existing:
         raise HTTPException(
@@ -197,10 +197,7 @@ async def delete_agent(
             detail=f"Agent not found: {agent_id}"
         )
 
-    config_manager.delete_agent(agent_id)
-    try:
-        db_manager.delete_agent(agent_id)
-    except Exception as e:
-        print(f"Warning deleting agent from DB: {e}")
-
+    db_manager.delete_agent(agent_id)
+    if agent_id in config_manager.agents:
+        del config_manager.agents[agent_id]
     return None

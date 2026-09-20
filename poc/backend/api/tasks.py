@@ -8,14 +8,11 @@ from pydantic import BaseModel, Field
 import uuid
 from datetime import datetime
 
-# Import from parent directory (backend)
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from dependencies import get_config_manager, get_db_manager, get_runtime_adapter
-from config import AgentConfig, ProjectConfig
-from runtime_adapter import AgentRun, TaskStatus
+# All PoC imports go through the centralized dependencies module
+from ..dependencies import (
+    get_config_manager, get_db_manager, get_runtime_adapter,
+    AgentConfig, ProjectConfig, AgentRun, TaskStatus
+)
 import asyncio
 import json
 
@@ -301,16 +298,17 @@ async def task_events(
         # Subscribe to events
         unsubscribe = runtime_adapter.subscribe_to_events(run_id, event_handler)
 
+        def format_sse(event_name: str, payload: Any) -> str:
+            payload_str = json.dumps(payload) if not isinstance(payload, str) else payload
+            return f"event: {event_name}\ndata: {payload_str}\n\n"
+
         try:
             # Send initial connection established event
-            yield {
-                "event": "connected",
-                "data": json.dumps({
-                    "run_id": run_id,
-                    "status": run.status.value if run else "unknown",
-                    "timestamp": asyncio.get_event_loop().time()
-                })
-            }
+            yield format_sse("connected", {
+                "run_id": run_id,
+                "status": run.status.value if run else "unknown",
+                "timestamp": asyncio.get_event_loop().time()
+            })
 
             # Stream events as they arrive
             while True:
@@ -319,74 +317,53 @@ async def task_events(
                     event = await asyncio.wait_for(event_queue.get(), timeout=30.0)
 
                     # Check if this is an end event
-                    if event.get("type") == "end_of_output" or \
-                       event.get("type") in ["result", "error"]:
-                        yield {
-                            "event": event["type"],
-                            "data": json.dumps(event)
-                        }
+                    event_type = event.get("type", "event")
+                    if event_type == "end_of_output" or event_type in ["result", "error"]:
+                        yield format_sse(event_type, event)
                         # Send close event after result/error
-                        if event.get("type") in ["result", "error"]:
-                            yield {
-                                "event": "close",
-                                "data": json.dumps({"run_id": run_id})
-                            }
+                        if event_type in ["result", "error"]:
+                            yield format_sse("close", {"run_id": run_id})
                         break
                     else:
-                        yield {
-                            "event": "event",
-                            "data": json.dumps(event)
-                        }
+                        yield format_sse("event", event)
 
                 except asyncio.TimeoutError:
                     # Send heartbeat to keep connection alive
-                    yield {
-                        "event": "heartbeat",
-                        "data": json.dumps({
-                            "run_id": run_id,
-                            "timestamp": asyncio.get_event_loop().time()
-                        })
-                    }
+                    yield format_sse("heartbeat", {
+                        "run_id": run_id,
+                        "timestamp": asyncio.get_event_loop().time()
+                    })
                     # Check if task is still running
                     current_run = runtime_adapter.get_run_status(run_id)
                     if current_run and current_run.status in [
                         TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED
                     ]:
                         # Task finished, send final update and close
-                        yield {
-                            "event": "update",
-                            "data": json.dumps(task_run_to_response(current_run))
-                        }
-                        yield {
-                            "event": "close",
-                            "data": json.dumps({"run_id": run_id})
-                        }
+                        yield format_sse("update", task_run_to_response(current_run))
+                        yield format_sse("close", {"run_id": run_id})
                         break
 
         except Exception as e:
-            yield {
-                "event": "error",
-                "data": json.dumps({
-                    "message": str(e),
-                    "run_id": run_id
-                })
-            }
+            yield format_sse("error", {
+                "message": str(e),
+                "run_id": run_id
+            })
         finally:
             # Clean up subscription
             try:
                 unsubscribe()
-            except:
+            except Exception:
                 pass
 
-    # Return SSE response
+    # Return SSE response with proper text/event-stream media type
     from fastapi.responses import StreamingResponse
     return StreamingResponse(
         event_generator(),
-        media_type="text/plain",
+        media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
-            "Content-Type": "text/event-stream",
+            "X-Accel-Buffering": "no",
         }
     )
 

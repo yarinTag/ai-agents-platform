@@ -54,47 +54,10 @@ export const SkillsPage: React.FC = () => {
         setPlugins(res.data.plugins);
         message.success(`Discovered ${res.data.total_skills} skills across ${res.data.plugins.length} plugin packages!`);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Plugin scan failed', err);
-      // Provide fallback mock plugin packages for the user's p-skills structure
-      setPlugins([
-        {
-          name: 'core',
-          path: 'C:\\Users\\taguo\\OneDrive\\Desktop\\Projects\\p-skills\\skills-marketplace\\plugins\\core',
-          skills_count: 3,
-          skills: [
-            { id: 'core-reasoning', name: 'Deep Reasoning', filename: 'reasoning.md', path: 'plugins/core/skills/reasoning.md', description: 'Advanced problem decomposition and reasoning patterns', plugin: 'core' },
-            { id: 'core-executor', name: 'Command Execution', filename: 'executor.md', path: 'plugins/core/skills/executor.md', description: 'Safe CLI and environment execution tools', plugin: 'core' },
-            { id: 'core-git', name: 'Git Operations', filename: 'git.md', path: 'plugins/core/skills/git.md', description: 'Branching, staging, committing and diff analysis', plugin: 'core' },
-          ],
-        },
-        {
-          name: 'tech-backend',
-          path: 'C:\\Users\\taguo\\OneDrive\\Desktop\\Projects\\p-skills\\skills-marketplace\\plugins\\tech-backend',
-          skills_count: 2,
-          skills: [
-            { id: 'backend-fastapi', name: 'FastAPI Architect', filename: 'fastapi.md', path: 'plugins/tech-backend/skills/fastapi.md', description: 'Async endpoints, Pydantic schemas, and dependency injection', plugin: 'tech-backend' },
-            { id: 'backend-sqlite', name: 'Database Persistence', filename: 'db.md', path: 'plugins/tech-backend/skills/db.md', description: 'SQLAlchemy / SQLite migration and queries', plugin: 'tech-backend' },
-          ],
-        },
-        {
-          name: 'tech-frontend',
-          path: 'C:\\Users\\taguo\\OneDrive\\Desktop\\Projects\\p-skills\\skills-marketplace\\plugins\\tech-frontend',
-          skills_count: 2,
-          skills: [
-            { id: 'frontend-react', name: 'React 19 & TypeScript', filename: 'react.md', path: 'plugins/tech-frontend/skills/react.md', description: 'Modern components, state management, and Vite bundling', plugin: 'tech-frontend' },
-            { id: 'frontend-antd', name: 'Ant Design System', filename: 'antd.md', path: 'plugins/tech-frontend/skills/antd.md', description: 'Design tokens, modals, tables, and themes', plugin: 'tech-frontend' },
-          ],
-        },
-        {
-          name: 'shared',
-          path: 'C:\\Users\\taguo\\OneDrive\\Desktop\\Projects\\p-skills\\skills-marketplace\\plugins\\shared',
-          skills_count: 1,
-          skills: [
-            { id: 'shared-finance', name: 'Finance Market Skill', filename: 'finance.md', path: 'Projects/test/finance_skill', description: 'SmartTrader stock and technical analysis skill', plugin: 'shared' },
-          ],
-        },
-      ]);
+      message.error(`Plugin scan failed: ${err?.message || 'Unable to scan plugins'}`);
+      setPlugins([]);
     } finally {
       setScanning(false);
     }
