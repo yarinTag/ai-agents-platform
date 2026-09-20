@@ -234,9 +234,9 @@ export const AgentsOfficeV3Canvas: React.FC<AgentsOfficeV3CanvasProps> = ({
   const activeTaskAny = tasks.find((t) => t.status === 'running');
   const totalDoing = tasks.filter((t) => t.status === 'running').length;
   const totalDone = tasks.filter((t) => t.status === 'completed').length;
-  const totalNotesCount = 37 + totalDone;
+  const totalNotesCount = tasks.length;
 
-  // Trigger a live simulated test mission that connects through the office in real time
+  // Trigger a live test task that connects through the office in real time
   const handleTriggerLiveMission = async () => {
     try {
       setLiveSimRunning(true);

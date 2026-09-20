@@ -1,37 +1,18 @@
-import React, { useEffect, useState } from 'react';
-import { Spin } from 'antd';
+import React, { useState } from 'react';
+import { Spin, Segmented } from 'antd';
+import { AppstoreOutlined, BuildOutlined } from '@ant-design/icons';
 import { AgentsOfficeV3Canvas } from '../components/office/AgentsOfficeV3Canvas';
+import { PixelOfficeCanvas } from '../components/office/PixelOfficeCanvas';
 import { OfficeRightSidebar } from '../components/office/OfficeRightSidebar';
 import { AgentDeskDrawer } from '../components/office/AgentDeskDrawer';
 import { Agent } from '../types/agent';
-import { Task } from '../types/task';
-import { getAgents, getTasks } from '../services/api';
+import { useOfficeEvents } from '../hooks/useOfficeEvents';
 
 export const OfficeViewPage: React.FC = () => {
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  const { agents, tasks, loading, connectionStatus, refresh } = useOfficeEvents();
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [drawerVisible, setDrawerVisible] = useState<boolean>(false);
-
-  const fetchData = async () => {
-    try {
-      const [agentsRes, tasksRes] = await Promise.all([getAgents(), getTasks()]);
-      setAgents(agentsRes.data || []);
-      setTasks(tasksRes.data || []);
-    } catch (err) {
-      console.error('Failed to load office data', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchData();
-    // Synchronize every 3s
-    const interval = setInterval(fetchData, 3000);
-    return () => clearInterval(interval);
-  }, []);
+  const [viewMode, setViewMode] = useState<string>('pixel');
 
   const handleSelectAgent = (agent: Agent) => {
     setSelectedAgent(agent);
@@ -45,30 +26,70 @@ export const OfficeViewPage: React.FC = () => {
         width: '100%',
         height: 'calc(100vh - 52px)',
         overflow: 'hidden',
-        background: '#f7f6f2',
+        background: '#0f172a',
       }}
     >
-      {/* Left / Center: Interactive 3D Isometric Agents Office Canvas */}
+      {/* Left / Center: Interactive Agents Office Canvas */}
       <div style={{ flex: 1, position: 'relative', height: '100%' }}>
+        {/* View Mode Switcher in Top Right */}
+        <div
+          style={{
+            position: 'absolute',
+            top: '16px',
+            right: '20px',
+            zIndex: 10,
+            background: 'rgba(15, 23, 42, 0.85)',
+            padding: '4px',
+            borderRadius: '10px',
+            border: '1px solid #334155',
+            backdropFilter: 'blur(8px)',
+          }}
+        >
+          <Segmented
+            value={viewMode}
+            onChange={(val) => setViewMode(val as string)}
+            options={[
+              {
+                label: 'Pixel Art',
+                value: 'pixel',
+                icon: <BuildOutlined />,
+              },
+              {
+                label: 'Isometric 3D',
+                value: 'isometric',
+                icon: <AppstoreOutlined />,
+              },
+            ]}
+          />
+        </div>
+
         {loading && agents.length === 0 ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
             <Spin size="large" />
           </div>
+        ) : viewMode === 'pixel' ? (
+          <PixelOfficeCanvas
+            agents={agents}
+            tasks={tasks}
+            connectionStatus={connectionStatus}
+            onSelectAgent={handleSelectAgent}
+            onTaskCreated={refresh}
+          />
         ) : (
           <AgentsOfficeV3Canvas
             agents={agents}
             tasks={tasks}
             onSelectAgent={handleSelectAgent}
-            onTaskCreated={fetchData}
+            onTaskCreated={refresh}
           />
         )}
       </div>
 
-      {/* Right: Office Task Status Panel (From Screenshot) */}
+      {/* Right: Office Task Status Panel */}
       <OfficeRightSidebar
         agents={agents}
         tasks={tasks}
-        onTaskCreated={fetchData}
+        onTaskCreated={refresh}
         onSelectAgent={handleSelectAgent}
       />
 
@@ -78,7 +99,7 @@ export const OfficeViewPage: React.FC = () => {
         tasks={tasks}
         visible={drawerVisible}
         onClose={() => setDrawerVisible(false)}
-        onTaskCreated={fetchData}
+        onTaskCreated={refresh}
       />
     </div>
   );
