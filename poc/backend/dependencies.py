@@ -17,11 +17,12 @@ _poc_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _poc_root not in sys.path:
     sys.path.insert(0, _poc_root)
 
-from config import config_manager, ConfigManager, AgentConfig, ProjectConfig, Skill
+from config import config_manager, ConfigManager, AgentConfig, AgentRole, AgentTemplate, ProjectConfig, Skill
 from persistence import db_manager, DatabaseManager
 from runtime_adapter import runtime_adapter, ClaudeCodeRuntimeAdapter, AgentRun, TaskStatus
 from runtime.claude_adapter import ClaudeCodeAdapter
 from events import EventBus, EventService, PlatformEvent, EventType
+from orchestration import validate_agent_hierarchy, HierarchyValidationError
 
 logger = logging.getLogger(__name__)
 

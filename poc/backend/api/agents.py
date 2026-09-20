@@ -1,17 +1,20 @@
 """
-Agent management API endpoints.
+Agent management API endpoints with organizational hierarchy support.
 """
 
 from fastapi import APIRouter, HTTPException, Depends, status
-from typing import List, Optional
+from typing import List, Optional, Any, Dict
 from pydantic import BaseModel, Field
+from datetime import datetime
+import logging
 
-# All PoC imports go through the centralized dependencies module
 from ..dependencies import (
     get_config_manager, get_db_manager, get_event_service,
-    AgentConfig, EventService, EventType
+    AgentConfig, EventService, EventType,
+    validate_agent_hierarchy, HierarchyValidationError
 )
 
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -24,12 +27,21 @@ class AgentBase(BaseModel):
     skills: List[str] = Field(default_factory=list)
     model: str = Field(default="default")
     effort: str = Field(default="medium")
-    max_tokens: int = Field(default=4000, gt=0)
+    max_tokens: int = Field(default=8000, gt=0)
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     repo_path: Optional[str] = None
     github_url: Optional[str] = None
     department: Optional[str] = "Engineering"
     avatar: Optional[str] = None
+
+    # Organizational hierarchy fields
+    parent_id: Optional[str] = None
+    role_type: str = Field(default="WORKER")
+    max_concurrent_children: int = Field(default=3, ge=1, le=20)
+    delegation_strategy: str = Field(default="hierarchical")
+    allowed_child_ids: List[str] = Field(default_factory=list)
+    allowed_tools: List[str] = Field(default_factory=list)
+    template_id: Optional[str] = None
 
 
 class AgentCreate(AgentBase):
@@ -50,6 +62,15 @@ class AgentUpdate(BaseModel):
     department: Optional[str] = None
     avatar: Optional[str] = None
 
+    # Organizational hierarchy fields
+    parent_id: Optional[str] = None
+    role_type: Optional[str] = None
+    max_concurrent_children: Optional[int] = Field(None, ge=1, le=20)
+    delegation_strategy: Optional[str] = None
+    allowed_child_ids: Optional[List[str]] = None
+    allowed_tools: Optional[List[str]] = None
+    template_id: Optional[str] = None
+
 
 class AgentResponse(AgentBase):
     id: str
@@ -60,11 +81,6 @@ class AgentResponse(AgentBase):
         from_attributes = True
 
 
-from datetime import datetime
-import logging
-
-logger = logging.getLogger(__name__)
-
 # Helper function to convert AgentConfig to response dict
 def agent_to_response(agent: AgentConfig) -> dict:
     now_iso = datetime.now().isoformat()
@@ -73,7 +89,7 @@ def agent_to_response(agent: AgentConfig) -> dict:
         "name": agent.name,
         "description": agent.description,
         "system_prompt": agent.system_prompt,
-        "skills": agent.skills,
+        "skills": agent.skills or [],
         "model": agent.model,
         "effort": agent.effort,
         "max_tokens": agent.max_tokens,
@@ -83,7 +99,14 @@ def agent_to_response(agent: AgentConfig) -> dict:
         "department": getattr(agent, "department", "Engineering"),
         "avatar": getattr(agent, "avatar", None),
         "created_at": getattr(agent, "created_at", None) or now_iso,
-        "updated_at": getattr(agent, "updated_at", None) or now_iso
+        "updated_at": getattr(agent, "updated_at", None) or now_iso,
+        "parent_id": getattr(agent, "parent_id", None),
+        "role_type": getattr(agent, "role_type", "WORKER"),
+        "max_concurrent_children": getattr(agent, "max_concurrent_children", 3),
+        "delegation_strategy": getattr(agent, "delegation_strategy", "hierarchical"),
+        "allowed_child_ids": getattr(agent, "allowed_child_ids", []) or [],
+        "allowed_tools": getattr(agent, "allowed_tools", []) or [],
+        "template_id": getattr(agent, "template_id", None)
     }
 
 
@@ -97,6 +120,15 @@ async def list_agents(
     return [agent_to_response(agent) for agent in agents]
 
 
+@router.get("/hierarchy/tree", response_model=List[Dict[str, Any]])
+@router.get("/hierarchy/tree/", response_model=List[Dict[str, Any]])
+async def get_entire_hierarchy_tree(
+    db_manager = Depends(get_db_manager)
+):
+    """Get the full organizational hierarchy tree from root orchestrators downward."""
+    return db_manager.get_agent_hierarchy()
+
+
 @router.post("/", response_model=AgentResponse, status_code=status.HTTP_201_CREATED)
 @router.post("", response_model=AgentResponse, status_code=status.HTTP_201_CREATED)
 async def create_agent(
@@ -105,7 +137,7 @@ async def create_agent(
     db_manager = Depends(get_db_manager),
     event_service: EventService = Depends(get_event_service)
 ):
-    """Create a new agent."""
+    """Create a new agent with hierarchy validation."""
     agent_id = agent_data.name.lower().replace(" ", "-").replace("_", "-")
 
     existing = db_manager.get_agent(agent_id) or config_manager.get_agent(agent_id)
@@ -115,13 +147,26 @@ async def create_agent(
             detail=f"Agent with ID '{agent_id}' already exists"
         )
 
+    # Validate hierarchy constraints
+    try:
+        validate_agent_hierarchy(
+            agent_id=agent_id,
+            role_type=agent_data.role_type,
+            parent_id=agent_data.parent_id,
+            db_manager=db_manager
+        )
+    except HierarchyValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
     agent_config = AgentConfig(
         id=agent_id,
         **agent_data.model_dump()
     )
 
     db_manager.save_agent(agent_config)
-    # Also update in-memory cache if available
     config_manager.agents[agent_id] = agent_config
 
     saved = db_manager.get_agent(agent_id) or agent_config
@@ -144,7 +189,6 @@ async def get_agent(
     """Get a specific agent by ID."""
     agent = db_manager.get_agent(agent_id)
     if not agent:
-        # Fallback to case-insensitive match in db
         for a in db_manager.list_agents():
             if a.id.lower() == agent_id.lower():
                 agent = a
@@ -157,6 +201,39 @@ async def get_agent(
     return agent_to_response(agent)
 
 
+@router.get("/{agent_id}/children", response_model=List[AgentResponse])
+@router.get("/{agent_id}/children/", response_model=List[AgentResponse])
+async def get_agent_children(
+    agent_id: str,
+    db_manager = Depends(get_db_manager)
+):
+    """Get all direct children reporting to this agent."""
+    agent = db_manager.get_agent(agent_id)
+    if not agent:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Agent not found: {agent_id}"
+        )
+    children = db_manager.get_child_agents(agent_id)
+    return [agent_to_response(c) for c in children]
+
+
+@router.get("/{agent_id}/hierarchy", response_model=List[Dict[str, Any]])
+@router.get("/{agent_id}/hierarchy/", response_model=List[Dict[str, Any]])
+async def get_agent_subtree(
+    agent_id: str,
+    db_manager = Depends(get_db_manager)
+):
+    """Get the organizational subtree rooted at this agent."""
+    agent = db_manager.get_agent(agent_id)
+    if not agent:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Agent not found: {agent_id}"
+        )
+    return db_manager.get_agent_hierarchy(root_id=agent_id)
+
+
 @router.put("/{agent_id}", response_model=AgentResponse)
 @router.put("/{agent_id}/", response_model=AgentResponse)
 async def update_agent(
@@ -166,7 +243,7 @@ async def update_agent(
     db_manager = Depends(get_db_manager),
     event_service: EventService = Depends(get_event_service)
 ):
-    """Update an existing agent."""
+    """Update an existing agent with hierarchy validation."""
     existing = db_manager.get_agent(agent_id) or config_manager.get_agent(agent_id)
     if not existing:
         raise HTTPException(
@@ -175,6 +252,25 @@ async def update_agent(
         )
 
     update_data = agent_data.model_dump(exclude_unset=True)
+
+    # If role_type or parent_id changed, validate hierarchy
+    target_role = update_data.get("role_type", existing.role_type)
+    target_parent = update_data.get("parent_id", existing.parent_id)
+
+    if "role_type" in update_data or "parent_id" in update_data:
+        try:
+            validate_agent_hierarchy(
+                agent_id=agent_id,
+                role_type=target_role,
+                parent_id=target_parent,
+                db_manager=db_manager
+            )
+        except HierarchyValidationError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e)
+            )
+
     for field, value in update_data.items():
         setattr(existing, field, value)
 
@@ -215,6 +311,15 @@ async def delete_agent(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Agent not found: {agent_id}"
+        )
+
+    # Check if agent has active children before deleting
+    children = db_manager.get_child_agents(agent_id)
+    if children:
+        child_names = [c.name for c in children]
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot delete agent '{agent_id}' because it has subordinate child agents: {child_names}. Reassign or remove them first."
         )
 
     db_manager.delete_agent(agent_id)

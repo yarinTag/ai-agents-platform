@@ -9,9 +9,20 @@ from typing import List, Optional, Dict, Any
 from pathlib import Path
 
 
+from enum import Enum
+
+
+class AgentRole(str, Enum):
+    """Canonical roles for platform agents."""
+    ROOT_ORCHESTRATOR = "ROOT_ORCHESTRATOR"
+    MANAGER = "MANAGER"
+    WORKER = "WORKER"
+    SPECIALIST = "SPECIALIST"
+
+
 @dataclass
 class AgentConfig:
-    """Configuration for an AI agent."""
+    """Configuration for an AI agent with organizational hierarchy support."""
     id: str
     name: str
     description: str
@@ -28,15 +39,60 @@ class AgentConfig:
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
+    # Hierarchy and delegation fields
+    parent_id: Optional[str] = None
+    role_type: str = "WORKER"
+    max_concurrent_children: int = 3
+    delegation_strategy: str = "hierarchical"
+    allowed_child_ids: List[str] = None
+    allowed_tools: List[str] = None
+    template_id: Optional[str] = None
+
     def __post_init__(self):
         if self.skills is None:
             self.skills = []
+        if self.allowed_child_ids is None:
+            self.allowed_child_ids = []
+        if self.allowed_tools is None:
+            self.allowed_tools = []
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'AgentConfig':
+        return cls(**data)
+
+
+@dataclass
+class AgentTemplate:
+    """Reusable template definition for creating agents."""
+    id: str
+    name: str
+    description: str
+    role: str
+    system_prompt: str
+    model: str = "default"
+    skills: List[str] = None
+    tools: List[str] = None
+    suggested_children: List[str] = None
+    category: str = "Engineering"
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+    def __post_init__(self):
+        if self.skills is None:
+            self.skills = []
+        if self.tools is None:
+            self.tools = []
+        if self.suggested_children is None:
+            self.suggested_children = []
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'AgentTemplate':
         return cls(**data)
 
 

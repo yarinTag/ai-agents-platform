@@ -13,7 +13,7 @@ from typing import List, Optional, Dict, Any, Union
 from pathlib import Path
 
 # Import from local modules using absolute imports
-from config import AgentConfig, ProjectConfig, Skill
+from config import AgentConfig, ProjectConfig, Skill, AgentTemplate
 from runtime_adapter import AgentRun, TaskStatus
 
 try:
@@ -80,12 +80,21 @@ class DatabaseManager:
                 ("repo_path", "TEXT"),
                 ("github_url", "TEXT"),
                 ("department", "TEXT DEFAULT 'Engineering'"),
-                ("avatar", "TEXT")
+                ("avatar", "TEXT"),
+                ("parent_id", "TEXT"),
+                ("role_type", "TEXT DEFAULT 'WORKER'"),
+                ("max_concurrent_children", "INTEGER DEFAULT 3"),
+                ("delegation_strategy", "TEXT DEFAULT 'hierarchical'"),
+                ("allowed_child_ids", "TEXT"),
+                ("allowed_tools", "TEXT"),
+                ("template_id", "TEXT")
             ]:
                 try:
                     conn.execute(f"ALTER TABLE agents ADD COLUMN {col} {col_type}")
                 except Exception:
                     pass
+
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_agents_parent ON agents(parent_id)")
 
             # Projects table
             conn.execute("""
@@ -136,11 +145,23 @@ class DatabaseManager:
                 )
             """)
 
+            # Add delegation and tracing columns to task_runs if not present
+            for col, col_type in [
+                ("parent_task_id", "TEXT"),
+                ("root_task_id", "TEXT"),
+                ("assigned_by", "TEXT")
+            ]:
+                try:
+                    conn.execute(f"ALTER TABLE task_runs ADD COLUMN {col} {col_type}")
+                except Exception:
+                    pass
+
             # Create indexes for better query performance
             conn.execute("CREATE INDEX IF NOT EXISTS idx_task_runs_agent ON task_runs(agent_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_task_runs_project ON task_runs(project_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_task_runs_status ON task_runs(status)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_task_runs_created ON task_runs(created_at)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_task_runs_parent ON task_runs(parent_task_id)")
 
             # Event log table
             conn.execute("""
@@ -165,12 +186,145 @@ class DatabaseManager:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_events_seq ON event_log(sequence_number)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_events_time ON event_log(timestamp)")
 
+            # Agent templates table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS agent_templates (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    description TEXT,
+                    role TEXT NOT NULL,
+                    system_prompt TEXT NOT NULL,
+                    model TEXT DEFAULT 'default',
+                    skills TEXT,
+                    tools TEXT,
+                    suggested_children TEXT,
+                    category TEXT DEFAULT 'Engineering',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_templates_category ON agent_templates(category)")
+
+            # Seed default agent templates if table empty
+            self._seed_default_templates(conn)
+
             conn.commit()
 
+    def _seed_default_templates(self, conn: sqlite3.Connection):
+        """Seed default reusable agent templates if none exist."""
+        cursor = conn.execute("SELECT COUNT(*) FROM agent_templates")
+        if cursor.fetchone()[0] > 0:
+            return
+
+        defaults = [
+            (
+                "engineering-manager",
+                "Engineering Manager",
+                "Coordinates engineering teams, delegates tasks, and synthesizes results.",
+                "MANAGER",
+                "You are an Engineering Manager. Decompose complex user goals, delegate subtasks to specialized developers, and produce executive summaries of technical work.",
+                "default",
+                json.dumps(["basic-reading"]),
+                json.dumps(["read_files", "grep_search"]),
+                json.dumps(["frontend-developer", "backend-developer", "qa-engineer"]),
+                "Engineering"
+            ),
+            (
+                "frontend-developer",
+                "Frontend Developer",
+                "Builds, refactors, and tests modern React, TypeScript, and UI interfaces.",
+                "WORKER",
+                "You are a Frontend Developer specialized in React 19, TypeScript, Vite, and Ant Design. Build responsive, pixel-perfect, accessible components.",
+                "default",
+                json.dumps(["basic-reading"]),
+                json.dumps(["read_files", "write_to_file", "replace_file_content", "run_command"]),
+                json.dumps([]),
+                "Engineering"
+            ),
+            (
+                "backend-developer",
+                "Backend Developer",
+                "Builds scalable Python, FastAPI, and database persistence architectures.",
+                "WORKER",
+                "You are a Senior Backend Engineer specialized in Python, FastAPI, SQLite, and streaming APIs. Write clean, strongly typed, robust services.",
+                "default",
+                json.dumps(["basic-reading"]),
+                json.dumps(["read_files", "write_to_file", "replace_file_content", "run_command"]),
+                json.dumps([]),
+                "Engineering"
+            ),
+            (
+                "qa-engineer",
+                "QA Engineer",
+                "Designs automated test suites, validates acceptance criteria, and verifies zero defects.",
+                "SPECIALIST",
+                "You are a QA Engineer. Run pytest suites, identify edge cases, write integration tests, and ensure code coverage and regressions are prevented.",
+                "default",
+                json.dumps(["basic-reading"]),
+                json.dumps(["read_files", "run_command"]),
+                json.dumps([]),
+                "Engineering"
+            ),
+        ]
+
+        now = datetime.now().isoformat()
+        conn.executemany("""
+            INSERT INTO agent_templates
+            (id, name, description, role, system_prompt, model, skills, tools, suggested_children, category, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, [(d[0], d[1], d[2], d[3], d[4], d[5], d[6], d[7], d[8], d[9], now, now) for d in defaults])
+
+    def _row_to_agent(self, row: sqlite3.Row) -> AgentConfig:
+        """Convert a database row to an AgentConfig instance."""
+        keys = row.keys()
+        allowed_children = json.loads(row['allowed_child_ids']) if 'allowed_child_ids' in keys and row['allowed_child_ids'] else []
+        allowed_tools = json.loads(row['allowed_tools']) if 'allowed_tools' in keys and row['allowed_tools'] else []
+
+        return AgentConfig(
+            id=row['id'],
+            name=row['name'],
+            description=row['description'],
+            system_prompt=row['system_prompt'],
+            skills=json.loads(row['skills']) if row['skills'] else [],
+            model=row['model'],
+            effort=row['effort'],
+            max_tokens=row['max_tokens'],
+            temperature=row['temperature'],
+            repo_path=row['repo_path'] if 'repo_path' in keys else None,
+            github_url=row['github_url'] if 'github_url' in keys else None,
+            department=row['department'] if 'department' in keys and row['department'] else 'Engineering',
+            avatar=row['avatar'] if 'avatar' in keys else None,
+            created_at=str(row['created_at']) if 'created_at' in keys and row['created_at'] else None,
+            updated_at=str(row['updated_at']) if 'updated_at' in keys and row['updated_at'] else None,
+            parent_id=row['parent_id'] if 'parent_id' in keys else None,
+            role_type=row['role_type'] if 'role_type' in keys and row['role_type'] else 'WORKER',
+            max_concurrent_children=row['max_concurrent_children'] if 'max_concurrent_children' in keys and row['max_concurrent_children'] is not None else 3,
+            delegation_strategy=row['delegation_strategy'] if 'delegation_strategy' in keys and row['delegation_strategy'] else 'hierarchical',
+            allowed_child_ids=allowed_children,
+            allowed_tools=allowed_tools,
+            template_id=row['template_id'] if 'template_id' in keys else None
+        )
+
+    def _row_to_template(self, row: sqlite3.Row) -> AgentTemplate:
+        """Convert a database row to an AgentTemplate instance."""
+        return AgentTemplate(
+            id=row['id'],
+            name=row['name'],
+            description=row['description'],
+            role=row['role'],
+            system_prompt=row['system_prompt'],
+            model=row['model'] or 'default',
+            skills=json.loads(row['skills']) if row['skills'] else [],
+            tools=json.loads(row['tools']) if row['tools'] else [],
+            suggested_children=json.loads(row['suggested_children']) if row['suggested_children'] else [],
+            category=row['category'] or 'Engineering',
+            created_at=str(row['created_at']) if 'created_at' in row.keys() and row['created_at'] else None,
+            updated_at=str(row['updated_at']) if 'updated_at' in row.keys() and row['updated_at'] else None
+        )
 
     # Agent methods
     def save_agent(self, agent: AgentConfig):
-        """Save or update an agent."""
+        """Save or update an agent with organizational hierarchy attributes."""
         with self._get_connection() as conn:
             existing = conn.execute("SELECT created_at FROM agents WHERE id = ?", (agent.id,)).fetchone()
             created_at = existing['created_at'] if existing else (getattr(agent, "created_at", None) or datetime.now().isoformat())
@@ -178,8 +332,11 @@ class DatabaseManager:
 
             conn.execute("""
                 INSERT INTO agents
-                (id, name, description, system_prompt, skills, model, effort, max_tokens, temperature, repo_path, github_url, department, avatar, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (id, name, description, system_prompt, skills, model, effort, max_tokens, temperature,
+                 repo_path, github_url, department, avatar, created_at, updated_at,
+                 parent_id, role_type, max_concurrent_children, delegation_strategy,
+                 allowed_child_ids, allowed_tools, template_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     name=excluded.name,
                     description=excluded.description,
@@ -193,7 +350,14 @@ class DatabaseManager:
                     github_url=excluded.github_url,
                     department=excluded.department,
                     avatar=excluded.avatar,
-                    updated_at=excluded.updated_at
+                    updated_at=excluded.updated_at,
+                    parent_id=excluded.parent_id,
+                    role_type=excluded.role_type,
+                    max_concurrent_children=excluded.max_concurrent_children,
+                    delegation_strategy=excluded.delegation_strategy,
+                    allowed_child_ids=excluded.allowed_child_ids,
+                    allowed_tools=excluded.allowed_tools,
+                    template_id=excluded.template_id
             """, (
                 agent.id,
                 agent.name,
@@ -209,7 +373,14 @@ class DatabaseManager:
                 getattr(agent, "department", "Engineering"),
                 getattr(agent, "avatar", None),
                 str(created_at),
-                str(updated_at)
+                str(updated_at),
+                getattr(agent, "parent_id", None),
+                getattr(agent, "role_type", "WORKER"),
+                getattr(agent, "max_concurrent_children", 3),
+                getattr(agent, "delegation_strategy", "hierarchical"),
+                json.dumps(getattr(agent, "allowed_child_ids", []) or []),
+                json.dumps(getattr(agent, "allowed_tools", []) or []),
+                getattr(agent, "template_id", None)
             ))
             conn.commit()
 
@@ -221,49 +392,112 @@ class DatabaseManager:
             )
             row = cursor.fetchone()
             if row:
-                return AgentConfig(
-                    id=row['id'],
-                    name=row['name'],
-                    description=row['description'],
-                    system_prompt=row['system_prompt'],
-                    skills=json.loads(row['skills']) if row['skills'] else [],
-                    model=row['model'],
-                    effort=row['effort'],
-                    max_tokens=row['max_tokens'],
-                    temperature=row['temperature'],
-                    repo_path=row['repo_path'] if 'repo_path' in row.keys() else None,
-                    github_url=row['github_url'] if 'github_url' in row.keys() else None,
-                    department=row['department'] if 'department' in row.keys() else 'Engineering',
-                    avatar=row['avatar'] if 'avatar' in row.keys() else None,
-                    created_at=str(row['created_at']) if 'created_at' in row.keys() and row['created_at'] else None,
-                    updated_at=str(row['updated_at']) if 'updated_at' in row.keys() and row['updated_at'] else None
-                )
+                return self._row_to_agent(row)
         return None
 
     def list_agents(self) -> List[AgentConfig]:
         """List all agents."""
         with self._get_connection() as conn:
             cursor = conn.execute("SELECT * FROM agents ORDER BY name")
-            return [
-                AgentConfig(
-                    id=row['id'],
-                    name=row['name'],
-                    description=row['description'],
-                    system_prompt=row['system_prompt'],
-                    skills=json.loads(row['skills']) if row['skills'] else [],
-                    model=row['model'],
-                    effort=row['effort'],
-                    max_tokens=row['max_tokens'],
-                    temperature=row['temperature'],
-                    repo_path=row['repo_path'] if 'repo_path' in row.keys() else None,
-                    github_url=row['github_url'] if 'github_url' in row.keys() else None,
-                    department=row['department'] if 'department' in row.keys() else 'Engineering',
-                    avatar=row['avatar'] if 'avatar' in row.keys() else None,
-                    created_at=str(row['created_at']) if 'created_at' in row.keys() and row['created_at'] else None,
-                    updated_at=str(row['updated_at']) if 'updated_at' in row.keys() and row['updated_at'] else None
-                )
-                for row in cursor.fetchall()
-            ]
+            return [self._row_to_agent(row) for row in cursor.fetchall()]
+
+    def get_child_agents(self, parent_id: str) -> List[AgentConfig]:
+        """Get all direct child agents managed by a parent agent."""
+        with self._get_connection() as conn:
+            cursor = conn.execute("SELECT * FROM agents WHERE parent_id = ? ORDER BY name", (parent_id,))
+            return [self._row_to_agent(row) for row in cursor.fetchall()]
+
+    def get_agent_hierarchy(self, root_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        Build an organizational hierarchy tree.
+        If root_id is provided, returns the subtree rooted at that agent.
+        Otherwise, returns all tree hierarchies from root agents (parent_id is NULL).
+        """
+        all_agents = self.list_agents()
+        agents_by_parent: Dict[Optional[str], List[AgentConfig]] = {}
+        for a in all_agents:
+            pid = a.parent_id
+            if pid not in agents_by_parent:
+                agents_by_parent[pid] = []
+            agents_by_parent[pid].append(a)
+
+        def build_node(agent: AgentConfig) -> Dict[str, Any]:
+            node = agent.to_dict()
+            node["children"] = [build_node(c) for c in agents_by_parent.get(agent.id, [])]
+            return node
+
+        if root_id:
+            root = self.get_agent(root_id)
+            return [build_node(root)] if root else []
+
+        root_agents = agents_by_parent.get(None, [])
+        return [build_node(r) for r in root_agents]
+
+    # Template methods
+    def save_template(self, template: AgentTemplate) -> AgentTemplate:
+        """Save or update an agent template."""
+        with self._get_connection() as conn:
+            now = datetime.now().isoformat()
+            existing = conn.execute("SELECT created_at FROM agent_templates WHERE id = ?", (template.id,)).fetchone()
+            created_at = existing['created_at'] if existing else (template.created_at or now)
+            updated_at = now
+
+            conn.execute("""
+                INSERT INTO agent_templates
+                (id, name, description, role, system_prompt, model, skills, tools, suggested_children, category, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    name=excluded.name,
+                    description=excluded.description,
+                    role=excluded.role,
+                    system_prompt=excluded.system_prompt,
+                    model=excluded.model,
+                    skills=excluded.skills,
+                    tools=excluded.tools,
+                    suggested_children=excluded.suggested_children,
+                    category=excluded.category,
+                    updated_at=excluded.updated_at
+            """, (
+                template.id,
+                template.name,
+                template.description,
+                template.role,
+                template.system_prompt,
+                template.model,
+                json.dumps(template.skills),
+                json.dumps(template.tools),
+                json.dumps(template.suggested_children),
+                template.category,
+                str(created_at),
+                str(updated_at)
+            ))
+            conn.commit()
+            return self.get_template(template.id) or template
+
+    def get_template(self, template_id: str) -> Optional[AgentTemplate]:
+        """Get an agent template by ID."""
+        with self._get_connection() as conn:
+            cursor = conn.execute("SELECT * FROM agent_templates WHERE id = ?", (template_id,))
+            row = cursor.fetchone()
+            if row:
+                return self._row_to_template(row)
+        return None
+
+    def list_templates(self, category: Optional[str] = None) -> List[AgentTemplate]:
+        """List agent templates, optionally filtered by category."""
+        with self._get_connection() as conn:
+            if category:
+                cursor = conn.execute("SELECT * FROM agent_templates WHERE category = ? ORDER BY name", (category,))
+            else:
+                cursor = conn.execute("SELECT * FROM agent_templates ORDER BY name")
+            return [self._row_to_template(row) for row in cursor.fetchall()]
+
+    def delete_template(self, template_id: str) -> bool:
+        """Delete an agent template."""
+        with self._get_connection() as conn:
+            cursor = conn.execute("DELETE FROM agent_templates WHERE id = ?", (template_id,))
+            conn.commit()
+            return cursor.rowcount > 0
 
     def delete_agent(self, agent_id: str):
         """Delete an agent and clean up any linked task runs."""
