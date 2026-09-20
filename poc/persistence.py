@@ -140,6 +140,9 @@ class DatabaseManager:
                     error TEXT,
                     exit_code INTEGER,
                     events TEXT,  -- JSON array
+                    parent_task_id TEXT,
+                    root_task_id TEXT,
+                    assigned_by TEXT,
                     FOREIGN KEY (agent_id) REFERENCES agents (id),
                     FOREIGN KEY (project_id) REFERENCES projects (id)
                 )
@@ -162,6 +165,8 @@ class DatabaseManager:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_task_runs_status ON task_runs(status)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_task_runs_created ON task_runs(created_at)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_task_runs_parent ON task_runs(parent_task_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_task_runs_root ON task_runs(root_task_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_task_runs_assigned ON task_runs(assigned_by)")
 
             # Event log table
             conn.execute("""
@@ -631,27 +636,51 @@ class DatabaseManager:
             conn.commit()
 
     # Task run methods
+    def _row_to_task_run(self, row: sqlite3.Row) -> AgentRun:
+        """Convert a database row to an AgentRun object."""
+        keys = row.keys() if hasattr(row, "keys") else []
+        return AgentRun(
+            run_id=row['run_id'],
+            agent_id=row['agent_id'],
+            project_id=row['project_id'],
+            prompt=row['prompt'],
+            status=TaskStatus(row['status']),
+            created_at=datetime.fromisoformat(row['created_at']) if row['created_at'] else None,
+            started_at=datetime.fromisoformat(row['started_at']) if row['started_at'] else None,
+            ended_at=datetime.fromisoformat(row['ended_at']) if row['ended_at'] else None,
+            result=row['result'],
+            error=row['error'],
+            exit_code=row['exit_code'],
+            events=json.loads(row['events']) if row['events'] else [],
+            parent_task_id=row['parent_task_id'] if 'parent_task_id' in keys else None,
+            root_task_id=row['root_task_id'] if 'root_task_id' in keys else None,
+            assigned_by=row['assigned_by'] if 'assigned_by' in keys else None
+        )
+
     def save_task_run(self, run: AgentRun):
         """Save or update a task run."""
         with self._get_connection() as conn:
             conn.execute("""
                 INSERT OR REPLACE INTO task_runs
                 (run_id, agent_id, project_id, prompt, status, created_at, started_at, ended_at,
-                 result, error, exit_code, events)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 result, error, exit_code, events, parent_task_id, root_task_id, assigned_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 run.run_id,
                 run.agent_id,
                 run.project_id,
                 run.prompt,
-                run.status.value,
+                run.status.value if hasattr(run.status, "value") else str(run.status),
                 run.created_at.isoformat() if run.created_at else None,
                 run.started_at.isoformat() if run.started_at else None,
                 run.ended_at.isoformat() if run.ended_at else None,
                 run.result,
                 run.error,
                 run.exit_code,
-                json.dumps(run.events) if run.events else None
+                json.dumps(run.events) if run.events else None,
+                getattr(run, "parent_task_id", None),
+                getattr(run, "root_task_id", None),
+                getattr(run, "assigned_by", None)
             ))
             conn.commit()
 
@@ -663,20 +692,7 @@ class DatabaseManager:
             )
             row = cursor.fetchone()
             if row:
-                return AgentRun(
-                    run_id=row['run_id'],
-                    agent_id=row['agent_id'],
-                    project_id=row['project_id'],
-                    prompt=row['prompt'],
-                    status=TaskStatus(row['status']),
-                    created_at=datetime.fromisoformat(row['created_at']) if row['created_at'] else None,
-                    started_at=datetime.fromisoformat(row['started_at']) if row['started_at'] else None,
-                    ended_at=datetime.fromisoformat(row['ended_at']) if row['ended_at'] else None,
-                    result=row['result'],
-                    error=row['error'],
-                    exit_code=row['exit_code'],
-                    events=json.loads(row['events']) if row['events'] else []
-                )
+                return self._row_to_task_run(row)
         return None
 
     def list_task_runs(
@@ -699,35 +715,80 @@ class DatabaseManager:
                 params.append(project_id)
             if status:
                 query += " AND status = ?"
-                params.append(status.value)
+                params.append(status.value if hasattr(status, "value") else str(status))
 
             query += " ORDER BY created_at DESC LIMIT ?"
             params.append(limit)
 
             cursor = conn.execute(query, params)
-            return [
-                AgentRun(
-                    run_id=row['run_id'],
-                    agent_id=row['agent_id'],
-                    project_id=row['project_id'],
-                    prompt=row['prompt'],
-                    status=TaskStatus(row['status']),
-                    created_at=datetime.fromisoformat(row['created_at']) if row['created_at'] else None,
-                    started_at=datetime.fromisoformat(row['started_at']) if row['started_at'] else None,
-                    ended_at=datetime.fromisoformat(row['ended_at']) if row['ended_at'] else None,
-                    result=row['result'],
-                    error=row['error'],
-                    exit_code=row['exit_code'],
-                    events=json.loads(row['events']) if row['events'] else []
-                )
-                for row in cursor.fetchall()
-            ]
+            return [self._row_to_task_run(row) for row in cursor.fetchall()]
 
     def delete_task_run(self, run_id: str):
         """Delete a task run."""
         with self._get_connection() as conn:
             conn.execute("DELETE FROM task_runs WHERE run_id = ?", (run_id,))
             conn.commit()
+
+    def get_subtasks(self, parent_task_id: str) -> List[AgentRun]:
+        """Query subtasks for a parent task."""
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT * FROM task_runs WHERE parent_task_id = ? ORDER BY created_at ASC",
+                (parent_task_id,)
+            )
+            return [self._row_to_task_run(row) for row in cursor.fetchall()]
+
+    def get_task_tree(self, root_task_id: str) -> Dict[str, Any]:
+        """
+        Build a nested recursive dictionary representing the task tree rooted at root_task_id.
+        Each node contains task run fields and a 'children' list of child nodes.
+        """
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                """SELECT * FROM task_runs
+                   WHERE run_id = ? OR root_task_id = ? OR parent_task_id = ?
+                   ORDER BY created_at ASC""",
+                (root_task_id, root_task_id, root_task_id)
+            )
+            rows = cursor.fetchall()
+
+        if not rows:
+            return {}
+
+        nodes: Dict[str, Dict[str, Any]] = {}
+        for row in rows:
+            run = self._row_to_task_run(row)
+            node = run.to_dict()
+            node["children"] = []
+            nodes[run.run_id] = node
+
+        root_node = nodes.get(root_task_id)
+        if not root_node:
+            for node in nodes.values():
+                if not node.get("parent_task_id") or node.get("parent_task_id") not in nodes:
+                    root_node = node
+                    break
+            if not root_node:
+                return {}
+
+        for run_id, node in nodes.items():
+            if run_id == root_node["run_id"]:
+                continue
+            parent_id = node.get("parent_task_id")
+            if parent_id and parent_id in nodes:
+                nodes[parent_id]["children"].append(node)
+
+        return root_node
+
+    def count_active_subtasks_for_parent(self, parent_agent_id: str) -> int:
+        """Count active subtasks (running or pending) assigned by a parent agent."""
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT COUNT(*) FROM task_runs WHERE assigned_by = ? AND LOWER(status) IN ('running', 'pending')",
+                (parent_agent_id,)
+            )
+            row = cursor.fetchone()
+            return int(row[0]) if row else 0
 
     # Event log methods
     def get_next_sequence_number(self) -> int:

@@ -22,6 +22,7 @@ from config import AgentConfig, ProjectConfig
 
 class TaskStatus(Enum):
     QUEUED = "queued"
+    PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
@@ -43,6 +44,9 @@ class AgentRun:
     error: Optional[str] = None
     exit_code: Optional[int] = None
     events: List[Dict[str, Any]] = None
+    parent_task_id: Optional[str] = None
+    root_task_id: Optional[str] = None
+    assigned_by: Optional[str] = None
 
     def __post_init__(self):
         if self.events is None:
@@ -51,24 +55,34 @@ class AgentRun:
     def to_dict(self) -> Dict[str, Any]:
         data = asdict(self)
         # Convert datetime objects to ISO strings
-        data['created_at'] = self.created_at.isoformat()
+        data['created_at'] = self.created_at.isoformat() if self.created_at else None
         if self.started_at:
             data['started_at'] = self.started_at.isoformat()
         if self.ended_at:
             data['ended_at'] = self.ended_at.isoformat()
         data['status'] = self.status.value
+        data['parent_task_id'] = self.parent_task_id
+        data['root_task_id'] = self.root_task_id
+        data['assigned_by'] = self.assigned_by
         return data
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'AgentRun':
+        data_copy = dict(data)
         # Convert ISO strings back to datetime objects
-        data['created_at'] = datetime.fromisoformat(data['created_at'])
-        if data.get('started_at'):
-            data['started_at'] = datetime.fromisoformat(data['started_at'])
-        if data.get('ended_at'):
-            data['ended_at'] = datetime.fromisoformat(data['ended_at'])
-        data['status'] = TaskStatus(data['status'])
-        return cls(**data)
+        if data_copy.get('created_at') and isinstance(data_copy['created_at'], str):
+            data_copy['created_at'] = datetime.fromisoformat(data_copy['created_at'])
+        if data_copy.get('started_at') and isinstance(data_copy['started_at'], str):
+            data_copy['started_at'] = datetime.fromisoformat(data_copy['started_at'])
+        if data_copy.get('ended_at') and isinstance(data_copy['ended_at'], str):
+            data_copy['ended_at'] = datetime.fromisoformat(data_copy['ended_at'])
+        if isinstance(data_copy.get('status'), str):
+            data_copy['status'] = TaskStatus(data_copy['status'])
+        data_copy.setdefault('project_id', None)
+        data_copy.setdefault('parent_task_id', None)
+        data_copy.setdefault('root_task_id', None)
+        data_copy.setdefault('assigned_by', None)
+        return cls(**data_copy)
 
 
 class ClaudeCodeRuntimeAdapter:
@@ -240,18 +254,18 @@ class ClaudeCodeRuntimeAdapter:
     def start_task(
         self,
         agent_id: str,
-        project_id: Optional[str],
-        prompt: str,
+        project_id: Optional[str] = None,
+        prompt: Optional[str] = None,
         session_id: Optional[str] = None,
         fork_session: bool = False
     ) -> str:
         """
-        Start a new agent task.
+        Start a new agent task, or launch execution of an existing task run by ID.
 
         Args:
-            agent_id: ID of the agent to use
+            agent_id: ID of the agent to use (or run_id if prompt is omitted)
             project_id: ID of the project context (optional)
-            prompt: The task prompt to execute
+            prompt: The task prompt to execute (optional if existing run ID provided)
             session_id: Optional session ID to resume
             fork_session: Whether to fork a new session
 
@@ -261,14 +275,64 @@ class ClaudeCodeRuntimeAdapter:
         # Import here to avoid circular imports
         from config import config_manager
 
+        # Check if agent_id is an existing subtask/run ID when prompt is omitted
+        if prompt is None:
+            existing_run = self._runs.get(agent_id)
+            if not existing_run:
+                try:
+                    from persistence import db_manager
+                    existing_run = db_manager.get_task_run(agent_id)
+                    if existing_run:
+                        self._runs[existing_run.run_id] = existing_run
+                except Exception:
+                    pass
+
+            if existing_run:
+                run_id = existing_run.run_id
+                agent_config = config_manager.get_agent(existing_run.agent_id)
+                if not agent_config:
+                    try:
+                        from persistence import db_manager
+                        agent_config = db_manager.get_agent(existing_run.agent_id)
+                    except Exception:
+                        pass
+                project_config = None
+                if existing_run.project_id:
+                    project_config = config_manager.get_project(existing_run.project_id)
+                    if not project_config:
+                        try:
+                            from persistence import db_manager
+                            project_config = db_manager.get_project(existing_run.project_id)
+                        except Exception:
+                            pass
+                thread = threading.Thread(
+                    target=self._execute_task,
+                    args=(run_id, agent_config, project_config, existing_run.prompt, session_id, fork_session)
+                )
+                thread.daemon = True
+                thread.start()
+                return run_id
+
         # Get configurations
         agent_config = config_manager.get_agent(agent_id)
+        if not agent_config:
+            try:
+                from persistence import db_manager
+                agent_config = db_manager.get_agent(agent_id)
+            except Exception:
+                pass
         if not agent_config:
             raise ValueError(f"Agent not found: {agent_id}")
 
         project_config = None
         if project_id:
             project_config = config_manager.get_project(project_id)
+            if not project_config:
+                try:
+                    from persistence import db_manager
+                    project_config = db_manager.get_project(project_id)
+                except Exception:
+                    pass
             if not project_config:
                 raise ValueError(f"Project not found: {project_id}")
 

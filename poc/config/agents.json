@@ -12,6 +12,41 @@
     "repo_path": "C:\\Users\\taguo\\OneDrive\\Desktop\\Projects\\test",
     "github_url": null,
     "department": "Engineering",
-    "avatar": null
+    "avatar": null,
+    "created_at": null,
+    "updated_at": null,
+    "parent_id": null,
+    "role_type": "WORKER",
+    "max_concurrent_children": 3,
+    "delegation_strategy": "hierarchical",
+    "allowed_child_ids": [],
+    "allowed_tools": [],
+    "template_id": null
+  },
+  "general-task-agent": {
+    "id": "general-task-agent",
+    "name": "General Task Agent",
+    "description": "Executes bounded read-only tasks in an assigned project",
+    "system_prompt": "You are a helpful AI agent that executes tasks accurately and concisely. When asked to summarize or analyze content, provide clear, structured responses without adding unnecessary commentary. Focus on completing the specific task requested.",
+    "skills": [
+      "basic-reading"
+    ],
+    "model": "nvidia_nim/nvidia/nemotron-3-super-120b-a12b",
+    "effort": "medium",
+    "max_tokens": 4000,
+    "temperature": 0.7,
+    "repo_path": null,
+    "github_url": null,
+    "department": "Engineering",
+    "avatar": null,
+    "created_at": null,
+    "updated_at": null,
+    "parent_id": null,
+    "role_type": "WORKER",
+    "max_concurrent_children": 3,
+    "delegation_strategy": "hierarchical",
+    "allowed_child_ids": [],
+    "allowed_tools": [],
+    "template_id": null
   }
 }

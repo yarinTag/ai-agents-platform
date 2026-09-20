@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { Agent, AgentCreateDto, AgentUpdateDto, AgentTemplate, TemplateInstantiateDto } from '../types/agent';
-import { Task, TaskCreateDto } from '../types/task';
+import { Task, TaskCreateDto, TaskDelegateDto, TaskTreeNode } from '../types/task';
 import { Skill, PluginPackage } from '../types/skill';
 import { Project } from '../types/project';
 import { ActivityEvent } from '../types/flow';
@@ -53,6 +53,9 @@ export const createTask = (data: TaskCreateDto) => api.post<Task>('/api/v1/tasks
 export const updateTask = (id: string, data: Partial<TaskCreateDto>) => api.put<Task>(`/api/v1/tasks/${id}/`, data);
 export const deleteTask = (id: string) => api.delete(`/api/v1/tasks/${id}/`);
 export const cancelTask = (id: string) => api.post(`/api/v1/tasks/${id}/cancel/`);
+export const delegateTask = (taskId: string, data: TaskDelegateDto) => api.post<Task>(`/api/v1/tasks/${taskId}/delegate/`, data);
+export const getSubtasks = (taskId: string) => api.get<Task[]>(`/api/v1/tasks/${taskId}/subtasks/`);
+export const getTaskTree = (taskId: string) => api.get<TaskTreeNode>(`/api/v1/tasks/${taskId}/tree/`);
 
 // System Stats & Real-Time Monitoring
 export const getSystemStats = () => api.get('/api/v1/events/system/stats');

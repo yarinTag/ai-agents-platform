@@ -1,1 +1,17 @@
-{}
+{
+  "demo-project": {
+    "id": "demo-project",
+    "name": "Demo Project",
+    "description": "A test project for demonstrating the AI Agents Platform",
+    "working_directory": "C:\\Users\\taguo\\Desktop\\ai-agents-platform\\poc",
+    "instructions": "This is a test project. Focus on reading files and providing summaries.",
+    "skills": [
+      "basic-reading"
+    ],
+    "allowed_tools": [
+      "read",
+      "grep",
+      "glob"
+    ]
+  }
+}

@@ -11,6 +11,7 @@ from datetime import datetime
 # All PoC imports go through the centralized dependencies module
 from ..dependencies import (
     get_config_manager, get_db_manager, get_runtime_adapter, get_event_service,
+    get_orchestration_engine, OrchestrationEngine, DelegationError, ConcurrencyLimitExceededError,
     AgentConfig, ProjectConfig, AgentRun, TaskStatus, EventService, EventType
 )
 import asyncio
@@ -29,6 +30,13 @@ class TaskCreate(BaseModel):
     skill_id: Optional[str] = None
 
 
+class TaskDelegateRequest(BaseModel):
+    target_agent_id: str = Field(..., min_length=1)
+    subtask_prompt: str = Field(..., min_length=1)
+    timeout_seconds: Optional[int] = Field(default=300, ge=10, le=3600)
+    project_id: Optional[str] = None
+
+
 class TaskResponse(BaseModel):
     id: str
     run_id: str
@@ -44,6 +52,9 @@ class TaskResponse(BaseModel):
     result: Optional[str] = None
     error: Optional[str] = None
     exit_code: Optional[int] = None
+    parent_task_id: Optional[str] = None
+    root_task_id: Optional[str] = None
+    assigned_by: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -77,13 +88,16 @@ def task_run_to_response(run: AgentRun) -> dict:
         "prompt": run.prompt,
         "input_data": {"task": run.prompt, "prompt": run.prompt},
         "output_data": {"result": run.result} if run.result else None,
-        "status": run.status.value,
+        "status": run.status.value if hasattr(run.status, "value") else str(run.status),
         "created_at": run.created_at.isoformat() if run.created_at else datetime.now().isoformat(),
         "started_at": run.started_at.isoformat() if run.started_at else None,
         "ended_at": run.ended_at.isoformat() if run.ended_at else None,
         "result": run.result,
         "error": run.error,
-        "exit_code": run.exit_code
+        "exit_code": run.exit_code,
+        "parent_task_id": getattr(run, "parent_task_id", None),
+        "root_task_id": getattr(run, "root_task_id", None),
+        "assigned_by": getattr(run, "assigned_by", None),
     }
 
 
@@ -410,3 +424,53 @@ async def get_task_logs(
         "result": run.result,
         "error": run.error
     }
+
+
+@router.post("/{run_id}/delegate", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/{run_id}/delegate/", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
+async def delegate_task(
+    run_id: str,
+    delegate_req: TaskDelegateRequest,
+    orchestration_engine = Depends(get_orchestration_engine)
+):
+    """Delegate a subtask from a parent task to a target agent."""
+    try:
+        subtask = orchestration_engine.delegate_task(
+            parent_task_id=run_id,
+            target_agent_id=delegate_req.target_agent_id,
+            subtask_prompt=delegate_req.subtask_prompt,
+            timeout_seconds=delegate_req.timeout_seconds or 300,
+            project_id=delegate_req.project_id
+        )
+        return task_run_to_response(subtask)
+    except ConcurrencyLimitExceededError as e:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(e))
+    except DelegationError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.get("/{run_id}/subtasks", response_model=List[TaskResponse])
+@router.get("/{run_id}/subtasks/", response_model=List[TaskResponse])
+async def get_subtasks(
+    run_id: str,
+    db_manager = Depends(get_db_manager)
+):
+    """Get all subtasks delegated by a parent task."""
+    subtasks = db_manager.get_subtasks(run_id)
+    return [task_run_to_response(s) for s in subtasks]
+
+
+@router.get("/{run_id}/tree")
+@router.get("/{run_id}/tree/")
+async def get_task_tree(
+    run_id: str,
+    db_manager = Depends(get_db_manager)
+):
+    """Get recursive task execution tree rooted at this task."""
+    tree = db_manager.get_task_tree(run_id)
+    if not tree:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Task tree not found: {run_id}"
+        )
+    return tree
