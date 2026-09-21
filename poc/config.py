@@ -47,6 +47,7 @@ class AgentConfig:
     allowed_child_ids: List[str] = None
     allowed_tools: List[str] = None
     template_id: Optional[str] = None
+    dangerously_skip_permissions: bool = False
 
     def __post_init__(self):
         if self.skills is None:
@@ -61,7 +62,11 @@ class AgentConfig:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'AgentConfig':
-        return cls(**data)
+        import inspect
+        valid_fields = set(inspect.signature(cls).parameters.keys())
+        filtered = {k: v for k, v in data.items() if k in valid_fields}
+        return cls(**filtered)
+
 
 
 @dataclass

@@ -87,7 +87,8 @@ class DatabaseManager:
                 ("delegation_strategy", "TEXT DEFAULT 'hierarchical'"),
                 ("allowed_child_ids", "TEXT"),
                 ("allowed_tools", "TEXT"),
-                ("template_id", "TEXT")
+                ("template_id", "TEXT"),
+                ("dangerously_skip_permissions", "INTEGER DEFAULT 0")
             ]:
                 try:
                     conn.execute(f"ALTER TABLE agents ADD COLUMN {col} {col_type}")
@@ -210,6 +211,25 @@ class DatabaseManager:
             """)
             conn.execute("CREATE INDEX IF NOT EXISTS idx_templates_category ON agent_templates(category)")
 
+            # Audit logs table for security tracking and compliance
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS audit_logs (
+                    id TEXT PRIMARY KEY,
+                    action TEXT NOT NULL,
+                    actor TEXT NOT NULL,
+                    entity_type TEXT NOT NULL,
+                    entity_id TEXT NOT NULL,
+                    details TEXT,
+                    ip_address TEXT,
+                    correlation_id TEXT,
+                    timestamp TIMESTAMP NOT NULL
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_logs(action)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_logs(entity_type, entity_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_time ON audit_logs(timestamp)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_correlation ON audit_logs(correlation_id)")
+
             # Seed default agent templates if table empty
             self._seed_default_templates(conn)
 
@@ -307,7 +327,8 @@ class DatabaseManager:
             delegation_strategy=row['delegation_strategy'] if 'delegation_strategy' in keys and row['delegation_strategy'] else 'hierarchical',
             allowed_child_ids=allowed_children,
             allowed_tools=allowed_tools,
-            template_id=row['template_id'] if 'template_id' in keys else None
+            template_id=row['template_id'] if 'template_id' in keys else None,
+            dangerously_skip_permissions=bool(row['dangerously_skip_permissions']) if 'dangerously_skip_permissions' in keys and row['dangerously_skip_permissions'] is not None else False
         )
 
     def _row_to_template(self, row: sqlite3.Row) -> AgentTemplate:
@@ -340,8 +361,8 @@ class DatabaseManager:
                 (id, name, description, system_prompt, skills, model, effort, max_tokens, temperature,
                  repo_path, github_url, department, avatar, created_at, updated_at,
                  parent_id, role_type, max_concurrent_children, delegation_strategy,
-                 allowed_child_ids, allowed_tools, template_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 allowed_child_ids, allowed_tools, template_id, dangerously_skip_permissions)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     name=excluded.name,
                     description=excluded.description,
@@ -362,7 +383,8 @@ class DatabaseManager:
                     delegation_strategy=excluded.delegation_strategy,
                     allowed_child_ids=excluded.allowed_child_ids,
                     allowed_tools=excluded.allowed_tools,
-                    template_id=excluded.template_id
+                    template_id=excluded.template_id,
+                    dangerously_skip_permissions=excluded.dangerously_skip_permissions
             """, (
                 agent.id,
                 agent.name,
@@ -385,7 +407,8 @@ class DatabaseManager:
                 getattr(agent, "delegation_strategy", "hierarchical"),
                 json.dumps(getattr(agent, "allowed_child_ids", []) or []),
                 json.dumps(getattr(agent, "allowed_tools", []) or []),
-                getattr(agent, "template_id", None)
+                getattr(agent, "template_id", None),
+                1 if getattr(agent, "dangerously_skip_permissions", False) else 0
             ))
             conn.commit()
 
@@ -896,6 +919,86 @@ class DatabaseManager:
                     timestamp=str(row["timestamp"])
                 ))
             return events
+
+    # Audit logging methods
+    def log_audit(
+        self,
+        action: str,
+        actor: str,
+        entity_type: str,
+        entity_id: str,
+        details: Optional[Dict[str, Any]] = None,
+        ip_address: Optional[str] = None,
+        correlation_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Record an immutable security audit trail event."""
+        log_id = f"aud_{uuid.uuid4().hex[:12]}"
+        now = datetime.now().isoformat()
+        details_json = json.dumps(details) if details is not None else None
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT INTO audit_logs
+                (id, action, actor, entity_type, entity_id, details, ip_address, correlation_id, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (log_id, action, actor, entity_type, entity_id, details_json, ip_address, correlation_id, now))
+            conn.commit()
+
+        return {
+            "id": log_id,
+            "action": action,
+            "actor": actor,
+            "entity_type": entity_type,
+            "entity_id": entity_id,
+            "details": details,
+            "ip_address": ip_address,
+            "correlation_id": correlation_id,
+            "timestamp": now
+        }
+
+    def get_audit_logs(
+        self,
+        limit: int = 100,
+        entity_type: Optional[str] = None,
+        action: Optional[str] = None,
+        actor: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Retrieve security audit logs with optional filters."""
+        query = "SELECT * FROM audit_logs WHERE 1=1"
+        params: List[Any] = []
+        if entity_type:
+            query += " AND entity_type = ?"
+            params.append(entity_type)
+        if action:
+            query += " AND action = ?"
+            params.append(action)
+        if actor:
+            query += " AND actor = ?"
+            params.append(actor)
+        query += " ORDER BY timestamp DESC LIMIT ?"
+        params.append(limit)
+
+        with self._get_connection() as conn:
+            rows = conn.execute(query, params).fetchall()
+            res = []
+            for r in rows:
+                details = None
+                if r['details']:
+                    try:
+                        details = json.loads(r['details'])
+                    except Exception:
+                        details = r['details']
+                res.append({
+                    "id": r['id'],
+                    "action": r['action'],
+                    "actor": r['actor'],
+                    "entity_type": r['entity_type'],
+                    "entity_id": r['entity_id'],
+                    "details": details,
+                    "ip_address": r['ip_address'],
+                    "correlation_id": r['correlation_id'],
+                    "timestamp": str(r['timestamp'])
+                })
+            return res
 
 
 # Global database instance

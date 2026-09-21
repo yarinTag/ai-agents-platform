@@ -2,7 +2,7 @@
 Main FastAPI application for the AI Agents Platform Dashboard API.
 """
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
@@ -14,6 +14,16 @@ from .api.tasks import router as tasks_router
 from .api.events import router as events_router
 from .api.templates import router as templates_router
 from .api.models import router as models_router
+from .api.audit import router as audit_router
+
+# Import security layer
+from .security import (
+    CorrelationIdMiddleware,
+    RateLimiterMiddleware,
+    authenticate_request,
+    http_exception_handler,
+    generic_exception_handler,
+)
 
 # Import dependencies for startup/shutdown
 from .dependencies import init_services, shutdown_services
@@ -37,7 +47,11 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Configure CORS
+# Exception handlers for uniform error structures
+app.add_exception_handler(HTTPException, http_exception_handler)
+app.add_exception_handler(Exception, generic_exception_handler)
+
+# Configure Middlewares (Order: Correlation -> RateLimiter -> CORS)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # In production, replace with specific origins
@@ -45,15 +59,22 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(RateLimiterMiddleware)
+app.add_middleware(CorrelationIdMiddleware)
+
+# Auth dependencies for protected routes
+auth_deps = [Depends(authenticate_request)]
 
 # Include API routers
-app.include_router(agents_router, prefix="/api/v1/agents", tags=["agents"])
-app.include_router(projects_router, prefix="/api/v1/projects", tags=["projects"])
-app.include_router(skills_router, prefix="/api/v1/skills", tags=["skills"])
-app.include_router(tasks_router, prefix="/api/v1/tasks", tags=["tasks"])
-app.include_router(events_router, prefix="/api/v1/events", tags=["events"])
-app.include_router(templates_router, prefix="/api/v1/templates", tags=["templates"])
-app.include_router(models_router, prefix="/api/v1/models", tags=["models"])
+app.include_router(agents_router, prefix="/api/v1/agents", tags=["agents"], dependencies=auth_deps)
+app.include_router(projects_router, prefix="/api/v1/projects", tags=["projects"], dependencies=auth_deps)
+app.include_router(skills_router, prefix="/api/v1/skills", tags=["skills"], dependencies=auth_deps)
+app.include_router(tasks_router, prefix="/api/v1/tasks", tags=["tasks"], dependencies=auth_deps)
+app.include_router(events_router, prefix="/api/v1/events", tags=["events"], dependencies=auth_deps)
+app.include_router(templates_router, prefix="/api/v1/templates", tags=["templates"], dependencies=auth_deps)
+app.include_router(models_router, prefix="/api/v1/models", tags=["models"], dependencies=auth_deps)
+app.include_router(audit_router, prefix="/api/v1/audit", tags=["audit"])
+app.include_router(audit_router, prefix="/api/v1/auth", tags=["auth"])
 
 
 @app.get("/")

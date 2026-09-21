@@ -166,68 +166,69 @@ async def test_template_instantiation_and_hierarchy_tree(temp_db):
     """Test instantiating agents from templates and querying hierarchy trees."""
     app.dependency_overrides[get_db_manager] = lambda: temp_db
 
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        # 1. Instantiate an Engineering Manager
-        mgr_payload = {
-            "name": "VP of Architecture",
-            "department": "Architecture",
-            "repo_path": "/workspace"
-        }
-        res = await client.post("/api/v1/templates/engineering-manager/instantiate", json=mgr_payload)
-        assert res.status_code == 201
-        mgr = res.json()
-        assert mgr["id"] == "vp-of-architecture"
-        assert mgr["role_type"] == "MANAGER"
-        assert mgr["template_id"] == "engineering-manager"
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            # 1. Instantiate an Engineering Manager
+            mgr_payload = {
+                "name": "VP of Architecture",
+                "department": "Architecture",
+                "repo_path": "/workspace"
+            }
+            res = await client.post("/api/v1/templates/engineering-manager/instantiate", json=mgr_payload)
+            assert res.status_code == 201
+            mgr = res.json()
+            assert mgr["id"] == "vp-of-architecture"
+            assert mgr["role_type"] == "MANAGER"
+            assert mgr["template_id"] == "engineering-manager"
 
-        # 2. Instantiate a Frontend Developer reporting to the VP
-        dev_payload = {
-            "name": "Lead UI Engineer",
-            "parent_id": "vp-of-architecture",
-            "department": "Frontend"
-        }
-        res = await client.post("/api/v1/templates/frontend-developer/instantiate", json=dev_payload)
-        assert res.status_code == 201
-        dev = res.json()
-        assert dev["id"] == "lead-ui-engineer"
-        assert dev["parent_id"] == "vp-of-architecture"
-        assert dev["role_type"] == "WORKER"
+            # 2. Instantiate a Frontend Developer reporting to the VP
+            dev_payload = {
+                "name": "Lead UI Engineer",
+                "parent_id": "vp-of-architecture",
+                "department": "Frontend"
+            }
+            res = await client.post("/api/v1/templates/frontend-developer/instantiate", json=dev_payload)
+            assert res.status_code == 201
+            dev = res.json()
+            assert dev["id"] == "lead-ui-engineer"
+            assert dev["parent_id"] == "vp-of-architecture"
+            assert dev["role_type"] == "WORKER"
 
-        # 3. Query VP's children
-        res = await client.get("/api/v1/agents/vp-of-architecture/children")
-        assert res.status_code == 200
-        children = res.json()
-        assert len(children) == 1
-        assert children[0]["id"] == "lead-ui-engineer"
+            # 3. Query VP's children
+            res = await client.get("/api/v1/agents/vp-of-architecture/children")
+            assert res.status_code == 200
+            children = res.json()
+            assert len(children) == 1
+            assert children[0]["id"] == "lead-ui-engineer"
 
-        # 4. Query VP's subtree
-        res = await client.get("/api/v1/agents/vp-of-architecture/hierarchy")
-        assert res.status_code == 200
-        subtree = res.json()
-        assert len(subtree) == 1
-        assert subtree[0]["id"] == "vp-of-architecture"
-        assert len(subtree[0]["children"]) == 1
-        assert subtree[0]["children"][0]["id"] == "lead-ui-engineer"
+            # 4. Query VP's subtree
+            res = await client.get("/api/v1/agents/vp-of-architecture/hierarchy")
+            assert res.status_code == 200
+            subtree = res.json()
+            assert len(subtree) == 1
+            assert subtree[0]["id"] == "vp-of-architecture"
+            assert len(subtree[0]["children"]) == 1
+            assert subtree[0]["children"][0]["id"] == "lead-ui-engineer"
 
-        # 5. Query entire hierarchy tree
-        res = await client.get("/api/v1/agents/hierarchy/tree")
-        assert res.status_code == 200
-        forest = res.json()
-        assert len(forest) >= 1
-        arch_roots = [tree for tree in forest if tree["id"] == "vp-of-architecture"]
-        assert len(arch_roots) == 1
+            # 5. Query entire hierarchy tree
+            res = await client.get("/api/v1/agents/hierarchy/tree")
+            assert res.status_code == 200
+            forest = res.json()
+            assert len(forest) >= 1
+            arch_roots = [tree for tree in forest if tree["id"] == "vp-of-architecture"]
+            assert len(arch_roots) == 1
 
-        # 6. Deleting manager with active children must be blocked
-        res = await client.delete("/api/v1/agents/vp-of-architecture")
-        assert res.status_code == 400
-        assert "subordinate child agents" in res.json()["detail"]
+            # 6. Deleting manager with active children must be blocked
+            res = await client.delete("/api/v1/agents/vp-of-architecture")
+            assert res.status_code == 400
+            assert "subordinate child agents" in res.json()["detail"]
 
-        # 7. Delete child first, then delete manager
-        res = await client.delete("/api/v1/agents/lead-ui-engineer")
-        assert res.status_code == 204
+            # 7. Delete child first, then delete manager
+            res = await client.delete("/api/v1/agents/lead-ui-engineer")
+            assert res.status_code == 204
 
-        res = await client.delete("/api/v1/agents/vp-of-architecture")
-        assert res.status_code == 204
-
-    app.dependency_overrides.clear()
+            res = await client.delete("/api/v1/agents/vp-of-architecture")
+            assert res.status_code == 204
+    finally:
+        app.dependency_overrides.clear()

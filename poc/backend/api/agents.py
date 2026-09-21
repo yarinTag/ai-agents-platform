@@ -177,6 +177,18 @@ async def create_agent(
         agent_id=agent_id,
         source="agents_api"
     )
+
+    try:
+        db_manager.log_audit(
+            action="AGENT_CREATE",
+            actor="api_client",
+            entity_type="agent",
+            entity_id=agent_id,
+            details={"name": agent_data.name, "role_type": role_type, "parent_id": parent_id}
+        )
+    except Exception:
+        pass
+
     return resp
 
 
@@ -285,6 +297,18 @@ async def update_agent(
         agent_id=agent_id,
         source="agents_api"
     )
+
+    try:
+        db_manager.log_audit(
+            action="AGENT_UPDATE",
+            actor="api_client",
+            entity_type="agent",
+            entity_id=agent_id,
+            details=update_data
+        )
+    except Exception:
+        pass
+
     return resp
 
 
@@ -332,4 +356,16 @@ async def delete_agent(
         agent_id=agent_id,
         source="agents_api"
     )
+
+    try:
+        db_manager.log_audit(
+            action="AGENT_DELETE",
+            actor="api_client",
+            entity_type="agent",
+            entity_id=agent_id,
+            details={"name": existing.name}
+        )
+    except Exception:
+        pass
+
     return None

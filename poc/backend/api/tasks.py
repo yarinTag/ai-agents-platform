@@ -182,6 +182,21 @@ async def create_task(
         source="tasks_api"
     )
 
+    try:
+        db_manager.log_audit(
+            action="TASK_DISPATCH",
+            actor="api_client",
+            entity_type="task",
+            entity_id=run.run_id,
+            details={
+                "agent_id": run.agent_id,
+                "project_id": run.project_id,
+                "prompt_preview": prompt[:80] if prompt else ""
+            }
+        )
+    except Exception:
+        pass
+
     return resp
 
 
@@ -431,7 +446,8 @@ async def get_task_logs(
 async def delegate_task(
     run_id: str,
     delegate_req: TaskDelegateRequest,
-    orchestration_engine = Depends(get_orchestration_engine)
+    orchestration_engine = Depends(get_orchestration_engine),
+    db_manager = Depends(get_db_manager)
 ):
     """Delegate a subtask from a parent task to a target agent."""
     try:
@@ -442,6 +458,22 @@ async def delegate_task(
             timeout_seconds=delegate_req.timeout_seconds or 300,
             project_id=delegate_req.project_id
         )
+
+        try:
+            db_manager.log_audit(
+                action="TASK_DELEGATE",
+                actor="orchestration_engine",
+                entity_type="task",
+                entity_id=subtask.run_id,
+                details={
+                    "parent_task_id": run_id,
+                    "target_agent_id": delegate_req.target_agent_id,
+                    "subtask_prompt": delegate_req.subtask_prompt[:80] if delegate_req.subtask_prompt else ""
+                }
+            )
+        except Exception:
+            pass
+
         return task_run_to_response(subtask)
     except ConcurrencyLimitExceededError as e:
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(e))

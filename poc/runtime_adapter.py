@@ -92,9 +92,10 @@ class ClaudeCodeRuntimeAdapter:
     """
 
     def __init__(self):
-        # Free Claude Code proxy configuration
-        self.proxy_url = "http://127.0.0.1:8082"
-        self.auth_token = "freecc"  # default from FCC settings
+        # Free Claude Code proxy configuration from environment or defaults
+        self.proxy_url = os.getenv("ANTHROPIC_BASE_URL", os.getenv("FCC_PROXY_URL", "http://127.0.0.1:8082"))
+        self.auth_token = os.getenv("ANTHROPIC_AUTH_TOKEN", os.getenv("FCC_AUTH_TOKEN", "freecc"))
+        self.max_concurrent_runs = int(os.getenv("PLATFORM_MAX_CONCURRENT_TASKS", "10"))
 
         # Active runs
         self._runs: Dict[str, AgentRun] = {}
@@ -153,9 +154,20 @@ class ClaudeCodeRuntimeAdapter:
         cmd.extend([
             "-p", prompt,
             "--output-format", "stream-json",
-            "--dangerously-skip-permissions",
             "--verbose"
         ])
+
+        # Make --dangerously-skip-permissions configurable per-agent or per-environment
+        skip_permissions = (
+            getattr(agent_config, "dangerously_skip_permissions", False) or
+            os.getenv("PLATFORM_DANGEROUSLY_SKIP_PERMISSIONS", "").lower() in ("true", "1")
+        )
+        if skip_permissions:
+            cmd.append("--dangerously-skip-permissions")
+
+        # Enforce agent tool restrictions if configured
+        if getattr(agent_config, "allowed_tools", None) and len(agent_config.allowed_tools) > 0:
+            cmd.extend(["--allowedTools", ",".join(agent_config.allowed_tools)])
 
         # Add working directory restriction if specified
         if project_config and project_config.working_directory:
@@ -312,6 +324,11 @@ class ClaudeCodeRuntimeAdapter:
                 thread.daemon = True
                 thread.start()
                 return run_id
+
+        # Check platform-wide concurrency limit
+        active_processes = sum(1 for p in self._processes.values() if p.poll() is None)
+        if active_processes >= self.max_concurrent_runs:
+            raise RuntimeError(f"Platform concurrency limit reached ({self.max_concurrent_runs} active runs). Try again later.")
 
         # Get configurations
         agent_config = config_manager.get_agent(agent_id)
