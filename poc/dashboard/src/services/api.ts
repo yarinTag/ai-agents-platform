@@ -62,4 +62,15 @@ export const getSystemStats = () => api.get('/api/v1/events/system/stats');
 export const getSystemHealth = () => api.get('/api/v1/events/system/health');
 export const getRecentActivity = (limit = 25) => api.get<{ activity: ActivityEvent[]; timestamp: string }>(`/api/v1/events/system/recent-activity?limit=${limit}`);
 
+// Models Discovery
+export interface DiscoveredModel {
+  id: string;
+  name: string;
+  provider: string;
+  description: string;
+  context_window: number;
+  is_default?: boolean;
+}
+export const getAvailableModels = () => api.get<DiscoveredModel[]>('/api/v1/models/');
+
 export default api;

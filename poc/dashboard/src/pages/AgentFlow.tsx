@@ -1,48 +1,73 @@
 import React, { useEffect, useState } from 'react';
-import { Spin, Button, Tag, message } from 'antd';
-import { ReloadOutlined } from '@ant-design/icons';
+import { Spin, Button, Tag, Badge } from 'antd';
+import { ReloadOutlined, ThunderboltOutlined, WifiOutlined } from '@ant-design/icons';
 import { AgentFlowDiagram } from '../components/flow/AgentFlowDiagram';
 import { AgentDeskDrawer } from '../components/office/AgentDeskDrawer';
 import { Agent } from '../types/agent';
-import { Task } from '../types/task';
 import { ActivityEvent } from '../types/flow';
-import { getAgents, getTasks, getRecentActivity } from '../services/api';
+import { getRecentActivity } from '../services/api';
+import { useOfficeEvents } from '../hooks/useOfficeEvents';
 
 export const AgentFlowPage: React.FC = () => {
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
+  const { agents, tasks, loading, connectionStatus, lastEvent, refresh } = useOfficeEvents();
   const [activity, setActivity] = useState<ActivityEvent[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [drawerVisible, setDrawerVisible] = useState<boolean>(false);
 
-  const fetchData = async () => {
-    try {
-      const [agentsRes, tasksRes, actRes] = await Promise.all([
-        getAgents(),
-        getTasks(),
-        getRecentActivity(15).catch(() => ({ data: { activity: [] } })),
-      ]);
-      setAgents(agentsRes.data || []);
-      setTasks(tasksRes.data || []);
-      setActivity(actRes.data?.activity || []);
-    } catch (err) {
-      console.error('Failed to load flow data', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Initial load of historical activity
   useEffect(() => {
-    fetchData();
-    // Live update polling every 3s
-    const interval = setInterval(fetchData, 3000);
-    return () => clearInterval(interval);
+    getRecentActivity(20)
+      .then((res) => {
+        setActivity(res.data?.activity || []);
+      })
+      .catch((err) => {
+        console.error('Failed to load initial recent activity:', err);
+      });
   }, []);
+
+  // Ingest live SSE events into the activity feed dynamically with ZERO polling
+  useEffect(() => {
+    if (!lastEvent) return;
+
+    const payload = lastEvent.payload || {};
+    const desc = payload.prompt
+      ? `Task: "${payload.prompt.slice(0, 50)}${payload.prompt.length > 50 ? '...' : ''}"`
+      : payload.name
+      ? `Agent: ${payload.name}`
+      : payload.result
+      ? `Result: ${String(payload.result).slice(0, 50)}`
+      : payload.error
+      ? `Error: ${String(payload.error).slice(0, 50)}`
+      : `Event on ${lastEvent.task_id || lastEvent.agent_id || 'platform'}`;
+
+    const newActivity: ActivityEvent = {
+      type: lastEvent.event_type,
+      action: lastEvent.event_type.replace(/[_.]/g, ' ').toUpperCase(),
+      description: desc,
+      timestamp: lastEvent.timestamp || new Date().toISOString(),
+      entity_id: lastEvent.task_id || lastEvent.agent_id || '',
+      entity_type: lastEvent.task_id ? 'task' : 'agent',
+      agent_id: lastEvent.agent_id,
+      project_id: lastEvent.project_id,
+    };
+
+    setActivity((prev) => [newActivity, ...prev.slice(0, 29)]);
+  }, [lastEvent]);
 
   const handleSelectAgent = (agent: Agent) => {
     setSelectedAgent(agent);
     setDrawerVisible(true);
+  };
+
+  const getStatusColor = () => {
+    switch (connectionStatus) {
+      case 'connected':
+        return '#52c41a';
+      case 'reconnecting':
+        return '#faad14';
+      default:
+        return '#ff4d4f';
+    }
   };
 
   return (
@@ -66,15 +91,27 @@ export const AgentFlowPage: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          <Tag color="cyan" style={{ borderRadius: '12px', padding: '4px 10px', fontSize: '12px' }}>
-            ● LIVE STREAMING
+          <Tag
+            color={connectionStatus === 'connected' ? 'cyan' : 'default'}
+            style={{
+              borderRadius: '12px',
+              padding: '4px 12px',
+              fontSize: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            <Badge color={getStatusColor()} />
+            {connectionStatus === 'connected'
+              ? 'LIVE SSE STREAMING'
+              : connectionStatus === 'reconnecting'
+              ? 'RECONNECTING...'
+              : 'OFFLINE'}
           </Tag>
           <Button
             icon={<ReloadOutlined />}
-            onClick={() => {
-              setLoading(true);
-              fetchData();
-            }}
+            onClick={() => refresh()}
             style={{ background: '#21262d', color: '#c9d1d9', borderColor: '#30363d' }}
           >
             Refresh
@@ -102,10 +139,11 @@ export const AgentFlowPage: React.FC = () => {
         tasks={tasks}
         visible={drawerVisible}
         onClose={() => setDrawerVisible(false)}
-        onTaskCreated={fetchData}
+        onTaskCreated={refresh}
       />
     </div>
   );
 };
 
 export default AgentFlowPage;
+

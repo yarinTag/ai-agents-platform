@@ -13,6 +13,7 @@ from .api.skills import router as skills_router
 from .api.tasks import router as tasks_router
 from .api.events import router as events_router
 from .api.templates import router as templates_router
+from .api.models import router as models_router
 
 # Import dependencies for startup/shutdown
 from .dependencies import init_services, shutdown_services
@@ -52,6 +53,7 @@ app.include_router(skills_router, prefix="/api/v1/skills", tags=["skills"])
 app.include_router(tasks_router, prefix="/api/v1/tasks", tags=["tasks"])
 app.include_router(events_router, prefix="/api/v1/events", tags=["events"])
 app.include_router(templates_router, prefix="/api/v1/templates", tags=["templates"])
+app.include_router(models_router, prefix="/api/v1/models", tags=["models"])
 
 
 @app.get("/")

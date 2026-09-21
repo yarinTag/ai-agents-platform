@@ -7,8 +7,11 @@ import {
   Modal,
   Tag,
   Select,
+  InputNumber,
   message,
   Tooltip,
+  Tabs,
+  Space,
 } from 'antd';
 import {
   PlusOutlined,
@@ -17,25 +20,44 @@ import {
   FolderOpenOutlined,
   GithubOutlined,
   LaptopOutlined,
+  CrownOutlined,
+  StarOutlined,
+  UserOutlined,
+  BranchesOutlined,
+  BookOutlined,
+  TeamOutlined,
 } from '@ant-design/icons';
-import { Agent } from '../types/agent';
-import { getAgents, createAgent, updateAgent, deleteAgent, getSkills } from '../services/api';
-import { AI_MODELS } from '../constants/models';
+import { Agent, AgentRole } from '../types/agent';
+import {
+  getAgents,
+  createAgent,
+  updateAgent,
+  deleteAgent,
+  getSkills,
+  getAvailableModels,
+  DiscoveredModel,
+} from '../services/api';
+import { CharacterSelector } from '../components/agents/CharacterSelector';
+import { TemplateGallery } from '../components/agents/TemplateGallery';
+import { HierarchyEditor } from '../components/agents/HierarchyEditor';
 
 const DEPARTMENTS = [
   'Engineering',
   'Architecture',
   'QA & Testing',
   'Research & Ops',
+  'HQ',
 ];
 
 export const AgentsPage: React.FC = () => {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [availableSkills, setAvailableSkills] = useState<{ label: string; value: string }[]>([]);
+  const [availableModels, setAvailableModels] = useState<DiscoveredModel[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [visible, setVisible] = useState<boolean>(false);
   const [form] = Form.useForm();
   const [editingKey, setEditingKey] = useState<string>('');
+  const [activeTab, setActiveTab] = useState<string>('roster');
 
   const fetchAgents = async () => {
     try {
@@ -50,11 +72,17 @@ export const AgentsPage: React.FC = () => {
     }
   };
 
-  const fetchSkillsList = async () => {
+  const fetchSkillsAndModels = async () => {
     try {
-      const res = await getSkills();
-      if (res.data) {
-        setAvailableSkills(res.data.map((s) => ({ label: s.name, value: s.id })));
+      const [skillsRes, modelsRes] = await Promise.all([
+        getSkills().catch(() => ({ data: [] })),
+        getAvailableModels().catch(() => ({ data: [] })),
+      ]);
+      if (skillsRes.data) {
+        setAvailableSkills(skillsRes.data.map((s) => ({ label: s.name, value: s.id })));
+      }
+      if (modelsRes.data) {
+        setAvailableModels(modelsRes.data);
       }
     } catch {
       // Fallback
@@ -63,11 +91,20 @@ export const AgentsPage: React.FC = () => {
 
   useEffect(() => {
     fetchAgents();
-    fetchSkillsList();
+    fetchSkillsAndModels();
   }, []);
 
   const handleCreate = () => {
     form.resetFields();
+    form.setFieldsValue({
+      role_type: 'WORKER',
+      department: 'Engineering',
+      model: 'default',
+      max_tokens: 8000,
+      temperature: 0.7,
+      max_concurrent_children: 3,
+      avatar: 'frontend_dev',
+    });
     setEditingKey('');
     setVisible(true);
   };
@@ -84,8 +121,9 @@ export const AgentsPage: React.FC = () => {
       }
       setVisible(false);
       fetchAgents();
-    } catch (err) {
-      message.error('Failed to save agent');
+    } catch (err: any) {
+      const detail = err.response?.data?.detail || 'Failed to save agent';
+      message.error(detail);
       console.error(err);
     }
   };
@@ -95,22 +133,70 @@ export const AgentsPage: React.FC = () => {
       title: 'Agent Name & Role',
       dataIndex: 'name',
       key: 'name',
-      render: (name: string, record: Agent) => (
-        <div>
-          <div style={{ fontWeight: 600, color: '#f3f4f6', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <LaptopOutlined /> {name}
+      render: (name: string, record: Agent) => {
+        const role = (record.role_type || 'WORKER').toUpperCase();
+        return (
+          <div>
+            <div style={{ fontWeight: 600, color: '#f3f4f6', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              {role === 'ROOT_ORCHESTRATOR' ? (
+                <CrownOutlined style={{ color: '#fbbf24' }} />
+              ) : role === 'MANAGER' ? (
+                <StarOutlined style={{ color: '#f59e0b' }} />
+              ) : (
+                <LaptopOutlined style={{ color: '#38bdf8' }} />
+              )}
+              <span>{name}</span>
+              <Tag
+                color={
+                  role === 'ROOT_ORCHESTRATOR'
+                    ? 'purple'
+                    : role === 'MANAGER'
+                    ? 'gold'
+                    : role === 'SPECIALIST'
+                    ? 'magenta'
+                    : 'cyan'
+                }
+                style={{ fontSize: '10px', padding: '0 4px', margin: 0 }}
+              >
+                {role}
+              </Tag>
+            </div>
+            <div style={{ fontSize: '11px', color: '#9ca3af' }}>{record.description || 'General Purpose Agent'}</div>
           </div>
-          <div style={{ fontSize: '11px', color: '#9ca3af' }}>{record.description || 'General Purpose Agent'}</div>
-        </div>
-      ),
+        );
+      },
+    },
+    {
+      title: 'Supervisor (Parent)',
+      dataIndex: 'parent_id',
+      key: 'parent_id',
+      render: (parentId?: string) => {
+        if (!parentId) return <span style={{ color: '#64748b', fontSize: '12px' }}>— (Root / Direct)</span>;
+        const parentAgent = agents.find((a) => a.id === parentId);
+        return (
+          <Tag color="gold" style={{ fontSize: '11px' }}>
+            ⭐ {parentAgent ? parentAgent.name : parentId}
+          </Tag>
+        );
+      },
     },
     {
       title: 'Department',
       dataIndex: 'department',
       key: 'department',
       render: (dept?: string) => (
-        <Tag color={dept === 'Architecture' ? 'purple' : dept === 'QA & Testing' ? 'cyan' : 'blue'}>
+        <Tag color={dept === 'Architecture' ? 'purple' : dept === 'QA & Testing' ? 'cyan' : dept === 'HQ' ? 'gold' : 'blue'}>
           {dept || 'Engineering'}
+        </Tag>
+      ),
+    },
+    {
+      title: 'Model',
+      dataIndex: 'model',
+      key: 'model',
+      render: (model?: string) => (
+        <Tag color="geekblue" style={{ fontSize: '11px' }}>
+          {model || 'default'}
         </Tag>
       ),
     },
@@ -123,7 +209,7 @@ export const AgentsPage: React.FC = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <FolderOpenOutlined style={{ color: '#e3b341' }} />
             <Tooltip title={repo || 'No local repo configured'}>
-              <span style={{ color: repo ? '#58a6ff' : '#6e7681', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <span style={{ color: repo ? '#58a6ff' : '#6e7681', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {repo ? repo.split(/[\\/]/).pop() || repo : 'Default Workspace'}
               </span>
             </Tooltip>
@@ -137,28 +223,10 @@ export const AgentsPage: React.FC = () => {
       ),
     },
     {
-      title: 'Equipped Skills',
-      dataIndex: 'skills',
-      key: 'skills',
-      render: (skills: string[] = []) => (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-          {skills.length === 0 ? (
-            <span style={{ color: '#6e7681', fontSize: '11px' }}>Core Builtins</span>
-          ) : (
-            skills.map((s) => (
-              <Tag key={s} color="geekblue" style={{ fontSize: '10px' }}>
-                {s}
-              </Tag>
-            ))
-          )}
-        </div>
-      ),
-    },
-    {
       title: 'Actions',
       key: 'actions',
       render: (_: any, record: Agent) => (
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <Space size="small">
           <Button
             size="small"
             icon={<EditOutlined />}
@@ -168,6 +236,9 @@ export const AgentsPage: React.FC = () => {
                 description: record.description,
                 system_prompt: record.system_prompt,
                 department: record.department || 'Engineering',
+                role_type: record.role_type || 'WORKER',
+                parent_id: record.parent_id || null,
+                max_concurrent_children: record.max_concurrent_children || 3,
                 repo_path: record.repo_path,
                 github_url: record.github_url,
                 skills: record.skills,
@@ -175,6 +246,7 @@ export const AgentsPage: React.FC = () => {
                 effort: record.effort,
                 max_tokens: record.max_tokens,
                 temperature: record.temperature,
+                avatar: record.avatar || 'frontend_dev',
               });
               setEditingKey(record.id);
               setVisible(true);
@@ -193,17 +265,24 @@ export const AgentsPage: React.FC = () => {
                   fetchAgents();
                 })
                 .catch((err) => {
-                  message.error('Failed to delete agent');
-                  console.error(err);
+                  const detail = err.response?.data?.detail || 'Failed to delete agent';
+                  message.error(detail);
                 });
             }}
           >
             Delete
           </Button>
-        </div>
+        </Space>
       ),
     },
   ];
+
+  // Eligible supervisors for parent_id selection
+  const eligibleManagers = agents.filter((a) => {
+    if (editingKey && a.id === editingKey) return false;
+    const r = (a.role_type || '').toUpperCase();
+    return r === 'MANAGER' || r === 'ROOT_ORCHESTRATOR';
+  });
 
   return (
     <div>
@@ -211,108 +290,211 @@ export const AgentsPage: React.FC = () => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <div>
           <h2 style={{ margin: 0, color: '#f3f4f6', fontSize: '22px', fontWeight: 700 }}>
-            🤖 Agents Roster & Configuration
+            👥 Agent Management & Team Hierarchy
           </h2>
           <span style={{ color: '#9ca3af', fontSize: '13px' }}>
-            Manage virtual team members, local repo links, departments and skill allocations
+            Assemble multi-agent units, define reporting lines, and manage model parameters.
           </span>
         </div>
-
         <Button
           type="primary"
           icon={<PlusOutlined />}
           onClick={handleCreate}
-          style={{ background: '#238636', borderColor: '#238636' }}
+          style={{ background: '#10b981', borderColor: '#10b981', borderRadius: '8px' }}
         >
-          Hire New Agent
+          Create Custom Agent
         </Button>
       </div>
 
-      <Table
-        loading={loading}
-        rowKey="id"
-        columns={columns}
-        dataSource={agents}
-        pagination={{ pageSize: 10 }}
+      {/* Tabs */}
+      <Tabs
+        activeKey={activeTab}
+        onChange={setActiveTab}
+        items={[
+          {
+            key: 'roster',
+            label: (
+              <span>
+                <TeamOutlined /> Active Roster ({agents.length})
+              </span>
+            ),
+            children: (
+              <Table
+                dataSource={agents}
+                columns={columns}
+                rowKey="id"
+                loading={loading}
+                pagination={{ pageSize: 8 }}
+                style={{ background: '#161b22', borderRadius: '12px', overflow: 'hidden' }}
+              />
+            ),
+          },
+          {
+            key: 'hierarchy',
+            label: (
+              <span>
+                <BranchesOutlined /> Hierarchy Tree
+              </span>
+            ),
+            children: <HierarchyEditor onHierarchyUpdated={fetchAgents} />,
+          },
+          {
+            key: 'templates',
+            label: (
+              <span>
+                <BookOutlined /> Template Gallery
+              </span>
+            ),
+            children: <TemplateGallery agents={agents} onAgentInstantiated={fetchAgents} />,
+          },
+        ]}
       />
 
-      {/* Agent Modal */}
+      {/* Agent Create / Edit Modal */}
       <Modal
-        title={editingKey ? 'Configure Agent' : 'Hire New Agent'}
+        title={editingKey ? 'Edit Agent Profile & Hierarchy' : 'Create Autonomous Agent'}
         open={visible}
         onOk={handleOk}
         onCancel={() => setVisible(false)}
-        width={620}
+        width={720}
+        okText={editingKey ? 'Save Changes' : 'Deploy Agent'}
+        destroyOnClose
       >
-        <Form
-          form={form}
-          layout="vertical"
-          initialValues={{
-            department: 'Engineering',
-            model: 'default',
-            effort: 'medium',
-            temperature: 0.7,
-            max_tokens: 4000,
-            repo_path: 'C:\\Users\\taguo\\OneDrive\\Desktop\\Projects\\test',
-          }}
-        >
-          <Form.Item label="Agent Name" name="name" rules={[{ required: true, message: 'Please input agent name!' }]}>
-            <Input placeholder="e.g. Backend Lead Agent" />
+        <Form form={form} layout="vertical">
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <Form.Item
+              name="name"
+              label="Agent Name"
+              rules={[{ required: true, message: 'Agent name is required' }]}
+            >
+              <Input placeholder="e.g. Lead Architect" />
+            </Form.Item>
+
+            <Form.Item name="department" label="Department">
+              <Select>
+                {DEPARTMENTS.map((d) => (
+                  <Select.Option key={d} value={d}>
+                    {d}
+                  </Select.Option>
+                ))}
+              </Select>
+            </Form.Item>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <Form.Item
+              name="role_type"
+              label="Role & Delegation Authority"
+              rules={[{ required: true, message: 'Role is required' }]}
+            >
+              <Select>
+                <Select.Option value="ROOT_ORCHESTRATOR">👑 ROOT_ORCHESTRATOR (Top Executive)</Select.Option>
+                <Select.Option value="MANAGER">⭐ MANAGER (Can Supervise & Delegate)</Select.Option>
+                <Select.Option value="WORKER">💻 WORKER (Task Executor)</Select.Option>
+                <Select.Option value="SPECIALIST">🛡️ SPECIALIST (Domain Expert)</Select.Option>
+              </Select>
+            </Form.Item>
+
+            <Form.Item
+              noStyle
+              shouldUpdate={(prev, curr) => prev.role_type !== curr.role_type}
+            >
+              {({ getFieldValue }) => {
+                const role = getFieldValue('role_type');
+                if (role === 'ROOT_ORCHESTRATOR') {
+                  return (
+                    <Form.Item label="Reports To">
+                      <Input disabled value="None (Top Level Root)" />
+                    </Form.Item>
+                  );
+                }
+                return (
+                  <Form.Item
+                    name="parent_id"
+                    label="Supervisor (Reports To)"
+                    help="Manager supervising this agent"
+                  >
+                    <Select placeholder="Select Manager" allowClear>
+                      {eligibleManagers.map((m) => (
+                        <Select.Option key={m.id} value={m.id}>
+                          ⭐ {m.name} ({m.role_type})
+                        </Select.Option>
+                      ))}
+                    </Select>
+                  </Form.Item>
+                );
+              }}
+            </Form.Item>
+          </div>
+
+          <Form.Item
+            noStyle
+            shouldUpdate={(prev, curr) => prev.role_type !== curr.role_type}
+          >
+            {({ getFieldValue }) => {
+              const role = getFieldValue('role_type');
+              if (role === 'MANAGER' || role === 'ROOT_ORCHESTRATOR') {
+                return (
+                  <Form.Item
+                    name="max_concurrent_children"
+                    label="Max Concurrent Subtasks"
+                    help="Limit on parallel delegated tasks this manager can run simultaneously"
+                  >
+                    <InputNumber min={1} max={20} style={{ width: '100%' }} />
+                  </Form.Item>
+                );
+              }
+              return null;
+            }}
           </Form.Item>
 
-          <Form.Item label="Department / Role" name="department">
-            <Select>
-              {DEPARTMENTS.map((dept) => (
-                <Select.Option key={dept} value={dept}>
-                  {dept}
-                </Select.Option>
-              ))}
-            </Select>
-          </Form.Item>
-
-          <Form.Item label="Description" name="description">
-            <Input placeholder="Primary responsibility and specialty" />
+          <Form.Item name="description" label="Short Role Description">
+            <Input placeholder="Coordinates frontend implementation and design system compliance" />
           </Form.Item>
 
           <Form.Item
-            label="Linked Local Repository Path (on PC)"
-            name="repo_path"
-            tooltip="Path to local codebase where this agent executes commands and edits code"
+            name="system_prompt"
+            label="System Instructions (Prompt)"
+            rules={[{ required: true, message: 'System prompt is required' }]}
           >
-            <Input prefix={<FolderOpenOutlined style={{ color: '#e3b341' }} />} placeholder="C:\Users\taguo\OneDrive\Desktop\Projects\test" />
-          </Form.Item>
-
-          <Form.Item label="GitHub Repository URL (Optional)" name="github_url">
-            <Input prefix={<GithubOutlined />} placeholder="https://github.com/ajsahni/agents-office" />
-          </Form.Item>
-
-          <Form.Item
-            label="AI Model (FCC Overridden)"
-            name="model"
-            rules={[{ required: true, message: 'Please select an AI model!' }]}
-            tooltip="Select the underlying Free Claude Code model alias for this agent"
-          >
-            <Select
-              showSearch
-              placeholder="Select model (Default, Sonnet, Opus, Haiku, Fable)"
-              options={AI_MODELS}
-              optionFilterProp="label"
+            <Input.TextArea
+              rows={4}
+              placeholder="You are an autonomous AI Agent. Execute tasks with precision..."
             />
           </Form.Item>
 
-          <Form.Item
-            label="Reasoning Effort / Budget"
-            name="effort"
-          >
-            <Select>
-              <Select.Option value="low">Low (Fast responses)</Select.Option>
-              <Select.Option value="medium">Medium (Balanced)</Select.Option>
-              <Select.Option value="high">High (Deep reasoning & verification)</Select.Option>
-            </Select>
-          </Form.Item>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <Form.Item name="model" label="AI Model">
+              <Select>
+                {availableModels.length > 0 ? (
+                  availableModels.map((m) => (
+                    <Select.Option key={m.id} value={m.id}>
+                      {m.name} ({m.provider})
+                    </Select.Option>
+                  ))
+                ) : (
+                  <Select.Option value="default">Default Claude</Select.Option>
+                )}
+              </Select>
+            </Form.Item>
 
-          <Form.Item label="System Prompt" name="system_prompt" rules={[{ required: true, message: 'System prompt required!' }]}>
-            <Input.TextArea rows={4} placeholder="You are an autonomous AI software engineer..." />
+            <Form.Item name="skills" label="Equipped Skills">
+              <Select mode="multiple" placeholder="Select skills" options={availableSkills} />
+            </Form.Item>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <Form.Item name="repo_path" label="Local Repository Path">
+              <Input placeholder="c:\projects\my-repo" />
+            </Form.Item>
+            <Form.Item name="github_url" label="GitHub URL">
+              <Input placeholder="https://github.com/org/repo" />
+            </Form.Item>
+          </div>
+
+          {/* Character / Avatar Selector */}
+          <Form.Item name="avatar" label="Pixel Art Office Avatar">
+            <CharacterSelector />
           </Form.Item>
         </Form>
       </Modal>
