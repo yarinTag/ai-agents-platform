@@ -1,7 +1,7 @@
 # AGENTS.md - Scheduler & Cron Engine Service
 
 ## 1. Service Identity & Mission
-The **Scheduler & Cron Engine Service** (`poc/backend/cron_engine.py` & `poc/backend/api/schedules.py`) provides headless, autonomous time-based task triggering. It enables agents to run routine maintenance, audits, security sweeps, and data syncing according to standard 5-part Cron expressions.
+The **Scheduler & Cron Engine Service** (`poc/backend/scheduler/engine.py` & `poc/backend/scheduler/router.py`) provides headless, autonomous time-based task triggering. It enables agents to run routine maintenance, audits, security sweeps, and data syncing according to standard 5-part Cron expressions.
 
 ---
 

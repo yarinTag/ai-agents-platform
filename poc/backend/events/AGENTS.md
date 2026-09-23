@@ -1,7 +1,7 @@
 # AGENTS.md - Events & Real-Time Streaming Bus Service
 
 ## 1. Service Identity & Mission
-The **Events & Real-Time Streaming Bus Service** (`poc/events.py` & `poc/backend/api/events.py`) provides the reactive backbone of the platform. It captures lifecycle events from agents, tasks, schedules, approvals, and chats, broadcasting them instantaneously to connected UI dashboards and external listeners.
+The **Events & Real-Time Streaming Bus Service** (`poc/events.py` & `poc/backend/events/router.py`) provides the reactive backbone of the platform. It captures lifecycle events from agents, tasks, schedules, approvals, and chats, broadcasting them instantaneously to connected UI dashboards and external listeners.
 
 ---
 
@@ -41,6 +41,7 @@ event_bus.publish(PlatformEvent(
 
 ### SSE Stream Endpoint
 * `GET /api/v1/events/stream` - Persistent SSE stream with 15s keepalive ping and historical replay.
+* `GET /api/v1/events/system/stats` - Platform health and task execution metrics.
 
 ---
 

@@ -1,7 +1,7 @@
 # AGENTS.md - Multi-Agent War Room & Deliberation Council Service
 
 ## 1. Service Identity & Mission
-The **Multi-Agent War Room & Deliberation Council Service** (`poc/backend/api/war_room.py`) facilitates structured, multi-agent debates and alignment sessions before executing complex or risky engineering tasks. It brings together agents of diverse specializations (e.g., Architect, Backend Lead, QA Specialist, Security Officer) to debate trade-offs, critique proposals, and forge a consensus plan.
+The **Multi-Agent War Room & Deliberation Council Service** (`poc/backend/war_room/router.py`) facilitates structured, multi-agent debates and alignment sessions before executing complex or risky engineering tasks. It brings together agents of diverse specializations (e.g., Architect, Backend Lead, QA Specialist, Security Officer) to debate trade-offs, critique proposals, and forge a consensus plan.
 
 ---
 

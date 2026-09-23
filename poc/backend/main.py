@@ -11,15 +11,15 @@ from .api.agents import router as agents_router
 from .api.projects import router as projects_router
 from .api.skills import router as skills_router
 from .api.tasks import router as tasks_router
-from .api.events import router as events_router
+from .events.router import router as events_router
 from .api.templates import router as templates_router
 from .api.models import router as models_router
 from .api.audit import router as audit_router
-from .api.schedules import router as schedules_router
-from .api.approvals import router as approvals_router
-from .api.chat import router as chat_router
-from .api.memories import router as memories_router
-from .api.war_room import router as war_room_router
+from .scheduler.router import router as schedules_router
+from .approvals.router import router as approvals_router
+from .chat.router import router as chat_router
+from .memory.router import router as memories_router
+from .war_room.router import router as war_room_router
 
 # Import security layer
 from .security import (

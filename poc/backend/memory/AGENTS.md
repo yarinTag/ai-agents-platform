@@ -1,7 +1,7 @@
 # AGENTS.md - Project Shared Memory & Knowledge Base Service
 
 ## 1. Service Identity & Mission
-The **Project Shared Memory & Knowledge Base Service** (`poc/backend/api/memories.py`) is the persistent institutional brain of the platform. It prevents redundant discovery by enabling agents to persist architectural decision records (ADRs), coding conventions, operational insights, and post-mortem lessons that are immediately shared across all agents in the workspace.
+The **Project Shared Memory & Knowledge Base Service** (`poc/backend/memory/`) is the persistent institutional brain of the platform. It prevents redundant discovery by enabling agents to persist architectural decision records (ADRs), coding conventions, operational insights, and post-mortem lessons that are immediately shared across all agents in the workspace.
 
 ---
 
