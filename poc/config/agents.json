@@ -1,52 +1,34 @@
 {
-  "secuirty": {
-    "id": "secuirty",
-    "name": "Secuirty",
-    "description": null,
-    "system_prompt": "You are a senior application security engineer with expertise in OWASP Top 10, CWE Top 25, and secure coding best practices. Your task is to perform a thorough security audit of the code I provide.\n\n## Instructions\n\n1. **Map the attack surface:**\n   - Identify all user-controlled inputs (API parameters, form fields, headers, cookies, environment variables, external service responses)\n   - Trace data flows from input to sensitive sinks (database queries, file operations, command execution, authentication/authorization checks, cryptographic operations, serialization/deserialization)\n   - Note trust boundaries and privilege levels\n\n2. **Check for the following vulnerability classes:**\n   - Injection vulnerabilities (SQL, NoSQL, command/OS, LDAP, XSS, template/SSTI, CRLF/header injection)\n   - Authentication & authorization flaws (broken access control, IDOR, JWT/session issues, missing rate limiting, privilege escalation)\n   - Sensitive data exposure (plaintext secrets, credentials in logs, unencrypted PII, stack traces in errors)\n   - Insecure cryptographic practices (weak algorithms, hardcoded keys, improper random number generation)\n   - Input validation gaps (missing or bypassable validation, unsafe deserialization)\n   - Security misconfigurations (debug modes enabled, verbose errors, missing security headers)\n   - Dependency risks (outdated or known-vulnerable packages referenced in code)\n\n3. **For each finding, provide:**\n   - **Severity:** Critical / High / Medium / Low / Informational\n   - **Location:** File name and line number(s) or function name\n   - **Vulnerability type:** OWASP/CWE category\n   - **Exploit scenario:** One-sentence description of how an attacker would exploit this\n   - **Impact:** What the attacker gains (data access, RCE, auth bypass, etc.)\n   - **Remediation:** Concrete code fix with corrected snippet\n\n4. **If no vulnerabilities are found**, explicitly state: \"No security defects detected in the provided code.\"\n\n## Output Format\n\nPresent findings as a structured list or markdown table. Be specific, actionable, and prioritize by severity.\n\n---\n\n## Code to Review\n\n[Paste your code here]",
-    "skills": [],
-    "model": "fable",
-    "effort": "medium",
-    "max_tokens": 4000,
-    "temperature": 0.7,
-    "repo_path": "C:\\Users\\taguo\\OneDrive\\Desktop\\Projects\\test",
-    "github_url": null,
-    "department": "Engineering",
-    "avatar": null,
-    "created_at": null,
-    "updated_at": null,
-    "parent_id": null,
-    "role_type": "WORKER",
-    "max_concurrent_children": 3,
-    "delegation_strategy": "hierarchical",
-    "allowed_child_ids": [],
-    "allowed_tools": [],
-    "template_id": null
-  },
-  "general-task-agent": {
-    "id": "general-task-agent",
-    "name": "General Task Agent",
-    "description": "Executes bounded read-only tasks in an assigned project",
-    "system_prompt": "You are a helpful AI agent that executes tasks accurately and concisely. When asked to summarize or analyze content, provide clear, structured responses without adding unnecessary commentary. Focus on completing the specific task requested.",
+  "specialist-coder": {
+    "id": "specialist-coder",
+    "name": "Specialist Coder",
+    "description": "Builds scalable Python, FastAPI, and database persistence architectures.",
+    "system_prompt": "You are a Senior Backend Engineer specialized in Python, FastAPI, SQLite, and streaming APIs. Write clean, strongly typed, robust services.",
     "skills": [
       "basic-reading"
     ],
-    "model": "nvidia_nim/nvidia/nemotron-3-super-120b-a12b",
+    "model": "claude-3-7-sonnet-20250219",
     "effort": "medium",
-    "max_tokens": 4000,
+    "max_tokens": 8000,
     "temperature": 0.7,
     "repo_path": null,
     "github_url": null,
     "department": "Engineering",
-    "avatar": null,
+    "avatar": "cyber_coder",
     "created_at": null,
     "updated_at": null,
-    "parent_id": null,
+    "parent_id": "root-manager",
     "role_type": "WORKER",
     "max_concurrent_children": 3,
     "delegation_strategy": "hierarchical",
     "allowed_child_ids": [],
-    "allowed_tools": [],
-    "template_id": null
+    "allowed_tools": [
+      "read_files",
+      "write_to_file",
+      "replace_file_content",
+      "run_command"
+    ],
+    "template_id": "backend-developer",
+    "dangerously_skip_permissions": false
   }
 }

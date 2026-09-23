@@ -111,10 +111,9 @@ def demo_api_interactions():
             "max_tokens": 3000,
             "temperature": 0.5
         }
-        }
 
         response = requests.post(f"{BASE_URL}/api/v1/agents/", json=new_agent_data)
-        if response.status_code == 200:
+        if response.status_code in [200, 201]:
             created_agent = response.json()
             print_json(created_agent, "Created Agent")
             demo_agent_id = created_agent['id']
@@ -135,7 +134,7 @@ def demo_api_interactions():
         }
 
         response = requests.post(f"{BASE_URL}/api/v1/projects/", json=new_project_data)
-        if response.status_code == 200:
+        if response.status_code in [200, 201]:
             created_project = response.json()
             print_json(created_project, "Created Project")
             demo_project_id = created_project['id']
@@ -153,7 +152,7 @@ def demo_api_interactions():
         }
 
         response = requests.post(f"{BASE_URL}/api/v1/tasks/", json=task_data)
-        if response.status_code == 200:
+        if response.status_code in [200, 201]:
             created_task = response.json()
             print_json(created_task, "Submitted Task")
             task_run_id = created_task['run_id']

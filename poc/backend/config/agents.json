@@ -4,12 +4,15 @@
     "name": "The Brain (Chief Orchestrator)",
     "description": "Central AI Orchestrator in Executive HQ coordinating all department leads and synthesizing corporate intelligence",
     "system_prompt": "You are The Brain, the central AI executive orchestrator. You coordinate all department leads, dispatch tactical missions, and synthesize intelligence.",
-    "skills": ["core-reasoning", "core-git"],
+    "skills": [
+      "core-reasoning",
+      "core-git"
+    ],
     "model": "opus",
     "effort": "high",
     "max_tokens": 8000,
     "temperature": 0.7,
-    "repo_path": "C:\\Users\\taguo\\OneDrive\\Desktop\\Projects\\test",
+    "repo_path": null,
     "github_url": null,
     "department": "Executive HQ",
     "avatar": "brain"
@@ -19,12 +22,14 @@
     "name": "Marketing Director",
     "description": "Head of Growth & Campaigns, optimizing multi-channel acquisition and brand messaging",
     "system_prompt": "You are the Marketing Lead directing viral campaigns, social positioning, and growth funnels.",
-    "skills": ["core-reasoning"],
+    "skills": [
+      "core-reasoning"
+    ],
     "model": "sonnet",
     "effort": "high",
     "max_tokens": 8000,
     "temperature": 0.7,
-    "repo_path": "C:\\Users\\taguo\\OneDrive\\Desktop\\Projects\\test",
+    "repo_path": null,
     "github_url": null,
     "department": "Marketing",
     "avatar": "marketing"
@@ -34,12 +39,14 @@
     "name": "Content & Copy Specialist",
     "description": "Writes high-converting landing pages, ads, and social content",
     "system_prompt": "You are a creative copywriter generating punchy, high-converting content.",
-    "skills": ["core-reasoning"],
+    "skills": [
+      "core-reasoning"
+    ],
     "model": "sonnet",
     "effort": "medium",
     "max_tokens": 4000,
     "temperature": 0.8,
-    "repo_path": "C:\\Users\\taguo\\OneDrive\\Desktop\\Projects\\test",
+    "repo_path": null,
     "github_url": null,
     "department": "Marketing",
     "avatar": "content"
@@ -49,12 +56,14 @@
     "name": "Email Communications Lead",
     "description": "Manages automated outreach sequences, client correspondence, and inbox triage",
     "system_prompt": "You are the Email Lead managing sequences, deliverability, and client communication.",
-    "skills": ["core-reasoning"],
+    "skills": [
+      "core-reasoning"
+    ],
     "model": "haiku",
     "effort": "medium",
     "max_tokens": 4000,
     "temperature": 0.5,
-    "repo_path": "C:\\Users\\taguo\\OneDrive\\Desktop\\Projects\\test",
+    "repo_path": null,
     "github_url": null,
     "department": "Emails",
     "avatar": "emails"
@@ -64,12 +73,15 @@
     "name": "Product Delivery Manager",
     "description": "Oversees feature releases, milestone execution, and client fulfillment pipelines",
     "system_prompt": "You are the Delivery Lead driving feature ship cycles, QA acceptance, and zero-defect deployments.",
-    "skills": ["core-executor", "backend-fastapi"],
+    "skills": [
+      "core-executor",
+      "backend-fastapi"
+    ],
     "model": "sonnet",
     "effort": "high",
     "max_tokens": 8000,
     "temperature": 0.6,
-    "repo_path": "C:\\Users\\taguo\\OneDrive\\Desktop\\Projects\\test",
+    "repo_path": null,
     "github_url": null,
     "department": "Delivery",
     "avatar": "delivery"
@@ -79,12 +91,14 @@
     "name": "Sales & Revenue Director",
     "description": "Manages pipeline velocity, lead scoring, enterprise negotiation, and revenue forecasting",
     "system_prompt": "You are the Sales Lead driving deals across enterprise pipelines and optimizing win rates.",
-    "skills": ["core-reasoning"],
+    "skills": [
+      "core-reasoning"
+    ],
     "model": "sonnet",
     "effort": "high",
     "max_tokens": 8000,
     "temperature": 0.7,
-    "repo_path": "C:\\Users\\taguo\\OneDrive\\Desktop\\Projects\\test",
+    "repo_path": null,
     "github_url": null,
     "department": "Sales",
     "avatar": "sales"
@@ -94,12 +108,14 @@
     "name": "Operations Lead",
     "description": "Coordinates internal workflows, process automation, SLA tracking, and resource allocation",
     "system_prompt": "You are the Operations Lead optimizing business processes and systems efficiency.",
-    "skills": ["core-executor"],
+    "skills": [
+      "core-executor"
+    ],
     "model": "haiku",
     "effort": "medium",
     "max_tokens": 8000,
     "temperature": 0.5,
-    "repo_path": "C:\\Users\\taguo\\OneDrive\\Desktop\\Projects\\p-skills",
+    "repo_path": null,
     "github_url": null,
     "department": "Operations",
     "avatar": "operations"
@@ -109,12 +125,14 @@
     "name": "Finance & Analytics Controller",
     "description": "Oversees unit economics, token cost tracking, invoices, and financial compliance",
     "system_prompt": "You are the Financial Controller tracking burn rates, margins, and budget allocations.",
-    "skills": ["shared-finance"],
+    "skills": [
+      "shared-finance"
+    ],
     "model": "fable",
     "effort": "medium",
     "max_tokens": 8000,
     "temperature": 0.3,
-    "repo_path": "C:\\Users\\taguo\\OneDrive\\Desktop\\Projects\\test",
+    "repo_path": null,
     "github_url": null,
     "department": "Finance",
     "avatar": "finance"
@@ -124,14 +142,54 @@
     "name": "Engineering Lead",
     "description": "Technical department manager overseeing backend and frontend implementation",
     "system_prompt": "You are the Engineering Department Lead supervising code quality and architecture.",
-    "skills": ["backend-fastapi", "core-executor"],
+    "skills": [
+      "backend-fastapi",
+      "core-executor"
+    ],
     "model": "sonnet",
     "effort": "high",
     "max_tokens": 8000,
     "temperature": 0.7,
-    "repo_path": "C:\\Users\\taguo\\OneDrive\\Desktop\\Projects\\test",
+    "repo_path": null,
     "github_url": null,
     "department": "Engineering",
     "avatar": "engineer"
+  },
+  "secuirty": {
+    "id": "secuirty",
+    "name": "Security Auditor",
+    "description": "Performs vulnerability audits and CWE/OWASP compliance scans",
+    "system_prompt": "You are a senior application security engineer with expertise in OWASP Top 10 and secure coding.",
+    "skills": [
+      "security-audit"
+    ],
+    "model": "fable",
+    "effort": "medium",
+    "max_tokens": 4000,
+    "temperature": 0.5,
+    "repo_path": null,
+    "github_url": null,
+    "department": "Engineering",
+    "avatar": "security",
+    "role_type": "WORKER"
+  },
+  "general-task-agent": {
+    "id": "general-task-agent",
+    "name": "General Task Agent",
+    "description": "Executes general platform tasks and file analysis",
+    "system_prompt": "You are a helpful AI agent that executes tasks concisely.",
+    "skills": [
+      "basic-reading",
+      "core-executor"
+    ],
+    "model": "sonnet",
+    "effort": "medium",
+    "max_tokens": 4000,
+    "temperature": 0.7,
+    "repo_path": null,
+    "github_url": null,
+    "department": "Operations",
+    "avatar": "general",
+    "role_type": "WORKER"
   }
 }

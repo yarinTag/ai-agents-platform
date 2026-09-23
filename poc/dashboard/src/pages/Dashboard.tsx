@@ -153,7 +153,7 @@ export const DashboardPage: React.FC = () => {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <CheckCircleOutlined style={{ color: '#52c41a' }} />
-            <span style={{ color: '#d1d5db' }}>Local Plugins: <strong>C:\Users\taguo\OneDrive\Desktop\Projects\test</strong></span>
+            <span style={{ color: '#d1d5db' }}>Plugin Hub: <strong>Local Workspace Scanned</strong></span>
           </div>
         </div>
       </Card>

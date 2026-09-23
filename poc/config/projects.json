@@ -13,5 +13,18 @@
       "grep",
       "glob"
     ]
+  },
+  "p-skills": {
+    "id": "p-skills",
+    "name": "p-skills",
+    "description": "Source of truth",
+    "working_directory": "C:\\Users\\taguo\\OneDrive\\Desktop\\Projects/p-skills",
+    "instructions": null,
+    "skills": [],
+    "allowed_tools": [
+      "read",
+      "grep",
+      "glob"
+    ]
   }
 }

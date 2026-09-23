@@ -64,23 +64,10 @@ export const OfficeTopBar: React.FC = () => {
           </span>
         </Link>
 
-        {/* Connected To Label & Icons */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10px', fontWeight: 800, color: '#78716c' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981' }} />
-            <span>CONNECTED TO</span>
-          </div>
-
-          {/* App Icons (Meta, Claude, GitHub, Notion, Gmail, Discord) */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', color: '#44403c' }}>
-            <span title="Meta / Facebook" style={{ cursor: 'pointer' }}>♾️</span>
-            <span title="Anthropic Claude" style={{ cursor: 'pointer' }}>✳️</span>
-            <span title="OpenAI / ChatGPT" style={{ cursor: 'pointer' }}>⚡</span>
-            <span title="GitHub Local Repos" style={{ cursor: 'pointer' }}><GithubOutlined /></span>
-            <span title="Notion Notes" style={{ cursor: 'pointer' }}>📓</span>
-            <span title="Google Workspace / Gmail" style={{ cursor: 'pointer' }}>✉️</span>
-            <span title="Terminal CLI" style={{ cursor: 'pointer' }}>💻</span>
-          </div>
+        {/* Live Platform Status */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10px', fontWeight: 800, color: '#047857', background: '#ecfdf5', padding: '3px 8px', borderRadius: '12px', border: '1px solid #a7f3d0' }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981' }} />
+          <span>ACTIVE PLATFORM</span>
         </div>
       </div>
 

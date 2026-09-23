@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Drawer,
   Tag,
@@ -23,7 +23,7 @@ import {
 } from '@ant-design/icons';
 import { Agent } from '../../types/agent';
 import { Task } from '../../types/task';
-import { createTask, updateAgent } from '../../services/api';
+import { createTask, updateAgent, scanPlugins, getSkills } from '../../services/api';
 import { AI_MODELS } from '../../constants/models';
 
 const { Paragraph } = Typography;
@@ -47,6 +47,61 @@ export const AgentDeskDrawer: React.FC<AgentDeskDrawerProps> = ({
   const [repoForm] = Form.useForm();
   const [running, setRunning] = useState(false);
   const [savingRepo, setSavingRepo] = useState(false);
+  const [availableSkills, setAvailableSkills] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchSkills = async () => {
+      try {
+        const [skillsRes, pluginsRes] = await Promise.all([
+          getSkills().catch(() => ({ data: [] })),
+          scanPlugins().catch(() => ({ data: { plugins: [] } })),
+        ]);
+        const formattedOptions: any[] = [];
+        if (pluginsRes.data && pluginsRes.data.plugins) {
+          pluginsRes.data.plugins.forEach((pkg: any) => {
+            if (pkg.skills && pkg.skills.length > 0) {
+              formattedOptions.push({
+                label: `📦 ${pkg.display_name || pkg.name.toUpperCase()} (${pkg.skills.length})`,
+                title: pkg.name,
+                options: pkg.skills.map((s: any) => ({
+                  label: `⚡ ${s.name} (${s.id})`,
+                  value: s.id,
+                  title: s.description,
+                })),
+              });
+            }
+          });
+        }
+        if (skillsRes.data && skillsRes.data.length > 0) {
+          formattedOptions.push({
+            label: `💾 Custom / DB Skills (${skillsRes.data.length})`,
+            title: 'custom',
+            options: skillsRes.data.map((s: any) => ({
+              label: `⚡ ${s.name} (${s.id})`,
+              value: s.id,
+              title: s.description || '',
+            })),
+          });
+        }
+        setAvailableSkills(formattedOptions);
+      } catch {
+        // Fallback
+      }
+    };
+    fetchSkills();
+  }, []);
+
+  useEffect(() => {
+    if (agent) {
+      repoForm.setFieldsValue({
+        repo_path: agent.repo_path || 'C:\\Users\\taguo\\Desktop\\ai-agents-platform',
+        github_url: agent.github_url || '',
+        model: agent.model || 'default',
+        department: agent.department || 'Engineering',
+        skills: agent.skills || [],
+      });
+    }
+  }, [agent, repoForm]);
 
   if (!agent) return null;
 
@@ -91,12 +146,14 @@ export const AgentDeskDrawer: React.FC<AgentDeskDrawerProps> = ({
         github_url: values.github_url,
         model: values.model,
         department: values.department,
+        skills: values.skills || [],
       });
       message.success('Workstation configuration updated!');
       agent.repo_path = values.repo_path;
       agent.github_url = values.github_url;
       agent.model = values.model;
       agent.department = values.department;
+      agent.skills = values.skills || [];
       onTaskCreated();
     } catch (err) {
       message.error('Failed to update workstation configuration');
@@ -276,7 +333,7 @@ export const AgentDeskDrawer: React.FC<AgentDeskDrawerProps> = ({
                   form={repoForm}
                   layout="vertical"
                   initialValues={{
-                    repo_path: agent.repo_path || 'C:\\Users\\taguo\\OneDrive\\Desktop\\Projects\\test',
+                    repo_path: agent.repo_path || 'C:\\Users\\taguo\\Desktop\\ai-agents-platform',
                     github_url: agent.github_url || '',
                     model: agent.model || 'default',
                     department: agent.department || 'Engineering',
@@ -299,11 +356,13 @@ export const AgentDeskDrawer: React.FC<AgentDeskDrawerProps> = ({
                     label={<span style={{ color: '#9ca3af' }}>Department Wing</span>}
                   >
                     <Select>
-                      <Select.Option value="Executive HQ">Executive HQ (Center)</Select.Option>
-                      <Select.Option value="Engineering">Engineering Wing</Select.Option>
-                      <Select.Option value="Architecture">Architecture Wing</Select.Option>
-                      <Select.Option value="QA & Testing">QA & Testing Wing</Select.Option>
-                      <Select.Option value="Research & Ops">Research & Ops Wing</Select.Option>
+                      <Select.Option value="Executive HQ">Executive HQ</Select.Option>
+                      <Select.Option value="Engineering">Engineering</Select.Option>
+                      <Select.Option value="Marketing">Marketing</Select.Option>
+                      <Select.Option value="Emails">Emails & Outreach</Select.Option>
+                      <Select.Option value="Delivery">Delivery & QA</Select.Option>
+                      <Select.Option value="Sales">Sales & Revenue</Select.Option>
+                      <Select.Option value="Operations">Operations</Select.Option>
                     </Select>
                   </Form.Item>
 
@@ -313,7 +372,7 @@ export const AgentDeskDrawer: React.FC<AgentDeskDrawerProps> = ({
                   >
                     <Input
                       prefix={<FolderOpenOutlined style={{ color: '#e3b341' }} />}
-                      placeholder="e.g. C:\Users\taguo\OneDrive\Desktop\Projects\test"
+                      placeholder="e.g. C:\Users\taguo\Desktop\ai-agents-platform"
                       style={{ background: '#161b22', color: '#fff', borderColor: '#30363d' }}
                     />
                   </Form.Item>
@@ -326,6 +385,29 @@ export const AgentDeskDrawer: React.FC<AgentDeskDrawerProps> = ({
                       prefix={<GithubOutlined style={{ color: '#fff' }} />}
                       placeholder="https://github.com/org/repo"
                       style={{ background: '#161b22', color: '#fff', borderColor: '#30363d' }}
+                    />
+                  </Form.Item>
+
+                  <Form.Item
+                    name="skills"
+                    label={<span style={{ color: '#9ca3af' }}>Equipped Skills (from Skills Marketplace)</span>}
+                    help="Select skills from your skills repo to equip on this desk"
+                  >
+                    <Select
+                      mode="multiple"
+                      allowClear
+                      showSearch
+                      placeholder="Search and equip skills (e.g., api-design)"
+                      options={availableSkills}
+                      filterOption={(input, option) => {
+                        const labelStr = typeof option?.label === 'string' ? option.label : String(option?.value || '');
+                        return (
+                          labelStr.toLowerCase().includes(input.toLowerCase()) ||
+                          String(option?.value || '').toLowerCase().includes(input.toLowerCase()) ||
+                          String(option?.title || '').toLowerCase().includes(input.toLowerCase())
+                        );
+                      }}
+                      style={{ width: '100%' }}
                     />
                   </Form.Item>
 
@@ -347,9 +429,8 @@ export const AgentDeskDrawer: React.FC<AgentDeskDrawerProps> = ({
                   <span style={{ fontSize: '12px', color: '#8b949e' }}>Quick Select Available Projects:</span>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
                     {[
-                      'C:\\Users\\taguo\\OneDrive\\Desktop\\Projects\\test',
-                      'C:\\Users\\taguo\\OneDrive\\Desktop\\Projects\\p-skills',
                       'C:\\Users\\taguo\\Desktop\\ai-agents-platform',
+                      '.',
                     ].map((path) => (
                       <div
                         key={path}
@@ -381,7 +462,7 @@ export const AgentDeskDrawer: React.FC<AgentDeskDrawerProps> = ({
             key: 'skills',
             label: (
               <span>
-                <AppstoreOutlined /> Equipped Skills
+                <AppstoreOutlined /> Equipped Skills ({agent.skills?.length || 0})
               </span>
             ),
             children: (

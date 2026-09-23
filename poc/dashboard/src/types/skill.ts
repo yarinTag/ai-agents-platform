@@ -15,10 +15,17 @@ export interface PluginSkill {
   path: string;
   description: string;
   plugin: string;
+  domain?: string;
+  version?: string;
+  content_preview?: string;
 }
 
 export interface PluginPackage {
   name: string;
+  display_name?: string;
+  version?: string;
+  description?: string;
+  domain?: string;
   path: string;
   skills_count: number;
   skills: PluginSkill[];

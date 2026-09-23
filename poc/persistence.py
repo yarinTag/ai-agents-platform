@@ -528,8 +528,9 @@ class DatabaseManager:
             return cursor.rowcount > 0
 
     def delete_agent(self, agent_id: str):
-        """Delete an agent and clean up any linked task runs."""
+        """Delete an agent and clean up any linked task runs and hierarchy relationships."""
         with self._get_connection() as conn:
+            conn.execute("UPDATE agents SET parent_id = NULL WHERE parent_id = ?", (agent_id,))
             conn.execute("DELETE FROM task_runs WHERE agent_id = ?", (agent_id,))
             conn.execute("DELETE FROM agents WHERE id = ?", (agent_id,))
             conn.commit()
@@ -747,8 +748,9 @@ class DatabaseManager:
             return [self._row_to_task_run(row) for row in cursor.fetchall()]
 
     def delete_task_run(self, run_id: str):
-        """Delete a task run."""
+        """Delete a task run and any child subtasks."""
         with self._get_connection() as conn:
+            conn.execute("DELETE FROM task_runs WHERE parent_task_id = ?", (run_id,))
             conn.execute("DELETE FROM task_runs WHERE run_id = ?", (run_id,))
             conn.commit()
 

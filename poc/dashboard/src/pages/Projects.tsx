@@ -166,7 +166,7 @@ export const ProjectsPage: React.FC = () => {
             <Input placeholder="e.g. SmartTrader App" />
           </Form.Item>
           <Form.Item label="Working Directory" name="working_directory">
-            <Input placeholder="C:\Users\taguo\OneDrive\Desktop\Projects\test" />
+            <Input placeholder="C:\Users\taguo\Desktop\ai-agents-platform" />
           </Form.Item>
           <Form.Item label="Description" name="description">
             <Input.TextArea rows={3} placeholder="Project scope and guidelines" />

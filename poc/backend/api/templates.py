@@ -167,7 +167,7 @@ async def instantiate_agent_from_template(
         )
 
     agent_id = request.name.lower().replace(" ", "-").replace("_", "-")
-    existing = db_manager.get_agent(agent_id) or config_manager.get_agent(agent_id)
+    existing = db_manager.get_agent(agent_id)
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

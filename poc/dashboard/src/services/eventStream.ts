@@ -93,12 +93,14 @@ class EventStreamService {
         'task.failed',
         'task.cancelled',
         'task.delegated',
+        'task.deleted',
         'task_created',
         'task_started',
         'task_completed',
         'task_failed',
         'task_cancelled',
         'task_delegated',
+        'task_deleted',
       ];
 
       registeredTypes.forEach((type) => {

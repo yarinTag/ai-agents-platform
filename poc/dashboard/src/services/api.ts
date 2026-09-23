@@ -17,7 +17,8 @@ export const getAgents = () => api.get<Agent[]>('/api/v1/agents/');
 export const getAgent = (id: string) => api.get<Agent>(`/api/v1/agents/${id}/`);
 export const createAgent = (data: AgentCreateDto) => api.post<Agent>('/api/v1/agents/', data);
 export const updateAgent = (id: string, data: AgentUpdateDto) => api.put<Agent>(`/api/v1/agents/${id}/`, data);
-export const deleteAgent = (id: string) => api.delete(`/api/v1/agents/${id}/`);
+export const deleteAgent = (id: string, cascade: boolean = true) =>
+  api.delete(`/api/v1/agents/${id}/`, { params: { cascade } });
 export const getAgentChildren = (id: string) => api.get<Agent[]>(`/api/v1/agents/${id}/children/`);
 export const getAgentHierarchy = (id: string) => api.get<any[]>(`/api/v1/agents/${id}/hierarchy/`);
 export const getEntireHierarchyTree = () => api.get<any[]>('/api/v1/agents/hierarchy/tree');
@@ -44,18 +45,20 @@ export const getSkill = (id: string) => api.get<Skill>(`/api/v1/skills/${id}`);
 export const createSkill = (data: Partial<Skill>) => api.post<Skill>('/api/v1/skills/', data);
 export const updateSkill = (id: string, data: Partial<Skill>) => api.put<Skill>(`/api/v1/skills/${id}`, data);
 export const deleteSkill = (id: string) => api.delete(`/api/v1/skills/${id}`);
-export const scanPlugins = () => api.get<{ status: string; plugins: PluginPackage[]; total_skills: number }>('/api/v1/skills/plugins/scan');
+export const scanPlugins = () => api.get<{ status: string; marketplace_path?: string; plugins: PluginPackage[]; total_skills: number }>('/api/v1/skills/plugins/scan');
+export const getPluginSkillContent = (path: string) => api.get<{ path: string; content: string }>('/api/v1/skills/plugins/content', { params: { path } });
 
 // Tasks
 export const getTasks = () => api.get<Task[]>('/api/v1/tasks/');
-export const getTask = (id: string) => api.get<Task>(`/api/v1/tasks/${id}/`);
+export const getTask = (id: string) => api.get<Task>(`/api/v1/tasks/${id}`);
+export const getTaskLogs = (id: string) => api.get<{ run_id: string; events: any[]; status: string; result: any; error: any }>(`/api/v1/tasks/${id}/logs`);
 export const createTask = (data: TaskCreateDto) => api.post<Task>('/api/v1/tasks/', data);
-export const updateTask = (id: string, data: Partial<TaskCreateDto>) => api.put<Task>(`/api/v1/tasks/${id}/`, data);
-export const deleteTask = (id: string) => api.delete(`/api/v1/tasks/${id}/`);
-export const cancelTask = (id: string) => api.post(`/api/v1/tasks/${id}/cancel/`);
-export const delegateTask = (taskId: string, data: TaskDelegateDto) => api.post<Task>(`/api/v1/tasks/${taskId}/delegate/`, data);
-export const getSubtasks = (taskId: string) => api.get<Task[]>(`/api/v1/tasks/${taskId}/subtasks/`);
-export const getTaskTree = (taskId: string) => api.get<TaskTreeNode>(`/api/v1/tasks/${taskId}/tree/`);
+export const updateTask = (id: string, data: Partial<TaskCreateDto>) => api.put<Task>(`/api/v1/tasks/${id}`, data);
+export const deleteTask = (id: string) => api.delete(`/api/v1/tasks/${id}`);
+export const cancelTask = (id: string) => api.post(`/api/v1/tasks/${id}/cancel`);
+export const delegateTask = (taskId: string, data: TaskDelegateDto) => api.post<Task>(`/api/v1/tasks/${taskId}/delegate`, data);
+export const getSubtasks = (taskId: string) => api.get<Task[]>(`/api/v1/tasks/${taskId}/subtasks`);
+export const getTaskTree = (taskId: string) => api.get<TaskTreeNode>(`/api/v1/tasks/${taskId}/tree`);
 
 // System Stats & Real-Time Monitoring
 export const getSystemStats = () => api.get('/api/v1/events/system/stats');

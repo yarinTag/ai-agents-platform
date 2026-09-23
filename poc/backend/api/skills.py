@@ -3,11 +3,12 @@ Skill management API endpoints.
 """
 
 from fastapi import APIRouter, HTTPException, Depends, status
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 
 import os
 import re
+import json
 from pathlib import Path
 
 # All PoC imports go through the centralized dependencies module
@@ -169,99 +170,251 @@ async def delete_skill(
     return None
 
 
+
 @router.get("/plugins/scan")
 async def scan_plugins():
-    """Scan configured plugin repositories for available skills."""
+    """Scan configured plugin repositories and local folders for available skills."""
     scan_env = os.environ.get("SKILLS_SCAN_PATHS", "")
-    potential_roots = [p.strip() for p in scan_env.split(";") if p.strip()] if scan_env else []
-    # Add local platform skills directory relative to project root
-    poc_skills_dir = Path(__file__).resolve().parent.parent.parent / "skills"
-    poc_config_skills_dir = Path(__file__).resolve().parent.parent.parent / "config" / "skills"
-    potential_roots.extend([str(poc_skills_dir), str(poc_config_skills_dir)])
+    potential_roots: List[Path] = []
 
-    plugins_data = []
+    # 1. Environment variable overrides
+    for env_var in ["SKILLS_REPO_PATH", "MARKETPLACE_PATH"]:
+        val = os.environ.get(env_var, "").strip()
+        if val:
+            p = Path(val)
+            if p.exists() and p not in potential_roots:
+                potential_roots.append(p.resolve())
 
-    for root_path in potential_roots:
-        if not os.path.exists(root_path):
+    if scan_env:
+        for p_str in scan_env.split(";"):
+            p_clean = p_str.strip()
+            if p_clean:
+                p = Path(p_clean)
+                if p.exists() and p not in potential_roots:
+                    potential_roots.append(p.resolve())
+
+    # 2. Dynamic discovery across user directories and workspace
+    home = Path.home()
+    try:
+        for child in home.iterdir():
+            if child.is_dir():
+                cand = child / "Desktop" / "Projects" / "p-skills" / "skills-marketplace"
+                if cand.exists() and cand.resolve() not in potential_roots:
+                    potential_roots.append(cand.resolve())
+                cand2 = child / "Projects" / "p-skills" / "skills-marketplace"
+                if cand2.exists() and cand2.resolve() not in potential_roots:
+                    potential_roots.append(cand2.resolve())
+    except Exception:
+        pass
+
+    for direct_child in [
+        home / "Desktop" / "Projects" / "p-skills" / "skills-marketplace",
+        home / "Projects" / "p-skills" / "skills-marketplace",
+        home / "p-skills" / "skills-marketplace",
+    ]:
+        if direct_child.exists() and direct_child.resolve() not in potential_roots:
+            potential_roots.append(direct_child.resolve())
+
+    # 4. Workspace locations
+    poc_dir = Path(__file__).resolve().parent.parent.parent
+    workspace_dir = poc_dir.parent
+
+    for candidate in [
+        workspace_dir.parent / "p-skills" / "skills-marketplace",
+        poc_dir / "plugins",
+        poc_dir / "config" / "skills",
+        poc_dir / "skills",
+        workspace_dir / "plugins",
+        workspace_dir / "skills",
+    ]:
+        if candidate.exists() and candidate.resolve() not in potential_roots:
+            potential_roots.append(candidate.resolve())
+
+    plugins_map: Dict[str, Dict[str, Any]] = {}
+    primary_marketplace_root: Optional[str] = None
+
+    def extract_skill_meta(file_path: Path, default_plugin: str, default_domain: str = "", default_version: str = "1.0.0") -> dict:
+        skill_id = file_path.parent.name if file_path.name.lower() == "skill.md" else file_path.stem
+        skill_name = skill_id.replace("-", " ").replace("_", " ").title()
+        desc = ""
+        plugin_name = default_plugin
+        domain = default_domain
+        version = default_version
+        content = ""
+
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                content = f.read(8192)
+
+                m_h1 = re.search(r"^#\s+(.+)$", content, re.MULTILINE)
+                if m_h1:
+                    skill_name = m_h1.group(1).strip()
+
+                m_name = re.search(r"^name:\s*[\"']?([^\"'\n\r]+)[\"']?", content, re.MULTILINE)
+                if m_name and not m_h1:
+                    skill_name = m_name.group(1).strip().replace("-", " ").title()
+
+                m_plugin = re.search(r"^plugin:\s*[\"']?([^\"'\n\r]+)[\"']?", content, re.MULTILINE)
+                if m_plugin:
+                    plugin_name = m_plugin.group(1).strip()
+
+                m_desc = re.search(r"^description:\s*[\"']?([^\"'\n\r]+)[\"']?", content, re.MULTILINE)
+                if m_desc:
+                    desc = m_desc.group(1).strip()
+                else:
+                    lines = [l.strip() for l in content.splitlines()[:15]]
+                    desc = " ".join([l for l in lines if l and not l.startswith(("#", "---"))])[:160]
+
+                m_domain = re.search(r"domain:\s*[\"']?([^\s\"'\n\r]+)[\"']?", content)
+                if m_domain:
+                    domain = m_domain.group(1).strip()
+
+                m_ver = re.search(r"version:\s*[\"']?([^\s\"'\n\r]+)[\"']?", content)
+                if m_ver:
+                    version = m_ver.group(1).strip()
+        except Exception:
+            pass
+
+        return {
+            "id": skill_id,
+            "name": skill_name,
+            "filename": file_path.name,
+            "path": str(file_path),
+            "description": desc or f"Skill provided by {plugin_name}",
+            "plugin": plugin_name,
+            "domain": domain,
+            "version": version,
+            "content_preview": content[:1500] if content else "",
+        }
+
+    # Iterate potential roots and discover plugins
+    for p_root in potential_roots:
+        if not p_root.exists():
             continue
 
-        p_root = Path(root_path)
-        # If this is the plugins directory, iterate over each plugin folder
+        mp_file = p_root / "marketplace.json"
+        if mp_file.exists():
+            if not primary_marketplace_root:
+                primary_marketplace_root = str(p_root)
+            try:
+                with open(mp_file, "r", encoding="utf-8") as f:
+                    mp_data = json.load(f)
+                for p_meta in mp_data.get("plugins", []):
+                    p_id = p_meta.get("id")
+                    if not p_id:
+                        continue
+                    p_dir = p_root / p_meta.get("path", f"plugins/{p_id}")
+                    if not p_dir.exists():
+                        continue
+
+                    if p_id not in plugins_map:
+                        plugins_map[p_id] = {
+                            "name": p_id,
+                            "display_name": p_id.replace("-", " ").replace("_", " ").title(),
+                            "version": p_meta.get("version", "1.0.0"),
+                            "description": p_meta.get("description", ""),
+                            "domain": p_meta.get("domain", ""),
+                            "path": str(p_dir),
+                            "skills": []
+                        }
+
+                    # Scan for SKILL.md in this plugin
+                    for f_path in sorted(p_dir.rglob("*.md")):
+                        # Ignore references, assets, examples, changelogs
+                        parts_lower = [part.lower() for part in f_path.parts]
+                        if any(ignored in parts_lower for ignored in ["references", "assets", "examples", "docs"]):
+                            continue
+                        if f_path.name.lower() in ["changelog.md", "versioning.md", "claude.md", "taxonomy.md", "readme.md"]:
+                            continue
+                        if f_path.name.lower() != "skill.md" and f_path.parent.name not in ["skills", p_id]:
+                            continue
+
+                        meta = extract_skill_meta(
+                            f_path,
+                            default_plugin=p_id,
+                            default_domain=p_meta.get("domain", ""),
+                            default_version=p_meta.get("version", "1.0.0")
+                        )
+                        if not any(s["id"] == meta["id"] for s in plugins_map[p_id]["skills"]):
+                            plugins_map[p_id]["skills"].append(meta)
+                continue
+            except Exception as e:
+                print(f"Error parsing marketplace manifest {mp_file}: {e}")
+
+        # Standard plugin directory (e.g. poc/plugins)
         if p_root.name == "plugins":
             for plugin_dir in p_root.iterdir():
                 if plugin_dir.is_dir() and not plugin_dir.name.startswith("."):
-                    plugin_skills = []
-                    # Search specifically for SKILL.md files
-                    for file_path in plugin_dir.rglob("*"):
-                        if file_path.is_file() and file_path.name.lower() == "skill.md":
-                            desc = ""
-                            skill_id = file_path.parent.name
-                            skill_name = skill_id.replace("-", " ").replace("_", " ").title()
-                            try:
-                                with open(file_path, "r", encoding="utf-8") as f:
-                                    content = f.read(4096)
-                                    m_name = re.search(r"^name:\s*[\"']?([^\"'\n\r]+)[\"']?", content, re.MULTILINE)
-                                    if m_name:
-                                        skill_name = m_name.group(1).strip().replace("-", " ").replace("_", " ").title()
-                                    m_desc = re.search(r"^description:\s*[\"']?([^\"'\n\r]+)[\"']?", content, re.MULTILINE)
-                                    if m_desc:
-                                        desc = m_desc.group(1).strip()
-                                    else:
-                                        lines = [l.strip() for l in content.splitlines()[:10]]
-                                        desc = " ".join([l for l in lines if l and not l.startswith(("#", "---"))])[:120]
-                            except Exception:
-                                pass
-                            plugin_skills.append({
-                                "id": f"{plugin_dir.name}-{skill_id}",
-                                "name": skill_name,
-                                "filename": file_path.name,
-                                "path": str(file_path),
-                                "description": desc or f"Skill provided by {plugin_dir.name} plugin",
-                                "plugin": plugin_dir.name
-                            })
-                    plugins_data.append({
-                        "name": plugin_dir.name,
-                        "path": str(plugin_dir),
-                        "skills_count": len(plugin_skills),
-                        "skills": plugin_skills
-                    })
-        elif p_root.is_dir():
-            # Project root with skills
-            project_skills = []
-            for file_path in p_root.rglob("*"):
-                if file_path.is_file() and file_path.name.lower() == "skill.md":
-                    desc = ""
-                    skill_id = file_path.parent.name
-                    skill_name = skill_id.replace("-", " ").replace("_", " ").title()
-                    try:
-                        with open(file_path, "r", encoding="utf-8") as f:
-                            content = f.read(4096)
-                            m_name = re.search(r"^name:\s*[\"']?([^\"'\n\r]+)[\"']?", content, re.MULTILINE)
-                            if m_name:
-                                skill_name = m_name.group(1).strip().replace("-", " ").replace("_", " ").title()
-                            m_desc = re.search(r"^description:\s*[\"']?([^\"'\n\r]+)[\"']?", content, re.MULTILINE)
-                            if m_desc:
-                                desc = m_desc.group(1).strip()
-                    except Exception:
-                        pass
-                    project_skills.append({
-                        "id": f"{p_root.name}-{skill_id}",
-                        "name": skill_name,
-                        "filename": file_path.name,
-                        "path": str(file_path),
-                        "description": desc or f"Skill asset found in {p_root.name}",
-                        "plugin": p_root.name
-                    })
-            if project_skills:
-                plugins_data.append({
-                    "name": p_root.name,
+                    p_name = plugin_dir.name
+                    if p_name not in plugins_map:
+                        plugins_map[p_name] = {
+                            "name": p_name,
+                            "display_name": p_name.replace("-", " ").replace("_", " ").title(),
+                            "version": "1.0.0",
+                            "description": f"Plugin package {p_name}",
+                            "domain": "general",
+                            "path": str(plugin_dir),
+                            "skills": []
+                        }
+                    for f in plugin_dir.rglob("*.md"):
+                        parts_lower = [part.lower() for part in f.parts]
+                        if any(ignored in parts_lower for ignored in ["references", "assets", "examples"]):
+                            continue
+                        if f.name.lower() in ["changelog.md", "versioning.md", "claude.md", "readme.md"]:
+                            continue
+                        meta = extract_skill_meta(f, default_plugin=p_name)
+                        if not any(s["id"] == meta["id"] for s in plugins_map[p_name]["skills"]):
+                            plugins_map[p_name]["skills"].append(meta)
+        else:
+            # Standalone skills directory (e.g. config/skills)
+            group_name = p_root.parent.name if p_root.name == "skills" else p_root.name
+            if group_name not in plugins_map:
+                plugins_map[group_name] = {
+                    "name": group_name,
+                    "display_name": group_name.replace("-", " ").replace("_", " ").title(),
+                    "version": "1.0.0",
+                    "description": f"Skills library from {group_name}",
+                    "domain": "general",
                     "path": str(p_root),
-                    "skills_count": len(project_skills),
-                    "skills": project_skills
-                })
+                    "skills": []
+                }
+            for f in p_root.rglob("*.md"):
+                if f.name.lower() in ["readme.md", "changelog.md"]:
+                    continue
+                meta = extract_skill_meta(f, default_plugin=group_name)
+                if not any(s["id"] == meta["id"] for s in plugins_map[group_name]["skills"]):
+                    plugins_map[group_name]["skills"].append(meta)
+
+    plugins_data = []
+    for p_name, p_info in plugins_map.items():
+        if p_info["skills"]:
+            plugins_data.append({
+                "name": p_name,
+                "display_name": p_info.get("display_name", p_name),
+                "version": p_info.get("version", "1.0.0"),
+                "description": p_info.get("description", ""),
+                "domain": p_info.get("domain", ""),
+                "path": p_info["path"],
+                "skills_count": len(p_info["skills"]),
+                "skills": p_info["skills"]
+            })
 
     return {
         "status": "success",
+        "marketplace_path": primary_marketplace_root or str(potential_roots[0]) if potential_roots else None,
         "plugins": plugins_data,
         "total_skills": sum(p["skills_count"] for p in plugins_data)
     }
+
+
+@router.get("/plugins/content")
+async def get_plugin_skill_content(path: str):
+    """Retrieve the full markdown instructions of a discovered skill."""
+    f_path = Path(path)
+    if not f_path.exists() or not f_path.is_file() or f_path.suffix.lower() != ".md":
+        raise HTTPException(status_code=404, detail="Skill file not found")
+    try:
+        content = f_path.read_text(encoding="utf-8")
+        return {"path": str(f_path), "content": content}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read skill: {str(e)}")

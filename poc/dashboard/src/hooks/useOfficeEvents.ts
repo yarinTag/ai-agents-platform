@@ -166,6 +166,14 @@ export function useOfficeEvents() {
       fetchData();
     });
 
+    const unsubTaskDeleted = eventStream.subscribe('task_deleted', (event) => {
+      setLastEvent(event);
+      const deletedTaskId = event.task_id || event.payload?.run_id || event.payload?.id;
+      if (deletedTaskId) {
+        setTasks((prev) => prev.filter((t) => t.id !== deletedTaskId && t.run_id !== deletedTaskId));
+      }
+    });
+
     return () => {
       unsubStatus();
       unsubAgentCreated();
@@ -176,6 +184,7 @@ export function useOfficeEvents() {
       unsubTaskCompleted();
       unsubTaskFailed();
       unsubTaskDelegated();
+      unsubTaskDeleted();
     };
   }, [fetchData]);
 

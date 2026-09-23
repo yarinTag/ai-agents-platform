@@ -25,6 +25,8 @@ import {
   CheckCircleOutlined,
   CloseCircleOutlined,
   ClockCircleOutlined,
+  CopyOutlined,
+  CodeOutlined,
 } from '@ant-design/icons';
 import { Task, TaskTreeNode } from '../types/task';
 import { Agent } from '../types/agent';
@@ -315,17 +317,22 @@ export const TasksPage: React.FC = () => {
               </Button>
             </Tooltip>
 
-            {/* View Details */}
+            {/* View Details / Logs */}
             <Button
               size="small"
               icon={<EyeOutlined />}
               onClick={() => {
+                setTaskDetail(record);
+                setDetailVisible(true);
                 getTask(record.id)
                   .then((res) => {
-                    setTaskDetail(res.data);
-                    setDetailVisible(true);
+                    if (res.data) {
+                      setTaskDetail(res.data);
+                    }
                   })
-                  .catch(() => message.error('Failed to load task details'));
+                  .catch((err) => {
+                    console.warn('Live task detail refresh skipped:', err);
+                  });
               }}
             >
               Logs
@@ -353,7 +360,7 @@ export const TasksPage: React.FC = () => {
               size="small"
               danger
               icon={<DeleteOutlined />}
-              disabled={record.status === 'running'}
+              title="Delete task"
               onClick={() => {
                 deleteTask(record.id)
                   .then(() => {
@@ -515,41 +522,202 @@ export const TasksPage: React.FC = () => {
 
       {/* Task Details / Logs Modal */}
       <Modal
-        title={`Task Run: ${taskDetail?.id}`}
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <CodeOutlined style={{ color: '#58a6ff', fontSize: '18px' }} />
+            <span style={{ color: '#f3f4f6', fontWeight: 600 }}>
+              Task Console: #{taskDetail?.id?.slice(0, 8)}
+            </span>
+            {taskDetail?.status && (
+              <Tag
+                color={
+                  taskDetail.status === 'completed'
+                    ? 'green'
+                    : taskDetail.status === 'running'
+                    ? 'blue'
+                    : taskDetail.status === 'failed'
+                    ? 'red'
+                    : 'default'
+                }
+              >
+                {taskDetail.status.toUpperCase()}
+              </Tag>
+            )}
+          </div>
+        }
         open={detailVisible}
         onOk={() => setDetailVisible(false)}
         onCancel={() => setDetailVisible(false)}
-        width={650}
+        width={720}
         footer={[
+          <Button
+            key="copy"
+            icon={<CopyOutlined />}
+            onClick={() => {
+              const fullLog = [
+                `Task ID: ${taskDetail?.id}`,
+                `Agent: ${taskDetail?.agent_id}`,
+                `Status: ${taskDetail?.status}`,
+                `Prompt: ${taskDetail?.prompt}`,
+                taskDetail?.result ? `Result:\n${typeof taskDetail.result === 'string' ? taskDetail.result : JSON.stringify(taskDetail.result, null, 2)}` : '',
+                taskDetail?.error ? `Error:\n${typeof taskDetail.error === 'string' ? taskDetail.error : JSON.stringify(taskDetail.error, null, 2)}` : '',
+              ]
+                .filter(Boolean)
+                .join('\n\n');
+              navigator.clipboard.writeText(fullLog);
+              message.success('Task execution logs copied to clipboard');
+            }}
+          >
+            Copy Logs
+          </Button>,
           <Button key="ok" type="primary" onClick={() => setDetailVisible(false)}>
-            Done
+            Close
           </Button>,
         ]}
       >
         {taskDetail && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {/* Meta summary strip */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                gap: '8px',
+                background: '#161b22',
+                padding: '10px 14px',
+                borderRadius: '8px',
+                border: '1px solid #30363d',
+                fontSize: '12px',
+              }}
+            >
+              <div>
+                <span style={{ color: '#8b949e' }}>Agent:</span>{' '}
+                <strong style={{ color: '#58a6ff' }}>{taskDetail.agent_id}</strong>
+              </div>
+              {taskDetail.project_id && (
+                <div>
+                  <span style={{ color: '#8b949e' }}>Project:</span>{' '}
+                  <span style={{ color: '#f3f4f6' }}>{taskDetail.project_id}</span>
+                </div>
+              )}
+              {taskDetail.created_at && (
+                <div>
+                  <span style={{ color: '#8b949e' }}>Created:</span>{' '}
+                  <span style={{ color: '#c9d1d9' }}>
+                    {new Date(taskDetail.created_at).toLocaleTimeString()}
+                  </span>
+                </div>
+              )}
+              {taskDetail.ended_at && (
+                <div>
+                  <span style={{ color: '#8b949e' }}>Ended:</span>{' '}
+                  <span style={{ color: '#c9d1d9' }}>
+                    {new Date(taskDetail.ended_at).toLocaleTimeString()}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Prompt */}
             <div>
-              <strong>Prompt:</strong>
-              <div style={{ background: '#1e293b', padding: '8px', borderRadius: '6px', marginTop: '4px', fontSize: '12px' }}>
+              <strong style={{ color: '#d1d5db', fontSize: '13px' }}>Instruction / Prompt:</strong>
+              <div
+                style={{
+                  background: '#0d1117',
+                  border: '1px solid #30363d',
+                  padding: '10px 12px',
+                  borderRadius: '6px',
+                  marginTop: '6px',
+                  fontSize: '12px',
+                  color: '#e6edf3',
+                  whiteSpace: 'pre-wrap',
+                }}
+              >
                 {taskDetail.prompt || 'N/A'}
               </div>
             </div>
 
+            {/* Execution Result */}
             {taskDetail.result && (
               <div>
-                <strong>Result:</strong>
-                <pre style={{ background: '#0f172a', padding: '10px', borderRadius: '6px', marginTop: '4px', maxHeight: '200px', overflowY: 'auto', fontSize: '11px', color: '#34d399' }}>
-                  {taskDetail.result}
+                <strong style={{ color: '#52c41a', fontSize: '13px' }}>Execution Output & Result:</strong>
+                <pre
+                  style={{
+                    background: '#0d1117',
+                    border: '1px solid #238636',
+                    padding: '12px',
+                    borderRadius: '6px',
+                    marginTop: '6px',
+                    maxHeight: '260px',
+                    overflowY: 'auto',
+                    fontSize: '12px',
+                    color: '#7ee787',
+                    fontFamily: 'monospace',
+                    whiteSpace: 'pre-wrap',
+                    lineHeight: '1.4',
+                  }}
+                >
+                  {typeof taskDetail.result === 'string'
+                    ? taskDetail.result
+                    : JSON.stringify(taskDetail.result, null, 2)}
                 </pre>
               </div>
             )}
 
+            {/* Error Output */}
             {taskDetail.error && (
               <div>
-                <strong>Error:</strong>
-                <pre style={{ background: '#450a0a', padding: '10px', borderRadius: '6px', marginTop: '4px', maxHeight: '150px', overflowY: 'auto', fontSize: '11px', color: '#f87171' }}>
-                  {taskDetail.error}
+                <strong style={{ color: '#f85149', fontSize: '13px' }}>Error Details:</strong>
+                <pre
+                  style={{
+                    background: '#1f0d0d',
+                    border: '1px solid #da3633',
+                    padding: '12px',
+                    borderRadius: '6px',
+                    marginTop: '6px',
+                    maxHeight: '180px',
+                    overflowY: 'auto',
+                    fontSize: '12px',
+                    color: '#ff7b72',
+                    fontFamily: 'monospace',
+                    whiteSpace: 'pre-wrap',
+                  }}
+                >
+                  {typeof taskDetail.error === 'string'
+                    ? taskDetail.error
+                    : JSON.stringify(taskDetail.error, null, 2)}
                 </pre>
+              </div>
+            )}
+
+            {/* Execution Events Stream (if present) */}
+            {taskDetail.events && taskDetail.events.length > 0 && (
+              <div>
+                <strong style={{ color: '#58a6ff', fontSize: '13px' }}>
+                  Execution Event Stream ({taskDetail.events.length} events):
+                </strong>
+                <div
+                  style={{
+                    background: '#0d1117',
+                    border: '1px solid #30363d',
+                    padding: '10px',
+                    borderRadius: '6px',
+                    marginTop: '6px',
+                    maxHeight: '180px',
+                    overflowY: 'auto',
+                    fontSize: '11px',
+                    fontFamily: 'monospace',
+                  }}
+                >
+                  {taskDetail.events.map((ev: any, idx: number) => (
+                    <div key={idx} style={{ color: '#8b949e', marginBottom: '4px', borderBottom: '1px dashed #21262d', paddingBottom: '3px' }}>
+                      <span style={{ color: '#79c0ff' }}>[{ev.type || 'event'}]</span>{' '}
+                      <span style={{ color: '#c9d1d9' }}>
+                        {ev.message ? (typeof ev.message === 'string' ? ev.message : JSON.stringify(ev.message)) : (ev.content || JSON.stringify(ev))}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>

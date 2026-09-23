@@ -316,6 +316,7 @@ async def update_agent(
 @router.delete("/{agent_id}/", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_agent(
     agent_id: str,
+    cascade: bool = False,
     config_manager = Depends(get_config_manager),
     db_manager = Depends(get_db_manager),
     event_service: EventService = Depends(get_event_service)
@@ -339,16 +340,20 @@ async def delete_agent(
 
     # Check if agent has active children before deleting
     children = db_manager.get_child_agents(agent_id)
-    if children:
+    if children and not cascade:
         child_names = [c.name for c in children]
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Cannot delete agent '{agent_id}' because it has subordinate child agents: {child_names}. Reassign or remove them first."
         )
 
+    if children and cascade:
+        for child in children:
+            child.parent_id = None
+            db_manager.save_agent(child)
+
     db_manager.delete_agent(agent_id)
-    if agent_id in config_manager.agents:
-        del config_manager.agents[agent_id]
+    config_manager.delete_agent(agent_id)
 
     event_service.emit(
         event_type=EventType.AGENT_DELETED,

@@ -55,6 +55,7 @@ class TaskResponse(BaseModel):
     parent_task_id: Optional[str] = None
     root_task_id: Optional[str] = None
     assigned_by: Optional[str] = None
+    events: Optional[List[Dict[str, Any]]] = None
 
     class Config:
         from_attributes = True
@@ -98,6 +99,7 @@ def task_run_to_response(run: AgentRun) -> dict:
         "parent_task_id": getattr(run, "parent_task_id", None),
         "root_task_id": getattr(run, "root_task_id", None),
         "assigned_by": getattr(run, "assigned_by", None),
+        "events": getattr(run, "events", None) or [],
     }
 
 
@@ -250,23 +252,49 @@ async def list_tasks(
 @router.delete("/{run_id}/", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_task(
     run_id: str,
-    db_manager = Depends(get_db_manager)
+    db_manager = Depends(get_db_manager),
+    runtime_adapter = Depends(get_runtime_adapter),
+    event_service: EventService = Depends(get_event_service)
 ):
     """Delete a task run."""
     try:
+        # Cancel if currently active in runtime
+        if hasattr(runtime_adapter, "active_runs") and run_id in runtime_adapter.active_runs:
+            try:
+                runtime_adapter.cancel_task(run_id)
+            except Exception:
+                pass
+
         db_manager.delete_task_run(run_id)
+
+        # Notify UI via event stream
+        event_service.emit(
+            event_type=EventType.TASK_DELETED,
+            payload={"run_id": run_id, "id": run_id, "deleted": True},
+            task_id=run_id,
+            source="tasks_api"
+        )
     except Exception as e:
         print(f"Warning deleting task run: {e}")
     return None
 
 
 @router.get("/{run_id}", response_model=TaskResponse)
+@router.get("/{run_id}/", response_model=TaskResponse)
 async def get_task(
     run_id: str,
-    db_manager = Depends(get_db_manager)
+    db_manager = Depends(get_db_manager),
+    runtime_adapter = Depends(get_runtime_adapter)
 ):
-    """Get a specific task by ID."""
+    """Get a specific task by ID, checking DB and active runtime."""
     run = db_manager.get_task_run(run_id)
+    if not run and hasattr(runtime_adapter, "get_run_status"):
+        run = runtime_adapter.get_run_status(run_id)
+    if not run and hasattr(runtime_adapter, "list_runs"):
+        for r in runtime_adapter.list_runs():
+            if getattr(r, "run_id", None) == run_id:
+                run = r
+                break
     if not run:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -276,6 +304,7 @@ async def get_task(
 
 
 @router.post("/{run_id}/cancel", response_model=TaskResponse)
+@router.post("/{run_id}/cancel/", response_model=TaskResponse)
 async def cancel_task(
     run_id: str,
     runtime_adapter = Depends(get_runtime_adapter),
@@ -284,6 +313,8 @@ async def cancel_task(
     """Cancel a running task."""
     # Check if task exists
     existing_run = db_manager.get_task_run(run_id)
+    if not existing_run and hasattr(runtime_adapter, "get_run_status"):
+        existing_run = runtime_adapter.get_run_status(run_id)
     if not existing_run:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -309,17 +340,17 @@ async def cancel_task(
 
 
 @router.get("/{run_id}/events")
+@router.get("/{run_id}/events/")
 async def task_events(
     run_id: str,
-    runtime_adapter = Depends(get_runtime_adapter)
+    runtime_adapter = Depends(get_runtime_adapter),
+    db_manager = Depends(get_db_manager)
 ):
     """Server-Sent Events endpoint for real-time task monitoring."""
     # Verify task exists
     run = runtime_adapter.get_run_status(run_id)
     if not run:
         # Check DB as fallback
-        from dependencies import get_db_manager
-        db_manager = get_db_manager()
         run = db_manager.get_task_run(run_id)
         if not run:
             raise HTTPException(
@@ -420,12 +451,21 @@ async def task_events(
 
 
 @router.get("/{run_id}/logs")
+@router.get("/{run_id}/logs/")
 async def get_task_logs(
     run_id: str,
-    db_manager = Depends(get_db_manager)
+    db_manager = Depends(get_db_manager),
+    runtime_adapter = Depends(get_runtime_adapter)
 ):
-    """Get full task execution logs/events from persistence."""
+    """Get full task execution logs/events from persistence or live runtime."""
     run = db_manager.get_task_run(run_id)
+    if not run and hasattr(runtime_adapter, "get_run_status"):
+        run = runtime_adapter.get_run_status(run_id)
+    if not run and hasattr(runtime_adapter, "list_runs"):
+        for r in runtime_adapter.list_runs():
+            if getattr(r, "run_id", None) == run_id:
+                run = r
+                break
     if not run:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -434,8 +474,8 @@ async def get_task_logs(
 
     return {
         "run_id": run.run_id,
-        "events": run.events or [],
-        "status": run.status.value,
+        "events": getattr(run, "events", None) or [],
+        "status": run.status.value if hasattr(run.status, "value") else str(run.status),
         "result": run.result,
         "error": run.error
     }

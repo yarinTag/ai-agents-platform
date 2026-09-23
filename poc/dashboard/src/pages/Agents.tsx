@@ -36,6 +36,7 @@ import {
   getSkills,
   getAvailableModels,
   DiscoveredModel,
+  scanPlugins,
 } from '../services/api';
 import { CharacterSelector } from '../components/agents/CharacterSelector';
 import { TemplateGallery } from '../components/agents/TemplateGallery';
@@ -51,7 +52,7 @@ const DEPARTMENTS = [
 
 export const AgentsPage: React.FC = () => {
   const [agents, setAgents] = useState<Agent[]>([]);
-  const [availableSkills, setAvailableSkills] = useState<{ label: string; value: string }[]>([]);
+  const [availableSkills, setAvailableSkills] = useState<any[]>([]);
   const [availableModels, setAvailableModels] = useState<DiscoveredModel[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [visible, setVisible] = useState<boolean>(false);
@@ -74,13 +75,44 @@ export const AgentsPage: React.FC = () => {
 
   const fetchSkillsAndModels = async () => {
     try {
-      const [skillsRes, modelsRes] = await Promise.all([
+      const [skillsRes, pluginsRes, modelsRes] = await Promise.all([
         getSkills().catch(() => ({ data: [] })),
+        scanPlugins().catch(() => ({ data: { plugins: [] } })),
         getAvailableModels().catch(() => ({ data: [] })),
       ]);
-      if (skillsRes.data) {
-        setAvailableSkills(skillsRes.data.map((s) => ({ label: s.name, value: s.id })));
+
+      const formattedOptions: any[] = [];
+
+      if (pluginsRes.data && pluginsRes.data.plugins) {
+        pluginsRes.data.plugins.forEach((pkg: any) => {
+          if (pkg.skills && pkg.skills.length > 0) {
+            formattedOptions.push({
+              label: `📦 ${pkg.display_name || pkg.name.toUpperCase()} (${pkg.skills.length})`,
+              title: pkg.name,
+              options: pkg.skills.map((s: any) => ({
+                label: `⚡ ${s.name} (${s.id})`,
+                value: s.id,
+                title: s.description,
+              })),
+            });
+          }
+        });
       }
+
+      if (skillsRes.data && skillsRes.data.length > 0) {
+        formattedOptions.push({
+          label: `💾 Custom / DB Skills (${skillsRes.data.length})`,
+          title: 'custom',
+          options: skillsRes.data.map((s: any) => ({
+            label: `⚡ ${s.name} (${s.id})`,
+            value: s.id,
+            title: s.description || '',
+          })),
+        });
+      }
+
+      setAvailableSkills(formattedOptions);
+
       if (modelsRes.data) {
         setAvailableModels(modelsRes.data);
       }
@@ -199,6 +231,32 @@ export const AgentsPage: React.FC = () => {
           {model || 'default'}
         </Tag>
       ),
+    },
+    {
+      title: 'Equipped Skills',
+      dataIndex: 'skills',
+      key: 'skills',
+      render: (skillsList?: string[]) => {
+        if (!skillsList || skillsList.length === 0) {
+          return <span style={{ color: '#6e7681', fontSize: '11px' }}>Core reasoning</span>;
+        }
+        return (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxWidth: '240px' }}>
+            {skillsList.slice(0, 3).map((s) => (
+              <Tag key={s} color="cyan" style={{ fontSize: '10px', padding: '0 4px', margin: 0 }}>
+                ⚡ {s}
+              </Tag>
+            ))}
+            {skillsList.length > 3 && (
+              <Tooltip title={skillsList.slice(3).join(', ')}>
+                <Tag color="default" style={{ fontSize: '10px', padding: '0 4px', margin: 0, cursor: 'pointer' }}>
+                  +{skillsList.length - 3} more
+                </Tag>
+              </Tooltip>
+            )}
+          </div>
+        );
+      },
     },
     {
       title: 'Linked Repository',
@@ -478,8 +536,26 @@ export const AgentsPage: React.FC = () => {
               </Select>
             </Form.Item>
 
-            <Form.Item name="skills" label="Equipped Skills">
-              <Select mode="multiple" placeholder="Select skills" options={availableSkills} />
+            <Form.Item
+              name="skills"
+              label="Equipped Skills"
+              help="Select skills from your local skills repository to equip this agent"
+            >
+              <Select
+                mode="multiple"
+                allowClear
+                showSearch
+                placeholder="Search and equip skills (e.g. api-design, systematic-debugger)"
+                options={availableSkills}
+                filterOption={(input, option) => {
+                  const labelStr = typeof option?.label === 'string' ? option.label : String(option?.value || '');
+                  return (
+                    labelStr.toLowerCase().includes(input.toLowerCase()) ||
+                    String(option?.value || '').toLowerCase().includes(input.toLowerCase()) ||
+                    String(option?.title || '').toLowerCase().includes(input.toLowerCase())
+                  );
+                }}
+              />
             </Form.Item>
           </div>
 
