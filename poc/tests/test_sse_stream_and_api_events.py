@@ -5,6 +5,7 @@ ZERO MOCKS: All tests use real FastAPI app, real EventBus, real EventService, an
 
 import asyncio
 import json
+import uuid
 import pytest
 import pytest_asyncio
 import httpx
@@ -194,7 +195,7 @@ async def test_tasks_api_emits_events():
         async with httpx.AsyncClient(app=app, base_url="http://test") as client:
             # First create an agent to assign the task to
             agent_payload = {
-                "name": "Task Event Agent",
+                "name": f"Task Event Agent {uuid.uuid4().hex[:6]}",
                 "description": "Agent for task event testing",
                 "system_prompt": "You are a test agent.",
                 "skills": []

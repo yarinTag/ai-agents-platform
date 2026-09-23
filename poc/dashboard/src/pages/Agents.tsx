@@ -26,6 +26,7 @@ import {
   BranchesOutlined,
   BookOutlined,
   TeamOutlined,
+  MessageOutlined,
 } from '@ant-design/icons';
 import { Agent, AgentRole } from '../types/agent';
 import {
@@ -41,6 +42,7 @@ import {
 import { CharacterSelector } from '../components/agents/CharacterSelector';
 import { TemplateGallery } from '../components/agents/TemplateGallery';
 import { HierarchyEditor } from '../components/agents/HierarchyEditor';
+import { AgentMiniChatDrawer } from '../components/chat/AgentMiniChatDrawer';
 
 const DEPARTMENTS = [
   'Engineering',
@@ -59,6 +61,8 @@ export const AgentsPage: React.FC = () => {
   const [form] = Form.useForm();
   const [editingKey, setEditingKey] = useState<string>('');
   const [activeTab, setActiveTab] = useState<string>('roster');
+  const [chatAgent, setChatAgent] = useState<Agent | null>(null);
+  const [chatVisible, setChatVisible] = useState<boolean>(false);
 
   const fetchAgents = async () => {
     try {
@@ -285,6 +289,18 @@ export const AgentsPage: React.FC = () => {
       key: 'actions',
       render: (_: any, record: Agent) => (
         <Space size="small">
+          <Button
+            size="small"
+            type="primary"
+            icon={<MessageOutlined />}
+            style={{ background: '#2563eb', borderColor: '#2563eb' }}
+            onClick={() => {
+              setChatAgent(record);
+              setChatVisible(true);
+            }}
+          >
+            Chat
+          </Button>
           <Button
             size="small"
             icon={<EditOutlined />}
@@ -574,6 +590,14 @@ export const AgentsPage: React.FC = () => {
           </Form.Item>
         </Form>
       </Modal>
+
+      {/* Agent Interactive Mini-Chat Drawer */}
+      <AgentMiniChatDrawer
+        agent={chatAgent}
+        visible={chatVisible}
+        onClose={() => setChatVisible(false)}
+        onTaskDispatched={fetchAgents}
+      />
     </div>
   );
 };

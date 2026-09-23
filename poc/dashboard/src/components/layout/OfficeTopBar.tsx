@@ -143,6 +143,37 @@ export const OfficeTopBar: React.FC = () => {
         >
           TASKS QUEUE
         </Link>
+        <Link
+          to="/projects"
+          style={{
+            fontSize: '11px',
+            fontWeight: 800,
+            color: location.pathname === '/projects' ? '#1c1917' : '#78716c',
+            textDecoration: 'none',
+            padding: '4px 10px',
+            borderRadius: '8px',
+            background: location.pathname === '/projects' ? '#eae7dd' : 'transparent',
+          }}
+        >
+          PROJECTS & MEMORY
+        </Link>
+        <Link
+          to="/calendar"
+          style={{
+            fontSize: '11px',
+            fontWeight: 800,
+            color: location.pathname === '/calendar' ? '#10b981' : '#78716c',
+            textDecoration: 'none',
+            padding: '4px 10px',
+            borderRadius: '8px',
+            background: location.pathname === '/calendar' ? '#ecfdf5' : 'transparent',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+          }}
+        >
+          <span>🗓️ SCHEDULE / CALENDAR</span>
+        </Link>
       </div>
 
       {/* Right: Headless status + Clock */}

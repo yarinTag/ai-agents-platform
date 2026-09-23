@@ -1236,18 +1236,53 @@ export class PixelRenderer {
     ctx.fillText(label, tagX + 3, tagY + 9 * z);
     ctx.restore();
 
-    // Active task indicator (pulsing dot)
+    // Active task / Approval / Question indicator
     const activeTask = this.tasks.find(
-      (t) => String(t.agent_id) === String(agent.id) && (t.status === 'running' || t.status === 'queued')
+      (t) => String(t.agent_id) === String(agent.id) &&
+        (t.status === 'running' || t.status === 'queued' || t.status === 'waiting_input' || t.status === 'pending_approval' || t.status === 'scheduled')
     );
     if (activeTask) {
-      const pulse = 0.6 + Math.abs(Math.sin(this.tick * 0.08)) * 0.4;
-      ctx.fillStyle = `rgba(16,185,129,${pulse})`;
-      ctx.beginPath();
-      ctx.arc(cx + 6 * z, cy - 26 * z, 3 * z, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = '#fff'; ctx.lineWidth = 0.5;
-      ctx.stroke();
+      const st = String(activeTask.status).toLowerCase();
+      if (st === 'waiting_input' || st === 'pending_approval') {
+        // Animated bouncing question / approval speech bubble
+        const bob = Math.sin(this.tick * 0.12) * 3 * z;
+        const bx = cx - 12 * z;
+        const by = cy - 48 * z - 12 * z + bob;
+        ctx.save();
+        ctx.fillStyle = st === 'waiting_input' ? '#dbeafe' : '#fef3c7';
+        ctx.strokeStyle = st === 'waiting_input' ? '#2563eb' : '#d97706';
+        ctx.lineWidth = 1.5;
+        // Bubble rounded box
+        ctx.beginPath();
+        ctx.rect(bx, by, 24 * z, 14 * z);
+        ctx.fill();
+        ctx.stroke();
+        // Bubble tail pointing down to head
+        ctx.beginPath();
+        ctx.moveTo(cx - 3 * z, by + 14 * z);
+        ctx.lineTo(cx, by + 18 * z);
+        ctx.lineTo(cx + 3 * z, by + 14 * z);
+        ctx.fillStyle = st === 'waiting_input' ? '#dbeafe' : '#fef3c7';
+        ctx.fill();
+        ctx.stroke();
+        // Bubble icon
+        ctx.font = `${Math.max(9, 9 * z)}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillText(st === 'waiting_input' ? '❓' : '⚠️', cx, by + 11 * z);
+        ctx.restore();
+      } else if (st === 'scheduled') {
+        ctx.font = `${Math.max(8, 8 * z)}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillText('⏰', cx + 7 * z, cy - 26 * z);
+      } else {
+        const pulse = 0.6 + Math.abs(Math.sin(this.tick * 0.08)) * 0.4;
+        ctx.fillStyle = `rgba(16,185,129,${pulse})`;
+        ctx.beginPath();
+        ctx.arc(cx + 6 * z, cy - 26 * z, 3 * z, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 0.5;
+        ctx.stroke();
+      }
     }
 
     ctx.restore();
@@ -1350,18 +1385,52 @@ export class PixelRenderer {
     ctx.fillText(label, tagX + 3, tagY + 8 * z);
     ctx.restore();
 
-    // Active task pulsing dot
+    // Active task / Approval / Question indicator
     const activeTask = this.tasks.find(
-      (t) => String(t.agent_id) === String(agent.id) && (t.status === 'running' || t.status === 'queued')
+      (t) => String(t.agent_id) === String(agent.id) &&
+        (t.status === 'running' || t.status === 'queued' || t.status === 'waiting_input' || t.status === 'pending_approval' || t.status === 'scheduled')
     );
     if (activeTask) {
-      const pulse = 0.6 + Math.abs(Math.sin(this.tick * 0.08)) * 0.4;
-      ctx.fillStyle = `rgba(16,185,129,${pulse})`;
-      ctx.beginPath();
-      ctx.arc(cx + 6 * z, cy - 24 * z, 3 * z, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = '#fff'; ctx.lineWidth = 0.5;
-      ctx.stroke();
+      const st = String(activeTask.status).toLowerCase();
+      if (st === 'waiting_input' || st === 'pending_approval') {
+        const bob = Math.sin(this.tick * 0.12) * 3 * z;
+        const bx = cx - 12 * z;
+        const by = cy - 46 * z - 11 * z + bob;
+        ctx.save();
+        ctx.fillStyle = st === 'waiting_input' ? '#dbeafe' : '#fef3c7';
+        ctx.strokeStyle = st === 'waiting_input' ? '#2563eb' : '#d97706';
+        ctx.lineWidth = 1.5;
+        // Bubble rounded box
+        ctx.beginPath();
+        ctx.rect(bx, by, 24 * z, 14 * z);
+        ctx.fill();
+        ctx.stroke();
+        // Bubble tail pointing down
+        ctx.beginPath();
+        ctx.moveTo(cx - 3 * z, by + 14 * z);
+        ctx.lineTo(cx, by + 18 * z);
+        ctx.lineTo(cx + 3 * z, by + 14 * z);
+        ctx.fillStyle = st === 'waiting_input' ? '#dbeafe' : '#fef3c7';
+        ctx.fill();
+        ctx.stroke();
+        // Bubble icon
+        ctx.font = `${Math.max(9, 9 * z)}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillText(st === 'waiting_input' ? '❓' : '⚠️', cx, by + 11 * z);
+        ctx.restore();
+      } else if (st === 'scheduled') {
+        ctx.font = `${Math.max(8, 8 * z)}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillText('⏰', cx + 7 * z, cy - 24 * z);
+      } else {
+        const pulse = 0.6 + Math.abs(Math.sin(this.tick * 0.08)) * 0.4;
+        ctx.fillStyle = `rgba(16,185,129,${pulse})`;
+        ctx.beginPath();
+        ctx.arc(cx + 6 * z, cy - 24 * z, 3 * z, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 0.5;
+        ctx.stroke();
+      }
     }
 
     ctx.restore();

@@ -1,10 +1,14 @@
 import React, { useState } from 'react';
 import { Spin, Segmented } from 'antd';
-import { AppstoreOutlined, BuildOutlined } from '@ant-design/icons';
+import { AppstoreOutlined, BuildOutlined, TeamOutlined, BookOutlined } from '@ant-design/icons';
+import { Button, Space } from 'antd';
 import { AgentsOfficeV3Canvas } from '../components/office/AgentsOfficeV3Canvas';
 import { PixelOfficeCanvas } from '../components/office/PixelOfficeCanvas';
 import { OfficeRightSidebar } from '../components/office/OfficeRightSidebar';
 import { AgentDeskDrawer } from '../components/office/AgentDeskDrawer';
+import { AgentMiniChatDrawer } from '../components/chat/AgentMiniChatDrawer';
+import { WarRoomModal } from '../components/warroom/WarRoomModal';
+import { ProjectSharedMemoryModal } from '../components/memory/ProjectSharedMemoryModal';
 import { Agent } from '../types/agent';
 import { useOfficeEvents } from '../hooks/useOfficeEvents';
 
@@ -12,11 +16,14 @@ export const OfficeViewPage: React.FC = () => {
   const { agents, tasks, loading, connectionStatus, refresh } = useOfficeEvents();
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [drawerVisible, setDrawerVisible] = useState<boolean>(false);
+  const [chatVisible, setChatVisible] = useState<boolean>(false);
+  const [warRoomVisible, setWarRoomVisible] = useState<boolean>(false);
+  const [memoryVisible, setMemoryVisible] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<string>('pixel');
 
   const handleSelectAgent = (agent: Agent) => {
     setSelectedAgent(agent);
-    setDrawerVisible(true);
+    setChatVisible(true);
   };
 
   return (
@@ -31,6 +38,47 @@ export const OfficeViewPage: React.FC = () => {
     >
       {/* Left / Center: Interactive Agents Office Canvas */}
       <div style={{ flex: 1, position: 'relative', height: '100%' }}>
+        {/* Quick Collaboration Actions on Top Left */}
+        <div
+          style={{
+            position: 'absolute',
+            top: '16px',
+            left: '20px',
+            zIndex: 10,
+            display: 'flex',
+            gap: '8px',
+          }}
+        >
+          <Button
+            type="primary"
+            icon={<TeamOutlined />}
+            onClick={() => setWarRoomVisible(true)}
+            style={{
+              background: 'rgba(99, 102, 241, 0.9)',
+              borderColor: '#6366f1',
+              backdropFilter: 'blur(8px)',
+              fontWeight: 600,
+              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.3)',
+            }}
+          >
+            🏛️ War Room
+          </Button>
+
+          <Button
+            icon={<BookOutlined />}
+            onClick={() => setMemoryVisible(true)}
+            style={{
+              background: 'rgba(16, 185, 129, 0.2)',
+              borderColor: '#10b981',
+              color: '#34d399',
+              backdropFilter: 'blur(8px)',
+              fontWeight: 600,
+            }}
+          >
+            🧠 Shared Memory
+          </Button>
+        </div>
+
         {/* View Mode Switcher in Top Right */}
         <div
           style={{
@@ -100,6 +148,28 @@ export const OfficeViewPage: React.FC = () => {
         visible={drawerVisible}
         onClose={() => setDrawerVisible(false)}
         onTaskCreated={refresh}
+      />
+
+      {/* Interactive Agent Mini-Chat Drawer */}
+      <AgentMiniChatDrawer
+        agent={selectedAgent}
+        tasks={tasks}
+        visible={chatVisible}
+        onClose={() => setChatVisible(false)}
+        onTaskDispatched={refresh}
+      />
+
+      {/* Multi-Agent War Room Deliberation Modal */}
+      <WarRoomModal
+        open={warRoomVisible}
+        onClose={() => setWarRoomVisible(false)}
+        agents={agents}
+      />
+
+      {/* Project Shared Memory & Knowledge Base Modal */}
+      <ProjectSharedMemoryModal
+        open={memoryVisible}
+        onClose={() => setMemoryVisible(false)}
       />
     </div>
   );

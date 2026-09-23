@@ -149,11 +149,12 @@ class DatabaseManager:
                 )
             """)
 
-            # Add delegation and tracing columns to task_runs if not present
+            # Add delegation, tracing, and session continuation columns to task_runs if not present
             for col, col_type in [
                 ("parent_task_id", "TEXT"),
                 ("root_task_id", "TEXT"),
-                ("assigned_by", "TEXT")
+                ("assigned_by", "TEXT"),
+                ("session_id", "TEXT")
             ]:
                 try:
                     conn.execute(f"ALTER TABLE task_runs ADD COLUMN {col} {col_type}")
@@ -229,6 +230,151 @@ class DatabaseManager:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_logs(entity_type, entity_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_time ON audit_logs(timestamp)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_correlation ON audit_logs(correlation_id)")
+
+            # Cron jobs table for scheduled recurring workflows
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS cron_jobs (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    description TEXT,
+                    cron_expression TEXT NOT NULL,
+                    agent_id TEXT NOT NULL,
+                    project_id TEXT,
+                    prompt TEXT NOT NULL,
+                    input_data TEXT,
+                    enabled INTEGER DEFAULT 1,
+                    concurrency_policy TEXT DEFAULT 'SKIP',
+                    misfire_policy TEXT DEFAULT 'RUN_ONCE',
+                    timezone TEXT DEFAULT 'UTC',
+                    last_run_at TIMESTAMP,
+                    last_run_id TEXT,
+                    last_status TEXT,
+                    next_run_at TIMESTAMP NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (agent_id) REFERENCES agents (id) ON DELETE CASCADE,
+                    FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL,
+                    FOREIGN KEY (last_run_id) REFERENCES task_runs (run_id) ON DELETE SET NULL
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_cron_jobs_poll ON cron_jobs(enabled, next_run_at)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_cron_jobs_agent ON cron_jobs(agent_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_cron_jobs_project ON cron_jobs(project_id)")
+
+            # Agent interactions table for questions, clarifications, and manager/human approvals
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS agent_interactions (
+                    id TEXT PRIMARY KEY,
+                    task_id TEXT NOT NULL,
+                    requester_agent_id TEXT NOT NULL,
+                    target_approver_id TEXT NOT NULL,
+                    interaction_type TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    context_data TEXT,
+                    status TEXT DEFAULT 'PENDING',
+                    resolution_response TEXT,
+                    resolved_by TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    resolved_at TIMESTAMP,
+                    FOREIGN KEY (task_id) REFERENCES task_runs(run_id) ON DELETE CASCADE,
+                    FOREIGN KEY (requester_agent_id) REFERENCES agents(id) ON DELETE CASCADE
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_interactions_target ON agent_interactions(target_approver_id, status)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_interactions_task ON agent_interactions(task_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_interactions_agent ON agent_interactions(requester_agent_id)")
+
+            # Agent conversations table (Chat sessions)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS agent_conversations (
+                    id TEXT PRIMARY KEY,
+                    agent_id TEXT NOT NULL,
+                    project_id TEXT,
+                    title TEXT DEFAULT 'Direct Chat Session',
+                    claude_session_id TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE,
+                    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_conversations_agent ON agent_conversations(agent_id, updated_at)")
+
+            # Chat messages table (Messages, Thoughts, Tool calls, Approvals)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS chat_messages (
+                    id TEXT PRIMARY KEY,
+                    conversation_id TEXT NOT NULL,
+                    agent_id TEXT NOT NULL,
+                    task_id TEXT,
+                    sender_type TEXT NOT NULL,
+                    message_type TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    metadata TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (conversation_id) REFERENCES agent_conversations(id) ON DELETE CASCADE,
+                    FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE,
+                    FOREIGN KEY (task_id) REFERENCES task_runs(run_id) ON DELETE SET NULL
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_chat_messages_conv ON chat_messages(conversation_id, created_at)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_chat_messages_agent ON chat_messages(agent_id, created_at)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_chat_messages_task ON chat_messages(task_id)")
+
+            # Project Shared Memory table (Knowledge Base, ADRs, Conventions)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS project_memories (
+                    id TEXT PRIMARY KEY,
+                    project_id TEXT NOT NULL,
+                    category TEXT NOT NULL DEFAULT 'INSIGHT', -- 'ADR', 'CONVENTION', 'INSIGHT', 'LESSON'
+                    title TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    tags TEXT, -- JSON array
+                    author_agent_id TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+                    FOREIGN KEY (author_agent_id) REFERENCES agents(id) ON DELETE SET NULL
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_memories_proj ON project_memories(project_id, category)")
+
+            # War Room Sessions table (Multi-Agent Deliberation & Planning)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS war_room_sessions (
+                    id TEXT PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    topic TEXT NOT NULL,
+                    project_id TEXT,
+                    moderator_agent_id TEXT NOT NULL,
+                    participant_agent_ids TEXT NOT NULL, -- JSON array
+                    status TEXT NOT NULL DEFAULT 'GATHERING', -- 'GATHERING', 'DEBATING', 'CONSENSUS_REACHED', 'EXECUTING', 'COMPLETED'
+                    synthesized_plan TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
+                    FOREIGN KEY (moderator_agent_id) REFERENCES agents(id) ON DELETE CASCADE
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_war_room_status ON war_room_sessions(status)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_war_room_proj ON war_room_sessions(project_id)")
+
+            # War Room Messages table (Roundtable Dialogue)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS war_room_messages (
+                    id TEXT PRIMARY KEY,
+                    session_id TEXT NOT NULL,
+                    agent_id TEXT NOT NULL,
+                    round_number INTEGER DEFAULT 1,
+                    message_type TEXT NOT NULL DEFAULT 'PROPOSAL', -- 'PROPOSAL', 'CRITIQUE', 'CONSENSUS_VOTE', 'SUMMARY'
+                    content TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (session_id) REFERENCES war_room_sessions(id) ON DELETE CASCADE,
+                    FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_war_room_msg_session ON war_room_messages(session_id, round_number)")
 
             # Seed default agent templates if table empty
             self._seed_default_templates(conn)
@@ -678,7 +824,8 @@ class DatabaseManager:
             events=json.loads(row['events']) if row['events'] else [],
             parent_task_id=row['parent_task_id'] if 'parent_task_id' in keys else None,
             root_task_id=row['root_task_id'] if 'root_task_id' in keys else None,
-            assigned_by=row['assigned_by'] if 'assigned_by' in keys else None
+            assigned_by=row['assigned_by'] if 'assigned_by' in keys else None,
+            session_id=row['session_id'] if 'session_id' in keys else None
         )
 
     def save_task_run(self, run: AgentRun):
@@ -687,8 +834,8 @@ class DatabaseManager:
             conn.execute("""
                 INSERT OR REPLACE INTO task_runs
                 (run_id, agent_id, project_id, prompt, status, created_at, started_at, ended_at,
-                 result, error, exit_code, events, parent_task_id, root_task_id, assigned_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 result, error, exit_code, events, parent_task_id, root_task_id, assigned_by, session_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 run.run_id,
                 run.agent_id,
@@ -704,7 +851,8 @@ class DatabaseManager:
                 json.dumps(run.events) if run.events else None,
                 getattr(run, "parent_task_id", None),
                 getattr(run, "root_task_id", None),
-                getattr(run, "assigned_by", None)
+                getattr(run, "assigned_by", None),
+                getattr(run, "session_id", None)
             ))
             conn.commit()
 
@@ -718,6 +866,38 @@ class DatabaseManager:
             if row:
                 return self._row_to_task_run(row)
         return None
+
+    def update_task_run(
+        self,
+        run_id: str,
+        status: Optional[TaskStatus] = None,
+        error: Optional[str] = None,
+        result: Optional[str] = None
+    ) -> Optional[AgentRun]:
+        """Update specific fields of an existing task run."""
+        fields = []
+        params = []
+        if status is not None:
+            fields.append("status = ?")
+            params.append(status.value if hasattr(status, "value") else str(status))
+        if error is not None:
+            fields.append("error = ?")
+            params.append(error)
+        if result is not None:
+            fields.append("result = ?")
+            params.append(result)
+
+        if not fields:
+            return self.get_task_run(run_id)
+
+        params.append(run_id)
+        query = f"UPDATE task_runs SET {', '.join(fields)} WHERE run_id = ?"
+        with self._get_connection() as conn:
+            conn.execute(query, params)
+            conn.commit()
+
+        return self.get_task_run(run_id)
+
 
     def list_task_runs(
         self,
@@ -1001,6 +1181,592 @@ class DatabaseManager:
                     "timestamp": str(r['timestamp'])
                 })
             return res
+
+    # -------------------------------------------------------------
+    # Cron Jobs persistence methods
+    # -------------------------------------------------------------
+    def create_cron_job(self, job_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Save a new scheduled cron job."""
+        job_id = job_data.get('id') or f"cron_{uuid.uuid4().hex[:12]}"
+        now = datetime.now().isoformat()
+        input_data = job_data.get('input_data')
+        input_str = json.dumps(input_data) if isinstance(input_data, (dict, list)) else input_data
+
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT INTO cron_jobs (
+                    id, name, description, cron_expression, agent_id, project_id,
+                    prompt, input_data, enabled, concurrency_policy, misfire_policy,
+                    timezone, next_run_at, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                job_id,
+                job_data['name'],
+                job_data.get('description'),
+                job_data['cron_expression'],
+                job_data['agent_id'],
+                job_data.get('project_id'),
+                job_data['prompt'],
+                input_str,
+                1 if job_data.get('enabled', True) else 0,
+                job_data.get('concurrency_policy', 'SKIP'),
+                job_data.get('misfire_policy', 'RUN_ONCE'),
+                job_data.get('timezone', 'UTC'),
+                job_data['next_run_at'],
+                now,
+                now
+            ))
+            conn.commit()
+
+        return self.get_cron_job(job_id)
+
+    def get_cron_job(self, job_id: str) -> Optional[Dict[str, Any]]:
+        """Get a scheduled cron job by ID."""
+        with self._get_connection() as conn:
+            row = conn.execute("SELECT * FROM cron_jobs WHERE id = ?", (job_id,)).fetchone()
+            if not row:
+                return None
+            res = dict(row)
+            res['enabled'] = bool(res['enabled'])
+            if res.get('input_data'):
+                try:
+                    res['input_data'] = json.loads(res['input_data'])
+                except Exception:
+                    pass
+            return res
+
+    def list_cron_jobs(
+        self,
+        agent_id: Optional[str] = None,
+        project_id: Optional[str] = None,
+        enabled: Optional[bool] = None
+    ) -> List[Dict[str, Any]]:
+        """List scheduled cron jobs with optional filters."""
+        query = "SELECT * FROM cron_jobs WHERE 1=1"
+        params: List[Any] = []
+        if agent_id:
+            query += " AND agent_id = ?"
+            params.append(agent_id)
+        if project_id:
+            query += " AND project_id = ?"
+            params.append(project_id)
+        if enabled is not None:
+            query += " AND enabled = ?"
+            params.append(1 if enabled else 0)
+        query += " ORDER BY next_run_at ASC"
+
+        with self._get_connection() as conn:
+            rows = conn.execute(query, params).fetchall()
+            jobs = []
+            for r in rows:
+                j = dict(r)
+                j['enabled'] = bool(j['enabled'])
+                if j.get('input_data'):
+                    try:
+                        j['input_data'] = json.loads(j['input_data'])
+                    except Exception:
+                        pass
+                jobs.append(j)
+            return jobs
+
+    def update_cron_job(self, job_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Update properties of an existing cron job."""
+        fields = []
+        params = []
+        now = datetime.now().isoformat()
+
+        for k, v in updates.items():
+            if k in ['name', 'description', 'cron_expression', 'agent_id', 'project_id',
+                     'prompt', 'concurrency_policy', 'misfire_policy', 'timezone',
+                     'last_run_at', 'last_run_id', 'last_status', 'next_run_at']:
+                fields.append(f"{k} = ?")
+                params.append(v)
+            elif k == 'enabled':
+                fields.append("enabled = ?")
+                params.append(1 if v else 0)
+            elif k == 'input_data':
+                fields.append("input_data = ?")
+                params.append(json.dumps(v) if isinstance(v, (dict, list)) else v)
+
+        if not fields:
+            return self.get_cron_job(job_id)
+
+        fields.append("updated_at = ?")
+        params.append(now)
+        params.append(job_id)
+
+        query = f"UPDATE cron_jobs SET {', '.join(fields)} WHERE id = ?"
+        with self._get_connection() as conn:
+            conn.execute(query, params)
+            conn.commit()
+
+        return self.get_cron_job(job_id)
+
+    def delete_cron_job(self, job_id: str) -> bool:
+        """Delete a scheduled cron job."""
+        with self._get_connection() as conn:
+            cursor = conn.execute("DELETE FROM cron_jobs WHERE id = ?", (job_id,))
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def get_due_cron_jobs(self, current_time_iso: str) -> List[Dict[str, Any]]:
+        """Find enabled cron jobs that are due for execution (next_run_at <= current_time)."""
+        with self._get_connection() as conn:
+            rows = conn.execute("""
+                SELECT * FROM cron_jobs 
+                WHERE enabled = 1 AND next_run_at <= ?
+                ORDER BY next_run_at ASC
+            """, (current_time_iso,)).fetchall()
+            jobs = []
+            for r in rows:
+                j = dict(r)
+                j['enabled'] = bool(j['enabled'])
+                if j.get('input_data'):
+                    try:
+                        j['input_data'] = json.loads(j['input_data'])
+                    except Exception:
+                        pass
+                jobs.append(j)
+            return jobs
+
+    # -------------------------------------------------------------
+    # Agent Interactions & Approvals persistence methods
+    # -------------------------------------------------------------
+    def create_interaction(self, interaction_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Save a new question or approval request from an agent."""
+        interaction_id = interaction_data.get('id') or f"inter_{uuid.uuid4().hex[:12]}"
+        now = datetime.now().isoformat()
+        ctx_data = interaction_data.get('context_data')
+        ctx_str = json.dumps(ctx_data) if isinstance(ctx_data, (dict, list)) else ctx_data
+
+        init_status = interaction_data.get('status', 'PENDING')
+        res_resp = interaction_data.get('resolution_response')
+        res_by = interaction_data.get('resolved_by')
+
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT INTO agent_interactions (
+                    id, task_id, requester_agent_id, target_approver_id,
+                    interaction_type, title, content, context_data,
+                    status, resolution_response, resolved_by, created_at, resolved_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                interaction_id,
+                interaction_data['task_id'],
+                interaction_data['requester_agent_id'],
+                interaction_data['target_approver_id'],
+                interaction_data.get('interaction_type', 'QUESTION'),
+                interaction_data['title'],
+                interaction_data['content'],
+                ctx_str,
+                init_status,
+                res_resp,
+                res_by,
+                now,
+                now if init_status != 'PENDING' else None
+            ))
+            conn.commit()
+
+        return self.get_interaction(interaction_id)
+
+    def get_interaction(self, interaction_id: str) -> Optional[Dict[str, Any]]:
+        """Get an interaction by ID."""
+        with self._get_connection() as conn:
+            row = conn.execute("SELECT * FROM agent_interactions WHERE id = ?", (interaction_id,)).fetchone()
+            if not row:
+                return None
+            res = dict(row)
+            if res.get('context_data'):
+                try:
+                    res['context_data'] = json.loads(res['context_data'])
+                except Exception:
+                    pass
+            return res
+
+    def list_interactions(
+        self,
+        task_id: Optional[str] = None,
+        agent_id: Optional[str] = None,
+        target_approver_id: Optional[str] = None,
+        status: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """List interactions / pending approvals with filters."""
+        query = "SELECT * FROM agent_interactions WHERE 1=1"
+        params: List[Any] = []
+        if task_id:
+            query += " AND task_id = ?"
+            params.append(task_id)
+        if agent_id:
+            query += " AND requester_agent_id = ?"
+            params.append(agent_id)
+        if target_approver_id:
+            query += " AND target_approver_id = ?"
+            params.append(target_approver_id)
+        if status:
+            query += " AND status = ?"
+            params.append(status)
+        query += " ORDER BY created_at DESC"
+
+        with self._get_connection() as conn:
+            rows = conn.execute(query, params).fetchall()
+            items = []
+            for r in rows:
+                item = dict(r)
+                if item.get('context_data'):
+                    try:
+                        item['context_data'] = json.loads(item['context_data'])
+                    except Exception:
+                        pass
+                items.append(item)
+            return items
+
+    def resolve_interaction(
+        self,
+        interaction_id: str,
+        resolution_response: str,
+        resolved_by: str,
+        decision: str = 'RESOLVED'
+    ) -> Optional[Dict[str, Any]]:
+        """Mark an interaction as resolved or rejected with a response."""
+        now = datetime.now().isoformat()
+        with self._get_connection() as conn:
+            conn.execute("""
+                UPDATE agent_interactions
+                SET status = ?, resolution_response = ?, resolved_by = ?, resolved_at = ?
+                WHERE id = ?
+            """, (decision, resolution_response, resolved_by, now, interaction_id))
+            conn.commit()
+
+        return self.get_interaction(interaction_id)
+
+    # -------------------------------------------------------------
+    # Agent Conversations & Chat Messages persistence methods
+    # -------------------------------------------------------------
+    def get_or_create_conversation(self, agent_id: str, project_id: Optional[str] = None) -> Dict[str, Any]:
+        """Get the active conversation for an agent, or create a new one."""
+        with self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM agent_conversations WHERE agent_id = ? ORDER BY updated_at DESC LIMIT 1",
+                (agent_id,)
+            ).fetchone()
+
+            if row:
+                return dict(row)
+
+            conv_id = f"conv_{uuid.uuid4().hex[:12]}"
+            now = datetime.now().isoformat()
+            conn.execute("""
+                INSERT INTO agent_conversations (id, agent_id, project_id, title, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (conv_id, agent_id, project_id, f"Chat with {agent_id}", now, now))
+            conn.commit()
+
+            return {
+                "id": conv_id,
+                "agent_id": agent_id,
+                "project_id": project_id,
+                "title": f"Chat with {agent_id}",
+                "claude_session_id": None,
+                "created_at": now,
+                "updated_at": now
+            }
+
+    def update_conversation_session(self, conversation_id: str, claude_session_id: str):
+        """Associate a Claude CLI session ID with the conversation."""
+        now = datetime.now().isoformat()
+        with self._get_connection() as conn:
+            conn.execute("""
+                UPDATE agent_conversations
+                SET claude_session_id = ?, updated_at = ?
+                WHERE id = ?
+            """, (claude_session_id, now, conversation_id))
+            conn.commit()
+
+    def save_chat_message(self, message_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Save a new chat message, thought, or tool call."""
+        msg_id = message_data.get('id') or f"msg_{uuid.uuid4().hex[:12]}"
+        now = datetime.now().isoformat()
+        meta = message_data.get('metadata')
+        meta_str = json.dumps(meta) if isinstance(meta, (dict, list)) else meta
+
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT INTO chat_messages (
+                    id, conversation_id, agent_id, task_id,
+                    sender_type, message_type, content, metadata, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                msg_id,
+                message_data['conversation_id'],
+                message_data['agent_id'],
+                message_data.get('task_id'),
+                message_data.get('sender_type', 'USER'),
+                message_data.get('message_type', 'CHAT'),
+                message_data['content'],
+                meta_str,
+                now
+            ))
+            # Also touch updated_at on the conversation
+            conn.execute(
+                "UPDATE agent_conversations SET updated_at = ? WHERE id = ?",
+                (now, message_data['conversation_id'])
+            )
+            conn.commit()
+
+            return {
+                "id": msg_id,
+                "conversation_id": message_data['conversation_id'],
+                "agent_id": message_data['agent_id'],
+                "task_id": message_data.get('task_id'),
+                "sender_type": message_data.get('sender_type', 'USER'),
+                "message_type": message_data.get('message_type', 'CHAT'),
+                "content": message_data['content'],
+                "metadata": meta,
+                "created_at": now
+            }
+
+    def get_chat_history(self, agent_id: str, limit: int = 100) -> List[Dict[str, Any]]:
+        """Retrieve recent chat history for an agent."""
+        with self._get_connection() as conn:
+            rows = conn.execute("""
+                SELECT * FROM chat_messages
+                WHERE agent_id = ?
+                ORDER BY created_at ASC
+                LIMIT ?
+            """, (agent_id, limit)).fetchall()
+
+            res = []
+            for r in rows:
+                item = dict(r)
+                if item.get('metadata'):
+                    try:
+                        item['metadata'] = json.loads(item['metadata'])
+                    except Exception:
+                        pass
+                res.append(item)
+            return res
+
+    def clear_chat_history(self, agent_id: str):
+        """Clear all messages and start fresh for an agent."""
+        with self._get_connection() as conn:
+            conn.execute("DELETE FROM chat_messages WHERE agent_id = ?", (agent_id,))
+            conn.execute("DELETE FROM agent_conversations WHERE agent_id = ?", (agent_id,))
+            conn.commit()
+
+    # -------------------------------------------------------------
+    # Project Shared Memory persistence methods
+    # -------------------------------------------------------------
+    def create_project_memory(self, memory_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Save a new knowledge insight, ADR, or convention to the project memory."""
+        mem_id = memory_data.get('id') or f"mem_{uuid.uuid4().hex[:12]}"
+        now = datetime.now().isoformat()
+        tags = memory_data.get('tags')
+        tags_str = json.dumps(tags) if isinstance(tags, (list, dict)) else tags
+
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT INTO project_memories (
+                    id, project_id, category, title, content, tags, author_agent_id, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                mem_id,
+                memory_data['project_id'],
+                memory_data.get('category', 'INSIGHT'),
+                memory_data['title'],
+                memory_data['content'],
+                tags_str,
+                memory_data.get('author_agent_id'),
+                now,
+                now
+            ))
+            conn.commit()
+
+        return self.get_project_memory(mem_id)
+
+    def get_project_memory(self, memory_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieve a specific memory item by ID."""
+        with self._get_connection() as conn:
+            row = conn.execute("SELECT * FROM project_memories WHERE id = ?", (memory_id,)).fetchone()
+            if not row:
+                return None
+            res = dict(row)
+            if res.get('tags'):
+                try:
+                    res['tags'] = json.loads(res['tags'])
+                except Exception:
+                    pass
+            return res
+
+    def list_project_memories(
+        self,
+        project_id: str,
+        category: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """List shared memories for a project."""
+        query = "SELECT * FROM project_memories WHERE project_id = ?"
+        params: List[Any] = [project_id]
+        if category:
+            query += " AND category = ?"
+            params.append(category)
+        query += " ORDER BY updated_at DESC"
+
+        with self._get_connection() as conn:
+            rows = conn.execute(query, params).fetchall()
+            items = []
+            for r in rows:
+                item = dict(r)
+                if item.get('tags'):
+                    try:
+                        item['tags'] = json.loads(item['tags'])
+                    except Exception:
+                        pass
+                items.append(item)
+            return items
+
+    def delete_project_memory(self, memory_id: str) -> bool:
+        """Delete a shared memory item."""
+        with self._get_connection() as conn:
+            cur = conn.execute("DELETE FROM project_memories WHERE id = ?", (memory_id,))
+            conn.commit()
+            return cur.rowcount > 0
+
+    # -------------------------------------------------------------
+    # War Room Sessions & Messages persistence methods
+    # -------------------------------------------------------------
+    def create_war_room_session(self, session_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a new multi-agent war room session."""
+        session_id = session_data.get('id') or f"wr_{uuid.uuid4().hex[:12]}"
+        now = datetime.now().isoformat()
+        participants = session_data.get('participant_agent_ids', [])
+        part_str = json.dumps(participants) if isinstance(participants, list) else participants
+
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT INTO war_room_sessions (
+                    id, title, topic, project_id, moderator_agent_id, participant_agent_ids, status, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                session_id,
+                session_data['title'],
+                session_data['topic'],
+                session_data.get('project_id'),
+                session_data['moderator_agent_id'],
+                part_str,
+                session_data.get('status', 'GATHERING'),
+                now,
+                now
+            ))
+            conn.commit()
+
+        return self.get_war_room_session(session_id)
+
+    def get_war_room_session(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """Get war room session details by ID."""
+        with self._get_connection() as conn:
+            row = conn.execute("SELECT * FROM war_room_sessions WHERE id = ?", (session_id,)).fetchone()
+            if not row:
+                return None
+            res = dict(row)
+            if res.get('participant_agent_ids'):
+                try:
+                    res['participant_agent_ids'] = json.loads(res['participant_agent_ids'])
+                except Exception:
+                    pass
+            return res
+
+    def list_war_room_sessions(self, project_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """List war room sessions."""
+        query = "SELECT * FROM war_room_sessions WHERE 1=1"
+        params: List[Any] = []
+        if project_id:
+            query += " AND project_id = ?"
+            params.append(project_id)
+        query += " ORDER BY updated_at DESC"
+
+        with self._get_connection() as conn:
+            rows = conn.execute(query, params).fetchall()
+            items = []
+            for r in rows:
+                item = dict(r)
+                if item.get('participant_agent_ids'):
+                    try:
+                        item['participant_agent_ids'] = json.loads(item['participant_agent_ids'])
+                    except Exception:
+                        pass
+                items.append(item)
+            return items
+
+    def update_war_room_session(self, session_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Update war room status or synthesized plan."""
+        fields = []
+        params = []
+        now = datetime.now().isoformat()
+
+        for k, v in updates.items():
+            if k in ['status', 'synthesized_plan', 'topic', 'title']:
+                fields.append(f"{k} = ?")
+                params.append(v)
+            elif k == 'participant_agent_ids':
+                fields.append("participant_agent_ids = ?")
+                params.append(json.dumps(v) if isinstance(v, list) else v)
+
+        if not fields:
+            return self.get_war_room_session(session_id)
+
+        fields.append("updated_at = ?")
+        params.append(now)
+        params.append(session_id)
+
+        with self._get_connection() as conn:
+            conn.execute(f"UPDATE war_room_sessions SET {', '.join(fields)} WHERE id = ?", params)
+            conn.commit()
+
+        return self.get_war_room_session(session_id)
+
+    def add_war_room_message(self, msg_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Add a dialogue message or proposal to a war room session."""
+        msg_id = msg_data.get('id') or f"wrmsg_{uuid.uuid4().hex[:12]}"
+        now = datetime.now().isoformat()
+
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT INTO war_room_messages (
+                    id, session_id, agent_id, round_number, message_type, content, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                msg_id,
+                msg_data['session_id'],
+                msg_data['agent_id'],
+                msg_data.get('round_number', 1),
+                msg_data.get('message_type', 'PROPOSAL'),
+                msg_data['content'],
+                now
+            ))
+            # Touch session
+            conn.execute("UPDATE war_room_sessions SET updated_at = ? WHERE id = ?", (now, msg_data['session_id']))
+            conn.commit()
+
+        return {
+            "id": msg_id,
+            "session_id": msg_data['session_id'],
+            "agent_id": msg_data['agent_id'],
+            "round_number": msg_data.get('round_number', 1),
+            "message_type": msg_data.get('message_type', 'PROPOSAL'),
+            "content": msg_data['content'],
+            "created_at": now
+        }
+
+    def get_war_room_messages(self, session_id: str) -> List[Dict[str, Any]]:
+        """Get all messages in a war room session chronologically."""
+        with self._get_connection() as conn:
+            rows = conn.execute("""
+                SELECT * FROM war_room_messages
+                WHERE session_id = ?
+                ORDER BY round_number ASC, created_at ASC
+            """, (session_id,)).fetchall()
+            return [dict(r) for r in rows]
+
+
 
 
 # Global database instance

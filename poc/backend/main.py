@@ -15,6 +15,11 @@ from .api.events import router as events_router
 from .api.templates import router as templates_router
 from .api.models import router as models_router
 from .api.audit import router as audit_router
+from .api.schedules import router as schedules_router
+from .api.approvals import router as approvals_router
+from .api.chat import router as chat_router
+from .api.memories import router as memories_router
+from .api.war_room import router as war_room_router
 
 # Import security layer
 from .security import (
@@ -73,6 +78,11 @@ app.include_router(tasks_router, prefix="/api/v1/tasks", tags=["tasks"], depende
 app.include_router(events_router, prefix="/api/v1/events", tags=["events"], dependencies=auth_deps)
 app.include_router(templates_router, prefix="/api/v1/templates", tags=["templates"], dependencies=auth_deps)
 app.include_router(models_router, prefix="/api/v1/models", tags=["models"], dependencies=auth_deps)
+app.include_router(schedules_router, prefix="/api/v1/schedules", tags=["schedules"], dependencies=auth_deps)
+app.include_router(approvals_router, prefix="/api/v1/approvals", tags=["approvals"], dependencies=auth_deps)
+app.include_router(chat_router, prefix="/api/v1/chat", tags=["chat"], dependencies=auth_deps)
+app.include_router(memories_router, prefix="/api/v1/projects", tags=["memories"], dependencies=auth_deps)
+app.include_router(war_room_router, prefix="/api/v1/war-room", tags=["war-room"], dependencies=auth_deps)
 app.include_router(audit_router, prefix="/api/v1/audit", tags=["audit"])
 app.include_router(audit_router, prefix="/api/v1/auth", tags=["auth"])
 

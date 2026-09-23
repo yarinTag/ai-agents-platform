@@ -10,6 +10,7 @@ import {
 import { PlusOutlined, EditOutlined, DeleteOutlined, FolderOpenOutlined } from '@ant-design/icons';
 import { Project } from '../types/project';
 import { getProjects, createProject, updateProject, deleteProject } from '../services/api';
+import ProjectSharedMemoryModal from '../components/memory/ProjectSharedMemoryModal';
 
 export const ProjectsPage: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -17,6 +18,8 @@ export const ProjectsPage: React.FC = () => {
   const [visible, setVisible] = useState<boolean>(false);
   const [form] = Form.useForm();
   const [editingKey, setEditingKey] = useState<string>('');
+  const [selectedMemoryProject, setSelectedMemoryProject] = useState<string>('');
+  const [memoryModalVisible, setMemoryModalVisible] = useState<boolean>(false);
 
   const fetchProjects = async () => {
     try {
@@ -92,6 +95,16 @@ export const ProjectsPage: React.FC = () => {
       key: 'actions',
       render: (_: any, record: Project) => (
         <div style={{ display: 'flex', gap: '8px' }}>
+          <Button
+            size="small"
+            style={{ borderColor: '#10b981', color: '#059669' }}
+            onClick={() => {
+              setSelectedMemoryProject(record.id);
+              setMemoryModalVisible(true);
+            }}
+          >
+            🧠 Shared Memory
+          </Button>
           <Button
             size="small"
             icon={<EditOutlined />}
@@ -173,6 +186,12 @@ export const ProjectsPage: React.FC = () => {
           </Form.Item>
         </Form>
       </Modal>
+
+      <ProjectSharedMemoryModal
+        open={memoryModalVisible}
+        onClose={() => setMemoryModalVisible(false)}
+        defaultProjectId={selectedMemoryProject}
+      />
     </div>
   );
 };
