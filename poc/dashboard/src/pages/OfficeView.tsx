@@ -38,17 +38,69 @@ export const OfficeViewPage: React.FC = () => {
     >
       {/* Left / Center: Interactive Agents Office Canvas */}
       <div style={{ flex: 1, position: 'relative', height: '100%' }}>
-        {/* Quick Collaboration Actions on Top Left */}
+        {/* Quick Collaboration Actions & Office Mode Header on Top Left */}
         <div
           style={{
             position: 'absolute',
             top: '16px',
             left: '20px',
-            zIndex: 10,
+            zIndex: 30,
             display: 'flex',
-            gap: '8px',
+            alignItems: 'center',
+            gap: '10px',
           }}
         >
+          {/* Office Status Badge */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              background: 'rgba(15, 23, 42, 0.85)',
+              padding: '6px 14px',
+              borderRadius: '10px',
+              border: '1px solid #334155',
+              backdropFilter: 'blur(8px)',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+              color: '#f8fafc',
+            }}
+          >
+            <span style={{ fontSize: '15px' }}>{viewMode === 'pixel' ? '🏢' : '🏛️'}</span>
+            <span style={{ fontWeight: 700, fontSize: '12px', letterSpacing: '0.5px' }}>
+              {viewMode === 'pixel' ? 'PIXEL ART AI OFFICE' : 'ISOMETRIC 3D OFFICE'}
+            </span>
+            <span style={{ color: '#475569' }}>|</span>
+            <span
+              style={{
+                width: 7,
+                height: 7,
+                borderRadius: '50%',
+                background: connectionStatus === 'connected' ? '#10b981' : '#f59e0b',
+                boxShadow: connectionStatus === 'connected' ? '0 0 6px #10b981' : 'none',
+              }}
+            />
+            <span style={{ color: connectionStatus === 'connected' ? '#34d399' : '#fbbf24', fontSize: '11px', fontWeight: 600 }}>
+              {connectionStatus === 'connected' ? 'LIVE SSE' : 'RECONNECTING'}
+            </span>
+            {tasks.filter((t) => t.status === 'running').length > 0 && (
+              <span
+                style={{
+                  background: '#065f46',
+                  color: '#34d399',
+                  padding: '1px 6px',
+                  borderRadius: '6px',
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+              >
+                ⚡ {tasks.filter((t) => t.status === 'running').length} ACTIVE
+              </span>
+            )}
+          </div>
+
           <Button
             type="primary"
             icon={<TeamOutlined />}
@@ -85,7 +137,7 @@ export const OfficeViewPage: React.FC = () => {
             position: 'absolute',
             top: '16px',
             right: '20px',
-            zIndex: 10,
+            zIndex: 30,
             background: 'rgba(15, 23, 42, 0.85)',
             padding: '4px',
             borderRadius: '10px',
@@ -148,6 +200,7 @@ export const OfficeViewPage: React.FC = () => {
         visible={drawerVisible}
         onClose={() => setDrawerVisible(false)}
         onTaskCreated={refresh}
+        agents={agents}
       />
 
       {/* Interactive Agent Mini-Chat Drawer */}

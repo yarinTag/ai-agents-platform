@@ -25,18 +25,115 @@ class SendMessageRequest(BaseModel):
 async def get_messages(
     agent_id: str,
     limit: int = 100,
-    db: DatabaseManager = Depends(get_db_manager)
+    db: DatabaseManager = Depends(get_db_manager),
+    runtime: ClaudeCodeRuntimeAdapter = Depends(get_runtime_adapter)
 ):
-    """Retrieve chat history, thoughts, and tool execution logs for an agent."""
+    """Retrieve chat history, thoughts, and task execution responses for an agent."""
     agent = db.get_agent(agent_id)
     if not agent:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Agent '{agent_id}' not found")
 
     conv = db.get_or_create_conversation(agent_id)
+
+    # 1. Fetch recent tasks for this agent from DB and runtime
+    recent_tasks = db.list_task_runs(agent_id=agent_id, limit=20)
+    seen_run_ids = {t.run_id for t in recent_tasks}
+    if hasattr(runtime, 'list_runs'):
+        for r in runtime.list_runs():
+            if str(r.agent_id) == str(agent_id) and r.run_id not in seen_run_ids:
+                recent_tasks.append(r)
+                seen_run_ids.add(r.run_id)
+
+    # 2. Get existing chat messages
     history = db.get_chat_history(agent_id, limit=limit)
+    existing_assistant_task_ids = {
+        m.get("task_id") for m in history
+        if m.get("task_id") and m.get("sender_type") in ("ASSISTANT", "AGENT")
+    }
+    existing_user_task_ids = {
+        m.get("task_id") for m in history
+        if m.get("task_id") and m.get("sender_type") == "USER"
+    }
+
+    # 3. Synchronize any completed/failed tasks into chat_messages
+    synced_any = False
+    for task_run in recent_tasks:
+        status_val = task_run.status.value if hasattr(task_run.status, "value") else str(task_run.status)
+        has_result = bool(task_run.result or task_run.error or status_val in ("completed", "failed"))
+
+        # Verify task is in DB before using task_id as foreign key
+        db_task_id = None
+        if hasattr(task_run, 'run_id') and task_run.run_id:
+            try:
+                db.save_task_run(task_run)
+                db_task_id = task_run.run_id
+            except Exception:
+                db_task_id = None
+
+        # Save user task prompt if not present
+        if task_run.prompt and task_run.run_id not in existing_user_task_ids:
+            try:
+                db.save_chat_message({
+                    "conversation_id": conv["id"],
+                    "agent_id": agent_id,
+                    "task_id": db_task_id,
+                    "sender_type": "USER",
+                    "message_type": "CHAT",
+                    "content": task_run.prompt,
+                    "metadata": {"task_id": task_run.run_id},
+                    "created_at": task_run.created_at.isoformat() if task_run.created_at else None
+                })
+                existing_user_task_ids.add(task_run.run_id)
+                synced_any = True
+            except Exception as e:
+                pass
+
+        # Save agent's completed response if not present
+        if has_result and task_run.run_id not in existing_assistant_task_ids:
+            content_text = task_run.result if (status_val == "completed" and task_run.result) else (task_run.error or "Task completed.")
+            try:
+                db.save_chat_message({
+                    "conversation_id": conv["id"],
+                    "agent_id": agent_id,
+                    "task_id": db_task_id,
+                    "sender_type": "ASSISTANT",
+                    "message_type": "CHAT",
+                    "content": content_text,
+                    "metadata": {
+                        "task_id": task_run.run_id,
+                        "status": status_val,
+                        "prompt": task_run.prompt,
+                        "exit_code": getattr(task_run, "exit_code", None),
+                        "started_at": task_run.started_at.isoformat() if getattr(task_run, "started_at", None) else None,
+                        "ended_at": task_run.ended_at.isoformat() if getattr(task_run, "ended_at", None) else None
+                    },
+                    "created_at": task_run.ended_at.isoformat() if getattr(task_run, "ended_at", None) else (task_run.created_at.isoformat() if getattr(task_run, "created_at", None) else None)
+                })
+                existing_assistant_task_ids.add(task_run.run_id)
+                synced_any = True
+            except Exception as e:
+                pass
+
+    if synced_any:
+        history = db.get_chat_history(agent_id, limit=limit)
+
     return {
         "conversation": conv,
-        "messages": history
+        "messages": history,
+        "tasks": [
+            {
+                "id": t.run_id,
+                "run_id": t.run_id,
+                "agent_id": t.agent_id,
+                "prompt": t.prompt,
+                "status": t.status.value if hasattr(t.status, "value") else str(t.status),
+                "result": t.result,
+                "error": t.error,
+                "created_at": t.created_at.isoformat() if t.created_at else None,
+                "ended_at": t.ended_at.isoformat() if getattr(t, "ended_at", None) else None
+            }
+            for t in recent_tasks
+        ]
     }
 
 

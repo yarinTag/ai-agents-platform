@@ -55,117 +55,49 @@ export const AgentsOfficeV3Canvas: React.FC<AgentsOfficeV3CanvasProps> = ({
   const [dragStart, setDragStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [liveSimRunning, setLiveSimRunning] = useState<boolean>(false);
   const [lastDispatchedDept, setLastDispatchedDept] = useState<string | null>(null);
+  const [hoveredDept, setHoveredDept] = useState<string | null>(null);
 
   // Central Brain Coordinates (perfectly centered on 1280x1000 workspace)
   const brainPos = { x: 640, y: 500 };
 
-  const DEPARTMENTS: DepartmentDef[] = [
-    {
-      key: 'Emails',
-      name: 'EMAILS',
-      dotColor: '#10b981',
-      stat1Label: 'OUTREACH SENT',
-      stat2Label: 'INBOX STATUS',
-      posX: 220,
-      posY: 180,
-      desks: [
-        { title: 'EMAILS LEAD', isLead: true, relX: -60, relY: -30 },
-        { title: 'CLIENT OUTREACH', relX: 60, relY: -30 },
-        { title: 'INBOX TRIAGE', relX: -60, relY: 40 },
-        { title: 'SEQUENCES', relX: 60, relY: 40 },
-      ],
-    },
-    {
-      key: 'Engineering',
-      name: 'ENGINEERING',
-      dotColor: '#3b82f6',
-      stat1Label: 'BUILD STATUS',
-      stat2Label: 'SECURITY AUDIT',
-      posX: 640,
-      posY: 180,
-      desks: [
-        { title: 'ENGINEERING LEAD', isLead: true, relX: -60, relY: -30 },
-        { title: 'SECURITY AUDITOR', relX: 60, relY: -30 },
-        { title: 'BACKEND ARCHITECT', relX: -60, relY: 40 },
-        { title: 'FRONTEND SPECIALIST', relX: 60, relY: 40 },
-      ],
-    },
-    {
-      key: 'Delivery',
-      name: 'DELIVERY',
-      dotColor: '#0ea5e9',
-      stat1Label: 'RELEASES SHIPPED',
-      stat2Label: 'PIPELINE STATUS',
-      posX: 1060,
-      posY: 180,
-      desks: [
-        { title: 'DELIVERY LEAD', isLead: true, relX: -60, relY: -30 },
-        { title: 'QA AUDIT', relX: 60, relY: -30 },
-        { title: 'DEPLOY PIPELINE', relX: -60, relY: 40 },
-        { title: 'RELEASE ACCEPTANCE', relX: 60, relY: 40 },
-      ],
-    },
-    {
-      key: 'Marketing',
-      name: 'MARKETING',
-      dotColor: '#f43f5e',
-      stat1Label: 'NEW INSIGHTS',
-      stat2Label: 'CAMPAIGN RUNS',
-      posX: 180,
-      posY: 500,
-      desks: [
-        { title: 'MARKETING LEAD', isLead: true, relX: -60, relY: -30 },
-        { title: 'COPY & CONTENT', relX: 60, relY: -30 },
-        { title: 'GROWTH STRATEGY', relX: -60, relY: 40 },
-        { title: 'CAMPAIGNS', relX: 60, relY: 40 },
-      ],
-    },
-    {
-      key: 'Sales',
-      name: 'SALES',
-      dotColor: '#f59e0b',
-      stat1Label: 'PIPELINE ACTIVE',
-      stat2Label: 'DEAL STATUS',
-      posX: 1100,
-      posY: 500,
-      desks: [
-        { title: 'SALES LEAD', isLead: true, relX: -60, relY: -30 },
-        { title: 'LEAD SCORING ICP', relX: 60, relY: -30 },
-        { title: 'ENTERPRISE CLOSER', relX: -60, relY: 40 },
-        { title: 'DEAL CONTRACTS', relX: 60, relY: 40 },
-      ],
-    },
-    {
-      key: 'Finance',
-      name: 'FINANCE',
-      dotColor: '#6366f1',
-      stat1Label: 'BURN RATE',
-      stat2Label: 'LEDGER AUDIT',
-      posX: 320,
-      posY: 820,
-      desks: [
-        { title: 'FINANCE LEAD', isLead: true, relX: -60, relY: -30 },
-        { title: 'TOKEN METRICS', relX: 60, relY: -30 },
-        { title: 'INVOICING', relX: -60, relY: 40 },
-        { title: 'AUDIT & LEDGERS', relX: 60, relY: 40 },
-      ],
-    },
-    {
-      key: 'Operations',
-      name: 'OPERATIONS',
-      dotColor: '#8b5cf6',
-      stat1Label: 'SLA UPTIME',
-      stat2Label: 'WORKFLOW ENGINE',
-      posX: 960,
-      posY: 820,
-      desks: [
-        { title: 'OPERATIONS LEAD', isLead: true, relX: -60, relY: -30 },
-        { title: 'GENERAL AGENT', relX: 60, relY: -30 },
-        { title: 'SLA & COMPLIANCE', relX: -60, relY: 40 },
-        { title: 'RESOURCE MONITOR', relX: 60, relY: 40 },
-      ],
-    },
+  const PRESET_SLOTS = [
+    { posX: 640, posY: 180, dotColor: '#3b82f6', stat1: 'TASKS TOTAL', stat2: 'PIPELINE' },  // North
+    { posX: 1060, posY: 220, dotColor: '#0ea5e9', stat1: 'TASKS TOTAL', stat2: 'PIPELINE' }, // North-East
+    { posX: 1100, posY: 500, dotColor: '#f59e0b', stat1: 'TASKS TOTAL', stat2: 'PIPELINE' }, // East
+    { posX: 960, posY: 820, dotColor: '#8b5cf6', stat1: 'TASKS TOTAL', stat2: 'PIPELINE' },  // South-East
+    { posX: 640, posY: 820, dotColor: '#6366f1', stat1: 'TASKS TOTAL', stat2: 'PIPELINE' },  // South
+    { posX: 320, posY: 820, dotColor: '#ec4899', stat1: 'TASKS TOTAL', stat2: 'PIPELINE' },  // South-West
+    { posX: 180, posY: 500, dotColor: '#f43f5e', stat1: 'TASKS TOTAL', stat2: 'PIPELINE' },  // West
+    { posX: 220, posY: 220, dotColor: '#10b981', stat1: 'TASKS TOTAL', stat2: 'PIPELINE' },  // North-West
   ];
+
+  const DEPARTMENTS: DepartmentDef[] = React.useMemo(() => {
+    const set = new Set<string>();
+    agents.forEach((a) => {
+      const d = (a.department || '').trim();
+      if (d) set.add(d);
+    });
+    const uniqueDepts = Array.from(set);
+
+    return uniqueDepts.map((deptName, idx) => {
+      const slot = PRESET_SLOTS[idx % PRESET_SLOTS.length];
+      return {
+        key: deptName,
+        name: deptName.toUpperCase(),
+        dotColor: slot.dotColor,
+        stat1Label: slot.stat1,
+        stat2Label: slot.stat2,
+        posX: slot.posX,
+        posY: slot.posY,
+        desks: [
+          { title: `${deptName.toUpperCase()} LEAD`, isLead: true, relX: -60, relY: -30 },
+          { title: 'SPECIALIST', relX: 60, relY: -30 },
+          { title: 'OPERATOR', relX: -60, relY: 40 },
+          { title: 'ANALYST', relX: 60, relY: 40 },
+        ],
+      };
+    });
+  }, [agents]);
 
   // Helper: Find real agent for a specific desk
   const findAgentForDesk = (deptKey: string, deskTitle: string, deskIdx: number): Agent | null => {
@@ -173,12 +105,6 @@ export const AgentsOfficeV3Canvas: React.FC<AgentsOfficeV3CanvasProps> = ({
     const deptAgents = agents.filter(
       (a) => (a.department || '').toLowerCase().includes(deptKey.toLowerCase())
     );
-
-    // Special case: Lead Engineer belongs with Delivery & Engineering
-    if (deptKey.toLowerCase() === 'delivery') {
-      const engAgents = agents.filter((a) => (a.department || '').toLowerCase().includes('engineering'));
-      deptAgents.push(...engAgents);
-    }
 
     if (deptAgents.length === 0) return null;
 
@@ -207,7 +133,7 @@ export const AgentsOfficeV3Canvas: React.FC<AgentsOfficeV3CanvasProps> = ({
       return deptAgents[deskIdx];
     }
 
-    // Return null for unassigned open desks - DO NOT fallback to agents[0]
+    // Return null for unassigned open desks
     return null;
   };
 
@@ -236,7 +162,7 @@ export const AgentsOfficeV3Canvas: React.FC<AgentsOfficeV3CanvasProps> = ({
     const done = deptTasks.filter((t) => t.status === 'completed').length;
 
     return {
-      agentsCount: Math.max(deptAgents.length, 1),
+      agentsCount: deptAgents.length,
       doing,
       next,
       done,
@@ -249,10 +175,13 @@ export const AgentsOfficeV3Canvas: React.FC<AgentsOfficeV3CanvasProps> = ({
   const activeTaskAny = tasks.find((t) => t.status === 'running');
   const totalDoing = tasks.filter((t) => t.status === 'running').length;
   const totalDone = tasks.filter((t) => t.status === 'completed').length;
-  const totalNotesCount = tasks.length;
 
   // Trigger a live test task that connects through the office in real time
   const handleTriggerLiveMission = async () => {
+    if (DEPARTMENTS.length === 0 || agents.length === 0) {
+      message.warning('Create at least one agent and department first!');
+      return;
+    }
     try {
       setLiveSimRunning(true);
       const targetDept = DEPARTMENTS[Math.floor(Math.random() * DEPARTMENTS.length)];
@@ -268,7 +197,7 @@ export const AgentsOfficeV3Canvas: React.FC<AgentsOfficeV3CanvasProps> = ({
           project_id: null,
           skill_id: null,
           input_data: {
-            task: `Live Mission: Sync ${targetDept.name} with Central Brain`,
+            task: `Live Mission: Sync ${targetDept.name} with Central Dispatch`,
             department: targetDept.name,
             timestamp: new Date().toISOString(),
           },
@@ -324,68 +253,7 @@ export const AgentsOfficeV3Canvas: React.FC<AgentsOfficeV3CanvasProps> = ({
       onMouseLeave={handleMouseUp}
       onWheel={handleWheel}
     >
-      {/* Top Left Floating Live Status Pill & Quick Action */}
-      <div
-        style={{
-          position: 'absolute',
-          top: '16px',
-          left: '20px',
-          zIndex: 20,
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-        }}
-      >
-        <div
-          style={{
-            background: 'rgba(255, 255, 255, 0.95)',
-            border: '1px solid #e5e2d8',
-            borderRadius: '24px',
-            padding: '6px 14px',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            fontSize: '12px',
-            fontWeight: 700,
-            color: '#1c1917',
-          }}
-        >
-          <span
-            style={{
-              width: 8,
-              height: 8,
-              borderRadius: '50%',
-              background: totalDoing > 0 ? '#10b981' : '#94a3b8',
-              boxShadow: totalDoing > 0 ? '0 0 8px #10b981' : 'none',
-            }}
-          />
-          <span>{totalDoing > 0 ? 'LIVE RUNTIME' : 'RUNTIME STANDBY'}</span>
-          <span style={{ color: '#78716c', fontWeight: 500 }}>|</span>
-          <span style={{ color: totalDoing > 0 ? '#059669' : '#64748b' }}>
-            {totalDoing > 0 ? `${totalDoing} ACTIVE IN FLIGHT` : '0 IN FLIGHT (IDLE)'}
-          </span>
-          <span style={{ color: '#78716c', fontWeight: 500 }}>•</span>
-          <span style={{ color: '#44403c' }}>{totalDone} COMPLETED</span>
-        </div>
 
-        <Button
-          type="primary"
-          icon={<ThunderboltFilled />}
-          loading={liveSimRunning}
-          onClick={handleTriggerLiveMission}
-          style={{
-            background: '#10b981',
-            borderColor: '#10b981',
-            borderRadius: '20px',
-            boxShadow: '0 4px 12px rgba(16, 185, 129, 0.25)',
-            fontWeight: 700,
-            fontSize: '12px',
-          }}
-        >
-          DISPATCH LIVE MISSION
-        </Button>
-      </div>
 
       {/* Zoom / Pan Container */}
       <div
@@ -503,6 +371,8 @@ export const AgentsOfficeV3Canvas: React.FC<AgentsOfficeV3CanvasProps> = ({
           return (
             <div
               key={dept.key}
+              onMouseEnter={() => setHoveredDept(dept.key)}
+              onMouseLeave={() => setHoveredDept(null)}
               style={{
                 position: 'absolute',
                 left: `${dept.posX}px`,
@@ -606,14 +476,18 @@ export const AgentsOfficeV3Canvas: React.FC<AgentsOfficeV3CanvasProps> = ({
                     {/* Desk Name Tag Label */}
                     <div
                       style={{
-                        background: '#ffffff',
-                        border: isWorking ? '1.5px solid #10b981' : '1px solid #e2ded5',
+                        background: deskAgent ? '#ffffff' : 'rgba(255, 255, 255, 0.45)',
+                        border: isWorking
+                          ? '1.5px solid #10b981'
+                          : deskAgent
+                          ? '1px solid #e2ded5'
+                          : '1px dashed #dcd8ca',
                         borderRadius: '10px',
                         padding: '1px 6px',
                         fontSize: '9px',
-                        fontWeight: desk.isLead ? 700 : 600,
-                        color: desk.isLead ? '#b45309' : '#44403c',
-                        boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
+                        fontWeight: deskAgent && desk.isLead ? 700 : 500,
+                        color: deskAgent ? (desk.isLead ? '#b45309' : '#44403c') : '#a8a29e',
+                        boxShadow: deskAgent ? '0 2px 6px rgba(0,0,0,0.08)' : 'none',
                         whiteSpace: 'nowrap',
                         marginBottom: '3px',
                         display: 'flex',
@@ -621,8 +495,8 @@ export const AgentsOfficeV3Canvas: React.FC<AgentsOfficeV3CanvasProps> = ({
                         gap: '3px',
                       }}
                     >
-                      {desk.isLead && <StarFilled style={{ color: '#f59e0b', fontSize: '8px' }} />}
-                      {deskAgent ? deskAgent.name.split(' ')[0] : desk.title}
+                      {deskAgent && desk.isLead && <StarFilled style={{ color: '#f59e0b', fontSize: '8px' }} />}
+                      {deskAgent ? deskAgent.name.split(' ')[0] : 'Open Desk'}
                     </div>
 
                     {/* Desk & Computer Rig (Isometric 3D Illustration) */}
@@ -661,33 +535,35 @@ export const AgentsOfficeV3Canvas: React.FC<AgentsOfficeV3CanvasProps> = ({
                         )}
                       </div>
 
-                      {/* Agent Character sitting at desk */}
-                      <div
-                        style={{
-                          position: 'absolute',
-                          bottom: '-8px',
-                          width: '14px',
-                          height: '14px',
-                          borderRadius: '50%',
-                          background: desk.isLead ? '#f59e0b' : '#0284c7',
-                          border: isWorking ? '2px solid #10b981' : '2px solid #ffffff',
-                          boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          color: '#fff',
-                          fontSize: '8px',
-                          fontWeight: 700,
-                        }}
-                      >
-                        {deskAgent ? deskAgent.name[0] : desk.title[0]}
-                      </div>
+                      {/* Agent Character sitting at desk - ONLY when real agent exists! */}
+                      {deskAgent && (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            bottom: '-8px',
+                            width: '14px',
+                            height: '14px',
+                            borderRadius: '50%',
+                            background: desk.isLead ? '#f59e0b' : '#0284c7',
+                            border: isWorking ? '2px solid #10b981' : '2px solid #ffffff',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#fff',
+                            fontSize: '8px',
+                            fontWeight: 700,
+                          }}
+                        >
+                          {deskAgent.name[0]}
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
               })}
 
-              {/* Floating Department HUD Card (Exact match to screenshot!) */}
+              {/* Compact Department Tag (Visible always, above the platform, never blocking agents) */}
               <div
                 onClick={(e) => {
                   e.stopPropagation();
@@ -695,107 +571,180 @@ export const AgentsOfficeV3Canvas: React.FC<AgentsOfficeV3CanvasProps> = ({
                 }}
                 style={{
                   position: 'absolute',
-                  top: '-70px',
+                  top: '-18px',
                   left: '50%',
                   transform: 'translateX(-50%)',
                   background: '#ffffff',
-                  borderRadius: '16px',
-                  border: isDeptActive ? `2px solid ${dept.dotColor}` : '1px solid #e5e2d8',
-                  boxShadow: isDeptActive
-                    ? `0 12px 28px ${dept.dotColor}25`
-                    : '0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 4px 10px -3px rgba(0, 0, 0, 0.04)',
-                  padding: '12px 16px',
-                  minWidth: '170px',
+                  borderRadius: '12px',
+                  border: isDeptActive ? `1.5px solid ${dept.dotColor}` : '1px solid #e5e2d8',
+                  boxShadow: '0 4px 10px rgba(0, 0, 0, 0.08)',
+                  padding: '3px 10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  whiteSpace: 'nowrap',
                   cursor: 'pointer',
                   zIndex: 4,
-                  transition: 'transform 0.15s ease, box-shadow 0.15s ease',
+                  transition: 'all 0.15s ease',
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.transform = 'translateX(-50%) translateY(-2px)')}
-                onMouseLeave={(e) => (e.currentTarget.style.transform = 'translateX(-50%) translateY(0)')}
               >
-                {/* Header: Dot + Department Name */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span
-                      style={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: '50%',
-                        background: dept.dotColor,
-                        boxShadow: isDeptActive ? `0 0 6px ${dept.dotColor}` : 'none',
-                      }}
-                    />
-                    <span style={{ fontSize: '11px', fontWeight: 800, color: '#1c1917', letterSpacing: '0.8px' }}>
-                      {dept.name}
-                    </span>
-                  </div>
-                  {isDeptActive ? (
-                    <span style={{ fontSize: '9px', fontWeight: 800, color: '#10b981' }}>
-                      <SyncOutlined spin /> ACTIVE
-                    </span>
-                  ) : (
-                    <span style={{ fontSize: '9px', fontWeight: 600, color: '#94a3b8' }}>
-                      IDLE
-                    </span>
-                  )}
-                </div>
-
-                {/* Big Agent Count */}
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', margin: '4px 0 10px 0' }}>
-                  <span style={{ fontSize: '28px', fontWeight: 800, color: '#1c1917', lineHeight: 1 }}>
-                    {stats.agentsCount}
-                  </span>
-                  <span style={{ fontSize: '10px', fontWeight: 700, color: '#78716c', letterSpacing: '0.5px' }}>
-                    AGENTS
-                  </span>
-                </div>
-
-                {/* Two Key Metrics */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginBottom: '10px', fontSize: '11px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: '#78716c', fontSize: '9px', fontWeight: 700 }}>{dept.stat1Label}</span>
-                    <span style={{ fontWeight: 800, color: '#1c1917' }}>{stats.total}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: '#78716c', fontSize: '9px', fontWeight: 700 }}>{dept.stat2Label}</span>
-                    <span style={{ fontWeight: 800, color: isDeptActive ? '#10b981' : '#64748b' }}>
-                      {isDeptActive ? `${stats.doing} IN PROGRESS` : stats.done > 0 ? `${stats.done} VERIFIED` : 'STANDBY'}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Bottom Task Pipeline Pills: DOING X, NEXT Y, DONE Z (Dynamically populated!) */}
-                <div
+                <span
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    borderTop: '1px solid #f0ede4',
-                    paddingTop: '6px',
-                    fontSize: '9px',
-                    fontWeight: 700,
-                    color: '#78716c',
+                    width: 7,
+                    height: 7,
+                    borderRadius: '50%',
+                    background: dept.dotColor,
+                    boxShadow: isDeptActive ? `0 0 6px ${dept.dotColor}` : 'none',
+                  }}
+                />
+                <span style={{ fontSize: '10px', fontWeight: 800, color: '#1c1917', letterSpacing: '0.8px' }}>
+                  {dept.name}
+                </span>
+                <span style={{ fontSize: '9px', fontWeight: 700, color: '#78716c' }}>
+                  ({stats.agentsCount})
+                </span>
+                {isDeptActive && (
+                  <span style={{ fontSize: '8px', fontWeight: 800, color: '#10b981' }}>
+                    • ACTIVE
+                  </span>
+                )}
+              </div>
+
+              {/* Floating Department Detailed HUD Card - ONLY VISIBLE ON HOVER, NOT covering the platform */}
+              {hoveredDept === dept.key && (
+                <div
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onSelectDepartment) onSelectDepartment(dept.key);
+                  }}
+                  style={{
+                    position: 'absolute',
+                    top: '-145px',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    background: '#ffffff',
+                    borderRadius: '16px',
+                    border: isDeptActive ? `2px solid ${dept.dotColor}` : '1px solid #e5e2d8',
+                    boxShadow: isDeptActive
+                      ? `0 16px 36px ${dept.dotColor}35`
+                      : '0 16px 36px rgba(0, 0, 0, 0.15)',
+                    padding: '12px 16px',
+                    minWidth: '180px',
+                    cursor: 'pointer',
+                    zIndex: 50,
                   }}
                 >
-                  <span>
-                    DOING{' '}
-                    <strong style={{ color: stats.doing > 0 ? '#10b981' : '#1c1917' }}>
-                      {stats.doing}
-                    </strong>
-                  </span>
-                  <span>
-                    NEXT <strong style={{ color: '#1c1917' }}>{stats.next}</strong>
-                  </span>
-                  <span>
-                    DONE <strong style={{ color: '#059669' }}>{stats.done}</strong>
-                  </span>
+                  {/* Header: Dot + Department Name */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span
+                        style={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: '50%',
+                          background: dept.dotColor,
+                          boxShadow: isDeptActive ? `0 0 6px ${dept.dotColor}` : 'none',
+                        }}
+                      />
+                      <span style={{ fontSize: '11px', fontWeight: 800, color: '#1c1917', letterSpacing: '0.8px' }}>
+                        {dept.name}
+                      </span>
+                    </div>
+                    {isDeptActive ? (
+                      <span style={{ fontSize: '9px', fontWeight: 800, color: '#10b981' }}>
+                        <SyncOutlined spin /> ACTIVE
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: '9px', fontWeight: 600, color: '#94a3b8' }}>
+                        IDLE
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Big Agent Count */}
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', margin: '4px 0 10px 0' }}>
+                    <span style={{ fontSize: '28px', fontWeight: 800, color: '#1c1917', lineHeight: 1 }}>
+                      {stats.agentsCount}
+                    </span>
+                    <span style={{ fontSize: '10px', fontWeight: 700, color: '#78716c', letterSpacing: '0.5px' }}>
+                      AGENTS
+                    </span>
+                  </div>
+
+                  {/* Two Key Metrics */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginBottom: '10px', fontSize: '11px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: '#78716c', fontSize: '9px', fontWeight: 700 }}>{dept.stat1Label}</span>
+                      <span style={{ fontWeight: 800, color: '#1c1917' }}>{stats.total}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: '#78716c', fontSize: '9px', fontWeight: 700 }}>{dept.stat2Label}</span>
+                      <span style={{ fontWeight: 800, color: isDeptActive ? '#10b981' : '#64748b' }}>
+                        {isDeptActive ? `${stats.doing} IN PROGRESS` : stats.done > 0 ? `${stats.done} VERIFIED` : 'STANDBY'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Bottom Task Pipeline Pills */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      borderTop: '1px solid #f0ede4',
+                      paddingTop: '6px',
+                      fontSize: '9px',
+                      fontWeight: 700,
+                      color: '#78716c',
+                    }}
+                  >
+                    <span>
+                      DOING{' '}
+                      <strong style={{ color: stats.doing > 0 ? '#10b981' : '#1c1917' }}>
+                        {stats.doing}
+                      </strong>
+                    </span>
+                    <span>
+                      NEXT <strong style={{ color: '#1c1917' }}>{stats.next}</strong>
+                    </span>
+                    <span>
+                      DONE <strong style={{ color: '#059669' }}>{stats.done}</strong>
+                    </span>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           );
         })}
 
-        {/* Central Hub: THE BRAIN 37 NOTES */}
+        {/* Empty State Banner if 0 Departments Defined */}
+        {DEPARTMENTS.length === 0 && (
+          <div
+            style={{
+              position: 'absolute',
+              left: `${brainPos.x}px`,
+              top: `${brainPos.y - 120}px`,
+              transform: 'translateX(-50%)',
+              background: '#ffffff',
+              borderRadius: '16px',
+              border: '1.5px dashed #cbd5e1',
+              padding: '16px 24px',
+              textAlign: 'center',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.06)',
+              zIndex: 10,
+              maxWidth: '380px',
+            }}
+          >
+            <div style={{ fontSize: '13px', fontWeight: 800, color: '#1c1917', marginBottom: '4px' }}>
+              🏢 NO DEPARTMENTS DEFINED
+            </div>
+            <div style={{ fontSize: '11px', color: '#64748b', lineHeight: '1.5' }}>
+              Create an agent in the Agents page and assign a department name to construct your office suites.
+            </div>
+          </div>
+        )}
+
+        {/* Central Hub: CENTRAL DISPATCH */}
         <div
           style={{
             position: 'absolute',
@@ -851,7 +800,7 @@ export const AgentsOfficeV3Canvas: React.FC<AgentsOfficeV3CanvasProps> = ({
             </div>
           </div>
 
-          {/* Floating Pill: THE BRAIN 37 NOTES */}
+          {/* Floating Pill: CENTRAL DISPATCH */}
           <div
             style={{
               position: 'absolute',
@@ -877,14 +826,14 @@ export const AgentsOfficeV3Canvas: React.FC<AgentsOfficeV3CanvasProps> = ({
               }}
             />
             <span style={{ fontSize: '11px', fontWeight: 800, color: totalDoing > 0 ? '#065f46' : '#475569', letterSpacing: '0.5px' }}>
-              THE BRAIN
+              CENTRAL DISPATCH
             </span>
             <span style={{ fontSize: '11px', fontWeight: 800, color: '#1c1917' }}>
-              {totalNotesCount} NOTES
+              {totalDoing > 0 ? `${totalDoing} ACTIVE` : `${agents.length} AGENTS`}
             </span>
           </div>
 
-          {/* Active Memory Bubble: Current Task or Standby */}
+          {/* Active Status Bubble */}
           <div
             style={{
               position: 'absolute',
@@ -905,7 +854,9 @@ export const AgentsOfficeV3Canvas: React.FC<AgentsOfficeV3CanvasProps> = ({
           >
             {activeTaskAny
               ? `⚡ ${((activeTaskAny.input_data as any)?.task || (activeTaskAny as any)?.prompt || 'EXECUTING MISSION').slice(0, 24)}...`
-              : '💤 STANDBY • NO ACTIVE TASKS'}
+              : DEPARTMENTS.length === 0
+              ? '💤 STANDBY • NO DEPARTMENTS'
+              : `💤 STANDBY • ${DEPARTMENTS.length} DEPT${DEPARTMENTS.length === 1 ? '' : 'S'} READY`}
           </div>
         </div>
       </div>

@@ -44,14 +44,6 @@ import { TemplateGallery } from '../components/agents/TemplateGallery';
 import { HierarchyEditor } from '../components/agents/HierarchyEditor';
 import { AgentMiniChatDrawer } from '../components/chat/AgentMiniChatDrawer';
 
-const DEPARTMENTS = [
-  'Engineering',
-  'Architecture',
-  'QA & Testing',
-  'Research & Ops',
-  'HQ',
-];
-
 export const AgentsPage: React.FC = () => {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [availableSkills, setAvailableSkills] = useState<any[]>([]);
@@ -63,6 +55,37 @@ export const AgentsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>('roster');
   const [chatAgent, setChatAgent] = useState<Agent | null>(null);
   const [chatVisible, setChatVisible] = useState<boolean>(false);
+  const [customDepartments, setCustomDepartments] = useState<string[]>([]);
+  const [deptSearchText, setDeptSearchText] = useState<string>('');
+  const [newCustomDept, setNewCustomDept] = useState<string>('');
+
+  const dynamicDepartments = React.useMemo(() => {
+    const set = new Set<string>([...customDepartments]);
+    agents.forEach((a) => {
+      if (a.department?.trim()) set.add(a.department.trim());
+    });
+    const opts = Array.from(set).map((d) => ({ value: d, label: d }));
+
+    const searchTrimmed = deptSearchText.trim();
+    if (searchTrimmed && !set.has(searchTrimmed)) {
+      opts.unshift({
+        value: searchTrimmed,
+        label: `➕ Create department "${searchTrimmed}"`,
+      });
+    }
+    return opts;
+  }, [agents, customDepartments, deptSearchText]);
+
+  const handleAddCustomDept = (nameToAdd?: string) => {
+    const val = (nameToAdd || newCustomDept).trim();
+    if (!val) return;
+    if (!customDepartments.includes(val)) {
+      setCustomDepartments((prev) => [...prev, val]);
+    }
+    form.setFieldsValue({ department: val });
+    setNewCustomDept('');
+    setDeptSearchText('');
+  };
 
   const fetchAgents = async () => {
     try {
@@ -134,7 +157,7 @@ export const AgentsPage: React.FC = () => {
     form.resetFields();
     form.setFieldsValue({
       role_type: 'WORKER',
-      department: 'Engineering',
+      department: customDepartments[0] || (agents[0]?.department) || '',
       model: 'default',
       max_tokens: 8000,
       temperature: 0.7,
@@ -148,6 +171,12 @@ export const AgentsPage: React.FC = () => {
   const handleOk = async () => {
     try {
       const values = await form.validateFields();
+      if (Array.isArray(values.department)) {
+        values.department = values.department[0] || '';
+      }
+      if (typeof values.department === 'string') {
+        values.department = values.department.trim();
+      }
       if (editingKey) {
         await updateAgent(editingKey, values);
         message.success('Agent updated successfully');
@@ -220,11 +249,22 @@ export const AgentsPage: React.FC = () => {
       title: 'Department',
       dataIndex: 'department',
       key: 'department',
-      render: (dept?: string) => (
-        <Tag color={dept === 'Architecture' ? 'purple' : dept === 'QA & Testing' ? 'cyan' : dept === 'HQ' ? 'gold' : 'blue'}>
-          {dept || 'Engineering'}
-        </Tag>
-      ),
+      render: (dept?: string) => {
+        const d = dept || 'Engineering';
+        const colorMap: Record<string, string> = {
+          Architecture: 'purple',
+          'QA & Testing': 'cyan',
+          HQ: 'gold',
+          Engineering: 'blue',
+          'Research & Ops': 'geekblue',
+          Marketing: 'magenta',
+          Sales: 'orange',
+          Operations: 'volcano',
+          Finance: 'indigo',
+        };
+        const color = colorMap[d] || 'volcano';
+        return <Tag color={color}>{d}</Tag>;
+      },
     },
     {
       title: 'Model',
@@ -444,14 +484,61 @@ export const AgentsPage: React.FC = () => {
               <Input placeholder="e.g. Lead Architect" />
             </Form.Item>
 
-            <Form.Item name="department" label="Department">
-              <Select>
-                {DEPARTMENTS.map((d) => (
-                  <Select.Option key={d} value={d}>
-                    {d}
-                  </Select.Option>
-                ))}
-              </Select>
+            <Form.Item
+              name="department"
+              label="Department"
+              help="Select or enter any custom department"
+            >
+              <Select
+                showSearch
+                allowClear
+                placeholder="Select or enter custom department"
+                options={dynamicDepartments}
+                searchValue={deptSearchText}
+                onSearch={setDeptSearchText}
+                onChange={(val) => {
+                  if (val) {
+                    const trimmed = String(val).trim();
+                    if (!customDepartments.includes(trimmed)) {
+                      setCustomDepartments((prev) => [...prev, trimmed]);
+                    }
+                  }
+                  setDeptSearchText('');
+                }}
+                dropdownRender={(menu) => (
+                  <>
+                    {menu}
+                    <div
+                      style={{
+                        display: 'flex',
+                        gap: '6px',
+                        padding: '8px',
+                        borderTop: '1px solid #30363d',
+                        background: '#161b22',
+                      }}
+                      onMouseDown={(e) => e.preventDefault()}
+                    >
+                      <Input
+                        size="small"
+                        placeholder="Define custom department"
+                        value={newCustomDept}
+                        onChange={(e) => setNewCustomDept(e.target.value)}
+                        onPressEnter={() => handleAddCustomDept()}
+                        style={{ background: '#0d1117', color: '#fff', borderColor: '#30363d' }}
+                      />
+                      <Button
+                        size="small"
+                        type="primary"
+                        icon={<PlusOutlined />}
+                        onClick={() => handleAddCustomDept()}
+                        style={{ background: '#10b981', borderColor: '#10b981' }}
+                      >
+                        Add
+                      </Button>
+                    </div>
+                  </>
+                )}
+              />
             </Form.Item>
           </div>
 

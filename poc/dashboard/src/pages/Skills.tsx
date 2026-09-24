@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   Table,
   Form,
@@ -37,6 +37,7 @@ export const SkillsPage: React.FC = () => {
   const [selectedPluginSkill, setSelectedPluginSkill] = useState<any>(null);
   const [skillContent, setSkillContent] = useState<string>('');
   const [loadingContent, setLoadingContent] = useState<boolean>(false);
+  const hasScannedRef = useRef<boolean>(false);
 
   const fetchSkills = async () => {
     try {
@@ -51,18 +52,22 @@ export const SkillsPage: React.FC = () => {
     }
   };
 
-  const handleScanPlugins = async () => {
+  const handleScanPlugins = async (isManual: boolean = false) => {
     try {
       setScanning(true);
       const res = await scanPlugins();
       if (res.data && res.data.plugins) {
         setPlugins(res.data.plugins);
         setMarketplacePath(res.data.marketplace_path || '');
-        message.success(`Discovered ${res.data.total_skills} skills across ${res.data.plugins.length} plugin packages!`);
+        if (isManual) {
+          message.success(`Discovered ${res.data.total_skills} skills across ${res.data.plugins.length} plugin packages!`);
+        }
       }
     } catch (err: any) {
       console.error('Plugin scan failed', err);
-      message.error(`Plugin scan failed: ${err?.message || 'Unable to scan plugins'}`);
+      if (isManual) {
+        message.error(`Plugin scan failed: ${err?.message || 'Unable to scan plugins'}`);
+      }
       setPlugins([]);
     } finally {
       setScanning(false);
@@ -87,7 +92,10 @@ export const SkillsPage: React.FC = () => {
 
   useEffect(() => {
     fetchSkills();
-    handleScanPlugins();
+    if (!hasScannedRef.current) {
+      hasScannedRef.current = true;
+      handleScanPlugins(false);
+    }
   }, []);
 
   const handleCreate = () => {
@@ -200,7 +208,7 @@ export const SkillsPage: React.FC = () => {
         <div style={{ display: 'flex', gap: '10px' }}>
           <Button
             icon={<SyncOutlined spin={scanning} />}
-            onClick={handleScanPlugins}
+            onClick={() => handleScanPlugins(true)}
             style={{ background: '#21262d', color: '#c9d1d9', borderColor: '#30363d' }}
           >
             Rescan Local Plugins

@@ -28,43 +28,17 @@ interface DepartmentOption {
   suggestions: string[];
 }
 
-const DEPARTMENTS: DepartmentOption[] = [
-  {
-    key: 'Marketing',
-    name: 'MARKETING',
-    color: '#f43f5e',
-    suggestions: ['Launch Q4 Growth Sprint', 'A/B Test Ad Copy', 'Weekly competitor pricing scan'],
-  },
-  {
-    key: 'Emails',
-    name: 'EMAILS',
-    color: '#10b981',
-    suggestions: ['Draft Cold Sequence v3', 'Triage Customer Inbox', 'Rebuild welcome sequence'],
-  },
-  {
-    key: 'Delivery',
-    name: 'DELIVERY',
-    color: '#0ea5e9',
-    suggestions: ['Run Zero-Defect Release Audit', 'Verify Test Repo Pipeline', 'Frontend build acceptance'],
-  },
-  {
-    key: 'Sales',
-    name: 'SALES',
-    color: '#f59e0b',
-    suggestions: ['Score Inbound Leads ICP', 'Forecast Pipeline Velocity', 'Enterprise pitch preparation'],
-  },
-  {
-    key: 'Operations',
-    name: 'OPERATIONS',
-    color: '#8b5cf6',
-    suggestions: ['Audit System SLA Health', 'Automate Workflow Sync', 'Data retention check'],
-  },
-  {
-    key: 'Finance',
-    name: 'FINANCE',
-    color: '#6366f1',
-    suggestions: ['Calculate Token Unit Economics', 'Monthly Margin Reconciliation', 'Invoicing audit'],
-  },
+const DEPT_PALETTE = [
+  '#3b82f6',
+  '#8b5cf6',
+  '#06b6d4',
+  '#10b981',
+  '#f59e0b',
+  '#f43f5e',
+  '#0ea5e9',
+  '#6366f1',
+  '#ec4899',
+  '#14b8a6',
 ];
 
 export const OfficeRightSidebar: React.FC<OfficeRightSidebarProps> = ({
@@ -74,7 +48,44 @@ export const OfficeRightSidebar: React.FC<OfficeRightSidebarProps> = ({
   onSelectDepartment,
   onSelectAgent,
 }) => {
-  const [selectedDept, setSelectedDept] = useState<DepartmentOption>(DEPARTMENTS[0]);
+  const departmentList: DepartmentOption[] = React.useMemo(() => {
+    const list: DepartmentOption[] = [];
+    const seen = new Set<string>();
+
+    // Dynamically collect custom departments strictly from defined agents
+    agents.forEach((agent) => {
+      const rawDept = (agent.department || '').trim();
+      if (!rawDept) return;
+      const lower = rawDept.toLowerCase();
+      if (!seen.has(lower)) {
+        seen.add(lower);
+        const color = DEPT_PALETTE[list.length % DEPT_PALETTE.length];
+        list.push({
+          key: rawDept,
+          name: rawDept.toUpperCase(),
+          color,
+          suggestions: [
+            `Dispatch task to ${rawDept}`,
+            `Review ${rawDept} sprint goals`,
+            `Verify ${rawDept} outputs`,
+          ],
+        });
+      }
+    });
+
+    return list;
+  }, [agents]);
+
+  const [selectedDeptKey, setSelectedDeptKey] = useState<string>('');
+
+  const selectedDept = React.useMemo(() => {
+    if (departmentList.length === 0) return null;
+    return (
+      departmentList.find((d) => d.key.toLowerCase() === selectedDeptKey.toLowerCase()) ||
+      departmentList[0]
+    );
+  }, [departmentList, selectedDeptKey]);
+
   const [taskPrompt, setTaskPrompt] = useState<string>('');
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [activeFilter, setActiveFilter] = useState<'ALL' | 'BACKLOG' | 'IN PROGRESS' | 'WAITING' | 'DONE'>('ALL');
@@ -83,32 +94,31 @@ export const OfficeRightSidebar: React.FC<OfficeRightSidebarProps> = ({
     const promptToSend = (customPrompt || taskPrompt).trim();
     if (!promptToSend) return;
 
+    const deptKey = selectedDept ? selectedDept.key : 'General';
+    const deptName = selectedDept ? selectedDept.name : 'GENERAL';
+
     // Find lead or agent in this department
-    const targetAgent =
-      agents.find((a) => (a.department || '').toLowerCase().includes(selectedDept.name.toLowerCase().split(' ')[0])) ||
-      agents[0];
+    const targetAgent = selectedDept
+      ? agents.find((a) => (a.department || '').toLowerCase().trim() === selectedDept.key.toLowerCase().trim()) ||
+        agents.find((a) => (a.department || '').toLowerCase().includes(selectedDept.key.toLowerCase())) ||
+        agents[0]
+      : agents[0];
 
     try {
       setSubmitting(true);
-      const res = await createTask({
-        agent_id: targetAgent ? targetAgent.id : 'chief-orchestrator',
+      await createTask({
+        agent_id: targetAgent ? targetAgent.id : 'general-dispatcher',
         project_id: null,
         skill_id: null,
         input_data: {
           task: promptToSend,
-          department: selectedDept.name,
+          department: deptKey,
           timestamp: new Date().toISOString(),
         },
       });
 
-      message.success(`Task dispatched to ${selectedDept.name}!`);
+      message.success(`Task dispatched to ${deptName}!`);
       setTaskPrompt('');
-
-      // Immediately register in local progress
-      if (res?.data?.id) {
-        setProgressMap((prev) => ({ ...prev, [res.data.id]: 15 }));
-      }
-
       onTaskCreated();
     } catch (err) {
       message.error('Failed to add task');
@@ -129,7 +139,7 @@ export const OfficeRightSidebar: React.FC<OfficeRightSidebarProps> = ({
     }
   };
 
-  const menuItems: MenuProps['items'] = DEPARTMENTS.map((dept) => ({
+  const menuItems: MenuProps['items'] = departmentList.map((dept) => ({
     key: dept.key,
     label: (
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -138,7 +148,7 @@ export const OfficeRightSidebar: React.FC<OfficeRightSidebarProps> = ({
       </div>
     ),
     onClick: () => {
-      setSelectedDept(dept);
+      setSelectedDeptKey(dept.key);
       if (onSelectDepartment) onSelectDepartment(dept.key);
     },
   }));
@@ -151,13 +161,12 @@ export const OfficeRightSidebar: React.FC<OfficeRightSidebarProps> = ({
 
   // Format tasks list for display
   const displayTasks = tasks.map((t) => {
+    const matchedAgent = agents.find((a) => String(a.id) === String(t.agent_id));
     const rawPrompt = (t.input_data as any)?.task || (t.input_data as any)?.prompt || (t as any).prompt || `Mission #${t.id.slice(0, 8)}`;
-    const deptInTask = (t.input_data as any)?.department || 'GENERAL';
+    const deptInTask = (t.input_data as any)?.department || matchedAgent?.department || 'GENERAL';
     const isRunning = t.status === 'running';
     const isDone = t.status === 'completed';
     const currentPercent = isDone ? 100 : isRunning ? 50 : 0;
-
-    const matchedAgent = agents.find((a) => String(a.id) === String(t.agent_id));
 
     return {
       id: t.id,
@@ -205,30 +214,53 @@ export const OfficeRightSidebar: React.FC<OfficeRightSidebarProps> = ({
             boxShadow: '0 4px 14px rgba(0,0,0,0.04)',
           }}
         >
-          <Dropdown menu={{ items: menuItems }} trigger={['click']}>
+          {selectedDept ? (
+            <Dropdown menu={{ items: menuItems }} trigger={['click']}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  cursor: 'pointer',
+                  padding: '4px 8px',
+                  borderRadius: '12px',
+                  fontSize: '11px',
+                  fontWeight: 800,
+                  color: '#1c1917',
+                  whiteSpace: 'nowrap',
+                  background: '#f7f6f2',
+                }}
+              >
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: selectedDept.color }} />
+                <span>{selectedDept.name}</span>
+                <DownOutlined style={{ fontSize: '9px', color: '#78716c' }} />
+              </div>
+            </Dropdown>
+          ) : (
             <div
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '6px',
-                cursor: 'pointer',
+                gap: '4px',
                 padding: '4px 8px',
                 borderRadius: '12px',
                 fontSize: '11px',
                 fontWeight: 800,
-                color: '#1c1917',
+                color: '#78716c',
                 whiteSpace: 'nowrap',
                 background: '#f7f6f2',
               }}
             >
-              <span style={{ width: 7, height: 7, borderRadius: '50%', background: selectedDept.color }} />
-              <span>{selectedDept.name}</span>
-              <DownOutlined style={{ fontSize: '9px', color: '#78716c' }} />
+              <span>GENERAL</span>
             </div>
-          </Dropdown>
+          )}
 
           <Input
-            placeholder={`Type a task for ${selectedDept.name.toLowerCase()}...`}
+            placeholder={
+              selectedDept
+                ? `Type a task for ${selectedDept.name.toLowerCase()}...`
+                : 'Type a task (no departments defined yet)...'
+            }
             value={taskPrompt}
             onChange={(e) => setTaskPrompt(e.target.value)}
             onPressEnter={() => handleAddTask()}
@@ -260,31 +292,33 @@ export const OfficeRightSidebar: React.FC<OfficeRightSidebarProps> = ({
         </div>
 
         {/* Quick Suggestion Chips */}
-        <div style={{ display: 'flex', gap: '4px', overflowX: 'auto', paddingBottom: '2px' }}>
-          {selectedDept.suggestions.map((sug, sIdx) => (
-            <button
-              key={sIdx}
-              onClick={() => handleAddTask(sug)}
-              style={{
-                background: '#f5f4ef',
-                border: '1px solid #e7e4da',
-                borderRadius: '10px',
-                padding: '2px 8px',
-                fontSize: '9px',
-                fontWeight: 600,
-                color: '#57534e',
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-              }}
-              title="Click to dispatch instantly"
-            >
-              + {sug}
-            </button>
-          ))}
-        </div>
+        {selectedDept && selectedDept.suggestions.length > 0 && (
+          <div style={{ display: 'flex', gap: '4px', overflowX: 'auto', paddingBottom: '2px' }}>
+            {selectedDept.suggestions.map((sug, sIdx) => (
+              <button
+                key={sIdx}
+                onClick={() => handleAddTask(sug)}
+                style={{
+                  background: '#f5f4ef',
+                  border: '1px solid #e7e4da',
+                  borderRadius: '10px',
+                  padding: '2px 8px',
+                  fontSize: '9px',
+                  fontWeight: 600,
+                  color: '#57534e',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+                title="Click to dispatch instantly"
+              >
+                + {sug}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* THE BRAIN Widget Card */}
+      {/* System Status Widget Card */}
       <div
         style={{
           background: '#ffffff',
@@ -297,14 +331,13 @@ export const OfficeRightSidebar: React.FC<OfficeRightSidebarProps> = ({
           gap: '12px',
         }}
       >
-        {/* Brain Graphic Node */}
         <div
           style={{
             width: '44px',
             height: '44px',
             borderRadius: '12px',
-            background: runningTasks.length > 0 ? '#ecfdf5' : '#f0fdf4',
-            border: runningTasks.length > 0 ? '1.5px solid #10b981' : '1px solid #bbf7d0',
+            background: runningTasks.length > 0 ? '#ecfdf5' : '#f8fafc',
+            border: runningTasks.length > 0 ? '1.5px solid #10b981' : '1px solid #e2e8f0',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -313,7 +346,7 @@ export const OfficeRightSidebar: React.FC<OfficeRightSidebarProps> = ({
         >
           <ThunderboltOutlined
             style={{
-              color: '#16a34a',
+              color: runningTasks.length > 0 ? '#16a34a' : '#94a3b8',
               fontSize: '20px',
               animation: runningTasks.length > 0 ? 'spin 3s linear infinite' : 'none',
             }}
@@ -322,26 +355,38 @@ export const OfficeRightSidebar: React.FC<OfficeRightSidebarProps> = ({
 
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: '11px', fontWeight: 800, color: '#1c1917', letterSpacing: '0.6px' }}>
-            THE BRAIN <span style={{ color: '#059669' }}>{37 + doneTasks.length} NOTES</span>
+            ORCHESTRATION ENGINE
           </div>
           <div style={{ fontSize: '10px', color: '#78716c', marginTop: '2px' }}>
-            {runningTasks.length > 0 ? (
+            {agents.length === 0 ? (
+              <span>No agents registered • 0 departments</span>
+            ) : runningTasks.length > 0 ? (
               <span style={{ color: '#10b981', fontWeight: 700 }}>
-                ⚡ {runningTasks.length} task in flight across departments
+                ⚡ {runningTasks.length} task in flight across {departmentList.length} dept{departmentList.length === 1 ? '' : 's'}
               </span>
             ) : (
-              <span>All departments synchronized & ready</span>
+              <span>
+                {agents.length} agent{agents.length === 1 ? '' : 's'} registered · {departmentList.length} department{departmentList.length === 1 ? '' : 's'}
+              </span>
             )}
           </div>
-          <div
-            onClick={() => {
-              const brainAgent = agents.find((a) => a.id === 'chief-orchestrator');
-              if (brainAgent && onSelectAgent) onSelectAgent(brainAgent);
-            }}
-            style={{ fontSize: '10px', fontWeight: 700, color: '#059669', marginTop: '3px', cursor: 'pointer' }}
-          >
-            Open Executive HQ Agent →
-          </div>
+          {(() => {
+            const rootAgent =
+              agents.find((a) => a.role_type === 'ROOT_ORCHESTRATOR') ||
+              agents.find((a) => a.role_type === 'MANAGER') ||
+              agents[0];
+            if (rootAgent && onSelectAgent) {
+              return (
+                <div
+                  onClick={() => onSelectAgent(rootAgent)}
+                  style={{ fontSize: '10px', fontWeight: 700, color: '#059669', marginTop: '3px', cursor: 'pointer' }}
+                >
+                  Open {rootAgent.name} ({rootAgent.role_type || 'Agent'}) →
+                </div>
+              );
+            }
+            return null;
+          })()}
         </div>
       </div>
 

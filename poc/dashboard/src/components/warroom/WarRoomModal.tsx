@@ -226,6 +226,7 @@ export const WarRoomModal: React.FC<WarRoomModalProps> = ({
       onCancel={onClose}
       width={1000}
       footer={null}
+      zIndex={1050}
       title={
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <TeamOutlined style={{ color: '#6366f1', fontSize: '20px' }} />
@@ -238,7 +239,7 @@ export const WarRoomModal: React.FC<WarRoomModalProps> = ({
         <div
           style={{
             width: '280px',
-            borderRight: '1px solid #f0f0f0',
+            borderRight: '1px solid #30363d',
             paddingRight: '12px',
             display: 'flex',
             flexDirection: 'column',

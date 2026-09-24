@@ -184,6 +184,7 @@ export const ProjectSharedMemoryModal: React.FC<ProjectSharedMemoryModalProps> =
       onCancel={onClose}
       width={900}
       footer={null}
+      zIndex={1050}
       title={
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingRight: '24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -245,8 +246,8 @@ export const ProjectSharedMemoryModal: React.FC<ProjectSharedMemoryModalProps> =
         {/* Add Memory Card */}
         {showAddForm && (
           <Card
-            title="Record New Architecture Decision or Project Knowledge"
-            style={{ marginBottom: '16px', border: '1px solid #a7f3d0', background: '#f0fdf4' }}
+            title={<span style={{ color: '#f0f6fc' }}>Record New Architecture Decision or Project Knowledge</span>}
+            style={{ marginBottom: '16px', border: '1px solid #30363d', background: '#1c2128' }}
             size="small"
           >
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>

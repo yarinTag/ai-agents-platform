@@ -140,6 +140,7 @@ export const AgentFlowPage: React.FC = () => {
         visible={drawerVisible}
         onClose={() => setDrawerVisible(false)}
         onTaskCreated={refresh}
+        agents={agents}
       />
     </div>
   );

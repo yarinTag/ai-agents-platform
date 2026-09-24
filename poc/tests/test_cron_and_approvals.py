@@ -25,10 +25,10 @@ def test_cron_and_approvals_flow(client):
     # 1. Ensure test agent exists
     agent = db.get_agent("qa-specialist")
     if not agent:
-        agents = db.list_agents()
-        agent_id = agents[0].id if agents else "test-agent"
-    else:
-        agent_id = "qa-specialist"
+        from config import AgentConfig
+        agent = AgentConfig(id="qa-specialist", name="QA Specialist", description="QA Engineer", system_prompt="You are a QA specialist.")
+        db.save_agent(agent)
+    agent_id = "qa-specialist"
 
     # 2. Test Cron Validation Endpoint
     val_resp = client.post("/api/v1/schedules/validate", json={"cron_expression": "*/10 * * * *"})

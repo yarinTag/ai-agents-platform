@@ -628,6 +628,59 @@ class ClaudeCodeRuntimeAdapter:
             try:
                 from persistence import db_manager
                 db_manager.save_task_run(run)
+
+                # Record task execution response in chat_messages for the agent
+                if run.status in (TaskStatus.COMPLETED, TaskStatus.FAILED) and run.agent_id:
+                    try:
+                        conv = db_manager.get_or_create_conversation(run.agent_id, project_id=run.project_id)
+                        existing = db_manager.get_chat_history(run.agent_id, limit=50)
+                        already_recorded = any(
+                            m.get("task_id") == run.run_id and m.get("sender_type") in ("ASSISTANT", "AGENT")
+                            for m in existing
+                        )
+                        if not already_recorded:
+                            status_val = run.status.value if hasattr(run.status, "value") else str(run.status)
+                            content_text = run.result if (status_val == "completed" and run.result) else (run.error or "Task completed.")
+                            assistant_msg = db_manager.save_chat_message({
+                                "conversation_id": conv["id"],
+                                "agent_id": run.agent_id,
+                                "task_id": run.run_id,
+                                "sender_type": "ASSISTANT",
+                                "message_type": "CHAT",
+                                "content": content_text,
+                                "metadata": {
+                                    "task_id": run.run_id,
+                                    "status": status_val,
+                                    "prompt": run.prompt,
+                                    "exit_code": run.exit_code,
+                                    "started_at": run.started_at.isoformat() if run.started_at else None,
+                                    "ended_at": run.ended_at.isoformat() if run.ended_at else None
+                                }
+                            })
+                            try:
+                                from events import PlatformEvent
+                                # Look for global event_bus if available
+                                import backend.dependencies as bdep
+                                if getattr(bdep, '_event_bus', None):
+                                    bdep._event_bus.publish(PlatformEvent(
+                                        event_id=f"evt_{datetime.now().timestamp()}",
+                                        event_type="chat.message",
+                                        agent_id=run.agent_id,
+                                        task_id=run.run_id,
+                                        payload={
+                                            "id": assistant_msg["id"],
+                                            "sender_type": "ASSISTANT",
+                                            "content": content_text,
+                                            "task_id": run.run_id,
+                                            "metadata": assistant_msg.get("metadata"),
+                                            "created_at": datetime.now().isoformat()
+                                        },
+                                        source="runtime"
+                                    ))
+                            except Exception:
+                                pass
+                    except Exception as chat_err:
+                        logging.getLogger(__name__).warning(f"Failed to record task response to chat: {chat_err}")
             except Exception as dbe:
                 logging.getLogger(__name__).warning(f"Failed to save task run to DB: {dbe}")
 

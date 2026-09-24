@@ -169,58 +169,7 @@ export const PixelOfficeCanvas: React.FC<PixelOfficeCanvasProps> = ({
         }}
       />
 
-      {/* Top Floating Office Controls & SSE Health Status */}
-      <div
-        style={{
-          position: 'absolute',
-          top: '16px',
-          left: '20px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px',
-          background: 'rgba(15, 23, 42, 0.85)',
-          padding: '8px 16px',
-          borderRadius: '12px',
-          border: '1px solid #334155',
-          backdropFilter: 'blur(8px)',
-          boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
-          color: '#f8fafc',
-          zIndex: 10,
-        }}
-      >
-        <span style={{ fontSize: '16px' }}>🏢</span>
-        <span style={{ fontWeight: 700, fontSize: '13px', letterSpacing: '0.5px' }}>
-          PIXEL ART AI OFFICE
-        </span>
 
-        {/* Live SSE Stream Badge */}
-        <Badge
-          status={connectionStatus === 'connected' ? 'success' : 'warning'}
-          text={
-            <span style={{ color: connectionStatus === 'connected' ? '#34d399' : '#fbbf24', fontSize: '11px', fontWeight: 600 }}>
-              {connectionStatus === 'connected' ? 'LIVE SSE' : 'RECONNECTING'}
-            </span>
-          }
-        />
-
-        {activeTaskCount > 0 && (
-          <span
-            style={{
-              background: '#065f46',
-              color: '#34d399',
-              padding: '2px 8px',
-              borderRadius: '8px',
-              fontSize: '11px',
-              fontWeight: 700,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-            }}
-          >
-            <SyncOutlined spin /> {activeTaskCount} ACTIVE
-          </span>
-        )}
-      </div>
 
       {/* View Navigation & Zoom Widget */}
       <div

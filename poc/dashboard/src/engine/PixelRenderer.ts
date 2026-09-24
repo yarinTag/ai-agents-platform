@@ -114,10 +114,10 @@ interface RoomDef {
 
 // Standard 6-desk layout: 3 columns × 2 rows
 // Col positions: dx = 1, 4, 7 (evenly spaced in 10-tile wide rooms)
-// Row 1 (dy=1): near north wall, agent sits south → dir='down'
+// Row 1 (dy=2): clamped away from north wall/doors, agent sits south → dir='down'
 // Row 2 (dy=5): near center, agent sits north → dir='up'
 const D6: RoomDef['desks'] = [
-  { dx: 1, dy: 1, dir: 'down' }, { dx: 4, dy: 1, dir: 'down' }, { dx: 7, dy: 1, dir: 'down' },
+  { dx: 1, dy: 2, dir: 'down' }, { dx: 4, dy: 2, dir: 'down' }, { dx: 7, dy: 2, dir: 'down' },
   { dx: 1, dy: 5, dir: 'up'   }, { dx: 4, dy: 5, dir: 'up'   }, { dx: 7, dy: 5, dir: 'up'   },
 ];
 
@@ -372,43 +372,109 @@ export class PixelRenderer {
     return false;
   }
 
-  private getAgentDepartmentRoom(agent: Agent): string {
-    const dept = (agent.department || '').toLowerCase();
-    const role = (agent.role_type || '').toUpperCase();
-    const id = agent.id.toLowerCase();
+  private clampToRoom(room: RoomDef, tx: number, ty: number): { tx: number; ty: number } {
+    const minX = room.x + 1;
+    const maxX = room.x + room.w - 2;
+    const minY = room.y + 2;
+    const maxY = room.y + room.h - 2;
+    return {
+      tx: Math.max(minX, Math.min(maxX, tx)),
+      ty: Math.max(minY, Math.min(maxY, ty)),
+    };
+  }
 
-    if (dept.includes('exec') || dept.includes('hq') || id === 'chief-orchestrator' || role === 'ROOT_ORCHESTRATOR') {
+  private getExtraDeskPosition(room: RoomDef, extraIdx: number): { dx: number; dy: number; dir: 'up' | 'down' } {
+    const colIdx = extraIdx % 3;
+    const rowIdx = Math.floor(extraIdx / 3);
+    const rawDx = colIdx === 0 ? 1 : colIdx === 1 ? 4 : 7;
+    const rawDy = 3.5 + (rowIdx % 2) * 0.5;
+    const clamped = this.clampToRoom(room, room.x + rawDx, room.y + rawDy);
+    return {
+      dx: clamped.tx - room.x,
+      dy: clamped.ty - room.y,
+      dir: extraIdx % 2 === 0 ? 'down' : 'up',
+    };
+  }
+
+  private getAgentDepartmentRoom(agent: Agent): string {
+    const dept = (agent.department || '').toLowerCase().trim();
+    const role = (agent.role_type || '').toUpperCase().trim();
+    const id = (agent.id || '').toLowerCase();
+    const name = (agent.name || '').toLowerCase();
+
+    // 1. Executive / Leadership / Orchestrators
+    if (
+      dept.includes('exec') || dept.includes('hq') || dept.includes('lead') ||
+      dept.includes('management') || dept.includes('board') ||
+      id === 'chief-orchestrator' || id.includes('orchestrator') ||
+      role === 'ROOT_ORCHESTRATOR' || name.includes('chief')
+    ) {
       return 'Executive HQ';
     }
-    for (const r of ROOMS) {
-      if (['Lounge', 'Break Room', 'Conference', 'Kitchen', 'Reception'].includes(r.key)) continue;
-      const rk = r.key.toLowerCase();
-      if (dept.includes(rk) || rk.includes(dept)) return r.key;
+
+    // 2. Direct matches against valid department rooms with desks
+    const validDepts = ['Executive HQ', 'Engineering', 'Marketing', 'Emails', 'Delivery', 'Operations', 'Sales'];
+    for (const valid of validDepts) {
+      const vk = valid.toLowerCase();
+      if (dept === vk || dept.includes(vk) || vk.includes(dept)) {
+        return valid;
+      }
     }
-    if (dept.includes('finance')) return 'Operations';
-    if (dept.includes('qa') || dept.includes('testing')) return 'Delivery';
-    return 'Engineering';
+
+    // 3. Keyword / semantic mapping
+    if (dept.includes('market') || dept.includes('growth') || dept.includes('social') || dept.includes('seo') || dept.includes('content') || dept.includes('brand')) {
+      return 'Marketing';
+    }
+    if (dept.includes('email') || dept.includes('mail') || dept.includes('campaign') || dept.includes('outreach') || dept.includes('newsletter')) {
+      return 'Emails';
+    }
+    if (dept.includes('deliver') || dept.includes('qa') || dept.includes('test') || dept.includes('quality') || dept.includes('release') || dept.includes('ci/cd') || dept.includes('devops') || dept.includes('sre') || dept.includes('infra')) {
+      return 'Delivery';
+    }
+    if (dept.includes('sale') || dept.includes('deal') || dept.includes('crm') || dept.includes('revenue') || dept.includes('biz') || dept.includes('business')) {
+      return 'Sales';
+    }
+    if (dept.includes('op') || dept.includes('finance') || dept.includes('hr') || dept.includes('legal') || dept.includes('account') || dept.includes('billing') || dept.includes('admin') || dept.includes('support') || dept.includes('people')) {
+      return 'Operations';
+    }
+    if (dept.includes('eng') || dept.includes('dev') || dept.includes('code') || dept.includes('tech') || dept.includes('software') || dept.includes('data') || dept.includes('ai') || dept.includes('product') || dept.includes('architect')) {
+      return 'Engineering';
+    }
+
+    // Dynamic slot allocation for any custom department
+    const hash = dept.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+    return validDepts[hash % validDepts.length];
   }
 
   private getRoomDesks(room: RoomDef): Array<{ dx: number; dy: number; dir: 'up' | 'down' | 'left' | 'right'; isManager: boolean }> {
     const list: Array<{ dx: number; dy: number; dir: 'up' | 'down' | 'left' | 'right'; isManager: boolean }> =
-      room.desks.map((d, idx) => ({ ...d, isManager: idx === 0 }));
+      room.desks.map((d, idx) => {
+        const clamped = this.clampToRoom(room, room.x + d.dx, room.y + d.dy);
+        return {
+          dx: clamped.tx - room.x,
+          dy: clamped.ty - room.y,
+          dir: d.dir,
+          isManager: idx === 0,
+        };
+      });
 
-    let workingInRoom = 0;
+    let agentsInRoom = 0;
     this.deskMap.forEach((pos) => {
       if (pos.roomKey === room.key && pos.isAtDesk) {
-        workingInRoom++;
+        agentsInRoom++;
       }
     });
 
-    if (workingInRoom > room.desks.length) {
-      for (let i = room.desks.length; i < workingInRoom; i++) {
+    if (agentsInRoom > room.desks.length) {
+      for (let i = room.desks.length; i < agentsInRoom; i++) {
         const extraIdx = i - room.desks.length;
-        const colIdx = extraIdx % 3;
-        const rowIdx = Math.floor(extraIdx / 3);
-        const dx = colIdx === 0 ? 1 : colIdx === 1 ? 4 : 7;
-        const dy = 3 + rowIdx * 2;
-        list.push({ dx, dy, dir: 'down', isManager: false });
+        const extra = this.getExtraDeskPosition(room, extraIdx);
+        list.push({
+          dx: extra.dx,
+          dy: extra.dy,
+          dir: extra.dir,
+          isManager: false,
+        });
       }
     }
     return list;
@@ -417,139 +483,59 @@ export class PixelRenderer {
   private assignDeskPositions(): void {
     this.deskMap.clear();
 
-    const loungeRoom = ROOMS.find((r) => r.key === 'Lounge')!;
-    const breakRoom  = ROOMS.find((r) => r.key === 'Break Room')!;
-    const confRoom   = ROOMS.find((r) => r.key === 'Conference')!;
-
-    // Spots around Conference Table for non-working managers and leads
-    const confSpots: Array<{ dx: number; dy: number; dir: 'up' | 'down'; activity: string }> = [
-      { dx: 2,   dy: 1.2, dir: 'down', activity: '📊 Strategy Meeting' },
-      { dx: 5,   dy: 1.2, dir: 'down', activity: '📊 Leadership Alignment' },
-      { dx: 8,   dy: 1.2, dir: 'down', activity: '📊 Roadmap Planning' },
-      { dx: 2,   dy: 6.2, dir: 'up',   activity: '📊 Performance Review' },
-      { dx: 5,   dy: 6.2, dir: 'up',   activity: '📊 Executive Sync' },
-      { dx: 8,   dy: 6.2, dir: 'up',   activity: '📊 Architecture Discussion' },
-      { dx: 1,   dy: 3.5, dir: 'down', activity: '📊 Resource Planning' },
-      { dx: 8.8, dy: 3.5, dir: 'down', activity: '📊 Sprint Goals' },
-    ];
-
-    // Spots in Lounge for non-working workers
-    const loungeSpots: Array<{ dx: number; dy: number; dir: 'up' | 'down'; activity: string }> = [
-      { dx: 2,   dy: 1.5, dir: 'down', activity: '🛋️ Resting on Couch' },
-      { dx: 3.5, dy: 1.5, dir: 'down', activity: '🛋️ Resting on Couch' },
-      { dx: 5.5, dy: 1.5, dir: 'down', activity: '☕ In Armchair' },
-      { dx: 8,   dy: 1.5, dir: 'down', activity: '☕ In Armchair' },
-      { dx: 3,   dy: 5,   dir: 'up',   activity: '📖 Coffee Table' },
-      { dx: 6,   dy: 5,   dir: 'up',   activity: '📺 Watching Tech News' },
-      { dx: 8,   dy: 5,   dir: 'up',   activity: '🌿 Relaxing by Plant' },
-      { dx: 5,   dy: 6.5, dir: 'up',   activity: '💬 Team Chat' },
-    ];
-
-    // Spots in Break Room for non-working workers
-    const breakSpots: Array<{ dx: number; dy: number; dir: 'up' | 'down'; activity: string }> = [
-      { dx: 1.5, dy: 2.2, dir: 'down', activity: '🏓 Playing Ping Pong' },
-      { dx: 6.5, dy: 2.2, dir: 'down', activity: '🏓 Playing Ping Pong' },
-      { dx: 9,   dy: 2.2, dir: 'up',   activity: '🕹️ Arcade High Score' },
-      { dx: 11,  dy: 2.2, dir: 'up',   activity: '🕹️ Retro Gaming' },
-      { dx: 1.5, dy: 6,   dir: 'up',   activity: '🛋️ Bean Bag Chill' },
-      { dx: 3.5, dy: 6,   dir: 'up',   activity: '🛋️ Bean Bag Chill' },
-      { dx: 10,  dy: 6,   dir: 'up',   activity: '🛋️ Bean Bag Chill' },
-      { dx: 8.5, dy: 5,   dir: 'down', activity: '🥤 Coffee & Snack' },
-      { dx: 4,   dy: 4.5, dir: 'up',   activity: '👀 Watching Ping Pong' },
-      { dx: 11.5,dy: 5,   dir: 'down', activity: '🍿 Break Room Snacks' },
-    ];
-
-    let confIdx = 0;
-    let loungeIdx = 0;
-    let breakIdx = 0;
-
-    const deptWorkingCounts: Record<string, number> = {};
+    const deptCounts: Record<string, number> = {};
 
     this.agents.forEach((agent) => {
       const working = this.isAgentWorking(agent);
+      const deptKey = this.getAgentDepartmentRoom(agent);
+      const room = ROOMS.find((r) => r.key === deptKey) || ROOMS.find((r) => r.key === 'Engineering')!;
+      const count = deptCounts[deptKey] || 0;
+      deptCounts[deptKey] = count + 1;
 
-      if (!working) {
-        // NON-WORKING AGENT
-        if (this.isManagerOrLead(agent)) {
-          // Managers & Leads -> Conference Room
-          const spot = confSpots[confIdx % confSpots.length];
-          const extraOffset = Math.floor(confIdx / confSpots.length) * 0.5;
-          this.deskMap.set(agent.id, {
-            tx: confRoom.x + spot.dx + extraOffset,
-            ty: confRoom.y + spot.dy,
-            deskIdx: confIdx,
-            roomKey: 'Conference',
-            dir: spot.dir,
-            isAtDesk: false,
-            activity: spot.activity,
-          });
-          confIdx++;
-        } else {
-          // Regular Agents -> Break Room or Lounge (alternating)
-          if ((loungeIdx + breakIdx) % 2 === 0) {
-            // Lounge
-            const spot = loungeSpots[loungeIdx % loungeSpots.length];
-            const extraOffset = Math.floor(loungeIdx / loungeSpots.length) * 0.5;
-            this.deskMap.set(agent.id, {
-              tx: loungeRoom.x + spot.dx + extraOffset,
-              ty: loungeRoom.y + spot.dy,
-              deskIdx: loungeIdx,
-              roomKey: 'Lounge',
-              dir: spot.dir,
-              isAtDesk: false,
-              activity: spot.activity,
-            });
-            loungeIdx++;
-          } else {
-            // Break Room
-            const spot = breakSpots[breakIdx % breakSpots.length];
-            const extraOffset = Math.floor(breakIdx / breakSpots.length) * 0.5;
-            this.deskMap.set(agent.id, {
-              tx: breakRoom.x + spot.dx + extraOffset,
-              ty: breakRoom.y + spot.dy,
-              deskIdx: breakIdx,
-              roomKey: 'Break Room',
-              dir: spot.dir,
-              isAtDesk: false,
-              activity: spot.activity,
-            });
-            breakIdx++;
-          }
-        }
+      let dx: number;
+      let dy: number;
+      let dir: 'up' | 'down' | 'left' | 'right';
+
+      if (count < room.desks.length) {
+        const desk = room.desks[count];
+        dx = desk.dx;
+        dy = desk.dy;
+        dir = desk.dir;
       } else {
-        // WORKING AGENT -> Desk in their department room
-        const deptKey = this.getAgentDepartmentRoom(agent);
-        const room = ROOMS.find((r) => r.key === deptKey) || ROOMS.find((r) => r.key === 'Engineering')!;
-        const count = deptWorkingCounts[deptKey] || 0;
-        deptWorkingCounts[deptKey] = count + 1;
-
-        if (count < room.desks.length) {
-          const desk = room.desks[count];
-          this.deskMap.set(agent.id, {
-            tx: room.x + desk.dx,
-            ty: room.y + desk.dy,
-            deskIdx: count,
-            roomKey: room.key,
-            dir: desk.dir,
-            isAtDesk: true,
-          });
-        } else {
-          // Dynamically add extra desk position in row 3
-          const extraIdx = count - room.desks.length;
-          const colIdx = extraIdx % 3;
-          const rowIdx = Math.floor(extraIdx / 3);
-          const dx = colIdx === 0 ? 1 : colIdx === 1 ? 4 : 7;
-          const dy = 3 + rowIdx * 2;
-          this.deskMap.set(agent.id, {
-            tx: room.x + dx,
-            ty: room.y + dy,
-            deskIdx: count,
-            roomKey: room.key,
-            dir: 'down',
-            isAtDesk: true,
-          });
-        }
+        const extraIdx = count - room.desks.length;
+        const extra = this.getExtraDeskPosition(room, extraIdx);
+        dx = extra.dx;
+        dy = extra.dy;
+        dir = extra.dir;
       }
+
+      // Strictly clamp desk position inside the room square bounds (never walls or corridors)
+      const { tx, ty } = this.clampToRoom(room, room.x + dx, room.y + dy);
+
+      // Determine visual activity
+      let activity: string | undefined;
+      if (!working) {
+        const IDLE_ACTIVITIES = [
+          '☕ Coffee at Desk',
+          '📖 Reading Docs',
+          '💭 Ideating',
+          '🎧 Listening to Music',
+          '⚡ Ready for Task',
+          '📝 Reviewing Architecture',
+        ];
+        const hash = (agent.name || agent.id).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+        activity = IDLE_ACTIVITIES[(hash + count) % IDLE_ACTIVITIES.length];
+      }
+
+      this.deskMap.set(agent.id, {
+        tx,
+        ty,
+        deskIdx: count,
+        roomKey: room.key,
+        dir,
+        isAtDesk: true,
+        activity,
+      });
     });
   }
 
@@ -836,7 +822,27 @@ export class PixelRenderer {
     const ctx = this.ctx;
 
     ROOMS.forEach((room) => {
-      const text = `${room.icon} ${room.label}`;
+      const isFacility = room.desks.length === 0;
+
+      let label = room.label;
+      let icon = room.icon;
+      let accent = room.accent;
+
+      if (!isFacility) {
+        const roomAgents = this.agents.filter((a) => this.getAgentDepartmentRoom(a) === room.key);
+        if (roomAgents.length > 0) {
+          const firstAgentDept = (roomAgents[0].department || '').trim();
+          if (firstAgentDept) {
+            label = firstAgentDept.toUpperCase();
+          }
+        } else {
+          label = 'AVAILABLE SUITE';
+          icon = '🚪';
+          accent = '#94a3b8';
+        }
+      }
+
+      const text = `${icon} ${label}`;
       ctx.save();
       ctx.font = `bold ${Math.max(8.5, 8.5 * this.zoom)}px sans-serif`;
       const tw = ctx.measureText(text).width;
@@ -854,12 +860,12 @@ export class PixelRenderer {
       // White background pill
       ctx.fillStyle = 'rgba(255,255,255,0.97)';
       ctx.fillRect(lx, ly, bw, bh);
-      ctx.strokeStyle = room.accent;
+      ctx.strokeStyle = accent;
       ctx.lineWidth = 1.5;
       ctx.strokeRect(lx, ly, bw, bh);
 
       // Left accent bar
-      ctx.fillStyle = room.accent;
+      ctx.fillStyle = accent;
       ctx.fillRect(lx, ly, 3.5, bh);
 
       ctx.fillStyle = '#1a1a2a';
@@ -1431,6 +1437,20 @@ export class PixelRenderer {
         ctx.strokeStyle = '#fff'; ctx.lineWidth = 0.5;
         ctx.stroke();
       }
+    } else {
+      // Idle state: at desk in department room with idle activity visual
+      const pos = this.deskMap.get(agent.id);
+      const idleBob = Math.sin(this.tick * 0.06 + tx) * 1.5 * z;
+      ctx.save();
+      ctx.font = `${Math.max(7, 7 * z)}px sans-serif`;
+      ctx.textAlign = 'center';
+      const idleIcon = pos?.activity?.includes('Coffee') ? '☕'
+        : pos?.activity?.includes('Docs') ? '📖'
+        : pos?.activity?.includes('Music') ? '🎧'
+        : pos?.activity?.includes('Ideating') ? '💭'
+        : '☕';
+      ctx.fillText(idleIcon, cx + 7 * z, cy - 24 * z + idleBob);
+      ctx.restore();
     }
 
     ctx.restore();

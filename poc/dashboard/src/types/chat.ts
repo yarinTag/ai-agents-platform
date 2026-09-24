@@ -1,4 +1,4 @@
-export type SenderType = 'USER' | 'AGENT' | 'SYSTEM';
+export type SenderType = 'USER' | 'AGENT' | 'ASSISTANT' | 'SYSTEM';
 export type MessageType =
   | 'CHAT'
   | 'THOUGHT'
@@ -32,4 +32,5 @@ export interface Conversation {
 export interface ChatHistoryResponse {
   conversation: Conversation;
   messages: ChatMessage[];
+  tasks?: any[];
 }

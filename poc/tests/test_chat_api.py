@@ -20,13 +20,13 @@ def client():
 def test_agent_chat_flow(client):
     db = get_db_manager()
 
-    # 1. Get an agent to chat with
+    # 1. Get or create an agent to chat with
     agent = db.get_agent("engineering-lead")
     if not agent:
-        agents = db.list_agents()
-        agent_id = agents[0].id if agents else "test-agent"
-    else:
-        agent_id = "engineering-lead"
+        from config import AgentConfig
+        agent = AgentConfig(id="engineering-lead", name="Engineering Lead", description="Lead Engineer", system_prompt="You are a lead engineer.")
+        db.save_agent(agent)
+    agent_id = "engineering-lead"
 
     # 2. Clear existing chat history
     clear_resp = client.post(f"/api/v1/chat/{agent_id}/clear")
@@ -81,3 +81,47 @@ def test_agent_chat_flow(client):
     # Verify task resumed to RUNNING
     updated_run = db.get_task_run(task_run_id)
     assert updated_run.status == TaskStatus.RUNNING
+
+
+def test_completed_task_response_visible_in_chat(client):
+    db = get_db_manager()
+    agent_id = "engineering-lead"
+    agent = db.get_agent(agent_id)
+    if not agent:
+        from config import AgentConfig
+        agent = AgentConfig(id=agent_id, name="Engineering Lead", description="Lead Engineer", system_prompt="You are a lead engineer.")
+        db.save_agent(agent)
+    now = datetime.now()
+
+    # Simulate a completed task dispatched to this agent
+    task_id = f"test_completed_task_{int(now.timestamp())}"
+    task_prompt = "Build user authentication endpoint"
+    task_result = "SUCCESS: User auth endpoint implemented and verified with 100% test coverage."
+
+    with db._get_connection() as conn:
+        conn.execute("""
+            INSERT INTO task_runs (run_id, agent_id, prompt, status, result, created_at, ended_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (task_id, agent_id, task_prompt, TaskStatus.COMPLETED.value, task_result, now.isoformat(), now.isoformat()))
+        conn.commit()
+
+    # When fetching chat messages for this agent, the completed task should be automatically synced as ASSISTANT message
+    resp = client.get(f"/api/v1/chat/{agent_id}/messages")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    # Check tasks array in response
+    assert "tasks" in data
+    assert any(t["run_id"] == task_id and t["result"] == task_result for t in data["tasks"])
+
+    # Check messages array has the assistant response
+    assert "messages" in data
+    matching_msgs = [
+        m for m in data["messages"]
+        if (m.get("metadata") or {}).get("task_id") == task_id or m.get("task_id") == task_id or m.get("content") == task_result
+    ]
+    assert len(matching_msgs) >= 1
+    # Check that at least one matching message is an ASSISTANT response
+    assistant_msgs = [m for m in matching_msgs if m.get("sender_type") == "ASSISTANT"]
+    assert len(assistant_msgs) >= 1
+    assert assistant_msgs[0]["content"] == task_result

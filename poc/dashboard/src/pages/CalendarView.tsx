@@ -338,23 +338,22 @@ export const CalendarView: React.FC = () => {
   ];
 
   return (
-    <div style={{ padding: '24px', background: '#0a0d12', minHeight: '100vh', color: '#e6edf3' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%' }}>
       {/* Top Header */}
       <div
         style={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          marginBottom: '20px',
         }}
       >
         <div>
-          <Title level={2} style={{ color: '#f3f4f6', margin: 0 }}>
+          <Title level={2} style={{ color: '#f0f6fc', margin: 0, fontWeight: 700 }}>
             🗓️ Schedule & Calendar Hub
           </Title>
-          <Text type="secondary">
+          <div style={{ color: '#8b949e', fontSize: '13px', marginTop: '4px' }}>
             Manage recurring cron jobs, inspect agent calendar executions, and approve pending agent actions.
-          </Text>
+          </div>
         </div>
         <Button
           type="primary"

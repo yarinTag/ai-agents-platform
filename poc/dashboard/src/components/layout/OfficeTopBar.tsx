@@ -1,10 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { Tag } from 'antd';
-import {
-  GithubOutlined,
-  ThunderboltFilled,
-  GlobalOutlined,
-} from '@ant-design/icons';
 import { Link, useLocation } from 'react-router-dom';
 
 export const OfficeTopBar: React.FC = () => {
@@ -29,12 +23,22 @@ export const OfficeTopBar: React.FC = () => {
     return () => clearInterval(timer);
   }, []);
 
+  const navLinks = [
+    { to: '/', label: 'OFFICE CANVAS' },
+    { to: '/flow', label: 'LIVE FLOW' },
+    { to: '/agents', label: 'AGENTS ROSTER' },
+    { to: '/skills', label: 'PLUGINS HUB' },
+    { to: '/tasks', label: 'TASKS QUEUE' },
+    { to: '/projects', label: 'PROJECTS & MEMORY' },
+    { to: '/calendar', label: '🗓️ SCHEDULE / CALENDAR' },
+  ];
+
   return (
     <header
       style={{
         height: '52px',
-        background: '#f7f6f2',
-        borderBottom: '1px solid #e5e2d8',
+        background: '#0d1117',
+        borderBottom: '1px solid #21262d',
         padding: '0 24px',
         display: 'flex',
         alignItems: 'center',
@@ -46,18 +50,19 @@ export const OfficeTopBar: React.FC = () => {
       {/* Left: Brand + Connected App Icons */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
         {/* Brand */}
-        <Link to="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span style={{ fontSize: '15px', fontWeight: 900, color: '#1c1917', letterSpacing: '1px' }}>
+        <Link to="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ fontSize: '15px', fontWeight: 900, color: '#f0f6fc', letterSpacing: '1px' }}>
             AGENTS OFFICE
           </span>
           <span
             style={{
               fontSize: '10px',
               fontWeight: 800,
-              color: '#78716c',
-              padding: '1px 4px',
-              background: '#eae7dd',
+              color: '#8b949e',
+              padding: '1px 5px',
+              background: '#161b22',
               borderRadius: '4px',
+              border: '1px solid #30363d',
             }}
           >
             v3
@@ -65,133 +70,71 @@ export const OfficeTopBar: React.FC = () => {
         </Link>
 
         {/* Live Platform Status */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10px', fontWeight: 800, color: '#047857', background: '#ecfdf5', padding: '3px 8px', borderRadius: '12px', border: '1px solid #a7f3d0' }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            fontSize: '10px',
+            fontWeight: 800,
+            color: '#34d399',
+            background: 'rgba(16, 185, 129, 0.15)',
+            padding: '3px 9px',
+            borderRadius: '12px',
+            border: '1px solid rgba(16, 185, 129, 0.35)',
+          }}
+        >
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981' }} />
           <span>ACTIVE PLATFORM</span>
         </div>
       </div>
 
       {/* Navigation Links in Center */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <Link
-          to="/"
-          style={{
-            fontSize: '11px',
-            fontWeight: 800,
-            color: location.pathname === '/' ? '#1c1917' : '#78716c',
-            textDecoration: 'none',
-            padding: '4px 10px',
-            borderRadius: '8px',
-            background: location.pathname === '/' ? '#eae7dd' : 'transparent',
-          }}
-        >
-          OFFICE CANVAS
-        </Link>
-        <Link
-          to="/flow"
-          style={{
-            fontSize: '11px',
-            fontWeight: 800,
-            color: location.pathname === '/flow' ? '#1c1917' : '#78716c',
-            textDecoration: 'none',
-            padding: '4px 10px',
-            borderRadius: '8px',
-            background: location.pathname === '/flow' ? '#eae7dd' : 'transparent',
-          }}
-        >
-          LIVE FLOW
-        </Link>
-        <Link
-          to="/agents"
-          style={{
-            fontSize: '11px',
-            fontWeight: 800,
-            color: location.pathname === '/agents' ? '#1c1917' : '#78716c',
-            textDecoration: 'none',
-            padding: '4px 10px',
-            borderRadius: '8px',
-            background: location.pathname === '/agents' ? '#eae7dd' : 'transparent',
-          }}
-        >
-          AGENTS ROSTER
-        </Link>
-        <Link
-          to="/skills"
-          style={{
-            fontSize: '11px',
-            fontWeight: 800,
-            color: location.pathname === '/skills' ? '#1c1917' : '#78716c',
-            textDecoration: 'none',
-            padding: '4px 10px',
-            borderRadius: '8px',
-            background: location.pathname === '/skills' ? '#eae7dd' : 'transparent',
-          }}
-        >
-          PLUGINS HUB
-        </Link>
-        <Link
-          to="/tasks"
-          style={{
-            fontSize: '11px',
-            fontWeight: 800,
-            color: location.pathname === '/tasks' ? '#1c1917' : '#78716c',
-            textDecoration: 'none',
-            padding: '4px 10px',
-            borderRadius: '8px',
-            background: location.pathname === '/tasks' ? '#eae7dd' : 'transparent',
-          }}
-        >
-          TASKS QUEUE
-        </Link>
-        <Link
-          to="/projects"
-          style={{
-            fontSize: '11px',
-            fontWeight: 800,
-            color: location.pathname === '/projects' ? '#1c1917' : '#78716c',
-            textDecoration: 'none',
-            padding: '4px 10px',
-            borderRadius: '8px',
-            background: location.pathname === '/projects' ? '#eae7dd' : 'transparent',
-          }}
-        >
-          PROJECTS & MEMORY
-        </Link>
-        <Link
-          to="/calendar"
-          style={{
-            fontSize: '11px',
-            fontWeight: 800,
-            color: location.pathname === '/calendar' ? '#10b981' : '#78716c',
-            textDecoration: 'none',
-            padding: '4px 10px',
-            borderRadius: '8px',
-            background: location.pathname === '/calendar' ? '#ecfdf5' : 'transparent',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '4px',
-          }}
-        >
-          <span>🗓️ SCHEDULE / CALENDAR</span>
-        </Link>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {navLinks.map((link) => {
+          const isActive = location.pathname === link.to;
+          return (
+            <Link
+              key={link.to}
+              to={link.to}
+              style={{
+                fontSize: '11px',
+                fontWeight: 700,
+                color: isActive ? '#f0f6fc' : '#8b949e',
+                textDecoration: 'none',
+                padding: '5px 11px',
+                borderRadius: '6px',
+                background: isActive ? '#21262d' : 'transparent',
+                border: isActive ? '1px solid #30363d' : '1px solid transparent',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              {link.label}
+            </Link>
+          );
+        })}
       </div>
 
       {/* Right: Headless status + Clock */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10px', fontWeight: 800, color: '#78716c' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10px', fontWeight: 700, color: '#8b949e' }}>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981' }} />
           <span>RUNS HEADLESS ON</span>
           <span style={{ fontSize: '12px' }}>⚙️ 🧠</span>
         </div>
 
-        {/* Live Digital Clock (matching screenshot e.g. 05:44:10 pm) */}
+        {/* Live Digital Clock */}
         <div
           style={{
             fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
             fontSize: '13px',
             fontWeight: 700,
-            color: '#1c1917',
+            color: '#f0f6fc',
             letterSpacing: '0.5px',
+            background: '#161b22',
+            padding: '2px 8px',
+            borderRadius: '6px',
+            border: '1px solid #30363d',
           }}
         >
           {timeStr}

@@ -26,6 +26,7 @@ Thumbs.db
 
 # SQLite databases
 *.db
+*.db.bak
 
 # Node.js
 node_modules/
