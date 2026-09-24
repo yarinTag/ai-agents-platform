@@ -12,9 +12,10 @@ import queue
 from dataclasses import dataclass, asdict
 from typing import Dict, List, Optional, Callable, Any
 from enum import Enum
+from datetime import datetime
+import re
 import uuid
 import logging
-from datetime import datetime
 
 # Import from local modules using absolute imports
 from config import AgentConfig, ProjectConfig
@@ -24,9 +25,13 @@ class TaskStatus(Enum):
     QUEUED = "queued"
     PENDING = "pending"
     RUNNING = "running"
+    SCHEDULED = "scheduled"
+    WAITING_INPUT = "waiting_input"
+    PENDING_APPROVAL = "pending_approval"
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+
 
 
 @dataclass
@@ -47,6 +52,7 @@ class AgentRun:
     parent_task_id: Optional[str] = None
     root_task_id: Optional[str] = None
     assigned_by: Optional[str] = None
+    session_id: Optional[str] = None
 
     def __post_init__(self):
         if self.events is None:
@@ -82,7 +88,71 @@ class AgentRun:
         data_copy.setdefault('parent_task_id', None)
         data_copy.setdefault('root_task_id', None)
         data_copy.setdefault('assigned_by', None)
+        data_copy.setdefault('session_id', None)
         return cls(**data_copy)
+
+
+def extract_supervisor_question(data: Any) -> Optional[Dict[str, Any]]:
+    """
+    Detects if an event or model output represents a supervisor clarification question.
+    Returns dictionary with {"question": ..., "context": ..., "suggested_options": ...} or None.
+    """
+    if not data:
+        return None
+
+    # Case 1: Dict event
+    if isinstance(data, dict):
+        if data.get("type") == "tool_use" and data.get("name") in ("ask_supervisor", "ask_manager", "ask_question", "AskUserQuestion"):
+            inp = data.get("input", {})
+            return {
+                "question": inp.get("question") or inp.get("prompt") or str(inp),
+                "context": inp.get("context", ""),
+                "suggested_options": inp.get("suggested_options", [])
+            }
+        if "result" in data and isinstance(data["result"], str):
+            return extract_supervisor_question(data["result"])
+        if "content" in data and isinstance(data["content"], str):
+            return extract_supervisor_question(data["content"])
+
+    # Case 2: String content or result
+    if isinstance(data, str):
+        text = data.strip()
+        if "ask_supervisor" in text or "ask_manager" in text:
+            try:
+                match = re.search(r'\{.*"question".*\}', text, re.DOTALL)
+                if match:
+                    parsed = json.loads(match.group(0))
+                    if "question" in parsed:
+                        return {
+                            "question": parsed["question"],
+                            "context": parsed.get("context", ""),
+                            "suggested_options": parsed.get("suggested_options", [])
+                        }
+            except Exception:
+                pass
+
+        if "[SUPERVISOR_REQUEST]" in text or "[ASK_SUPERVISOR]" in text:
+            clean = text.replace("[SUPERVISOR_REQUEST]", "").replace("[ASK_SUPERVISOR]", "").strip()
+            return {
+                "question": clean,
+                "context": "Agent flagged need for supervisor direction.",
+                "suggested_options": []
+            }
+
+        clarification_markers = [
+            "please clarify", "could you clarify", "please specify", "please provide",
+            "i need to know", "need more information", "before proceeding", "cannot proceed without",
+            "אנא ספק", "תוכל להבהיר", "נא להבהיר", "חסר מידע", "איזה קובץ", "איזה פורמט"
+        ]
+        text_lower = text.lower()
+        if "?" in text and any(marker in text_lower for marker in clarification_markers):
+            return {
+                "question": text,
+                "context": "Agent indicated missing parameters or needed clarification to proceed.",
+                "suggested_options": []
+            }
+
+    return None
 
 
 class ClaudeCodeRuntimeAdapter:
@@ -454,12 +524,60 @@ class ClaudeCodeRuntimeAdapter:
                     # Add event to run
                     run.events.append(event)
 
+                    # Capture Claude session ID if emitted
+                    if event.get("session_id"):
+                        run.session_id = event["session_id"]
+                    elif event.get("data", {}).get("session_id"):
+                        run.session_id = event["data"]["session_id"]
+
+                    # Check for explicit tool call for supervisor clarification
+                    tool_q = extract_supervisor_question(event)
+                    if tool_q:
+                        from orchestration.supervisor_resolver import SupervisorResolver
+                        from persistence import db_manager
+                        resolver = SupervisorResolver(db_manager, runtime_adapter=self)
+                        resolution = resolver.resolve_or_escalate_question(
+                            task_id=run.run_id,
+                            requester_agent_id=run.agent_id,
+                            question=tool_q["question"],
+                            project_id=run.project_id,
+                            context=tool_q.get("context"),
+                            suggested_options=tool_q.get("suggested_options")
+                        )
+                        if resolution.get("status") == "AUTO_RESOLVED":
+                            run.status = TaskStatus.RUNNING
+                        else:
+                            run.status = TaskStatus.WAITING_INPUT
+                            run.result = f"Waiting for {resolution.get('target_approver', 'supervisor')} response: {tool_q['question']}"
+                        break
+
                     # Handle special events
                     if event.get("type") == "result":
-                        # Task completed successfully
-                        run.result = event.get("result")
-                        run.status = TaskStatus.COMPLETED
-                        break
+                        res_val = event.get("result", "")
+                        q_data = extract_supervisor_question(res_val)
+                        if q_data:
+                            from orchestration.supervisor_resolver import SupervisorResolver
+                            from persistence import db_manager
+                            resolver = SupervisorResolver(db_manager, runtime_adapter=self)
+                            resolution = resolver.resolve_or_escalate_question(
+                                task_id=run.run_id,
+                                requester_agent_id=run.agent_id,
+                                question=q_data["question"],
+                                project_id=run.project_id,
+                                context=q_data.get("context"),
+                                suggested_options=q_data.get("suggested_options")
+                            )
+                            if resolution.get("status") == "AUTO_RESOLVED":
+                                run.status = TaskStatus.RUNNING
+                            else:
+                                run.status = TaskStatus.WAITING_INPUT
+                                run.result = f"Waiting for {resolution.get('target_approver', 'supervisor')} response: {q_data['question']}"
+                            break
+                        else:
+                            # Task completed successfully
+                            run.result = res_val
+                            run.status = TaskStatus.COMPLETED
+                            break
                     elif event.get("type") == "error":
                         # Task failed
                         error_info = event.get("error", {})
@@ -502,11 +620,67 @@ class ClaudeCodeRuntimeAdapter:
                 "_run_id": run_id
             })
         finally:
-            # Clean up
-            run.ended_at = datetime.now()
+            # Clean up: only mark ended_at for terminal statuses (not paused WAITING_INPUT)
+            if run.status in (TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED):
+                run.ended_at = datetime.now()
+            else:
+                run.ended_at = None
             try:
                 from persistence import db_manager
                 db_manager.save_task_run(run)
+
+                # Record task execution response in chat_messages for the agent
+                if run.status in (TaskStatus.COMPLETED, TaskStatus.FAILED) and run.agent_id:
+                    try:
+                        conv = db_manager.get_or_create_conversation(run.agent_id, project_id=run.project_id)
+                        existing = db_manager.get_chat_history(run.agent_id, limit=50)
+                        already_recorded = any(
+                            m.get("task_id") == run.run_id and m.get("sender_type") in ("ASSISTANT", "AGENT")
+                            for m in existing
+                        )
+                        if not already_recorded:
+                            status_val = run.status.value if hasattr(run.status, "value") else str(run.status)
+                            content_text = run.result if (status_val == "completed" and run.result) else (run.error or "Task completed.")
+                            assistant_msg = db_manager.save_chat_message({
+                                "conversation_id": conv["id"],
+                                "agent_id": run.agent_id,
+                                "task_id": run.run_id,
+                                "sender_type": "ASSISTANT",
+                                "message_type": "CHAT",
+                                "content": content_text,
+                                "metadata": {
+                                    "task_id": run.run_id,
+                                    "status": status_val,
+                                    "prompt": run.prompt,
+                                    "exit_code": run.exit_code,
+                                    "started_at": run.started_at.isoformat() if run.started_at else None,
+                                    "ended_at": run.ended_at.isoformat() if run.ended_at else None
+                                }
+                            })
+                            try:
+                                from events import PlatformEvent
+                                # Look for global event_bus if available
+                                import backend.dependencies as bdep
+                                if getattr(bdep, '_event_bus', None):
+                                    bdep._event_bus.publish(PlatformEvent(
+                                        event_id=f"evt_{datetime.now().timestamp()}",
+                                        event_type="chat.message",
+                                        agent_id=run.agent_id,
+                                        task_id=run.run_id,
+                                        payload={
+                                            "id": assistant_msg["id"],
+                                            "sender_type": "ASSISTANT",
+                                            "content": content_text,
+                                            "task_id": run.run_id,
+                                            "metadata": assistant_msg.get("metadata"),
+                                            "created_at": datetime.now().isoformat()
+                                        },
+                                        source="runtime"
+                                    ))
+                            except Exception:
+                                pass
+                    except Exception as chat_err:
+                        logging.getLogger(__name__).warning(f"Failed to record task response to chat: {chat_err}")
             except Exception as dbe:
                 logging.getLogger(__name__).warning(f"Failed to save task run to DB: {dbe}")
 
@@ -534,6 +708,48 @@ class ClaudeCodeRuntimeAdapter:
                 del self._reader_threads[run_id]
             if run_id in self._stop_events:
                 del self._stop_events[run_id]
+
+    def resume_task(self, run_id: str, answer: str) -> str:
+        """
+        Resume an existing paused task (WAITING_INPUT) by passing the supervisor/human answer back into the session.
+        """
+        run = self._runs.get(run_id)
+        if not run:
+            try:
+                from persistence import db_manager
+                run = db_manager.get_task_run(run_id)
+                if run:
+                    self._runs[run_id] = run
+            except Exception:
+                pass
+
+        if not run:
+            raise ValueError(f"Task run {run_id} not found to resume")
+
+        from config import config_manager
+        agent_config = config_manager.get_agent(run.agent_id)
+        if not agent_config:
+            try:
+                from persistence import db_manager
+                agent_config = db_manager.get_agent(run.agent_id)
+            except Exception:
+                pass
+
+        project_config = config_manager.get_project(run.project_id) if run.project_id else None
+
+        continuation_prompt = f"Supervisor response to your question: {answer}. Please proceed and complete the task."
+        run.status = TaskStatus.RUNNING
+        run.started_at = datetime.now()
+        run.ended_at = None
+        run.result = None
+
+        thread = threading.Thread(
+            target=self._execute_task,
+            args=(run_id, agent_config, project_config, continuation_prompt, run.session_id, False)
+        )
+        thread.daemon = True
+        thread.start()
+        return run_id
 
     def list_runs(self) -> List[AgentRun]:
         """List all known runs in memory."""

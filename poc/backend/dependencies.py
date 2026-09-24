@@ -26,6 +26,7 @@ from orchestration import (
     validate_agent_hierarchy, HierarchyValidationError, OrchestrationEngine,
     DelegationError, ConcurrencyLimitExceededError
 )
+from .cron_engine import CronSchedulerEngine
 
 logger = logging.getLogger(__name__)
 
@@ -36,11 +37,12 @@ _event_bus: Optional[EventBus] = None
 _event_service: Optional[EventService] = None
 _claude_adapter: Optional[ClaudeCodeAdapter] = None
 _orchestration_engine: Optional[OrchestrationEngine] = None
+_cron_engine: Optional[CronSchedulerEngine] = None
 
 
 async def init_services():
     """Initialize all backend services."""
-    global _services_initialized, _event_bus, _event_service, _claude_adapter, _orchestration_engine
+    global _services_initialized, _event_bus, _event_service, _claude_adapter, _orchestration_engine, _cron_engine
 
     if _services_initialized:
         return
@@ -63,10 +65,17 @@ async def init_services():
                 runtime_adapter=runtime_adapter,
                 event_service=_event_service
             )
+        if _cron_engine is None:
+            _cron_engine = CronSchedulerEngine(
+                db_manager=db_manager,
+                runtime_adapter=_claude_adapter,
+                event_bus=_event_bus
+            )
+            _cron_engine.start()
 
         _services_initialized = True
         logger.info(
-            "Backend services initialized: %d config agents, %d DB agents, %d projects, event bus ready",
+            "Backend services initialized: %d config agents, %d DB agents, %d projects, cron engine and event bus ready",
             len(agents), len(db_agents), len(db_projects)
         )
 
@@ -77,7 +86,10 @@ async def init_services():
 
 async def shutdown_services():
     """Shutdown all backend services."""
-    global _services_initialized, _background_tasks
+    global _services_initialized, _background_tasks, _cron_engine
+
+    if _cron_engine:
+        await _cron_engine.stop()
 
     for task in _background_tasks:
         if not task.done():
@@ -135,3 +147,9 @@ def get_orchestration_engine() -> OrchestrationEngine:
             event_service=get_event_service()
         )
     return _orchestration_engine
+
+
+def get_cron_engine() -> Optional[CronSchedulerEngine]:
+    """Get the global CronSchedulerEngine instance."""
+    global _cron_engine
+    return _cron_engine

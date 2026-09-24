@@ -49,7 +49,8 @@ export const scanPlugins = () => api.get<{ status: string; marketplace_path?: st
 export const getPluginSkillContent = (path: string) => api.get<{ path: string; content: string }>('/api/v1/skills/plugins/content', { params: { path } });
 
 // Tasks
-export const getTasks = () => api.get<Task[]>('/api/v1/tasks/');
+export const getTasks = (params?: { agent_id?: string; project_id?: string; status?: string; limit?: number }) =>
+  api.get<Task[]>('/api/v1/tasks/', { params });
 export const getTask = (id: string) => api.get<Task>(`/api/v1/tasks/${id}`);
 export const getTaskLogs = (id: string) => api.get<{ run_id: string; events: any[]; status: string; result: any; error: any }>(`/api/v1/tasks/${id}/logs`);
 export const createTask = (data: TaskCreateDto) => api.post<Task>('/api/v1/tasks/', data);
@@ -76,4 +77,66 @@ export interface DiscoveredModel {
 }
 export const getAvailableModels = () => api.get<DiscoveredModel[]>('/api/v1/models/');
 
+// Schedules & Cron Jobs
+import { ScheduledJob, ScheduledJobCreateDto, ApprovalRequest, ApprovalResponseDto } from '../types/scheduler';
+
+export const getSchedules = (params?: { agent_id?: string; project_id?: string; enabled?: boolean }) =>
+  api.get<ScheduledJob[]>('/api/v1/schedules/', { params });
+export const getSchedule = (id: string) => api.get<ScheduledJob>(`/api/v1/schedules/${id}`);
+export const createSchedule = (data: ScheduledJobCreateDto) => api.post<ScheduledJob>('/api/v1/schedules/', data);
+export const updateSchedule = (id: string, data: Partial<ScheduledJobCreateDto>) => api.put<ScheduledJob>(`/api/v1/schedules/${id}`, data);
+export const deleteSchedule = (id: string) => api.delete(`/api/v1/schedules/${id}`);
+export const toggleSchedule = (id: string, enabled: boolean) => api.post(`/api/v1/schedules/${id}/toggle`, { enabled });
+export const triggerScheduleNow = (id: string) => api.post<{ message: string; task_id: string }>(`/api/v1/schedules/${id}/trigger`);
+export const validateCronExpression = (cron_expression: string) => api.post<{ valid: boolean; upcoming_runs?: string[]; error?: string }>('/api/v1/schedules/validate', { cron_expression });
+
+// Approvals & Human-In-The-Loop
+export const getPendingApprovals = (params?: { agent_id?: string; target_approver_id?: string }) =>
+  api.get<ApprovalRequest[]>('/api/v1/approvals/pending', { params });
+export const createApprovalRequest = (data: any) => api.post<ApprovalRequest>('/api/v1/approvals/', data);
+export const respondToApproval = (data: ApprovalResponseDto) => api.post('/api/v1/approvals/respond', data);
+
+// Interactive Agent Mini-Chat
+import { ChatHistoryResponse, ChatMessage } from '../types/chat';
+
+export const getChatHistory = (agentId: string, limit: number = 100) =>
+  api.get<ChatHistoryResponse>(`/api/v1/chat/${agentId}/messages`, { params: { limit } });
+export const sendChatMessage = (agentId: string, content: string, projectId?: string | null) =>
+  api.post<{ status: string; task_id?: string; user_message: ChatMessage }>(`/api/v1/chat/${agentId}/messages`, { content, project_id: projectId });
+export const clearChatHistory = (agentId: string) =>
+  api.post<{ status: string }>(`/api/v1/chat/${agentId}/clear`);
+
+// Phase 3: Project Shared Memory & Knowledge Base
+import {
+  ProjectMemory,
+  ProjectMemoryCreateDto,
+  WarRoomSession,
+  WarRoomDetail,
+  WarRoomCreateDto,
+  WarRoomMessageCreateDto
+} from '../types/collab';
+
+export const getProjectMemories = (projectId: string, category?: string) =>
+  api.get<ProjectMemory[]>(`/api/v1/projects/${projectId}/memories`, { params: { category } });
+export const createProjectMemory = (projectId: string, data: ProjectMemoryCreateDto) =>
+  api.post<ProjectMemory>(`/api/v1/projects/${projectId}/memories`, data);
+export const deleteProjectMemory = (projectId: string, memoryId: string) =>
+  api.delete(`/api/v1/projects/${projectId}/memories/${memoryId}`);
+export const getProjectContextPrompt = (projectId: string) =>
+  api.get<{ context_prompt: string; memories_count: number }>(`/api/v1/projects/${projectId}/context-prompt`);
+
+// Phase 3: Multi-Agent War Room & Deliberation
+export const getWarRoomSessions = (projectId?: string) =>
+  api.get<WarRoomSession[]>('/api/v1/war-room/', { params: { project_id: projectId } });
+export const createWarRoomSession = (data: WarRoomCreateDto) =>
+  api.post<WarRoomSession>('/api/v1/war-room/', data);
+export const getWarRoomSession = (sessionId: string) =>
+  api.get<WarRoomDetail>(`/api/v1/war-room/${sessionId}`);
+export const sendWarRoomMessage = (sessionId: string, data: WarRoomMessageCreateDto) =>
+  api.post('/api/v1/war-room/' + sessionId + '/messages', data);
+export const synthesizeWarRoomPlan = (sessionId: string, synthesized_plan: string) =>
+  api.post<WarRoomSession>(`/api/v1/war-room/${sessionId}/synthesize`, { synthesized_plan });
+
 export default api;
+
+

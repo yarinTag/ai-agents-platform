@@ -6,8 +6,10 @@ export interface Task {
   project_id?: string | null;
   skill_id?: string | null;
   status: TaskStatus | string;
+  prompt?: string;
   input_data: Record<string, any> | string;
   output_data?: Record<string, any> | string | null;
+  result?: string | null;
   created_at: string;
   updated_at?: string;
   ended_at?: string | null;

@@ -1,6 +1,6 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { ConfigProvider } from 'antd';
+import { ConfigProvider, theme } from 'antd';
 import AppLayout from './components/layout/AppLayout';
 import OfficeViewPage from './pages/OfficeView';
 import AgentFlowPage from './pages/AgentFlow';
@@ -9,18 +9,24 @@ import ProjectsPage from './pages/Projects';
 import SkillsPage from './pages/Skills';
 import TasksPage from './pages/Tasks';
 import DashboardPage from './pages/Dashboard';
+import CalendarViewPage from './pages/CalendarView';
 
 export const App: React.FC = () => {
   return (
     <ConfigProvider
       theme={{
+        algorithm: theme.darkAlgorithm,
         token: {
-          colorPrimary: '#1c1917',
-          colorBgContainer: '#ffffff',
-          colorBgElevated: '#ffffff',
-          colorBorder: '#e5e2d8',
-          colorText: '#1c1917',
-          borderRadius: 12,
+          colorPrimary: '#10b981',
+          colorBgBase: '#0a0d12',
+          colorBgContainer: '#161b22',
+          colorBgElevated: '#1c2128',
+          colorBorder: '#30363d',
+          colorBorderSecondary: '#21262d',
+          colorText: '#f0f6fc',
+          colorTextSecondary: '#8b949e',
+          colorTextPlaceholder: '#6e7681',
+          borderRadius: 8,
           fontFamily: `-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif`,
         },
       }}
@@ -33,6 +39,7 @@ export const App: React.FC = () => {
             <Route path="/agents" element={<AgentsPage />} />
             <Route path="/skills" element={<SkillsPage />} />
             <Route path="/tasks" element={<TasksPage />} />
+            <Route path="/calendar" element={<CalendarViewPage />} />
             <Route path="/projects" element={<ProjectsPage />} />
             <Route path="/dashboard" element={<DashboardPage />} />
           </Routes>

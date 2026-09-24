@@ -20,6 +20,7 @@ import {
   SyncOutlined,
   AppstoreOutlined,
   CopyOutlined,
+  PlusOutlined,
 } from '@ant-design/icons';
 import { Agent } from '../../types/agent';
 import { Task } from '../../types/task';
@@ -34,6 +35,7 @@ interface AgentDeskDrawerProps {
   visible: boolean;
   onClose: () => void;
   onTaskCreated: () => void;
+  agents?: Agent[];
 }
 
 export const AgentDeskDrawer: React.FC<AgentDeskDrawerProps> = ({
@@ -42,12 +44,49 @@ export const AgentDeskDrawer: React.FC<AgentDeskDrawerProps> = ({
   visible,
   onClose,
   onTaskCreated,
+  agents,
 }) => {
   const [form] = Form.useForm();
   const [repoForm] = Form.useForm();
   const [running, setRunning] = useState(false);
   const [savingRepo, setSavingRepo] = useState(false);
   const [availableSkills, setAvailableSkills] = useState<any[]>([]);
+  const [customDepartments, setCustomDepartments] = useState<string[]>([]);
+  const [deptSearchText, setDeptSearchText] = useState<string>('');
+  const [newCustomDept, setNewCustomDept] = useState<string>('');
+
+  const dynamicDepartments = React.useMemo(() => {
+    const set = new Set<string>([...customDepartments]);
+    if (agents) {
+      agents.forEach((a) => {
+        if (a.department?.trim()) set.add(a.department.trim());
+      });
+    }
+    if (agent?.department?.trim()) {
+      set.add(agent.department.trim());
+    }
+    const opts = Array.from(set).map((d) => ({ value: d, label: d }));
+
+    const searchTrimmed = deptSearchText.trim();
+    if (searchTrimmed && !set.has(searchTrimmed)) {
+      opts.unshift({
+        value: searchTrimmed,
+        label: `➕ Create department "${searchTrimmed}"`,
+      });
+    }
+    return opts;
+  }, [agents, agent, customDepartments, deptSearchText]);
+
+  const handleAddCustomDept = (nameToAdd?: string) => {
+    const val = (nameToAdd || newCustomDept).trim();
+    if (!val) return;
+    if (!customDepartments.includes(val)) {
+      setCustomDepartments((prev) => [...prev, val]);
+    }
+    repoForm.setFieldsValue({ department: val });
+    setNewCustomDept('');
+    setDeptSearchText('');
+  };
 
   useEffect(() => {
     const fetchSkills = async () => {
@@ -140,6 +179,12 @@ export const AgentDeskDrawer: React.FC<AgentDeskDrawerProps> = ({
   const handleSaveRepo = async () => {
     try {
       const values = await repoForm.validateFields();
+      if (Array.isArray(values.department)) {
+        values.department = values.department[0] || 'Engineering';
+      }
+      if (typeof values.department === 'string') {
+        values.department = values.department.trim() || 'Engineering';
+      }
       setSavingRepo(true);
       await updateAgent(agent.id, {
         repo_path: values.repo_path,
@@ -354,16 +399,58 @@ export const AgentDeskDrawer: React.FC<AgentDeskDrawerProps> = ({
                   <Form.Item
                     name="department"
                     label={<span style={{ color: '#9ca3af' }}>Department Wing</span>}
+                    help="Select existing department or define a custom department"
                   >
-                    <Select>
-                      <Select.Option value="Executive HQ">Executive HQ</Select.Option>
-                      <Select.Option value="Engineering">Engineering</Select.Option>
-                      <Select.Option value="Marketing">Marketing</Select.Option>
-                      <Select.Option value="Emails">Emails & Outreach</Select.Option>
-                      <Select.Option value="Delivery">Delivery & QA</Select.Option>
-                      <Select.Option value="Sales">Sales & Revenue</Select.Option>
-                      <Select.Option value="Operations">Operations</Select.Option>
-                    </Select>
+                    <Select
+                      showSearch
+                      allowClear
+                      placeholder="Select or enter custom department"
+                      options={dynamicDepartments}
+                      searchValue={deptSearchText}
+                      onSearch={setDeptSearchText}
+                      onChange={(val) => {
+                        if (val) {
+                          const trimmed = String(val).trim();
+                          if (!customDepartments.includes(trimmed)) {
+                            setCustomDepartments((prev) => [...prev, trimmed]);
+                          }
+                        }
+                        setDeptSearchText('');
+                      }}
+                      dropdownRender={(menu) => (
+                        <>
+                          {menu}
+                          <div
+                            style={{
+                              display: 'flex',
+                              gap: '6px',
+                              padding: '8px',
+                              borderTop: '1px solid #30363d',
+                              background: '#161b22',
+                            }}
+                            onMouseDown={(e) => e.preventDefault()}
+                          >
+                            <Input
+                              size="small"
+                              placeholder="Define custom department"
+                              value={newCustomDept}
+                              onChange={(e) => setNewCustomDept(e.target.value)}
+                              onPressEnter={() => handleAddCustomDept()}
+                              style={{ background: '#0d1117', color: '#fff', borderColor: '#30363d' }}
+                            />
+                            <Button
+                              size="small"
+                              type="primary"
+                              icon={<PlusOutlined />}
+                              onClick={() => handleAddCustomDept()}
+                              style={{ background: '#10b981', borderColor: '#10b981' }}
+                            >
+                              Add
+                            </Button>
+                          </div>
+                        </>
+                      )}
+                    />
                   </Form.Item>
 
                   <Form.Item
