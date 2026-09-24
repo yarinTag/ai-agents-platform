@@ -42,6 +42,9 @@ class AgentBase(BaseModel):
     allowed_child_ids: List[str] = Field(default_factory=list)
     allowed_tools: List[str] = Field(default_factory=list)
     template_id: Optional[str] = None
+    allow_sibling_communication: bool = Field(default=True)
+    allowed_peer_ids: List[str] = Field(default_factory=list)
+    mcp_permissions: List[str] = Field(default_factory=list)
 
 
 class AgentCreate(AgentBase):
@@ -70,6 +73,9 @@ class AgentUpdate(BaseModel):
     allowed_child_ids: Optional[List[str]] = None
     allowed_tools: Optional[List[str]] = None
     template_id: Optional[str] = None
+    allow_sibling_communication: Optional[bool] = None
+    allowed_peer_ids: Optional[List[str]] = None
+    mcp_permissions: Optional[List[str]] = None
 
 
 class AgentResponse(AgentBase):
@@ -106,7 +112,10 @@ def agent_to_response(agent: AgentConfig) -> dict:
         "delegation_strategy": getattr(agent, "delegation_strategy", "hierarchical"),
         "allowed_child_ids": getattr(agent, "allowed_child_ids", []) or [],
         "allowed_tools": getattr(agent, "allowed_tools", []) or [],
-        "template_id": getattr(agent, "template_id", None)
+        "template_id": getattr(agent, "template_id", None),
+        "allow_sibling_communication": getattr(agent, "allow_sibling_communication", True),
+        "allowed_peer_ids": getattr(agent, "allowed_peer_ids", []) or [],
+        "mcp_permissions": getattr(agent, "mcp_permissions", []) or []
     }
 
 
@@ -139,6 +148,13 @@ async def create_agent(
 ):
     """Create a new agent with hierarchy validation."""
     agent_id = agent_data.name.lower().replace(" ", "-").replace("_", "-")
+
+    max_agents = getattr(db_manager, "max_agents", 18)
+    if len(db_manager.list_agents()) >= max_agents:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Platform agent capacity reached: maximum {max_agents} agents allowed"
+        )
 
     existing = db_manager.get_agent(agent_id) or config_manager.get_agent(agent_id)
     if existing:
@@ -184,7 +200,7 @@ async def create_agent(
             actor="api_client",
             entity_type="agent",
             entity_id=agent_id,
-            details={"name": agent_data.name, "role_type": role_type, "parent_id": parent_id}
+            details={"name": agent_data.name, "role_type": agent_data.role_type, "parent_id": agent_data.parent_id}
         )
     except Exception:
         pass

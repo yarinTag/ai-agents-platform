@@ -16,11 +16,14 @@ router = APIRouter()
 
 
 class MemoryCreate(BaseModel):
-    category: str = Field(default="INSIGHT", pattern="^(ADR|CONVENTION|INSIGHT|LESSON)$")
+    category: str = Field(default="INSIGHT", pattern="^(ADR|CONVENTION|INSIGHT|LESSON|ARCHITECTURE|DECISION|LESSON_LEARNED|GENERAL)$")
     title: str = Field(..., min_length=1, max_length=200)
     content: str = Field(..., min_length=1)
     tags: Optional[List[str]] = None
     author_agent_id: Optional[str] = None
+    source_task_id: Optional[str] = None
+    source_run_id: Optional[str] = None
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
 
 
 @router.get("/{project_id}/memories")
@@ -48,8 +51,12 @@ async def create_memory(
         "title": payload.title,
         "content": payload.content,
         "tags": payload.tags or [],
-        "author_agent_id": payload.author_agent_id
+        "author_agent_id": payload.author_agent_id,
+        "source_task_id": payload.source_task_id,
+        "source_run_id": payload.source_run_id,
+        "confidence": payload.confidence
     })
+
 
     # Broadcast memory created event
     event_bus.publish(PlatformEvent(

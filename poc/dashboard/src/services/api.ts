@@ -137,6 +137,43 @@ export const sendWarRoomMessage = (sessionId: string, data: WarRoomMessageCreate
 export const synthesizeWarRoomPlan = (sessionId: string, synthesized_plan: string) =>
   api.post<WarRoomSession>(`/api/v1/war-room/${sessionId}/synthesize`, { synthesized_plan });
 
+// Phase 4: MCP Platform, Agent Messaging & Teams
+import { MCPConnector, MCPTool, MCPToolCall, AgentMessage, AgentTeam } from '../types/mcp';
+
+export const getMCPConnectors = () =>
+  api.get<MCPConnector[]>('/api/v1/mcp/connectors');
+
+export const getMCPTools = (connectorId?: string) =>
+  api.get<MCPTool[]>('/api/v1/mcp/tools', { params: connectorId ? { connector_id: connectorId } : {} });
+
+export const getMCPToolCalls = (limit: number = 50) =>
+  api.get<MCPToolCall[]>('/api/v1/mcp/calls', { params: { limit } });
+
+export const executeMCPTool = (data: { agent_id: string; connector_id: string; tool_name: string; input_args?: any; task_id?: string }) =>
+  api.post<MCPToolCall>('/api/v1/mcp/execute', data);
+
+export const getAgentMessages = (agentId?: string, limit: number = 50) =>
+  api.get<AgentMessage[]>('/api/v1/messages', { params: agentId ? { agent_id: agentId, limit } : { limit } });
+
+export const sendAgentMessage = (data: { from_agent_id: string; to_agent_id: string; content: string; message_type?: string; task_id?: string; metadata?: any }) =>
+  api.post<AgentMessage>('/api/v1/messages', data);
+
+export const replyAgentMessage = (messageId: string, data: { from_agent_id: string; content: string; message_type?: string; metadata?: any }) =>
+  api.post<AgentMessage>(`/api/v1/messages/${messageId}/reply`, data);
+
+export const getAgentTeams = (projectId?: string) =>
+  api.get<AgentTeam[]>('/api/v1/teams', { params: projectId ? { project_id: projectId } : {} });
+
+export const createAgentTeam = (data: { name: string; manager_agent_id: string; member_agent_ids: string[]; project_id?: string; description?: string }) =>
+  api.post<AgentTeam>('/api/v1/teams', data);
+
+export const dispatchAgentTeam = (teamId: string, data: { shared_goal: string; member_prompts?: Record<string, string>; parent_task_id?: string }) =>
+  api.post<{ team_id: string; status: string; shared_goal: string; tasks: any[] }>(`/api/v1/teams/${teamId}/dispatch`, data);
+
+export const synthesizeAgentTeam = (teamId: string, data: { task_ids: string[] }) =>
+  api.post<{ team_id: string; status: string; synthesis: string; member_results: any[] }>(`/api/v1/teams/${teamId}/synthesize`, data);
+
 export default api;
+
 
 

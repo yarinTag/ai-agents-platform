@@ -18,11 +18,16 @@ from persistence import DatabaseManager
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MAX_HIERARCHY_DEPTH = 3
+DEFAULT_MAX_HIERARCHY_DEPTH = 5
 
 
 class HierarchyValidationError(ValueError):
     """Raised when an agent hierarchy violates structural or role rules."""
+    pass
+
+
+class CommunicationAuthorizationError(ValueError):
+    """Raised when an agent message violates hierarchy communication permissions."""
     pass
 
 
@@ -64,7 +69,7 @@ def validate_agent_hierarchy(
         if parent_role in [AgentRole.WORKER.value, AgentRole.SPECIALIST.value]:
             raise HierarchyValidationError(
                 f"Parent agent '{parent_id}' has role '{parent_role}', which cannot have children. "
-                f"Only MANAGER or ROOT_ORCHESTRATOR may have child agents."
+                f"Only MANAGER, SUPER_AGENT, or ROOT_ORCHESTRATOR may have child agents."
             )
 
         # Rule 3: Cycle Detection
@@ -99,3 +104,66 @@ def validate_agent_hierarchy(
             raise HierarchyValidationError(
                 f"Cannot set role of '{agent_id}' to '{norm_role}' because it currently manages child agents: {child_ids}."
             )
+
+
+def validate_agent_communication(
+    sender: AgentConfig,
+    receiver: AgentConfig,
+    db_manager: DatabaseManager
+) -> None:
+    """
+    Validate that sender is authorized to send a message to receiver according to hierarchy and permissions.
+    Permitted relationships:
+    - Super Agent & Root Orchestrator <-> any subordinate
+    - Subordinates -> Super Agent
+    - Parent -> Child
+    - Child -> Parent
+    - Sibling -> Sibling (if siblings share same parent and sibling communication is permitted)
+    - Explicit peer allowance (receiver in sender.allowed_peer_ids)
+    - Dangerously skip permissions
+    """
+    if sender.id == receiver.id:
+        raise CommunicationAuthorizationError(f"Agent '{sender.id}' cannot send a message to itself.")
+
+    if getattr(sender, "dangerously_skip_permissions", False):
+        return
+
+    sender_role = (getattr(sender, "role_type", "") or "WORKER").upper()
+    receiver_role = (getattr(receiver, "role_type", "") or "WORKER").upper()
+
+    # Super Agent & Root Orchestrator can message anyone
+    if sender_role in ("SUPER_AGENT", "ROOT_ORCHESTRATOR"):
+        return
+
+    # Anyone can message Super Agent for assistance/direction
+    if receiver_role == "SUPER_AGENT":
+        return
+
+    # Parent -> Child
+    if getattr(receiver, "parent_id", None) == sender.id:
+        return
+
+    # Child -> Parent
+    if getattr(sender, "parent_id", None) == receiver.id:
+        return
+
+    # Explicit peer allowance
+    if receiver.id in (getattr(sender, "allowed_peer_ids", []) or []):
+        return
+
+    # Sibling -> Sibling
+    sender_parent = getattr(sender, "parent_id", None)
+    receiver_parent = getattr(receiver, "parent_id", None)
+    if sender_parent and receiver_parent and sender_parent == receiver_parent:
+        sender_allow_sibling = getattr(sender, "allow_sibling_communication", True)
+        if sender_allow_sibling:
+            return
+        else:
+            raise CommunicationAuthorizationError(
+                f"Sibling communication is disabled for agent '{sender.id}'."
+            )
+
+    raise CommunicationAuthorizationError(
+        f"Agent '{sender.id}' is not authorized to communicate directly with '{receiver.id}'. "
+        f"Direct messages must follow hierarchy (Parent/Child), permitted Siblings, or explicit peer permissions."
+    )

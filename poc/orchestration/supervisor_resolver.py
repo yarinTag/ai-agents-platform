@@ -1,8 +1,8 @@
 """
 Automated Supervisor Question Resolver & Escalation Engine.
 Implements a multi-tier resolution hierarchy:
-Tier 1: Scans Project Shared Memory / Knowledge Base (ADRs, Conventions, Lessons) for auto-resolution.
-Tier 2: Routes unanswered questions to the agent's manager (parent_id) if configured.
+Tier 1: Scans Deep Project Intelligence (ADRs, Conventions, Lessons, Docs, Active Context).
+Tier 2: Super Agent / Authorized Manager Decision Authority.
 Tier 3: Escalates to HUMAN_OPERATOR with visual and interactive notifications.
 """
 
@@ -12,8 +12,9 @@ import re
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 
-from persistence import DatabaseManager
+from persistence import DatabaseManager, AgentMessage
 from runtime_adapter import TaskStatus
+from .project_intelligence import ProjectIntelligence
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,7 @@ class SupervisorResolver:
         self.db = db_manager
         self.event_bus = event_bus
         self.runtime_adapter = runtime_adapter
+        self.project_intelligence = ProjectIntelligence(db_manager)
 
     def resolve_or_escalate_question(
         self,
@@ -36,68 +38,172 @@ class SupervisorResolver:
         suggested_options: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         """
-        Attempt to resolve the question using Project Shared Knowledge first.
-        If no confident match is found, escalate to the agent's manager or human operator.
+        Attempt to resolve the question using Deep Project Intelligence and Super Agent authority first.
+        If no confident match is found or the decision exceeds authority, escalate to manager or human.
         """
         logger.info(f"[SupervisorResolver] Evaluating question from {requester_agent_id} on task {task_id}: '{question}'")
 
-        # ── Tier 1: Check Project Shared Memory & Conventions ────────────────────
-        auto_answer = self._try_auto_resolve_from_memory(project_id, question)
-        if auto_answer:
-            logger.info(f"[SupervisorResolver] Question AUTO-RESOLVED from project memory for task {task_id}")
-            interaction = self.db.create_interaction({
-                "task_id": task_id,
-                "requester_agent_id": requester_agent_id,
-                "target_approver_id": "PROJECT_SHARED_MEMORY",
-                "interaction_type": "QUESTION",
-                "title": f"Auto-Resolved: {question[:80]}",
-                "content": question,
-                "context_data": json.dumps({"context": context, "suggested_options": suggested_options or []}),
-                "status": "APPROVED",
-                "resolution_response": auto_answer,
-                "resolved_by": "SUPERVISOR_AUTO_RESOLVE"
-            })
+        # ── 1. Check Super Agent Configuration for the Project ───────────────────
+        super_cfg = self.db.get_super_agent_for_project(project_id) if project_id else None
 
-            # Broadcast auto-resolution event
-            if self.event_bus:
-                try:
-                    from events import PlatformEvent
-                    self.event_bus.publish(PlatformEvent(
-                        event_id=f"evt_{datetime.now().timestamp()}",
-                        event_type="approval.auto_resolved",
-                        project_id=project_id,
-                        agent_id=requester_agent_id,
-                        task_id=task_id,
-                        payload={
-                            "interaction_id": interaction["id"],
-                            "question": question,
-                            "resolution": auto_answer,
-                            "source": "PROJECT_SHARED_MEMORY"
-                        },
-                        source="supervisor_resolver"
-                    ))
-                except Exception as eb_err:
-                    logger.warning(f"Failed to publish auto_resolved event: {eb_err}")
+        # Check if question requires human approval due to Super Agent authority limits
+        requires_human_approval = False
+        if super_cfg and super_cfg.require_human_approval_for:
+            q_lower = question.lower()
+            for restricted in super_cfg.require_human_approval_for:
+                if restricted == "destructive_actions" and any(k in q_lower for k in ("delete", "drop", "truncate", "rm -rf", "wipe")):
+                    requires_human_approval = True
+                    break
+                if restricted == "production_changes" and any(k in q_lower for k in ("prod", "production", "live cluster", "deploy")):
+                    requires_human_approval = True
+                    break
+                if restricted == "financial_actions" and any(k in q_lower for k in ("payment", "stripe", "credit card", "billing", "invoice")):
+                    requires_human_approval = True
+                    break
+                if restricted == "external_messages" and any(k in q_lower for k in ("email", "sms", "tweet", "post to")):
+                    requires_human_approval = True
+                    break
 
-            # Automatically resume task
-            if self.runtime_adapter:
-                try:
-                    self.runtime_adapter.resume_task(task_id, auto_answer)
-                except Exception as res_err:
-                    logger.warning(f"Failed to trigger automatic resume for task {task_id}: {res_err}")
+        # ── 2. Deep Project Intelligence & Super Agent Resolution ────────────────
+        if not requires_human_approval:
+            intel = self.project_intelligence.synthesize_answer(project_id, question, requester_agent_id, context) if project_id else None
+            if intel and intel.get("requires_human_approval"):
+                requires_human_approval = True
 
-            return {
-                "status": "AUTO_RESOLVED",
-                "interaction_id": interaction["id"],
-                "answer": auto_answer,
-                "target_approver": "PROJECT_SHARED_MEMORY"
-            }
+            if intel and not requires_human_approval:
+                answer = intel["answer"]
+                target_approver = super_cfg.agent_id if (super_cfg and super_cfg.can_answer_questions) else "PROJECT_SHARED_MEMORY"
+                resolved_by = f"SUPER_AGENT:{super_cfg.agent_id}" if (super_cfg and super_cfg.can_answer_questions) else "SUPERVISOR_AUTO_RESOLVE"
 
-        # ── Tier 2 & 3: Route to Manager (parent_id) or Human Operator ──────────
+                logger.info(f"[SupervisorResolver] Question AUTO-RESOLVED by {target_approver} for task {task_id}")
+
+                interaction = self.db.create_interaction({
+                    "task_id": task_id,
+                    "requester_agent_id": requester_agent_id,
+                    "target_approver_id": target_approver,
+                    "interaction_type": "QUESTION",
+                    "title": f"Resolved: {question[:80]}",
+                    "content": question,
+                    "context_data": json.dumps({
+                        "context": context,
+                        "suggested_options": suggested_options or [],
+                        "source": intel.get("source"),
+                        "confidence": intel.get("confidence")
+                    }),
+                    "status": "APPROVED",
+                    "resolution_response": answer,
+                    "resolved_by": resolved_by
+                })
+
+                # If resolved by Super Agent, record an AgentMessage in SQLite
+                if super_cfg and super_cfg.can_answer_questions:
+                    try:
+                        self.db.save_agent_message(AgentMessage(
+                            id=f"msg_sa_{datetime.now().timestamp()}",
+                            from_agent_id=super_cfg.agent_id,
+                            to_agent_id=requester_agent_id,
+                            content=answer,
+                            task_id=task_id,
+                            message_type="ANSWER",
+                            status="SENT",
+                            metadata={"resolved_by": resolved_by, "confidence": intel.get("confidence")}
+                        ))
+                    except Exception as msg_err:
+                        logger.warning(f"Failed to record Super Agent message: {msg_err}")
+
+                # Broadcast auto-resolution event
+                if self.event_bus:
+                    try:
+                        from events import PlatformEvent
+                        self.event_bus.publish(PlatformEvent(
+                            event_id=f"evt_{datetime.now().timestamp()}",
+                            event_type="approval.auto_resolved",
+                            project_id=project_id,
+                            agent_id=requester_agent_id,
+                            task_id=task_id,
+                            payload={
+                                "interaction_id": interaction["id"],
+                                "question": question,
+                                "resolution": answer,
+                                "source": intel.get("source", "PROJECT_SHARED_MEMORY"),
+                                "target_approver": target_approver
+                            },
+                            source="supervisor_resolver"
+                        ))
+                    except Exception as eb_err:
+                        logger.warning(f"Failed to publish auto_resolved event: {eb_err}")
+
+                # Automatically resume task via Claude Code runtime adapter
+                if self.runtime_adapter:
+                    try:
+                        self.runtime_adapter.resume_task(task_id, answer)
+                    except Exception as res_err:
+                        logger.warning(f"Failed to trigger automatic resume for task {task_id}: {res_err}")
+
+                return {
+                    "status": "AUTO_RESOLVED",
+                    "interaction_id": interaction["id"],
+                    "answer": answer,
+                    "target_approver": target_approver,
+                    "resolved_by": resolved_by
+                }
+
+        # ── 3. Fallback Legacy Memory Keyword Match (if project intelligence missed)
+        if not requires_human_approval:
+            legacy_answer = self._try_auto_resolve_from_memory(project_id, question)
+            if legacy_answer:
+                logger.info(f"[SupervisorResolver] Question AUTO-RESOLVED from legacy memory for task {task_id}")
+                interaction = self.db.create_interaction({
+                    "task_id": task_id,
+                    "requester_agent_id": requester_agent_id,
+                    "target_approver_id": "PROJECT_SHARED_MEMORY",
+                    "interaction_type": "QUESTION",
+                    "title": f"Auto-Resolved: {question[:80]}",
+                    "content": question,
+                    "context_data": json.dumps({"context": context, "suggested_options": suggested_options or []}),
+                    "status": "APPROVED",
+                    "resolution_response": legacy_answer,
+                    "resolved_by": "SUPERVISOR_AUTO_RESOLVE"
+                })
+
+                if self.event_bus:
+                    try:
+                        from events import PlatformEvent
+                        self.event_bus.publish(PlatformEvent(
+                            event_id=f"evt_{datetime.now().timestamp()}",
+                            event_type="approval.auto_resolved",
+                            project_id=project_id,
+                            agent_id=requester_agent_id,
+                            task_id=task_id,
+                            payload={
+                                "interaction_id": interaction["id"],
+                                "question": question,
+                                "resolution": legacy_answer,
+                                "source": "PROJECT_SHARED_MEMORY"
+                            },
+                            source="supervisor_resolver"
+                        ))
+                    except Exception as eb_err:
+                        logger.warning(f"Failed to publish auto_resolved event: {eb_err}")
+
+                if self.runtime_adapter:
+                    try:
+                        self.runtime_adapter.resume_task(task_id, legacy_answer)
+                    except Exception as res_err:
+                        logger.warning(f"Failed to trigger automatic resume for task {task_id}: {res_err}")
+
+                return {
+                    "status": "AUTO_RESOLVED",
+                    "interaction_id": interaction["id"],
+                    "answer": legacy_answer,
+                    "target_approver": "PROJECT_SHARED_MEMORY"
+                }
+
+        # ── 4. Escalation: Route to Manager or Human Operator ───────────────────
         target_approver = "HUMAN_OPERATOR"
         try:
             agent = self.db.get_agent(requester_agent_id)
-            if agent and agent.parent_id:
+            if agent and agent.parent_id and not requires_human_approval:
                 target_approver = agent.parent_id
         except Exception as e:
             logger.warning(f"Error checking agent parent_id: {e}")
@@ -168,7 +274,6 @@ class SupervisorResolver:
         if not memories:
             return None
 
-        # Extract normalized keywords from question (words with length >= 4)
         clean_q = re.sub(r'[^a-zA-Z0-9_\u0590-\u05fe\s]', ' ', question.lower())
         q_words = set(w for w in clean_q.split() if len(w) >= 4)
 
@@ -196,7 +301,6 @@ class SupervisorResolver:
                 highest_score = score
                 best_memory = mem
 
-        # Require a threshold score of >= 3 for confident auto-resolution
         if highest_score >= 3 and best_memory:
             return (
                 f"Auto-resolved from Project Standard [{best_memory['category']}: {best_memory['title']}]:\n"

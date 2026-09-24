@@ -42,6 +42,27 @@ class EventType(str, Enum):
     RESULT_SUBMITTED = "result.submitted"
     RESULT_FORWARDED = "result.forwarded"
 
+    # Agent-to-Agent Messaging
+    AGENT_MESSAGE_SENT = "agent.message.sent"
+    AGENT_MESSAGE_RECEIVED = "agent.message.received"
+
+    # Agent Lifecycle & Execution States
+    AGENT_STARTED = "agent.started"
+    AGENT_THINKING = "agent.thinking"
+    AGENT_WAITING = "agent.waiting"
+    AGENT_BLOCKED = "agent.blocked"
+    AGENT_COMPLETED = "agent.completed"
+    AGENT_FAILED = "agent.failed"
+
+    # MCP Lifecycle & Tool Execution
+    MCP_CONNECTION_CREATED = "mcp.connection.created"
+    MCP_CONNECTION_CONNECTED = "mcp.connection.connected"
+    MCP_CONNECTION_DISCONNECTED = "mcp.connection.disconnected"
+    MCP_TOOL_STARTED = "mcp.tool.started"
+    MCP_TOOL_COMPLETED = "mcp.tool.completed"
+    MCP_TOOL_FAILED = "mcp.tool.failed"
+    MCP_PERMISSION_DENIED = "mcp.permission.denied"
+
     # Human Approvals
     APPROVAL_REQUIRED = "approval.required"
     APPROVAL_GRANTED = "approval.granted"

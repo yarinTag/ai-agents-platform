@@ -22,6 +22,16 @@
 import { Agent } from '../types/agent';
 import { Task } from '../types/task';
 
+export interface VisualConnection {
+  id: string;
+  fromAgentId: string;
+  toAgentId?: string;
+  targetType: 'agent' | 'super_agent' | 'mcp';
+  color: string;
+  label?: string;
+}
+
+
 // ─── Palette ──────────────────────────────────────────────────────────────────
 const P = {
   EXTERIOR:     '#1a1f2e',  // dark outside
@@ -233,6 +243,7 @@ export class PixelRenderer {
   }> = new Map();
   private walkAnims: Map<string, WalkAnim> = new Map();
   private prevTaskStatuses: Map<string, string> = new Map();
+  private connections: VisualConnection[] = [];
 
   // Character visual stable assignments
   private charColors: Map<string, { shirt: string; hair: string; skin: string }> = new Map();
@@ -247,13 +258,66 @@ export class PixelRenderer {
     this.panY = 30;
   }
 
-  public updateData(agents: Agent[], tasks: Task[]): void {
+  public updateData(agents: Agent[], tasks: Task[], connections?: VisualConnection[]): void {
     this.agents = agents;
     this.tasks = tasks;
+    if (connections) {
+      this.connections = connections;
+    } else {
+      this.deriveActiveConnections();
+    }
     this.assignDeskPositions();
     this.detectTaskCompletions();
     this.assignCharColors();
   }
+
+  public setConnections(conns: VisualConnection[]): void {
+    this.connections = conns;
+  }
+
+  private deriveActiveConnections(): void {
+    const list: VisualConnection[] = [];
+    this.tasks.forEach((t) => {
+      const st = String(t.status).toLowerCase();
+      const aid = String(t.agent_id);
+      if (st === 'waiting_input') {
+        list.push({
+          id: `conn-super-${t.id}`,
+          fromAgentId: aid,
+          targetType: 'super_agent',
+          color: '#38bdf8',
+          label: 'Super Agent Query',
+        });
+      } else if (st === 'running' || st === 'queued') {
+        const inp = typeof t.input_data === 'string' ? t.input_data : JSON.stringify(t.input_data || '');
+        if (inp.toLowerCase().includes('mcp') || inp.toLowerCase().includes('github') || inp.toLowerCase().includes('tool')) {
+          list.push({
+            id: `conn-mcp-${t.id}`,
+            fromAgentId: aid,
+            targetType: 'mcp',
+            color: '#10b981',
+            label: 'MCP Tool Exec',
+          });
+        }
+      }
+    });
+
+    this.agents.forEach((a) => {
+      const ast = (a.status || '').toUpperCase();
+      if (ast === 'COMMUNICATING' && a.parent_id) {
+        list.push({
+          id: `conn-comm-${a.id}`,
+          fromAgentId: a.id,
+          toAgentId: a.parent_id,
+          targetType: 'agent',
+          color: '#a855f7',
+          label: 'Peer Message',
+        });
+      }
+    });
+    this.connections = list;
+  }
+
   public setOnSelectAgent(cb: (a: Agent) => void): void { this.onSelectAgentCallback = cb; }
   public setSelectedAgent(id: string | null): void { this.selectedAgentId = id; }
   public resize(w: number, h: number): void { this.canvas.width = w; this.canvas.height = h; }
@@ -573,9 +637,11 @@ export class PixelRenderer {
     this.renderSeatedAgents();     // 9. Seated characters BEFORE desks (desks cover legs)
     this.renderDesks();            // 10. Desks on top → agent legs hidden = sitting look
     this.renderWalkingAgents();    // 11. Walking delivery animations (on top)
-    this.renderHUD();              // 12. Hover tooltip
-    this.renderRoomLabels();       // 13. Room name badges — LAST so always on top of everything
+    this.renderActiveConnections(); // 12. Active visual connection paths (Agent<->Agent, MCP, Super Agent)
+    this.renderHUD();              // 13. Hover tooltip
+    this.renderRoomLabels();       // 14. Room name badges — LAST so always on top of everything
   }
+
 
   // ─── 1. Building shell (cream wall fill) ──────────────────────────────
   private renderBuildingShell(): void {
@@ -1242,54 +1308,9 @@ export class PixelRenderer {
     ctx.fillText(label, tagX + 3, tagY + 9 * z);
     ctx.restore();
 
-    // Active task / Approval / Question indicator
-    const activeTask = this.tasks.find(
-      (t) => String(t.agent_id) === String(agent.id) &&
-        (t.status === 'running' || t.status === 'queued' || t.status === 'waiting_input' || t.status === 'pending_approval' || t.status === 'scheduled')
-    );
-    if (activeTask) {
-      const st = String(activeTask.status).toLowerCase();
-      if (st === 'waiting_input' || st === 'pending_approval') {
-        // Animated bouncing question / approval speech bubble
-        const bob = Math.sin(this.tick * 0.12) * 3 * z;
-        const bx = cx - 12 * z;
-        const by = cy - 48 * z - 12 * z + bob;
-        ctx.save();
-        ctx.fillStyle = st === 'waiting_input' ? '#dbeafe' : '#fef3c7';
-        ctx.strokeStyle = st === 'waiting_input' ? '#2563eb' : '#d97706';
-        ctx.lineWidth = 1.5;
-        // Bubble rounded box
-        ctx.beginPath();
-        ctx.rect(bx, by, 24 * z, 14 * z);
-        ctx.fill();
-        ctx.stroke();
-        // Bubble tail pointing down to head
-        ctx.beginPath();
-        ctx.moveTo(cx - 3 * z, by + 14 * z);
-        ctx.lineTo(cx, by + 18 * z);
-        ctx.lineTo(cx + 3 * z, by + 14 * z);
-        ctx.fillStyle = st === 'waiting_input' ? '#dbeafe' : '#fef3c7';
-        ctx.fill();
-        ctx.stroke();
-        // Bubble icon
-        ctx.font = `${Math.max(9, 9 * z)}px sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.fillText(st === 'waiting_input' ? '❓' : '⚠️', cx, by + 11 * z);
-        ctx.restore();
-      } else if (st === 'scheduled') {
-        ctx.font = `${Math.max(8, 8 * z)}px sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.fillText('⏰', cx + 7 * z, cy - 26 * z);
-      } else {
-        const pulse = 0.6 + Math.abs(Math.sin(this.tick * 0.08)) * 0.4;
-        ctx.fillStyle = `rgba(16,185,129,${pulse})`;
-        ctx.beginPath();
-        ctx.arc(cx + 6 * z, cy - 26 * z, 3 * z, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = '#fff'; ctx.lineWidth = 0.5;
-        ctx.stroke();
-      }
-    }
+    // Agent visual runtime state badge (IDLE, THINKING, WORKING, WAITING, BLOCKED, COMMUNICATING, USING_MCP, COMPLETED, FAILED)
+    this.drawAgentStatusBubble(agent, cx, cy, z);
+
 
     ctx.restore();
   }
@@ -1391,54 +1412,53 @@ export class PixelRenderer {
     ctx.fillText(label, tagX + 3, tagY + 8 * z);
     ctx.restore();
 
-    // Active task / Approval / Question indicator
+    // Agent visual runtime state badge (IDLE, THINKING, WORKING, WAITING, BLOCKED, COMMUNICATING, USING_MCP, COMPLETED, FAILED)
+    this.drawAgentStatusBubble(agent, cx, cy, z, tx);
+
+
+    ctx.restore();
+  }
+
+  // ─── 9 Agent Runtime Visual States Status Bubble ────────────────────────
+  private drawAgentStatusBubble(agent: Agent, cx: number, cy: number, z: number, tx: number = 0): void {
+    const ctx = this.ctx;
     const activeTask = this.tasks.find(
       (t) => String(t.agent_id) === String(agent.id) &&
-        (t.status === 'running' || t.status === 'queued' || t.status === 'waiting_input' || t.status === 'pending_approval' || t.status === 'scheduled')
+        ['running', 'queued', 'waiting_input', 'pending_approval', 'scheduled', 'completed', 'failed'].includes(String(t.status).toLowerCase())
     );
+
+    let state: 'IDLE' | 'THINKING' | 'WORKING' | 'WAITING' | 'BLOCKED' | 'COMMUNICATING' | 'USING_MCP' | 'COMPLETED' | 'FAILED' = 'IDLE';
+    const rawAgentStatus = (agent.status || '').toUpperCase();
+    if (rawAgentStatus === 'COMMUNICATING') state = 'COMMUNICATING';
+    else if (rawAgentStatus === 'USING_MCP') state = 'USING_MCP';
+    else if (rawAgentStatus === 'THINKING') state = 'THINKING';
+    else if (rawAgentStatus === 'BLOCKED') state = 'BLOCKED';
+
     if (activeTask) {
       const st = String(activeTask.status).toLowerCase();
       if (st === 'waiting_input' || st === 'pending_approval') {
-        const bob = Math.sin(this.tick * 0.12) * 3 * z;
-        const bx = cx - 12 * z;
-        const by = cy - 46 * z - 11 * z + bob;
-        ctx.save();
-        ctx.fillStyle = st === 'waiting_input' ? '#dbeafe' : '#fef3c7';
-        ctx.strokeStyle = st === 'waiting_input' ? '#2563eb' : '#d97706';
-        ctx.lineWidth = 1.5;
-        // Bubble rounded box
-        ctx.beginPath();
-        ctx.rect(bx, by, 24 * z, 14 * z);
-        ctx.fill();
-        ctx.stroke();
-        // Bubble tail pointing down
-        ctx.beginPath();
-        ctx.moveTo(cx - 3 * z, by + 14 * z);
-        ctx.lineTo(cx, by + 18 * z);
-        ctx.lineTo(cx + 3 * z, by + 14 * z);
-        ctx.fillStyle = st === 'waiting_input' ? '#dbeafe' : '#fef3c7';
-        ctx.fill();
-        ctx.stroke();
-        // Bubble icon
-        ctx.font = `${Math.max(9, 9 * z)}px sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.fillText(st === 'waiting_input' ? '❓' : '⚠️', cx, by + 11 * z);
-        ctx.restore();
+        state = 'BLOCKED';
       } else if (st === 'scheduled') {
-        ctx.font = `${Math.max(8, 8 * z)}px sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.fillText('⏰', cx + 7 * z, cy - 24 * z);
-      } else {
-        const pulse = 0.6 + Math.abs(Math.sin(this.tick * 0.08)) * 0.4;
-        ctx.fillStyle = `rgba(16,185,129,${pulse})`;
-        ctx.beginPath();
-        ctx.arc(cx + 6 * z, cy - 24 * z, 3 * z, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = '#fff'; ctx.lineWidth = 0.5;
-        ctx.stroke();
+        state = 'WAITING';
+      } else if (st === 'running' || st === 'queued') {
+        if (state === 'IDLE') {
+          const inp = typeof activeTask.input_data === 'string' ? activeTask.input_data : JSON.stringify(activeTask.input_data || '');
+          if (inp.toLowerCase().includes('mcp') || inp.toLowerCase().includes('github')) {
+            state = 'USING_MCP';
+          } else if ((agent.status || '').toLowerCase() === 'thinking') {
+            state = 'THINKING';
+          } else {
+            state = 'WORKING';
+          }
+        }
+      } else if (st === 'completed') {
+        state = 'COMPLETED';
+      } else if (st === 'failed') {
+        state = 'FAILED';
       }
-    } else {
-      // Idle state: at desk in department room with idle activity visual
+    }
+
+    if (state === 'IDLE') {
       const pos = this.deskMap.get(agent.id);
       const idleBob = Math.sin(this.tick * 0.06 + tx) * 1.5 * z;
       ctx.save();
@@ -1451,10 +1471,155 @@ export class PixelRenderer {
         : '☕';
       ctx.fillText(idleIcon, cx + 7 * z, cy - 24 * z + idleBob);
       ctx.restore();
+      return;
     }
 
+    ctx.save();
+    const bob = Math.sin(this.tick * 0.12) * 2.5 * z;
+    const bx = cx - 12 * z;
+    const by = cy - 46 * z - 11 * z + bob;
+
+    let bg = '#dbeafe';
+    let border = '#2563eb';
+    let icon = '⚡';
+
+    switch (state) {
+      case 'THINKING':
+        bg = '#ede9fe';
+        border = '#7c3aed';
+        icon = '💭';
+        break;
+      case 'WORKING':
+        bg = '#d1fae5';
+        border = '#059669';
+        icon = '⚡';
+        break;
+      case 'WAITING':
+        bg = '#fef3c7';
+        border = '#d97706';
+        icon = '⏳';
+        break;
+      case 'BLOCKED':
+        bg = '#fee2e2';
+        border = '#dc2626';
+        icon = '❓';
+        break;
+      case 'COMMUNICATING':
+        bg = '#cffafe';
+        border = '#0891b2';
+        icon = '💬';
+        break;
+      case 'USING_MCP':
+        bg = '#fef3c7';
+        border = '#b45309';
+        icon = '🔌';
+        break;
+      case 'COMPLETED':
+        bg = '#dcfce7';
+        border = '#16a34a';
+        icon = '✅';
+        break;
+      case 'FAILED':
+        bg = '#fee2e2';
+        border = '#b91c1c';
+        icon = '❌';
+        break;
+    }
+
+    ctx.fillStyle = bg;
+    ctx.strokeStyle = border;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.rect(bx, by, 24 * z, 13 * z);
+    ctx.fill();
+    ctx.stroke();
+
+    // Bubble pointer down
+    ctx.beginPath();
+    ctx.moveTo(cx - 3 * z, by + 13 * z);
+    ctx.lineTo(cx, by + 17 * z);
+    ctx.lineTo(cx + 3 * z, by + 13 * z);
+    ctx.fillStyle = bg;
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.font = `${Math.max(9, 9 * z)}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText(icon, cx, by + 10 * z);
     ctx.restore();
   }
+
+  // ─── Active Visual Connections (Agent<->Agent, MCP, Super Agent) ──────
+  private renderActiveConnections(): void {
+    const ctx = this.ctx;
+    const z = this.zoom;
+    const T = this.T * z;
+
+    this.connections.forEach((conn) => {
+      const fromDesk = this.deskMap.get(conn.fromAgentId);
+      if (!fromDesk) return;
+
+      let toTx = 48, toTy = 3; // Default MCP Station in Entrance / Hub
+      if (conn.targetType === 'super_agent') {
+        toTx = 18; toTy = 13; // Executive HQ Lead desk
+      } else if (conn.targetType === 'agent' && conn.toAgentId) {
+        const toDesk = this.deskMap.get(conn.toAgentId);
+        if (toDesk) {
+          toTx = toDesk.tx;
+          toTy = toDesk.ty;
+        }
+      }
+
+      const p1 = this.gs(fromDesk.tx, fromDesk.ty);
+      const p2 = this.gs(toTx, toTy);
+
+      const x1 = p1.x + T / 2;
+      const y1 = p1.y + T / 2;
+      const x2 = p2.x + T / 2;
+      const y2 = p2.y + T / 2;
+
+      ctx.save();
+      ctx.strokeStyle = conn.color;
+      ctx.lineWidth = Math.max(1.5, 2 * z);
+      ctx.setLineDash([6 * z, 5 * z]);
+      ctx.lineDashOffset = -this.tick * 0.7;
+
+      const midX = (x1 + x2) / 2;
+      const midY = (y1 + y2) / 2 - 25 * z;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.quadraticCurveTo(midX, midY, x2, y2);
+      ctx.stroke();
+
+      // Traveling glowing particle
+      const t = (this.tick % 60) / 60;
+      const qx = (1 - t) * (1 - t) * x1 + 2 * (1 - t) * t * midX + t * t * x2;
+      const qy = (1 - t) * (1 - t) * y1 + 2 * (1 - t) * t * midY + t * t * y2;
+
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(qx, qy, 3.5 * z, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Label badge
+      if (conn.label) {
+        ctx.setLineDash([]);
+        ctx.font = `bold ${Math.max(8, 8 * z)}px sans-serif`;
+        const tw = ctx.measureText(conn.label).width;
+        const lx = midX - tw / 2 - 4 * z;
+        const ly = midY - 6 * z;
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+        ctx.strokeStyle = conn.color;
+        ctx.lineWidth = 1;
+        ctx.fillRect(lx, ly, tw + 8 * z, 12 * z);
+        ctx.strokeRect(lx, ly, tw + 8 * z, 12 * z);
+        ctx.fillStyle = '#f8fafc';
+        ctx.fillText(conn.label, lx + 4 * z, ly + 9 * z);
+      }
+      ctx.restore();
+    });
+  }
+
 
   // ─── Office chair sprite ──────────────────────────────────────────────
   // For dir='down': chair appears at bottom (south) of desk tile

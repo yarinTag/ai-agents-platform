@@ -20,6 +20,9 @@ from .approvals.router import router as approvals_router
 from .chat.router import router as chat_router
 from .memory.router import router as memories_router
 from .war_room.router import router as war_room_router
+from .messages.router import router as messages_router
+from .mcp.router import router as mcp_router
+from .teams.router import router as teams_router
 
 # Import security layer
 from .security import (
@@ -83,7 +86,11 @@ app.include_router(approvals_router, prefix="/api/v1/approvals", tags=["approval
 app.include_router(chat_router, prefix="/api/v1/chat", tags=["chat"], dependencies=auth_deps)
 app.include_router(memories_router, prefix="/api/v1/projects", tags=["memories"], dependencies=auth_deps)
 app.include_router(war_room_router, prefix="/api/v1/war-room", tags=["war-room"], dependencies=auth_deps)
+app.include_router(messages_router, prefix="/api/v1/messages", tags=["messages"], dependencies=auth_deps)
+app.include_router(mcp_router, prefix="/api/v1/mcp", tags=["mcp"], dependencies=auth_deps)
+app.include_router(teams_router, prefix="/api/v1/teams", tags=["teams"], dependencies=auth_deps)
 app.include_router(audit_router, prefix="/api/v1/audit", tags=["audit"])
+
 app.include_router(audit_router, prefix="/api/v1/auth", tags=["auth"])
 
 

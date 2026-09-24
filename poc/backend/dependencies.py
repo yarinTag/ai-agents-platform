@@ -24,9 +24,12 @@ from runtime.claude_adapter import ClaudeCodeAdapter
 from events import EventBus, EventService, PlatformEvent, EventType
 from orchestration import (
     validate_agent_hierarchy, HierarchyValidationError, OrchestrationEngine,
-    DelegationError, ConcurrencyLimitExceededError
+    DelegationError, ConcurrencyLimitExceededError,
+    validate_agent_communication, CommunicationAuthorizationError,
+    ProjectIntelligence, TeamCoordinator
 )
 from .cron_engine import CronSchedulerEngine
+from mcp import MCPRegistry, MCPExecutor, MCPPermissionDeniedError
 
 logger = logging.getLogger(__name__)
 
@@ -38,11 +41,15 @@ _event_service: Optional[EventService] = None
 _claude_adapter: Optional[ClaudeCodeAdapter] = None
 _orchestration_engine: Optional[OrchestrationEngine] = None
 _cron_engine: Optional[CronSchedulerEngine] = None
+_mcp_registry: Optional[MCPRegistry] = None
+_mcp_executor: Optional[MCPExecutor] = None
+_project_intelligence: Optional[ProjectIntelligence] = None
+_team_coordinator: Optional[TeamCoordinator] = None
 
 
 async def init_services():
     """Initialize all backend services."""
-    global _services_initialized, _event_bus, _event_service, _claude_adapter, _orchestration_engine, _cron_engine
+    global _services_initialized, _event_bus, _event_service, _claude_adapter, _orchestration_engine, _cron_engine, _mcp_registry, _mcp_executor, _project_intelligence, _team_coordinator
 
     if _services_initialized:
         return
@@ -72,10 +79,23 @@ async def init_services():
                 event_bus=_event_bus
             )
             _cron_engine.start()
+        if _mcp_registry is None:
+            _mcp_registry = MCPRegistry(db_manager=db_manager, event_service=_event_service)
+            _mcp_registry.seed_default_connectors()
+        if _mcp_executor is None:
+            _mcp_executor = MCPExecutor(db_manager=db_manager, registry=_mcp_registry, event_service=_event_service)
+        if _project_intelligence is None:
+            _project_intelligence = ProjectIntelligence(db_manager=db_manager)
+        if _team_coordinator is None:
+            _team_coordinator = TeamCoordinator(
+                db_manager=db_manager,
+                orchestration_engine=_orchestration_engine,
+                event_service=_event_service
+            )
 
         _services_initialized = True
         logger.info(
-            "Backend services initialized: %d config agents, %d DB agents, %d projects, cron engine and event bus ready",
+            "Backend services initialized: %d config agents, %d DB agents, %d projects, cron engine, event bus, and MCP platform ready",
             len(agents), len(db_agents), len(db_projects)
         )
 
@@ -153,3 +173,44 @@ def get_cron_engine() -> Optional[CronSchedulerEngine]:
     """Get the global CronSchedulerEngine instance."""
     global _cron_engine
     return _cron_engine
+
+
+def get_mcp_registry() -> MCPRegistry:
+    """Get the global MCPRegistry instance."""
+    global _mcp_registry
+    if _mcp_registry is None:
+        _mcp_registry = MCPRegistry(db_manager=get_db_manager(), event_service=get_event_service())
+        _mcp_registry.seed_default_connectors()
+    return _mcp_registry
+
+
+def get_mcp_executor() -> MCPExecutor:
+    """Get the global MCPExecutor instance."""
+    global _mcp_executor
+    if _mcp_executor is None:
+        _mcp_executor = MCPExecutor(
+            db_manager=get_db_manager(),
+            registry=get_mcp_registry(),
+            event_service=get_event_service()
+        )
+    return _mcp_executor
+
+
+def get_project_intelligence() -> ProjectIntelligence:
+    """Get the global ProjectIntelligence instance."""
+    global _project_intelligence
+    if _project_intelligence is None:
+        _project_intelligence = ProjectIntelligence(db_manager=get_db_manager())
+    return _project_intelligence
+
+
+def get_team_coordinator() -> TeamCoordinator:
+    """Get the global TeamCoordinator instance."""
+    global _team_coordinator
+    if _team_coordinator is None:
+        _team_coordinator = TeamCoordinator(
+            db_manager=get_db_manager(),
+            orchestration_engine=get_orchestration_engine(),
+            event_service=get_event_service()
+        )
+    return _team_coordinator
