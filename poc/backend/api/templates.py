@@ -167,6 +167,14 @@ async def instantiate_agent_from_template(
         )
 
     agent_id = request.name.lower().replace(" ", "-").replace("_", "-")
+
+    max_agents = getattr(db_manager, "max_agents", 18)
+    if len(db_manager.list_agents()) >= max_agents:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Platform agent capacity reached: maximum {max_agents} agents allowed"
+        )
+
     existing = db_manager.get_agent(agent_id)
     if existing:
         raise HTTPException(

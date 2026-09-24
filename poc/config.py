@@ -15,6 +15,7 @@ from enum import Enum
 class AgentRole(str, Enum):
     """Canonical roles for platform agents."""
     ROOT_ORCHESTRATOR = "ROOT_ORCHESTRATOR"
+    SUPER_AGENT = "SUPER_AGENT"
     MANAGER = "MANAGER"
     WORKER = "WORKER"
     SPECIALIST = "SPECIALIST"
@@ -49,6 +50,11 @@ class AgentConfig:
     template_id: Optional[str] = None
     dangerously_skip_permissions: bool = False
 
+    # Communication & MCP permissions
+    allow_sibling_communication: bool = True
+    allowed_peer_ids: List[str] = None
+    mcp_permissions: List[str] = None
+
     def __post_init__(self):
         if self.skills is None:
             self.skills = []
@@ -56,12 +62,50 @@ class AgentConfig:
             self.allowed_child_ids = []
         if self.allowed_tools is None:
             self.allowed_tools = []
+        if self.allowed_peer_ids is None:
+            self.allowed_peer_ids = []
+        if self.mcp_permissions is None:
+            self.mcp_permissions = []
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'AgentConfig':
+        import inspect
+        valid_fields = set(inspect.signature(cls).parameters.keys())
+        filtered = {k: v for k, v in data.items() if k in valid_fields}
+        return cls(**filtered)
+
+
+@dataclass
+class SuperAgentConfig:
+    """Explicit decision authority configuration for a Super Agent."""
+    agent_id: str
+    project_id: str
+    can_answer_questions: bool = True
+    can_delegate: bool = True
+    can_create_subtasks: bool = True
+    can_use_mcp: bool = True
+    can_make_project_decisions: bool = True
+    can_modify_files: bool = True
+    can_execute_commands: bool = True
+    require_human_approval_for: List[str] = None
+
+    def __post_init__(self):
+        if self.require_human_approval_for is None:
+            self.require_human_approval_for = [
+                "external_messages",
+                "destructive_actions",
+                "production_changes",
+                "financial_actions"
+            ]
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'SuperAgentConfig':
         import inspect
         valid_fields = set(inspect.signature(cls).parameters.keys())
         filtered = {k: v for k, v in data.items() if k in valid_fields}

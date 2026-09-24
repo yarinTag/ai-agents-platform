@@ -12,8 +12,10 @@ from datetime import datetime
 from typing import List, Optional, Dict, Any, Union
 from pathlib import Path
 
+from dataclasses import dataclass, asdict, field
+
 # Import from local modules using absolute imports
-from config import AgentConfig, ProjectConfig, Skill, AgentTemplate
+from config import AgentConfig, ProjectConfig, Skill, AgentTemplate, SuperAgentConfig, AgentRole
 from runtime_adapter import AgentRun, TaskStatus
 
 try:
@@ -21,6 +23,100 @@ try:
 except ImportError:
     from poc.events.models import PlatformEvent
 
+
+@dataclass
+class AgentMessage:
+    """First-class internal agent-to-agent message."""
+    id: str
+    from_agent_id: str
+    to_agent_id: str
+    content: str
+    task_id: Optional[str] = None
+    run_id: Optional[str] = None
+    parent_message_id: Optional[str] = None
+    message_type: str = "QUESTION"  # QUESTION, ANSWER, REQUEST, DELEGATION, STATUS, RESULT, HANDOFF
+    status: str = "SENT"  # SENT, DELIVERED, READ, ANSWERED, FAILED
+    metadata: Optional[Dict[str, Any]] = None
+    created_at: Optional[str] = None
+    responded_at: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'AgentMessage':
+        import inspect
+        valid_fields = set(inspect.signature(cls).parameters.keys())
+        filtered = {k: v for k, v in data.items() if k in valid_fields}
+        return cls(**filtered)
+
+
+@dataclass
+class MCPConnector:
+    """Represents a connected Model Context Protocol server/service."""
+    id: str
+    name: str
+    provider: str
+    status: str = "DISCONNECTED"  # CONNECTED, DISCONNECTED, ERROR
+    configuration: Optional[Dict[str, Any]] = None
+    capabilities: Optional[List[str]] = None
+    error_message: Optional[str] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class MCPTool:
+    """An individual tool exposed by an MCP connector."""
+    id: str
+    connector_id: str
+    name: str
+    description: str
+    input_schema: Optional[Dict[str, Any]] = None
+    created_at: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class MCPToolCall:
+    """Historical and active record of an MCP tool invocation."""
+    id: str
+    connector_id: str
+    tool_id: str
+    agent_id: str
+    task_id: Optional[str] = None
+    run_id: Optional[str] = None
+    status: str = "STARTED"  # STARTED, COMPLETED, FAILED
+    arguments: Optional[Dict[str, Any]] = None
+    result: Optional[str] = None
+    error: Optional[str] = None
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class AgentTeam:
+    """A collaborative team of agents coordinated by a manager."""
+    id: str
+    name: str
+    manager_agent_id: str
+    project_id: Optional[str] = None
+    description: Optional[str] = None
+    status: str = "ACTIVE"  # ACTIVE, COMPLETED, DISBANDED
+    members: Optional[List[Dict[str, Any]]] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
 
 
 POC_ROOT = Path(__file__).resolve().parent
@@ -35,6 +131,7 @@ class DatabaseManager:
             self.db_path = DEFAULT_DB_PATH
         else:
             self.db_path = Path(db_path)
+        self.max_agents: int = int(os.getenv("PLATFORM_MAX_AGENTS", "18"))
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_database()
 
@@ -88,7 +185,10 @@ class DatabaseManager:
                 ("allowed_child_ids", "TEXT"),
                 ("allowed_tools", "TEXT"),
                 ("template_id", "TEXT"),
-                ("dangerously_skip_permissions", "INTEGER DEFAULT 0")
+                ("dangerously_skip_permissions", "INTEGER DEFAULT 0"),
+                ("allow_sibling_communication", "INTEGER DEFAULT 1"),
+                ("allowed_peer_ids", "TEXT"),
+                ("mcp_permissions", "TEXT")
             ]:
                 try:
                     conn.execute(f"ALTER TABLE agents ADD COLUMN {col} {col_type}")
@@ -340,6 +440,16 @@ class DatabaseManager:
             """)
             conn.execute("CREATE INDEX IF NOT EXISTS idx_memories_proj ON project_memories(project_id, category)")
 
+            for col, col_type in [
+                ("source_task_id", "TEXT"),
+                ("source_run_id", "TEXT"),
+                ("confidence", "REAL DEFAULT 1.0")
+            ]:
+                try:
+                    conn.execute(f"ALTER TABLE project_memories ADD COLUMN {col} {col_type}")
+                except Exception:
+                    pass
+
             # War Room Sessions table (Multi-Agent Deliberation & Planning)
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS war_room_sessions (
@@ -376,8 +486,153 @@ class DatabaseManager:
             """)
             conn.execute("CREATE INDEX IF NOT EXISTS idx_war_room_msg_session ON war_room_messages(session_id, round_number)")
 
-            # Seed default agent templates if table empty
+            # First-Class Agent-to-Agent Messaging table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS agent_messages (
+                    id TEXT PRIMARY KEY,
+                    from_agent_id TEXT NOT NULL,
+                    to_agent_id TEXT NOT NULL,
+                    task_id TEXT,
+                    run_id TEXT,
+                    parent_message_id TEXT,
+                    message_type TEXT NOT NULL DEFAULT 'QUESTION',
+                    content TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'SENT',
+                    metadata TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    responded_at TIMESTAMP,
+                    FOREIGN KEY (from_agent_id) REFERENCES agents(id) ON DELETE CASCADE,
+                    FOREIGN KEY (to_agent_id) REFERENCES agents(id) ON DELETE CASCADE,
+                    FOREIGN KEY (parent_message_id) REFERENCES agent_messages(id) ON DELETE SET NULL,
+                    FOREIGN KEY (task_id) REFERENCES task_runs(run_id) ON DELETE SET NULL
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_from ON agent_messages(from_agent_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_to ON agent_messages(to_agent_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_task ON agent_messages(task_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_parent ON agent_messages(parent_message_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_created ON agent_messages(created_at)")
+
+            # Super Agent Configs table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS super_agent_configs (
+                    agent_id TEXT PRIMARY KEY,
+                    project_id TEXT NOT NULL,
+                    can_answer_questions INTEGER DEFAULT 1,
+                    can_delegate INTEGER DEFAULT 1,
+                    can_create_subtasks INTEGER DEFAULT 1,
+                    can_use_mcp INTEGER DEFAULT 1,
+                    can_make_project_decisions INTEGER DEFAULT 1,
+                    can_modify_files INTEGER DEFAULT 1,
+                    can_execute_commands INTEGER DEFAULT 1,
+                    require_human_approval_for TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE,
+                    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_super_agent_proj ON super_agent_configs(project_id)")
+
+            # MCP Connectors table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS mcp_connectors (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    provider TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'DISCONNECTED',
+                    configuration TEXT,
+                    capabilities TEXT,
+                    error_message TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            # MCP Tools table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS mcp_tools (
+                    id TEXT PRIMARY KEY,
+                    connector_id TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    description TEXT,
+                    input_schema TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (connector_id) REFERENCES mcp_connectors(id) ON DELETE CASCADE
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_mcp_tools_conn ON mcp_tools(connector_id)")
+
+            # MCP Tool Calls table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS mcp_tool_calls (
+                    id TEXT PRIMARY KEY,
+                    connector_id TEXT NOT NULL,
+                    tool_id TEXT NOT NULL,
+                    agent_id TEXT NOT NULL,
+                    task_id TEXT,
+                    run_id TEXT,
+                    status TEXT NOT NULL DEFAULT 'STARTED',
+                    arguments TEXT,
+                    result TEXT,
+                    error TEXT,
+                    started_at TIMESTAMP NOT NULL,
+                    completed_at TIMESTAMP,
+                    FOREIGN KEY (connector_id) REFERENCES mcp_connectors(id) ON DELETE CASCADE,
+                    FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_mcp_calls_agent ON mcp_tool_calls(agent_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_mcp_calls_conn ON mcp_tool_calls(connector_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_mcp_calls_task ON mcp_tool_calls(task_id)")
+
+            # MCP Agent Permissions table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS mcp_agent_permissions (
+                    id TEXT PRIMARY KEY,
+                    agent_id TEXT NOT NULL,
+                    connector_id TEXT NOT NULL,
+                    tool_id TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE,
+                    FOREIGN KEY (connector_id) REFERENCES mcp_connectors(id) ON DELETE CASCADE
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_mcp_perm_agent ON mcp_agent_permissions(agent_id)")
+
+            # Agent Teams table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS agent_teams (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    manager_agent_id TEXT NOT NULL,
+                    project_id TEXT,
+                    description TEXT,
+                    status TEXT NOT NULL DEFAULT 'ACTIVE',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (manager_agent_id) REFERENCES agents(id) ON DELETE CASCADE,
+                    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_teams_mgr ON agent_teams(manager_agent_id)")
+
+            # Team Members table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS team_members (
+                    team_id TEXT NOT NULL,
+                    agent_id TEXT NOT NULL,
+                    role_in_team TEXT DEFAULT 'MEMBER',
+                    joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (team_id, agent_id),
+                    FOREIGN KEY (team_id) REFERENCES agent_teams(id) ON DELETE CASCADE,
+                    FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE
+                )
+            """)
+
+            # Seed default agent templates and baseline agents if tables are empty
             self._seed_default_templates(conn)
+            self._seed_default_agents(conn)
 
             conn.commit()
 
@@ -445,6 +700,81 @@ class DatabaseManager:
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, [(d[0], d[1], d[2], d[3], d[4], d[5], d[6], d[7], d[8], d[9], now, now) for d in defaults])
 
+    def _seed_default_agents(self, conn: sqlite3.Connection):
+        """Seed default baseline agents (canonical 11 agents) if agents table is empty."""
+        cursor = conn.execute("SELECT COUNT(*) FROM agents")
+        if cursor.fetchone()[0] > 0:
+            return
+
+        agents_file = POC_ROOT / "backend" / "config" / "agents.json"
+        defaults = []
+        if agents_file.exists():
+            try:
+                with open(agents_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    defaults = list(data.values())
+            except Exception as e:
+                logging.getLogger(__name__).warning(f"Failed to read baseline agents from {agents_file}: {e}")
+
+        now = datetime.now().isoformat()
+        for item in defaults:
+            aid = item.get("id")
+            if not aid:
+                continue
+            role_type = item.get("role_type")
+            if not role_type:
+                if aid == "chief-orchestrator":
+                    role_type = "ROOT_ORCHESTRATOR"
+                elif "lead" in aid:
+                    role_type = "MANAGER"
+                else:
+                    role_type = "WORKER"
+
+            parent_id = item.get("parent_id")
+            if not parent_id:
+                if role_type == "MANAGER":
+                    parent_id = "chief-orchestrator"
+                elif aid in ("secuirty", "marketing-content"):
+                    parent_id = "lead-engineer" if aid == "secuirty" else "marketing-lead"
+                elif aid == "general-task-agent":
+                    parent_id = "operations-lead"
+
+            conn.execute("""
+                INSERT OR IGNORE INTO agents
+                (id, name, description, system_prompt, skills, model, effort, max_tokens, temperature,
+                 repo_path, github_url, department, avatar, created_at, updated_at,
+                 parent_id, role_type, max_concurrent_children, delegation_strategy,
+                 allowed_child_ids, allowed_tools, template_id, dangerously_skip_permissions,
+                 allow_sibling_communication, allowed_peer_ids, mcp_permissions)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                aid,
+                item.get("name", aid),
+                item.get("description", ""),
+                item.get("system_prompt", "Autonomous agent"),
+                json.dumps(item.get("skills", [])),
+                item.get("model", "default"),
+                item.get("effort", "medium"),
+                item.get("max_tokens", 8000),
+                item.get("temperature", 0.7),
+                item.get("repo_path"),
+                item.get("github_url"),
+                item.get("department", "Engineering"),
+                item.get("avatar", "brain" if aid == "chief-orchestrator" else None),
+                now, now,
+                parent_id,
+                role_type,
+                item.get("max_concurrent_children", 3),
+                item.get("delegation_strategy", "hierarchical"),
+                json.dumps(item.get("allowed_child_ids", [])),
+                json.dumps(item.get("allowed_tools", [])),
+                item.get("template_id"),
+                1 if item.get("dangerously_skip_permissions") else 0,
+                1 if item.get("allow_sibling_communication", True) else 0,
+                json.dumps(item.get("allowed_peer_ids", [])),
+                json.dumps(item.get("mcp_permissions", []))
+            ))
+
     def _row_to_agent(self, row: sqlite3.Row) -> AgentConfig:
         """Convert a database row to an AgentConfig instance."""
         keys = row.keys()
@@ -474,7 +804,10 @@ class DatabaseManager:
             allowed_child_ids=allowed_children,
             allowed_tools=allowed_tools,
             template_id=row['template_id'] if 'template_id' in keys else None,
-            dangerously_skip_permissions=bool(row['dangerously_skip_permissions']) if 'dangerously_skip_permissions' in keys and row['dangerously_skip_permissions'] is not None else False
+            dangerously_skip_permissions=bool(row['dangerously_skip_permissions']) if 'dangerously_skip_permissions' in keys and row['dangerously_skip_permissions'] is not None else False,
+            allow_sibling_communication=bool(row['allow_sibling_communication']) if 'allow_sibling_communication' in keys and row['allow_sibling_communication'] is not None else True,
+            allowed_peer_ids=json.loads(row['allowed_peer_ids']) if 'allowed_peer_ids' in keys and row['allowed_peer_ids'] else [],
+            mcp_permissions=json.loads(row['mcp_permissions']) if 'mcp_permissions' in keys and row['mcp_permissions'] else []
         )
 
     def _row_to_template(self, row: sqlite3.Row) -> AgentTemplate:
@@ -499,6 +832,10 @@ class DatabaseManager:
         """Save or update an agent with organizational hierarchy attributes."""
         with self._get_connection() as conn:
             existing = conn.execute("SELECT created_at FROM agents WHERE id = ?", (agent.id,)).fetchone()
+            if not existing:
+                count = conn.execute("SELECT COUNT(*) FROM agents").fetchone()[0]
+                if count >= self.max_agents:
+                    raise ValueError(f"Platform agent capacity reached: maximum {self.max_agents} agents allowed")
             created_at = existing['created_at'] if existing else (getattr(agent, "created_at", None) or datetime.now().isoformat())
             updated_at = datetime.now().isoformat()
 
@@ -507,8 +844,9 @@ class DatabaseManager:
                 (id, name, description, system_prompt, skills, model, effort, max_tokens, temperature,
                  repo_path, github_url, department, avatar, created_at, updated_at,
                  parent_id, role_type, max_concurrent_children, delegation_strategy,
-                 allowed_child_ids, allowed_tools, template_id, dangerously_skip_permissions)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 allowed_child_ids, allowed_tools, template_id, dangerously_skip_permissions,
+                 allow_sibling_communication, allowed_peer_ids, mcp_permissions)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     name=excluded.name,
                     description=excluded.description,
@@ -530,7 +868,10 @@ class DatabaseManager:
                     allowed_child_ids=excluded.allowed_child_ids,
                     allowed_tools=excluded.allowed_tools,
                     template_id=excluded.template_id,
-                    dangerously_skip_permissions=excluded.dangerously_skip_permissions
+                    dangerously_skip_permissions=excluded.dangerously_skip_permissions,
+                    allow_sibling_communication=excluded.allow_sibling_communication,
+                    allowed_peer_ids=excluded.allowed_peer_ids,
+                    mcp_permissions=excluded.mcp_permissions
             """, (
                 agent.id,
                 agent.name,
@@ -554,7 +895,10 @@ class DatabaseManager:
                 json.dumps(getattr(agent, "allowed_child_ids", []) or []),
                 json.dumps(getattr(agent, "allowed_tools", []) or []),
                 getattr(agent, "template_id", None),
-                1 if getattr(agent, "dangerously_skip_permissions", False) else 0
+                1 if getattr(agent, "dangerously_skip_permissions", False) else 0,
+                1 if getattr(agent, "allow_sibling_communication", True) else 0,
+                json.dumps(getattr(agent, "allowed_peer_ids", []) or []),
+                json.dumps(getattr(agent, "mcp_permissions", []) or [])
             ))
             conn.commit()
 
@@ -674,11 +1018,45 @@ class DatabaseManager:
             return cursor.rowcount > 0
 
     def delete_agent(self, agent_id: str):
-        """Delete an agent and clean up any linked task runs and hierarchy relationships."""
+        """Delete an agent and clean up any linked task runs, messages, permissions, and hierarchy relationships."""
         with self._get_connection() as conn:
             conn.execute("UPDATE agents SET parent_id = NULL WHERE parent_id = ?", (agent_id,))
+            conn.execute("DELETE FROM team_members WHERE agent_id = ?", (agent_id,))
+            conn.execute("DELETE FROM agent_teams WHERE manager_agent_id = ?", (agent_id,))
+            conn.execute("DELETE FROM mcp_agent_permissions WHERE agent_id = ?", (agent_id,))
+            conn.execute("DELETE FROM agent_messages WHERE from_agent_id = ? OR to_agent_id = ?", (agent_id, agent_id))
+            conn.execute("DELETE FROM agent_interactions WHERE requester_agent_id = ? OR target_approver_id = ?", (agent_id, agent_id))
+            conn.execute("DELETE FROM chat_messages WHERE agent_id = ?", (agent_id,))
+            conn.execute("DELETE FROM agent_conversations WHERE agent_id = ?", (agent_id,))
             conn.execute("DELETE FROM task_runs WHERE agent_id = ?", (agent_id,))
+            conn.execute("DELETE FROM super_agent_configs WHERE agent_id = ?", (agent_id,))
             conn.execute("DELETE FROM agents WHERE id = ?", (agent_id,))
+            conn.commit()
+
+    def clean_database(self, seed_baseline: bool = True):
+        """Clean all tables from database and optionally reseed default templates and baseline agents."""
+        with self._get_connection() as conn:
+            conn.execute("PRAGMA foreign_keys = OFF")
+            tables = [
+                "war_room_messages", "war_room_sessions",
+                "chat_messages", "agent_conversations",
+                "agent_messages", "agent_interactions",
+                "task_runs", "team_members", "agent_teams",
+                "mcp_tool_calls", "mcp_agent_permissions",
+                "super_agent_configs", "project_memories",
+                "event_log", "audit_logs", "cron_jobs",
+                "skills", "projects", "agent_templates", "agents"
+            ]
+            for t in tables:
+                conn.execute(f"DELETE FROM {t}")
+            conn.execute("PRAGMA foreign_keys = ON")
+            conn.commit()
+
+        # Re-initialize default seeds
+        with self._get_connection() as conn:
+            self._seed_default_templates(conn)
+            if seed_baseline:
+                self._seed_default_agents(conn)
             conn.commit()
 
     # Project methods
@@ -1563,11 +1941,16 @@ class DatabaseManager:
         tags = memory_data.get('tags')
         tags_str = json.dumps(tags) if isinstance(tags, (list, dict)) else tags
 
+        source_task_id = memory_data.get('source_task_id')
+        source_run_id = memory_data.get('source_run_id')
+        confidence = memory_data.get('confidence', 1.0)
+
         with self._get_connection() as conn:
             conn.execute("""
                 INSERT INTO project_memories (
-                    id, project_id, category, title, content, tags, author_agent_id, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    id, project_id, category, title, content, tags, author_agent_id,
+                    source_task_id, source_run_id, confidence, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 mem_id,
                 memory_data['project_id'],
@@ -1576,10 +1959,14 @@ class DatabaseManager:
                 memory_data['content'],
                 tags_str,
                 memory_data.get('author_agent_id'),
+                source_task_id,
+                source_run_id,
+                confidence,
                 now,
                 now
             ))
             conn.commit()
+
 
         return self.get_project_memory(mem_id)
 
@@ -1765,6 +2152,677 @@ class DatabaseManager:
                 ORDER BY round_number ASC, created_at ASC
             """, (session_id,)).fetchall()
             return [dict(r) for r in rows]
+
+    # -------------------------------------------------------------
+    # Agent-to-Agent Messaging persistence methods
+    # -------------------------------------------------------------
+    def save_agent_message(self, message: Union[AgentMessage, Dict[str, Any]]) -> AgentMessage:
+        """Save a new or updated internal agent message."""
+        if isinstance(message, dict):
+            msg = AgentMessage.from_dict(message)
+        else:
+            msg = message
+
+        if not msg.id:
+            msg.id = f"msg_{uuid.uuid4().hex[:12]}"
+        now = datetime.now().isoformat()
+        if not msg.created_at:
+            msg.created_at = now
+
+        meta_str = json.dumps(msg.metadata) if msg.metadata else None
+
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT INTO agent_messages (
+                    id, from_agent_id, to_agent_id, task_id, run_id, parent_message_id,
+                    message_type, content, status, metadata, created_at, responded_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    status=excluded.status,
+                    responded_at=excluded.responded_at,
+                    metadata=excluded.metadata
+            """, (
+                msg.id,
+                msg.from_agent_id,
+                msg.to_agent_id,
+                msg.task_id,
+                msg.run_id,
+                msg.parent_message_id,
+                msg.message_type,
+                msg.content,
+                msg.status,
+                meta_str,
+                msg.created_at,
+                msg.responded_at
+            ))
+            conn.commit()
+
+        return self.get_agent_message(msg.id)
+
+    def get_agent_message(self, message_id: str) -> Optional[AgentMessage]:
+        """Retrieve an agent message by ID."""
+        with self._get_connection() as conn:
+            row = conn.execute("SELECT * FROM agent_messages WHERE id = ?", (message_id,)).fetchone()
+            if not row:
+                return None
+            d = dict(row)
+            if d.get("metadata"):
+                try:
+                    d["metadata"] = json.loads(d["metadata"])
+                except Exception:
+                    pass
+            return AgentMessage.from_dict(d)
+
+    def list_agent_messages(
+        self,
+        from_agent_id: Optional[str] = None,
+        to_agent_id: Optional[str] = None,
+        agent_id: Optional[str] = None,
+        task_id: Optional[str] = None,
+        parent_message_id: Optional[str] = None,
+        limit: int = 100
+    ) -> List[AgentMessage]:
+        """List internal messages between agents with optional filters."""
+        query = "SELECT * FROM agent_messages WHERE 1=1"
+        params: List[Any] = []
+        if agent_id:
+            query += " AND (from_agent_id = ? OR to_agent_id = ?)"
+            params.extend([agent_id, agent_id])
+        else:
+            if from_agent_id:
+                query += " AND from_agent_id = ?"
+                params.append(from_agent_id)
+            if to_agent_id:
+                query += " AND to_agent_id = ?"
+                params.append(to_agent_id)
+        if task_id:
+            query += " AND task_id = ?"
+            params.append(task_id)
+        if parent_message_id:
+            query += " AND parent_message_id = ?"
+            params.append(parent_message_id)
+
+        query += " ORDER BY created_at ASC LIMIT ?"
+        params.append(limit)
+
+        with self._get_connection() as conn:
+            rows = conn.execute(query, params).fetchall()
+            results = []
+            for r in rows:
+                d = dict(r)
+                if d.get("metadata"):
+                    try:
+                        d["metadata"] = json.loads(d["metadata"])
+                    except Exception:
+                        pass
+                results.append(AgentMessage.from_dict(d))
+            return results
+
+    def update_agent_message(
+        self,
+        message_id: str,
+        status: Optional[str] = None,
+        responded_at: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> Optional[AgentMessage]:
+        """Update an agent message status and response time."""
+        fields = []
+        params = []
+        if status is not None:
+            fields.append("status = ?")
+            params.append(status)
+        if responded_at is not None:
+            fields.append("responded_at = ?")
+            params.append(responded_at)
+        if metadata is not None:
+            fields.append("metadata = ?")
+            params.append(json.dumps(metadata))
+
+        if not fields:
+            return self.get_agent_message(message_id)
+
+        params.append(message_id)
+        with self._get_connection() as conn:
+            conn.execute(f"UPDATE agent_messages SET {', '.join(fields)} WHERE id = ?", params)
+            conn.commit()
+
+        return self.get_agent_message(message_id)
+
+    # -------------------------------------------------------------
+    # Super Agent Configuration persistence methods
+    # -------------------------------------------------------------
+    def save_super_agent_config(self, config: Union[SuperAgentConfig, Dict[str, Any]]) -> SuperAgentConfig:
+        """Save or update decision authority configuration for a Super Agent."""
+        if isinstance(config, dict):
+            cfg = SuperAgentConfig.from_dict(config)
+        else:
+            cfg = config
+
+        now = datetime.now().isoformat()
+        approval_str = json.dumps(cfg.require_human_approval_for) if cfg.require_human_approval_for else None
+
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT INTO super_agent_configs (
+                    agent_id, project_id, can_answer_questions, can_delegate,
+                    can_create_subtasks, can_use_mcp, can_make_project_decisions,
+                    can_modify_files, can_execute_commands, require_human_approval_for,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(agent_id) DO UPDATE SET
+                    project_id=excluded.project_id,
+                    can_answer_questions=excluded.can_answer_questions,
+                    can_delegate=excluded.can_delegate,
+                    can_create_subtasks=excluded.can_create_subtasks,
+                    can_use_mcp=excluded.can_use_mcp,
+                    can_make_project_decisions=excluded.can_make_project_decisions,
+                    can_modify_files=excluded.can_modify_files,
+                    can_execute_commands=excluded.can_execute_commands,
+                    require_human_approval_for=excluded.require_human_approval_for,
+                    updated_at=excluded.updated_at
+            """, (
+                cfg.agent_id,
+                cfg.project_id,
+                1 if cfg.can_answer_questions else 0,
+                1 if cfg.can_delegate else 0,
+                1 if cfg.can_create_subtasks else 0,
+                1 if cfg.can_use_mcp else 0,
+                1 if cfg.can_make_project_decisions else 0,
+                1 if cfg.can_modify_files else 0,
+                1 if cfg.can_execute_commands else 0,
+                approval_str,
+                now,
+                now
+            ))
+            conn.commit()
+
+        return self.get_super_agent_config(cfg.agent_id)
+
+    def get_super_agent_config(self, agent_id: str) -> Optional[SuperAgentConfig]:
+        """Get super agent authority configuration by agent ID."""
+        with self._get_connection() as conn:
+            row = conn.execute("SELECT * FROM super_agent_configs WHERE agent_id = ?", (agent_id,)).fetchone()
+            if not row:
+                return None
+            return self._row_to_super_agent_config(row)
+
+    def get_super_agent_for_project(self, project_id: str) -> Optional[SuperAgentConfig]:
+        """Get the configured Super Agent for a designated project."""
+        with self._get_connection() as conn:
+            row = conn.execute("SELECT * FROM super_agent_configs WHERE project_id = ?", (project_id,)).fetchone()
+            if not row:
+                return None
+            return self._row_to_super_agent_config(row)
+
+    def list_super_agent_configs(self) -> List[SuperAgentConfig]:
+        """List all configured Super Agents across projects."""
+        with self._get_connection() as conn:
+            rows = conn.execute("SELECT * FROM super_agent_configs ORDER BY created_at DESC").fetchall()
+            return [self._row_to_super_agent_config(r) for r in rows]
+
+    def _row_to_super_agent_config(self, row: sqlite3.Row) -> SuperAgentConfig:
+        d = dict(row)
+        approval_list = json.loads(d["require_human_approval_for"]) if d.get("require_human_approval_for") else []
+        return SuperAgentConfig(
+            agent_id=d["agent_id"],
+            project_id=d["project_id"],
+            can_answer_questions=bool(d["can_answer_questions"]),
+            can_delegate=bool(d["can_delegate"]),
+            can_create_subtasks=bool(d["can_create_subtasks"]),
+            can_use_mcp=bool(d["can_use_mcp"]),
+            can_make_project_decisions=bool(d["can_make_project_decisions"]),
+            can_modify_files=bool(d["can_modify_files"]),
+            can_execute_commands=bool(d["can_execute_commands"]),
+            require_human_approval_for=approval_list
+        )
+
+    # -------------------------------------------------------------
+    # MCP (Model Context Protocol) persistence methods
+    # -------------------------------------------------------------
+    def save_mcp_connector(self, connector: Union[MCPConnector, Dict[str, Any]]) -> MCPConnector:
+        """Register or update an MCP connector."""
+        if isinstance(connector, dict):
+            c = MCPConnector(**connector)
+        else:
+            c = connector
+
+        now = datetime.now().isoformat()
+        cfg_str = json.dumps(c.configuration) if c.configuration else None
+        caps_str = json.dumps(c.capabilities) if c.capabilities else None
+
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT INTO mcp_connectors (
+                    id, name, provider, status, configuration, capabilities, error_message, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    name=excluded.name,
+                    provider=excluded.provider,
+                    status=excluded.status,
+                    configuration=excluded.configuration,
+                    capabilities=excluded.capabilities,
+                    error_message=excluded.error_message,
+                    updated_at=excluded.updated_at
+            """, (
+                c.id,
+                c.name,
+                c.provider,
+                c.status,
+                cfg_str,
+                caps_str,
+                c.error_message,
+                c.created_at or now,
+                now
+            ))
+            conn.commit()
+
+        return self.get_mcp_connector(c.id)
+
+    def get_mcp_connector(self, connector_id: str) -> Optional[MCPConnector]:
+        """Retrieve an MCP connector by ID."""
+        with self._get_connection() as conn:
+            row = conn.execute("SELECT * FROM mcp_connectors WHERE id = ?", (connector_id,)).fetchone()
+            if not row:
+                return None
+            d = dict(row)
+            if d.get("configuration"):
+                try:
+                    d["configuration"] = json.loads(d["configuration"])
+                except Exception:
+                    pass
+            if d.get("capabilities"):
+                try:
+                    d["capabilities"] = json.loads(d["capabilities"])
+                except Exception:
+                    pass
+            return MCPConnector(**d)
+
+    def list_mcp_connectors(self) -> List[MCPConnector]:
+        """List all registered MCP connectors."""
+        with self._get_connection() as conn:
+            rows = conn.execute("SELECT * FROM mcp_connectors ORDER BY name ASC").fetchall()
+            results = []
+            for r in rows:
+                d = dict(r)
+                if d.get("configuration"):
+                    try:
+                        d["configuration"] = json.loads(d["configuration"])
+                    except Exception:
+                        pass
+                if d.get("capabilities"):
+                    try:
+                        d["capabilities"] = json.loads(d["capabilities"])
+                    except Exception:
+                        pass
+                results.append(MCPConnector(**d))
+            return results
+
+    def delete_mcp_connector(self, connector_id: str) -> bool:
+        """Delete an MCP connector and associated tools."""
+        with self._get_connection() as conn:
+            cursor = conn.execute("DELETE FROM mcp_connectors WHERE id = ?", (connector_id,))
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def save_mcp_tool(self, tool: Union[MCPTool, Dict[str, Any]]) -> MCPTool:
+        """Save or update an MCP tool."""
+        if isinstance(tool, dict):
+            t = MCPTool(**tool)
+        else:
+            t = tool
+
+        now = datetime.now().isoformat()
+        schema_str = json.dumps(t.input_schema) if t.input_schema else None
+
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT INTO mcp_tools (
+                    id, connector_id, name, description, input_schema, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    name=excluded.name,
+                    description=excluded.description,
+                    input_schema=excluded.input_schema
+            """, (
+                t.id,
+                t.connector_id,
+                t.name,
+                t.description,
+                schema_str,
+                t.created_at or now
+            ))
+            conn.commit()
+
+        return self.get_mcp_tool(t.id)
+
+    def get_mcp_tool(self, tool_id: str) -> Optional[MCPTool]:
+        """Retrieve an MCP tool by ID."""
+        with self._get_connection() as conn:
+            row = conn.execute("SELECT * FROM mcp_tools WHERE id = ?", (tool_id,)).fetchone()
+            if not row:
+                return None
+            d = dict(row)
+            if d.get("input_schema"):
+                try:
+                    d["input_schema"] = json.loads(d["input_schema"])
+                except Exception:
+                    pass
+            return MCPTool(**d)
+
+    def list_mcp_tools(self, connector_id: Optional[str] = None) -> List[MCPTool]:
+        """List MCP tools, optionally filtered by connector."""
+        query = "SELECT * FROM mcp_tools"
+        params = []
+        if connector_id:
+            query += " WHERE connector_id = ?"
+            params.append(connector_id)
+        query += " ORDER BY name ASC"
+
+        with self._get_connection() as conn:
+            rows = conn.execute(query, params).fetchall()
+            results = []
+            for r in rows:
+                d = dict(r)
+                if d.get("input_schema"):
+                    try:
+                        d["input_schema"] = json.loads(d["input_schema"])
+                    except Exception:
+                        pass
+                results.append(MCPTool(**d))
+            return results
+
+    def save_mcp_tool_call(self, call: Union[MCPToolCall, Dict[str, Any]]) -> MCPToolCall:
+        """Record an MCP tool execution invocation."""
+        if isinstance(call, dict):
+            tc = MCPToolCall(**call)
+        else:
+            tc = call
+
+        if not tc.id:
+            tc.id = f"mcpcall_{uuid.uuid4().hex[:12]}"
+        now = datetime.now().isoformat()
+        if not tc.started_at:
+            tc.started_at = now
+
+        args_str = json.dumps(tc.arguments) if tc.arguments else None
+
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT INTO mcp_tool_calls (
+                    id, connector_id, tool_id, agent_id, task_id, run_id,
+                    status, arguments, result, error, started_at, completed_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    status=excluded.status,
+                    result=excluded.result,
+                    error=excluded.error,
+                    completed_at=excluded.completed_at
+            """, (
+                tc.id,
+                tc.connector_id,
+                tc.tool_id,
+                tc.agent_id,
+                tc.task_id,
+                tc.run_id,
+                tc.status,
+                args_str,
+                tc.result,
+                tc.error,
+                tc.started_at,
+                tc.completed_at
+            ))
+            conn.commit()
+
+        return self.get_mcp_tool_call(tc.id)
+
+    def get_mcp_tool_call(self, call_id: str) -> Optional[MCPToolCall]:
+        """Retrieve an MCP tool call by ID."""
+        with self._get_connection() as conn:
+            row = conn.execute("SELECT * FROM mcp_tool_calls WHERE id = ?", (call_id,)).fetchone()
+            if not row:
+                return None
+            d = dict(row)
+            if d.get("arguments"):
+                try:
+                    d["arguments"] = json.loads(d["arguments"])
+                except Exception:
+                    pass
+            return MCPToolCall(**d)
+
+    def list_mcp_tool_calls(
+        self,
+        agent_id: Optional[str] = None,
+        connector_id: Optional[str] = None,
+        task_id: Optional[str] = None,
+        limit: int = 100
+    ) -> List[MCPToolCall]:
+        """List historical MCP tool calls."""
+        query = "SELECT * FROM mcp_tool_calls WHERE 1=1"
+        params = []
+        if agent_id:
+            query += " AND agent_id = ?"
+            params.append(agent_id)
+        if connector_id:
+            query += " AND connector_id = ?"
+            params.append(connector_id)
+        if task_id:
+            query += " AND task_id = ?"
+            params.append(task_id)
+        query += " ORDER BY started_at DESC LIMIT ?"
+        params.append(limit)
+
+        with self._get_connection() as conn:
+            rows = conn.execute(query, params).fetchall()
+            results = []
+            for r in rows:
+                d = dict(r)
+                if d.get("arguments"):
+                    try:
+                        d["arguments"] = json.loads(d["arguments"])
+                    except Exception:
+                        pass
+                results.append(MCPToolCall(**d))
+            return results
+
+    def update_mcp_tool_call(
+        self,
+        call_id: str,
+        status: str,
+        result: Optional[str] = None,
+        error: Optional[str] = None,
+        completed_at: Optional[str] = None
+    ) -> Optional[MCPToolCall]:
+        """Update the status and result of an MCP tool call."""
+        fields = ["status = ?"]
+        params = [status]
+        if result is not None:
+            fields.append("result = ?")
+            params.append(result)
+        if error is not None:
+            fields.append("error = ?")
+            params.append(error)
+        if completed_at is not None:
+            fields.append("completed_at = ?")
+            params.append(completed_at)
+
+        params.append(call_id)
+        with self._get_connection() as conn:
+            conn.execute(f"UPDATE mcp_tool_calls SET {', '.join(fields)} WHERE id = ?", params)
+            conn.commit()
+
+        return self.get_mcp_tool_call(call_id)
+
+    def add_mcp_permission(self, agent_id: str, connector_id: str, tool_id: Optional[str] = None) -> Dict[str, Any]:
+        """Grant an agent permission to use a connector or specific tool."""
+        perm_id = f"perm_{uuid.uuid4().hex[:10]}"
+        now = datetime.now().isoformat()
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT INTO mcp_agent_permissions (id, agent_id, connector_id, tool_id, created_at)
+                VALUES (?, ?, ?, ?, ?)
+            """, (perm_id, agent_id, connector_id, tool_id, now))
+            conn.commit()
+        return {"id": perm_id, "agent_id": agent_id, "connector_id": connector_id, "tool_id": tool_id}
+
+    def get_agent_mcp_permissions(self, agent_id: str) -> List[Dict[str, Any]]:
+        """List active MCP permissions for an agent."""
+        with self._get_connection() as conn:
+            rows = conn.execute("SELECT * FROM mcp_agent_permissions WHERE agent_id = ?", (agent_id,)).fetchall()
+            return [dict(r) for r in rows]
+
+    def revoke_mcp_permission(self, agent_id: str, connector_id: str, tool_id: Optional[str] = None) -> bool:
+        """Revoke MCP permission from an agent."""
+        query = "DELETE FROM mcp_agent_permissions WHERE agent_id = ? AND connector_id = ?"
+        params = [agent_id, connector_id]
+        if tool_id is not None:
+            query += " AND tool_id = ?"
+            params.append(tool_id)
+        with self._get_connection() as conn:
+            cursor = conn.execute(query, params)
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def check_agent_mcp_permission(self, agent_id: str, connector_id: str, tool_name: Optional[str] = None) -> bool:
+        """
+        Check if an agent has permission to invoke an MCP connector/tool.
+        Checks:
+        1. Agent config dangerously_skip_permissions
+        2. Agent config mcp_permissions list (e.g. ['github', 'google_workspace.*'])
+        3. Database mcp_agent_permissions table
+        """
+        agent = self.get_agent(agent_id)
+        if not agent:
+            return False
+        if getattr(agent, "dangerously_skip_permissions", False):
+            return True
+
+        # Check in agent config mcp_permissions
+        agent_mcp = getattr(agent, "mcp_permissions", []) or []
+        for p in agent_mcp:
+            p_clean = p.strip().lower()
+            if p_clean in ("*", "all"):
+                return True
+            if p_clean == connector_id.lower() or p_clean == f"{connector_id.lower()}.*":
+                return True
+            if tool_name and p_clean == f"{connector_id.lower()}.{tool_name.lower()}":
+                return True
+
+        # Check in DB table
+        perms = self.get_agent_mcp_permissions(agent_id)
+        for perm in perms:
+            if perm["connector_id"].lower() == connector_id.lower():
+                if not perm.get("tool_id"):
+                    return True
+                if tool_name and perm["tool_id"].lower() == tool_name.lower():
+                    return True
+
+        return False
+
+    # -------------------------------------------------------------
+    # Agent Teams persistence methods
+    # -------------------------------------------------------------
+    def create_agent_team(self, team_data: Dict[str, Any]) -> AgentTeam:
+        """Create a new temporary agent team with assigned members."""
+        team_id = team_data.get("id") or f"team_{uuid.uuid4().hex[:10]}"
+        now = datetime.now().isoformat()
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT INTO agent_teams (id, name, manager_agent_id, project_id, description, status, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                team_id,
+                team_data["name"],
+                team_data["manager_agent_id"],
+                team_data.get("project_id"),
+                team_data.get("description"),
+                team_data.get("status", "ACTIVE"),
+                now,
+                now
+            ))
+            # Insert members if provided
+            for member in team_data.get("members", []):
+                agent_id = member["agent_id"] if isinstance(member, dict) else member
+                role = member.get("role_in_team", "MEMBER") if isinstance(member, dict) else "MEMBER"
+                conn.execute("""
+                    INSERT OR REPLACE INTO team_members (team_id, agent_id, role_in_team, joined_at)
+                    VALUES (?, ?, ?, ?)
+                """, (team_id, agent_id, role, now))
+            conn.commit()
+
+        return self.get_agent_team(team_id)
+
+    def get_agent_team(self, team_id: str) -> Optional[AgentTeam]:
+        """Get an agent team with its current members."""
+        with self._get_connection() as conn:
+            row = conn.execute("SELECT * FROM agent_teams WHERE id = ?", (team_id,)).fetchone()
+            if not row:
+                return None
+            team_dict = dict(row)
+            m_rows = conn.execute("SELECT agent_id, role_in_team, joined_at FROM team_members WHERE team_id = ?", (team_id,)).fetchall()
+            team_dict["members"] = [dict(mr) for mr in m_rows]
+            return AgentTeam(**team_dict)
+
+    def list_agent_teams(self, manager_agent_id: Optional[str] = None, project_id: Optional[str] = None, status: Optional[str] = None) -> List[AgentTeam]:
+        """List active or completed agent teams."""
+        query = "SELECT * FROM agent_teams WHERE 1=1"
+        params = []
+        if manager_agent_id:
+            query += " AND manager_agent_id = ?"
+            params.append(manager_agent_id)
+        if project_id:
+            query += " AND project_id = ?"
+            params.append(project_id)
+        if status:
+            query += " AND status = ?"
+            params.append(status)
+        query += " ORDER BY created_at DESC"
+
+
+        with self._get_connection() as conn:
+            rows = conn.execute(query, params).fetchall()
+            teams = []
+            for r in rows:
+                t_dict = dict(r)
+                m_rows = conn.execute("SELECT agent_id, role_in_team, joined_at FROM team_members WHERE team_id = ?", (t_dict["id"],)).fetchall()
+                t_dict["members"] = [dict(mr) for mr in m_rows]
+                teams.append(AgentTeam(**t_dict))
+            return teams
+
+    def add_team_member(self, team_id: str, agent_id: str, role_in_team: str = "MEMBER") -> bool:
+        """Add an agent to a team."""
+        now = datetime.now().isoformat()
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT OR REPLACE INTO team_members (team_id, agent_id, role_in_team, joined_at)
+                VALUES (?, ?, ?, ?)
+            """, (team_id, agent_id, role_in_team, now))
+            conn.commit()
+            return True
+
+    def remove_team_member(self, team_id: str, agent_id: str) -> bool:
+        """Remove an agent from a team."""
+        with self._get_connection() as conn:
+            cursor = conn.execute("DELETE FROM team_members WHERE team_id = ? AND agent_id = ?", (team_id, agent_id))
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def update_agent_team(self, team_id: str, **kwargs) -> Optional[AgentTeam]:
+        """Update an agent team's attributes or status."""
+        fields = []
+        params = []
+        now = datetime.now().isoformat()
+        for k, v in kwargs.items():
+            if k in ("name", "description", "status", "project_id"):
+                fields.append(f"{k} = ?")
+                params.append(v)
+        if fields:
+            fields.append("updated_at = ?")
+            params.append(now)
+            params.append(team_id)
+            with self._get_connection() as conn:
+                conn.execute(f"UPDATE agent_teams SET {', '.join(fields)} WHERE id = ?", params)
+                conn.commit()
+        return self.get_agent_team(team_id)
 
 
 
