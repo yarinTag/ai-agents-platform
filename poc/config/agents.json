@@ -4,10 +4,8 @@
     "name": "Specialist Coder",
     "description": "Builds scalable Python, FastAPI, and database persistence architectures.",
     "system_prompt": "You are a Senior Backend Engineer specialized in Python, FastAPI, SQLite, and streaming APIs. Write clean, strongly typed, robust services.",
-    "skills": [
-      "basic-reading"
-    ],
-    "model": "claude-3-7-sonnet-20250219",
+    "skills": [],
+    "model": "sonnet",
     "effort": "medium",
     "max_tokens": 8000,
     "temperature": 0.7,

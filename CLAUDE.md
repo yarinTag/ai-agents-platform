@@ -6,10 +6,13 @@ Welcome to the AI Agents Platform codebase. This repository contains an enterpri
 
 ## 🧭 Monorepo Structure & Quick Navigation
 
-* **Backend (`poc/backend/`)**: FastAPI, SQLite3 (WAL), Cron Scheduler Engine, Claude Code Subprocess Adapter, SSE EventBus. See [`poc/backend/CLAUDE.md`](file:///c:/Users/taguo/Desktop/ai-agents-platform/poc/backend/CLAUDE.md).
-* **Frontend (`poc/dashboard/`)**: React 18, Vite, Ant Design, TypeScript, Pixel Office Canvas Engine. See [`poc/dashboard/CLAUDE.md`](file:///c:/Users/taguo/Desktop/ai-agents-platform/poc/dashboard/CLAUDE.md).
-* **Orchestration (`poc/orchestration/`)**: Multi-agent task trees, hierarchy depth validation, and `SupervisorResolver`. See [`poc/orchestration/AGENTS.md`](file:///c:/Users/taguo/Desktop/ai-agents-platform/poc/orchestration/AGENTS.md).
-* **Runtime Execution (`poc/runtime/`)**: Claude CLI adapter, subprocess isolation, stream-json event reader, and `--resume` continuation. See [`poc/runtime/AGENTS.md`](file:///c:/Users/taguo/Desktop/ai-agents-platform/poc/runtime/AGENTS.md).
+* **Backend (`poc/backend/`)**: FastAPI, SQLite3 (WAL), Cron Scheduler Engine, Claude Code Subprocess Adapter, SSE EventBus. See [`poc/backend/CLAUDE.md`](poc/backend/CLAUDE.md).
+* **Frontend (`poc/dashboard/`)**: React 18, Vite, Ant Design, TypeScript, Pixel Office Canvas Engine. See [`poc/dashboard/CLAUDE.md`](poc/dashboard/CLAUDE.md).
+* **Orchestration (`poc/orchestration/`)**: Multi-agent task trees, hierarchy depth validation, and `SupervisorResolver`. See [`poc/orchestration/AGENTS.md`](poc/orchestration/AGENTS.md).
+* **Runtime Execution (`poc/runtime/`)**: Claude CLI adapter, subprocess isolation, stream-json event reader, and `--resume` continuation. See [`poc/runtime/AGENTS.md`](poc/runtime/AGENTS.md).
+* **Security & Auth (`poc/backend/security/`)**: Authentication, rate limiting, correlation IDs. See [`poc/backend/security/AGENTS.md`](poc/backend/security/AGENTS.md).
+* **Multi-Agent Teams (`poc/backend/teams/`)**: Team coordination, roles, and mission dispatch. See [`poc/backend/teams/AGENTS.md`](poc/backend/teams/AGENTS.md).
+* **Agent-to-Agent Messaging (`poc/backend/messages/`)**: Peer-to-peer and hierarchical A2A message exchange. See [`poc/backend/messages/AGENTS.md`](poc/backend/messages/AGENTS.md).
 
 ---
 
