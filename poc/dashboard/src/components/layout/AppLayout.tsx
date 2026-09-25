@@ -2,7 +2,6 @@ import React from 'react';
 import { Layout } from 'antd';
 import { useLocation } from 'react-router-dom';
 import { OfficeTopBar } from './OfficeTopBar';
-import { MCPTopBar } from './MCPTopBar';
 
 const { Content } = Layout;
 
@@ -18,8 +17,6 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     <Layout style={{ minHeight: '100vh', background: '#0a0d12', color: '#f0f6fc' }}>
       {/* Top Header */}
       <OfficeTopBar />
-      {/* MCP Connectors Sub-Header */}
-      <MCPTopBar />
 
 
       {/* Main Content Area */}

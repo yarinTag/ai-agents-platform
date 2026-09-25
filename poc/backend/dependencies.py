@@ -81,7 +81,6 @@ async def init_services():
             _cron_engine.start()
         if _mcp_registry is None:
             _mcp_registry = MCPRegistry(db_manager=db_manager, event_service=_event_service)
-            _mcp_registry.seed_default_connectors()
         if _mcp_executor is None:
             _mcp_executor = MCPExecutor(db_manager=db_manager, registry=_mcp_registry, event_service=_event_service)
         if _project_intelligence is None:
@@ -95,7 +94,7 @@ async def init_services():
 
         _services_initialized = True
         logger.info(
-            "Backend services initialized: %d config agents, %d DB agents, %d projects, cron engine, event bus, and MCP platform ready",
+            "Backend services initialized: %d config agents, %d DB agents, %d projects, cron engine, event bus ready",
             len(agents), len(db_agents), len(db_projects)
         )
 
@@ -180,7 +179,6 @@ def get_mcp_registry() -> MCPRegistry:
     global _mcp_registry
     if _mcp_registry is None:
         _mcp_registry = MCPRegistry(db_manager=get_db_manager(), event_service=get_event_service())
-        _mcp_registry.seed_default_connectors()
     return _mcp_registry
 
 

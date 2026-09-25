@@ -25,6 +25,8 @@ class EventType(str, Enum):
     TASK_STARTED = "task.started"
     TASK_DELEGATED = "task.delegated"
     TASK_DELETED = "task.deleted"
+    TASK_PROGRESS = "task.progress"
+    TASK_WAITING_INPUT = "task.waiting_input"
 
     # Execution events
     EXECUTION_STARTED = "execution.started"

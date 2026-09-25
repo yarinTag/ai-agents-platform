@@ -97,12 +97,27 @@ export const createApprovalRequest = (data: any) => api.post<ApprovalRequest>('/
 export const respondToApproval = (data: ApprovalResponseDto) => api.post('/api/v1/approvals/respond', data);
 
 // Interactive Agent Mini-Chat
-import { ChatHistoryResponse, ChatMessage } from '../types/chat';
+import { ChatHistoryResponse, ChatMessage, AgentSession } from '../types/chat';
 
-export const getChatHistory = (agentId: string, limit: number = 100) =>
-  api.get<ChatHistoryResponse>(`/api/v1/chat/${agentId}/messages`, { params: { limit } });
-export const sendChatMessage = (agentId: string, content: string, projectId?: string | null) =>
-  api.post<{ status: string; task_id?: string; user_message: ChatMessage }>(`/api/v1/chat/${agentId}/messages`, { content, project_id: projectId });
+export const getAgentSessions = (agentId: string) =>
+  api.get<{ sessions: AgentSession[] }>(`/api/v1/chat/${agentId}/sessions`);
+
+export const createAgentSession = (agentId: string, data?: { title?: string; project_id?: string | null; task_id?: string | null }) =>
+  api.post<{ session: AgentSession }>(`/api/v1/chat/${agentId}/sessions`, data || {});
+
+export const activateAgentSession = (agentId: string, conversationId: string) =>
+  api.post<{ session: AgentSession }>(`/api/v1/chat/${agentId}/sessions/${conversationId}/activate`);
+
+export const getChatHistory = (agentId: string, conversationId?: string | null, limit: number = 100) =>
+  api.get<ChatHistoryResponse>(`/api/v1/chat/${agentId}/messages`, { params: { conversation_id: conversationId, limit } });
+
+export const sendChatMessage = (agentId: string, content: string, projectId?: string | null, conversationId?: string | null) =>
+  api.post<{ status: string; task_id?: string; user_message: ChatMessage }>(`/api/v1/chat/${agentId}/messages`, {
+    content,
+    project_id: projectId,
+    conversation_id: conversationId,
+  });
+
 export const clearChatHistory = (agentId: string) =>
   api.post<{ status: string }>(`/api/v1/chat/${agentId}/clear`);
 
@@ -137,20 +152,8 @@ export const sendWarRoomMessage = (sessionId: string, data: WarRoomMessageCreate
 export const synthesizeWarRoomPlan = (sessionId: string, synthesized_plan: string) =>
   api.post<WarRoomSession>(`/api/v1/war-room/${sessionId}/synthesize`, { synthesized_plan });
 
-// Phase 4: MCP Platform, Agent Messaging & Teams
-import { MCPConnector, MCPTool, MCPToolCall, AgentMessage, AgentTeam } from '../types/mcp';
-
-export const getMCPConnectors = () =>
-  api.get<MCPConnector[]>('/api/v1/mcp/connectors');
-
-export const getMCPTools = (connectorId?: string) =>
-  api.get<MCPTool[]>('/api/v1/mcp/tools', { params: connectorId ? { connector_id: connectorId } : {} });
-
-export const getMCPToolCalls = (limit: number = 50) =>
-  api.get<MCPToolCall[]>('/api/v1/mcp/calls', { params: { limit } });
-
-export const executeMCPTool = (data: { agent_id: string; connector_id: string; tool_name: string; input_args?: any; task_id?: string }) =>
-  api.post<MCPToolCall>('/api/v1/mcp/execute', data);
+// Agent Messaging & Teams
+import { AgentMessage, AgentTeam } from '../types/mcp';
 
 export const getAgentMessages = (agentId?: string, limit: number = 50) =>
   api.get<AgentMessage[]>('/api/v1/messages', { params: agentId ? { agent_id: agentId, limit } : { limit } });
@@ -172,6 +175,45 @@ export const dispatchAgentTeam = (teamId: string, data: { shared_goal: string; m
 
 export const synthesizeAgentTeam = (teamId: string, data: { task_ids: string[] }) =>
   api.post<{ team_id: string; status: string; synthesis: string; member_results: any[] }>(`/api/v1/teams/${teamId}/synthesize`, data);
+
+// Filesystem & Local Workspace Picker
+export interface FolderItem {
+  name: string;
+  path: string;
+  is_project: boolean;
+  project_type?: string;
+  has_children: boolean;
+}
+
+export interface QuickAccessItem {
+  name: string;
+  path: string;
+  icon?: string;
+}
+
+export interface BrowseResponse {
+  current_path: string;
+  parent_path?: string | null;
+  name: string;
+  is_root: boolean;
+  quick_access: QuickAccessItem[];
+  folders: FolderItem[];
+}
+
+export interface PickFolderResponse {
+  path?: string | null;
+  name?: string | null;
+  is_project: boolean;
+  project_type?: string | null;
+  cancelled: boolean;
+  error?: string | null;
+}
+
+export const browseDirectory = (path?: string) =>
+  api.get<BrowseResponse>('/api/v1/fs/browse', { params: path ? { path } : {} });
+
+export const pickFolderNative = (initialPath?: string) =>
+  api.post<PickFolderResponse>('/api/v1/fs/pick-folder', { initial_path: initialPath }, { timeout: 180000 });
 
 export default api;
 

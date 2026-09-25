@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 Script to start the AI Agents Platform API server.
 """

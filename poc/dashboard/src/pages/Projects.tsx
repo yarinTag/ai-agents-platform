@@ -11,11 +11,13 @@ import { PlusOutlined, EditOutlined, DeleteOutlined, FolderOpenOutlined } from '
 import { Project } from '../types/project';
 import { getProjects, createProject, updateProject, deleteProject } from '../services/api';
 import ProjectSharedMemoryModal from '../components/memory/ProjectSharedMemoryModal';
+import FolderPickerModal from '../components/common/FolderPickerModal';
 
 export const ProjectsPage: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [visible, setVisible] = useState<boolean>(false);
+  const [folderPickerVisible, setFolderPickerVisible] = useState<boolean>(false);
   const [form] = Form.useForm();
   const [editingKey, setEditingKey] = useState<string>('');
   const [selectedMemoryProject, setSelectedMemoryProject] = useState<string>('');
@@ -42,6 +44,29 @@ export const ProjectsPage: React.FC = () => {
     form.resetFields();
     setEditingKey('');
     setVisible(true);
+  };
+
+  const handlePickProjectFromComputer = () => {
+    setFolderPickerVisible(true);
+  };
+
+  const handleFolderSelected = (path: string, folderName: string) => {
+    if (visible) {
+      form.setFieldsValue({ working_directory: path });
+      const currentName = form.getFieldValue('name');
+      if (!currentName || currentName.trim() === '') {
+        form.setFieldsValue({ name: folderName });
+      }
+    } else {
+      form.resetFields();
+      setEditingKey('');
+      form.setFieldsValue({
+        name: folderName,
+        working_directory: path,
+        description: `Local project at ${path}`,
+      });
+      setVisible(true);
+    }
   };
 
   const handleOk = async () => {
@@ -155,9 +180,23 @@ export const ProjectsPage: React.FC = () => {
           </span>
         </div>
 
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate} style={{ background: '#238636', borderColor: '#238636' }}>
-          Add Project
-        </Button>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <Button
+            type="primary"
+            icon={<FolderOpenOutlined />}
+            onClick={handlePickProjectFromComputer}
+            style={{ background: '#0284c7', borderColor: '#0284c7', fontWeight: 600 }}
+          >
+            📁 Select Project from Computer
+          </Button>
+          <Button
+            icon={<PlusOutlined />}
+            onClick={handleCreate}
+            style={{ background: '#238636', borderColor: '#238636', color: '#fff' }}
+          >
+            Add Manually
+          </Button>
+        </div>
       </div>
 
       <Table
@@ -178,14 +217,37 @@ export const ProjectsPage: React.FC = () => {
           <Form.Item label="Name" name="name" rules={[{ required: true, message: 'Please input project name!' }]}>
             <Input placeholder="e.g. SmartTrader App" />
           </Form.Item>
-          <Form.Item label="Working Directory" name="working_directory">
-            <Input placeholder="C:\Users\taguo\Desktop\ai-agents-platform" />
+          <Form.Item
+            label="Working Directory"
+            name="working_directory"
+            rules={[{ required: true, message: 'Please specify or choose working directory!' }]}
+          >
+            <Input
+              placeholder="/path/to/project"
+              addonAfter={
+                <Button
+                  type="link"
+                  size="small"
+                  icon={<FolderOpenOutlined />}
+                  onClick={() => setFolderPickerVisible(true)}
+                  style={{ padding: '0 6px', color: '#38bdf8' }}
+                >
+                  Browse...
+                </Button>
+              }
+            />
           </Form.Item>
           <Form.Item label="Description" name="description">
             <Input.TextArea rows={3} placeholder="Project scope and guidelines" />
           </Form.Item>
         </Form>
       </Modal>
+
+      <FolderPickerModal
+        open={folderPickerVisible}
+        onClose={() => setFolderPickerVisible(false)}
+        onSelect={handleFolderSelected}
+      />
 
       <ProjectSharedMemoryModal
         open={memoryModalVisible}

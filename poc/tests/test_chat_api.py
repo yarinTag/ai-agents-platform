@@ -125,3 +125,134 @@ def test_completed_task_response_visible_in_chat(client):
     assistant_msgs = [m for m in matching_msgs if m.get("sender_type") == "ASSISTANT"]
     assert len(assistant_msgs) >= 1
     assert assistant_msgs[0]["content"] == task_result
+
+
+def test_agent_sessions_multi_tab_and_supervisor_link(client):
+    """
+    Test that:
+    1. Each agent has its session in the DB.
+    2. Creating a new session via POST /{agent_id}/sessions closes the old active session and creates a new one.
+    3. The child agent's session is linked with the supervisor's active session.
+    4. Switching between sessions (activate) loads the correct history for each session.
+    """
+    db = get_db_manager()
+    from config import AgentConfig
+
+    # 1. Create a Manager agent (supervisor)
+    manager = AgentConfig(
+        id="eng-manager-test",
+        name="Engineering Manager",
+        description="Engineering Manager",
+        system_prompt="You manage engineers."
+    )
+    db.save_agent(manager)
+
+    # 2. Create a Worker agent reporting to Manager
+    worker = AgentConfig(
+        id="fe-worker-test",
+        name="Frontend Worker",
+        description="Frontend Worker",
+        system_prompt="You build UI.",
+        parent_id="eng-manager-test"
+    )
+    db.save_agent(worker)
+
+    # Ensure manager has an active session
+    mgr_sess = db.get_or_create_conversation("eng-manager-test")
+
+    # 3. List worker sessions and verify supervisor link
+    worker_sess_resp = client.get("/api/v1/chat/fe-worker-test/sessions")
+    assert worker_sess_resp.status_code == 200
+    w_sessions = worker_sess_resp.json()["sessions"]
+    assert len(w_sessions) >= 1
+    first_worker_sess = w_sessions[0]
+    assert first_worker_sess["status"] == "ACTIVE"
+    assert first_worker_sess["supervisor_agent_id"] == "eng-manager-test"
+    assert first_worker_sess["supervisor_agent_name"] == "Engineering Manager"
+    assert first_worker_sess["supervisor_session_id"] == mgr_sess["id"]
+
+    # 4. Send a message in Worker's first session
+    send_resp1 = client.post("/api/v1/chat/fe-worker-test/messages", json={
+        "content": "Message in Session 1",
+        "conversation_id": first_worker_sess["id"]
+    })
+    assert send_resp1.status_code == 200
+
+    # 5. Create a NEW session for the worker (simulating clicking '+' in drawer)
+    new_sess_resp = client.post("/api/v1/chat/fe-worker-test/sessions", json={
+        "title": "Session 2"
+    })
+    assert new_sess_resp.status_code == 200
+    new_sess = new_sess_resp.json()["session"]
+    assert new_sess["title"] == "Session 2"
+    assert new_sess["status"] == "ACTIVE"
+    assert new_sess["id"] != first_worker_sess["id"]
+
+    # Verify old session was closed
+    old_sess_db = db.get_conversation(first_worker_sess["id"])
+    assert old_sess_db["status"] == "CLOSED"
+
+    # 6. Send a message in Session 2
+    send_resp2 = client.post("/api/v1/chat/fe-worker-test/messages", json={
+        "content": "Message in Session 2",
+        "conversation_id": new_sess["id"]
+    })
+    assert send_resp2.status_code == 200
+
+    # 7. Check message isolation: Session 1 has only msg 1; Session 2 has only msg 2
+    hist_sess1 = client.get(f"/api/v1/chat/fe-worker-test/messages?conversation_id={first_worker_sess['id']}")
+    assert hist_sess1.status_code == 200
+    s1_msgs = [m["content"] for m in hist_sess1.json()["messages"]]
+    assert "Message in Session 1" in s1_msgs
+    assert "Message in Session 2" not in s1_msgs
+
+    hist_sess2 = client.get(f"/api/v1/chat/fe-worker-test/messages?conversation_id={new_sess['id']}")
+    assert hist_sess2.status_code == 200
+    s2_msgs = [m["content"] for m in hist_sess2.json()["messages"]]
+    assert "Message in Session 2" in s2_msgs
+    assert "Message in Session 1" not in s2_msgs
+
+    # 8. Switch back to Session 1 via activate
+    act_resp = client.post(f"/api/v1/chat/fe-worker-test/sessions/{first_worker_sess['id']}/activate")
+    assert act_resp.status_code == 200
+    assert act_resp.json()["session"]["status"] == "ACTIVE"
+
+    # Verify Session 2 is now closed
+    s2_db = db.get_conversation(new_sess["id"])
+    assert s2_db["status"] == "CLOSED"
+
+
+def test_no_duplicate_execution_messages_on_poll(client):
+    """
+    Test that repeated polling of GET /messages does NOT duplicate user prompts or assistant outputs.
+    """
+    db = get_db_manager()
+    agent_id = "eng-manager-test"
+    from config import AgentConfig
+    agent = AgentConfig(
+        id=agent_id,
+        name="Engineering Manager",
+        description="Engineering Manager",
+        system_prompt="You manage engineers."
+    )
+    db.save_agent(agent)
+
+    # Clear chat
+    client.post(f"/api/v1/chat/{agent_id}/clear")
+
+    # Send a single task
+    send_resp = client.post(f"/api/v1/chat/{agent_id}/messages", json={
+        "content": "Check repository branches"
+    })
+    assert send_resp.status_code == 200
+
+    # Poll multiple times consecutively
+    p1 = client.get(f"/api/v1/chat/{agent_id}/messages").json()["messages"]
+    p2 = client.get(f"/api/v1/chat/{agent_id}/messages").json()["messages"]
+    p3 = client.get(f"/api/v1/chat/{agent_id}/messages").json()["messages"]
+
+    # There should only be exactly ONE user message with this content
+    user_prompts = [m for m in p3 if m["sender_type"] == "USER" and m["content"] == "Check repository branches"]
+    assert len(user_prompts) == 1
+    assert len(p1) == len(p2) == len(p3)
+

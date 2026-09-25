@@ -59,9 +59,7 @@ class MCPRegistry:
 
     def seed_default_connectors(self):
         """Seed default realistic connectors and tools if none exist."""
-        connectors = self.db.list_mcp_connectors()
-        if len(connectors) > 0:
-            return
+        return
 
         defaults = [
             {

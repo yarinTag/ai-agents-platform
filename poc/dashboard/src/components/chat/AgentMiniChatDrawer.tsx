@@ -31,10 +31,12 @@ import {
   ClockCircleOutlined,
   MessageOutlined,
   CheckOutlined,
+  PlusOutlined,
+  CrownOutlined,
 } from '@ant-design/icons';
 import { Agent } from '../../types/agent';
 import { Task } from '../../types/task';
-import { ChatMessage } from '../../types/chat';
+import { ChatMessage, AgentSession } from '../../types/chat';
 import {
   getChatHistory,
   sendChatMessage,
@@ -42,6 +44,9 @@ import {
   respondToApproval,
   getPendingApprovals,
   getTasks,
+  getAgentSessions,
+  createAgentSession,
+  activateAgentSession,
 } from '../../services/api';
 import { ApprovalRequest } from '../../types/scheduler';
 
@@ -69,6 +74,9 @@ export const AgentMiniChatDrawer: React.FC<AgentMiniChatDrawerProps> = ({
   onClose,
   onTaskDispatched,
 }) => {
+  const [sessions, setSessions] = useState<AgentSession[]>([]);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [creatingSession, setCreatingSession] = useState<boolean>(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [agentTasks, setAgentTasks] = useState<Task[]>([]);
   const [inputText, setInputText] = useState<string>('');
@@ -84,17 +92,41 @@ export const AgentMiniChatDrawer: React.FC<AgentMiniChatDrawerProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const loadHistory = async () => {
+  const loadHistory = async (targetSessionId?: string | null) => {
     if (!agent) return;
+    const sessionToLoad = targetSessionId !== undefined ? targetSessionId : currentSessionId;
     try {
       setLoading(true);
-      const [historyRes, appRes, tasksRes] = await Promise.all([
-        getChatHistory(agent.id).catch(() => ({ data: { messages: [], tasks: [] } })),
+      const [historyRes, appRes, tasksRes, sessionsRes] = await Promise.all([
+        getChatHistory(agent.id, sessionToLoad).catch(() => ({ data: { messages: [], tasks: [], conversation: null } })),
         getPendingApprovals({ agent_id: agent.id }).catch(() => ({ data: [] })),
         getTasks({ agent_id: agent.id }).catch(() => ({ data: [] })),
+        getAgentSessions(agent.id).catch(() => ({ data: { sessions: [] } })),
       ]);
 
-      setMessages(historyRes.data.messages || []);
+      const sessList: AgentSession[] = sessionsRes.data?.sessions || [];
+      setSessions(sessList);
+
+      let resolvedSessionId = sessionToLoad;
+      if (!resolvedSessionId && sessList.length > 0) {
+        const activeSess = sessList.find((s) => s.status === 'ACTIVE') || sessList[0];
+        resolvedSessionId = activeSess.id;
+        setCurrentSessionId(resolvedSessionId);
+      }
+
+      const rawMessages = historyRes.data.messages || [];
+      const seenMsgIds = new Set<string>();
+      const seenContentKeys = new Set<string>();
+      const dedupedMessages = rawMessages.filter((m: any) => {
+        if (!m.id || seenMsgIds.has(m.id)) return false;
+        seenMsgIds.add(m.id);
+        const contentKey = `${m.sender_type}_${m.task_id || ''}_${m.content}`;
+        if (m.sender_type === 'USER' && seenContentKeys.has(contentKey)) return false;
+        seenContentKeys.add(contentKey);
+        return true;
+      });
+      setMessages(dedupedMessages);
+
       const pending = appRes.data || [];
       setPendingApproval(pending.length > 0 ? pending[0] : null);
 
@@ -110,8 +142,12 @@ export const AgentMiniChatDrawer: React.FC<AgentMiniChatDrawerProps> = ({
   useEffect(() => {
     if (visible && agent) {
       loadHistory();
-      const interval = setInterval(loadHistory, 3500); // Polling update
+      const interval = setInterval(() => {
+        loadHistory();
+      }, 3500);
       return () => clearInterval(interval);
+    } else {
+      setCurrentSessionId(null);
     }
   }, [visible, agent]);
 
@@ -123,12 +159,10 @@ export const AgentMiniChatDrawer: React.FC<AgentMiniChatDrawerProps> = ({
 
   const allAgentTasks = useMemo(() => {
     const map = new Map<string, Task>();
-    // From tasks prop
     tasks.filter((t) => String(t.agent_id) === String(agent?.id)).forEach((t) => {
       const tid = t.run_id || t.id;
       if (tid) map.set(tid, t);
     });
-    // From fetched agent tasks
     agentTasks.forEach((t) => {
       const tid = t.run_id || t.id;
       if (tid) map.set(tid, t);
@@ -165,6 +199,56 @@ export const AgentMiniChatDrawer: React.FC<AgentMiniChatDrawerProps> = ({
     setTimeout(() => setCopiedTaskId(null), 2000);
   };
 
+  const handleCreateNewSession = async (customTaskId?: string, customTitle?: string) => {
+    if (!agent) return;
+    try {
+      setCreatingSession(true);
+      const nextNum = sessions.length + 1;
+      const title = customTitle || (customTaskId ? `Execution ${customTaskId.slice(-6)}` : `Session ${nextNum}`);
+      const res = await createAgentSession(agent.id, {
+        title,
+        task_id: customTaskId || null,
+      });
+      const newSess = res.data.session;
+      message.success(`Closed old session and started new: ${newSess.title}`);
+      setCurrentSessionId(newSess.id);
+      setMessages([]);
+      await loadHistory(newSess.id);
+    } catch (err: any) {
+      message.error(err.response?.data?.detail || 'Failed to create new session');
+    } finally {
+      setCreatingSession(false);
+    }
+  };
+
+  const handleSelectSession = async (sessionId: string) => {
+    setCurrentSessionId(sessionId);
+    try {
+      await activateAgentSession(agent!.id, sessionId);
+      setSessions((prev) =>
+        prev.map((s) => ({
+          ...s,
+          status: s.id === sessionId ? 'ACTIVE' : 'CLOSED',
+        }))
+      );
+    } catch (err) {
+      console.warn('Could not activate session on backend:', err);
+    }
+    loadHistory(sessionId);
+  };
+
+  const handleOpenTaskInSession = async (task: Task) => {
+    const tid = task.run_id || task.id;
+    const existing = sessions.find((s) => s.task_id === tid);
+    if (existing) {
+      await handleSelectSession(existing.id);
+      setActiveTab('chat');
+    } else {
+      await handleCreateNewSession(tid, `Execution ${tid.slice(-6)}`);
+      setActiveTab('chat');
+    }
+  };
+
   const handleSend = async (textToSend?: string) => {
     const text = textToSend || inputText.trim();
     if (!text || !agent) return;
@@ -172,13 +256,20 @@ export const AgentMiniChatDrawer: React.FC<AgentMiniChatDrawerProps> = ({
     try {
       setSending(true);
       setInputText('');
-      const res = await sendChatMessage(agent.id, text);
+      const res = await sendChatMessage(agent.id, text, null, currentSessionId);
       if (res.data.user_message) {
-        setMessages((prev) => [...prev, res.data.user_message]);
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === res.data.user_message.id)) return prev;
+          return [...prev, res.data.user_message];
+        });
       }
-      message.success(`Task dispatched to ${agent.name}`);
+      if (res.data.status === 'resumed_task') {
+        message.success(`Resumed execution for ${agent.name}`);
+      } else {
+        message.success(`Task dispatched to ${agent.name}`);
+      }
       if (onTaskDispatched) onTaskDispatched();
-      loadHistory();
+      loadHistory(currentSessionId);
     } catch (err: any) {
       message.error(err.response?.data?.detail || 'Failed to send message');
     } finally {
@@ -192,6 +283,7 @@ export const AgentMiniChatDrawer: React.FC<AgentMiniChatDrawerProps> = ({
       await clearChatHistory(agent.id);
       setMessages([]);
       message.success('Chat history cleared');
+      loadHistory(currentSessionId);
     } catch (err) {
       message.error('Failed to clear chat');
     }
@@ -209,7 +301,7 @@ export const AgentMiniChatDrawer: React.FC<AgentMiniChatDrawerProps> = ({
       message.success(decision === 'approve' ? 'Action approved!' : 'Action rejected');
       setPendingApproval(null);
       setApprovalResponse('');
-      loadHistory();
+      loadHistory(currentSessionId);
     } catch (err) {
       message.error('Failed to submit approval response');
     }
@@ -217,7 +309,6 @@ export const AgentMiniChatDrawer: React.FC<AgentMiniChatDrawerProps> = ({
 
   if (!agent) return null;
 
-  // Active status determination
   const activeTask = allAgentTasks.find(
     (t) =>
       t.status === 'running' ||
@@ -227,6 +318,10 @@ export const AgentMiniChatDrawer: React.FC<AgentMiniChatDrawerProps> = ({
   );
 
   const isWaitingInput = pendingApproval !== null || activeTask?.status === 'waiting_input' || activeTask?.status === 'pending_approval';
+
+  const currentSession = sessions.find((s) => s.id === currentSessionId) || sessions.find((s) => s.status === 'ACTIVE') || sessions[0];
+  const supervisorName = currentSession?.supervisor_agent_name || (agent.parent_id ? `Supervisor (${agent.parent_id})` : null);
+  const supervisorSessionTitle = currentSession?.supervisor_session_title || 'Active Session';
 
   return (
     <Drawer
@@ -264,7 +359,7 @@ export const AgentMiniChatDrawer: React.FC<AgentMiniChatDrawerProps> = ({
         </div>
       }
       placement="right"
-      width={600}
+      width={640}
       onClose={onClose}
       open={visible}
       styles={{
@@ -278,8 +373,8 @@ export const AgentMiniChatDrawer: React.FC<AgentMiniChatDrawerProps> = ({
         },
       }}
     >
-      {/* Drawer Subheader: Segmented View Navigation */}
-      <div style={{ background: '#0d1117', borderBottom: '1px solid #21262d', padding: '8px 16px' }}>
+      {/* Drawer Subheader: Segmented View Navigation & Supervisor Info */}
+      <div style={{ background: '#0d1117', borderBottom: '1px solid #21262d', padding: '8px 16px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
         <Segmented
           value={activeTab}
           onChange={(val) => setActiveTab(val as 'chat' | 'tasks')}
@@ -305,14 +400,105 @@ export const AgentMiniChatDrawer: React.FC<AgentMiniChatDrawerProps> = ({
             },
           ]}
         />
+
+        {/* Supervisor Session Badge */}
+        {supervisorName && (
+          <div
+            style={{
+              padding: '4px 10px',
+              background: 'rgba(168, 85, 247, 0.08)',
+              border: '1px solid rgba(168, 85, 247, 0.25)',
+              borderRadius: '6px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              fontSize: '11px',
+              color: '#d8b4fe',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <CrownOutlined style={{ color: '#c084fc' }} />
+              <span>
+                <strong>Supervisor:</strong> {supervisorName}
+              </span>
+            </div>
+            <Tag color="purple" style={{ margin: 0, fontSize: '10px', lineHeight: '18px' }}>
+              Session: {supervisorSessionTitle}
+            </Tag>
+          </div>
+        )}
+      </div>
+
+      {/* Session Tabs Bar with + Button */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          padding: '6px 16px',
+          background: '#11161d',
+          borderBottom: '1px solid #21262d',
+          overflowX: 'auto',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, overflowX: 'auto', scrollbarWidth: 'none' }}>
+          {sessions.map((sess) => {
+            const isSelected = currentSessionId ? sess.id === currentSessionId : sess.status === 'ACTIVE';
+            const isActive = sess.status === 'ACTIVE';
+            return (
+              <Button
+                key={sess.id}
+                size="small"
+                type={isSelected ? 'primary' : 'default'}
+                onClick={() => handleSelectSession(sess.id)}
+                style={{
+                  fontSize: '11px',
+                  borderRadius: '5px',
+                  background: isSelected ? '#1f6feb' : '#161b22',
+                  borderColor: isSelected ? '#388bfd' : '#30363d',
+                  color: isSelected ? '#ffffff' : '#c9d1d9',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {isActive ? (
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#3fb950', display: 'inline-block' }} />
+                ) : (
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#8b949e', display: 'inline-block' }} />
+                )}
+                {sess.title || 'Session'}
+              </Button>
+            );
+          })}
+        </div>
+        <Tooltip title="Start New Session (Closes previous active session)">
+          <Button
+            size="small"
+            icon={<PlusOutlined />}
+            loading={creatingSession}
+            onClick={() => handleCreateNewSession()}
+            style={{
+              borderRadius: '5px',
+              background: '#21262d',
+              borderColor: '#30363d',
+              color: '#58a6ff',
+              fontWeight: 600,
+              fontSize: '11px',
+            }}
+          >
+            New
+          </Button>
+        </Tooltip>
       </div>
 
       {/* Active Task Notification Banner */}
       {activeTask && (
         <div
           style={{
-            margin: '10px 16px 0 16px',
-            padding: '10px 14px',
+            margin: '8px 16px 0 16px',
+            padding: '8px 12px',
             background: 'rgba(59, 130, 246, 0.1)',
             border: '1px solid rgba(59, 130, 246, 0.4)',
             borderRadius: '8px',
@@ -323,7 +509,7 @@ export const AgentMiniChatDrawer: React.FC<AgentMiniChatDrawerProps> = ({
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
-            <SyncOutlined spin style={{ color: '#38bdf8', fontSize: '16px' }} />
+            <SyncOutlined spin style={{ color: '#38bdf8', fontSize: '15px' }} />
             <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{ color: '#38bdf8', fontWeight: 600, fontSize: '12px' }}>
                 Executing Task in Progress
@@ -366,7 +552,7 @@ export const AgentMiniChatDrawer: React.FC<AgentMiniChatDrawerProps> = ({
             <div style={{ textAlign: 'center', padding: '60px 20px', color: '#6e7681' }}>
               <div style={{ fontSize: '36px', marginBottom: '10px' }}>💬</div>
               <div style={{ fontWeight: 600, color: '#c9d1d9', marginBottom: '4px' }}>
-                Direct Workspace with {agent.name}
+                {currentSession?.title || 'Direct Workspace'} &bull; {agent.name}
               </div>
               <div style={{ fontSize: '12px' }}>
                 Send a task or prompt below. Any executed task and response will appear right here.
@@ -453,7 +639,6 @@ export const AgentMiniChatDrawer: React.FC<AgentMiniChatDrawerProps> = ({
                 const status = (msg.metadata?.status || 'completed').toLowerCase();
                 const isCompleted = status === 'completed';
                 const isFailed = status === 'failed';
-                const prompt = msg.metadata?.prompt;
                 const taskId = msg.metadata?.task_id || msg.task_id;
 
                 return (
@@ -495,23 +680,6 @@ export const AgentMiniChatDrawer: React.FC<AgentMiniChatDrawerProps> = ({
                       </div>
                     </div>
 
-                    {prompt && (
-                      <div
-                        style={{
-                          background: '#0d1117',
-                          padding: '6px 10px',
-                          borderRadius: '6px',
-                          fontSize: '12px',
-                          color: '#cbd5e1',
-                          marginBottom: '8px',
-                          borderLeft: '3px solid #3b82f6',
-                        }}
-                      >
-                        <span style={{ color: '#93c5fd', fontWeight: 600 }}>Task Prompt: </span>
-                        {prompt}
-                      </div>
-                    )}
-
                     <div style={{ color: '#f3f4f6', fontSize: '13px', lineHeight: '1.5', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                       <div style={{ color: isCompleted ? '#34d399' : '#f87171', fontWeight: 600, fontSize: '11px', marginBottom: '4px' }}>
                         {isCompleted ? '⚡ Execution Output / Agent Response:' : '❌ Execution Error:'}
@@ -547,22 +715,26 @@ export const AgentMiniChatDrawer: React.FC<AgentMiniChatDrawerProps> = ({
                 >
                   <div
                     style={{
-                      fontSize: '10px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      marginBottom: '4px',
+                      fontSize: '11px',
                       color: '#8b949e',
-                      marginBottom: '3px',
-                      padding: '0 4px',
                     }}
                   >
-                    {isUser ? 'You' : agent.name} &bull; {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    <span>{isUser ? 'Operator (You)' : agent.name}</span>
+                    <span>&bull;</span>
+                    <span>{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                   </div>
                   <div
                     style={{
                       maxWidth: '85%',
                       padding: '10px 14px',
-                      borderRadius: isUser ? '16px 16px 2px 16px' : '16px 16px 16px 2px',
-                      background: isUser ? '#1e3a8a' : '#161b22',
-                      border: isUser ? '1px solid #2563eb' : '1px solid #30363d',
-                      color: '#f3f4f6',
+                      borderRadius: isUser ? '14px 14px 2px 14px' : '14px 14px 14px 2px',
+                      background: isUser ? '#1f6feb' : '#161b22',
+                      color: isUser ? '#ffffff' : '#f3f4f6',
+                      border: isUser ? '1px solid #388bfd' : '1px solid #30363d',
                       fontSize: '13px',
                       lineHeight: '1.5',
                       whiteSpace: 'pre-wrap',
@@ -576,7 +748,7 @@ export const AgentMiniChatDrawer: React.FC<AgentMiniChatDrawerProps> = ({
             })
           )}
 
-          {/* In-Chat Interactive Approval Card (When agent asks question or seeks permission) */}
+          {/* In-Chat Interactive Approval Card */}
           {pendingApproval && (
             <Card
               style={{
@@ -677,6 +849,18 @@ export const AgentMiniChatDrawer: React.FC<AgentMiniChatDrawerProps> = ({
                         <ClockCircleOutlined style={{ marginRight: '4px' }} />
                         {new Date(t.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </span>
+                      <Tooltip title="Open this execution in a chat session tab">
+                        <Button
+                          type="primary"
+                          ghost
+                          size="small"
+                          icon={<MessageOutlined />}
+                          onClick={() => handleOpenTaskInSession(t)}
+                          style={{ fontSize: '11px', height: '24px' }}
+                        >
+                          Chat Tab
+                        </Button>
+                      </Tooltip>
                       {result && (
                         <Tooltip title="Copy Task Response">
                           <Button
@@ -737,10 +921,12 @@ export const AgentMiniChatDrawer: React.FC<AgentMiniChatDrawerProps> = ({
                           background: '#090d13',
                           padding: '8px 12px',
                           borderRadius: '6px',
-                          border: '1px solid #ef4444',
+                          border: '1px solid #21262d',
                           fontFamily: 'Consolas, monospace',
                           fontSize: '12px',
                           color: '#fca5a5',
+                          maxHeight: '220px',
+                          overflowY: 'auto',
                           whiteSpace: 'pre-wrap',
                         }}
                       >
@@ -748,8 +934,8 @@ export const AgentMiniChatDrawer: React.FC<AgentMiniChatDrawerProps> = ({
                       </div>
                     </div>
                   ) : isRunning ? (
-                    <div style={{ color: '#38bdf8', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 0' }}>
-                      <SyncOutlined spin /> Task is currently executing... Response will update live.
+                    <div style={{ fontSize: '12px', color: '#93c5fd', display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 0' }}>
+                      <SyncOutlined spin /> Claude Code runtime process active...
                     </div>
                   ) : null}
                 </Card>
@@ -759,30 +945,32 @@ export const AgentMiniChatDrawer: React.FC<AgentMiniChatDrawerProps> = ({
         </div>
       )}
 
-      {/* Quick Prompts Bar */}
+      {/* Suggested Quick Prompts */}
       <div
         style={{
-          padding: '8px 16px',
-          background: '#0d1117',
-          borderTop: '1px solid #21262d',
           display: 'flex',
           gap: '8px',
           overflowX: 'auto',
-          whiteSpace: 'nowrap',
+          padding: '8px 16px',
+          background: '#0d1117',
+          borderTop: '1px solid #21262d',
+          scrollbarWidth: 'none',
         }}
       >
         {QUICK_PROMPTS.map((qp, idx) => (
           <Button
             key={idx}
             size="small"
+            onClick={() => handleSend(qp.replace(/^[^\s]+\s/, ''))}
+            disabled={sending}
             style={{
               fontSize: '11px',
+              borderRadius: '6px',
               background: '#161b22',
               borderColor: '#30363d',
               color: '#8b949e',
-              borderRadius: '12px',
+              whiteSpace: 'nowrap',
             }}
-            onClick={() => handleSend(qp)}
           >
             {qp}
           </Button>
@@ -807,7 +995,11 @@ export const AgentMiniChatDrawer: React.FC<AgentMiniChatDrawerProps> = ({
                 handleSend();
               }
             }}
-            placeholder={`Message or dispatch task to ${agent.name}... (Press Enter to send)`}
+            placeholder={
+              isWaitingInput
+                ? `Reply to unblock ${agent.name}... (Press Enter to resume execution)`
+                : `Message or dispatch task to ${agent.name}... (Press Enter to send)`
+            }
             autoSize={{ minRows: 1, maxRows: 4 }}
             style={{
               background: '#161b22',
@@ -835,4 +1027,5 @@ export const AgentMiniChatDrawer: React.FC<AgentMiniChatDrawerProps> = ({
     </Drawer>
   );
 };
+
 export default AgentMiniChatDrawer;

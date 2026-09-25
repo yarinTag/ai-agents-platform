@@ -53,6 +53,7 @@ class AgentRun:
     root_task_id: Optional[str] = None
     assigned_by: Optional[str] = None
     session_id: Optional[str] = None
+    dangerously_skip_permissions: bool = False
 
     def __post_init__(self):
         if self.events is None:
@@ -70,6 +71,7 @@ class AgentRun:
         data['parent_task_id'] = self.parent_task_id
         data['root_task_id'] = self.root_task_id
         data['assigned_by'] = self.assigned_by
+        data['dangerously_skip_permissions'] = self.dangerously_skip_permissions
         return data
 
     @classmethod
@@ -89,34 +91,91 @@ class AgentRun:
         data_copy.setdefault('root_task_id', None)
         data_copy.setdefault('assigned_by', None)
         data_copy.setdefault('session_id', None)
+        data_copy.setdefault('dangerously_skip_permissions', False)
         return cls(**data_copy)
 
 
 def extract_supervisor_question(data: Any) -> Optional[Dict[str, Any]]:
     """
-    Detects if an event or model output represents a supervisor clarification question.
-    Returns dictionary with {"question": ..., "context": ..., "suggested_options": ...} or None.
+    Detects if an event or model output represents a supervisor clarification question,
+    permission request, or waiting input condition.
+    Returns dictionary with {"question": ..., "context": ..., "suggested_options": ..., "is_permission": ...} or None.
     """
     if not data:
         return None
 
     # Case 1: Dict event
     if isinstance(data, dict):
+        # 1a. Structured permission denials from Claude Code
+        denials = data.get("permission_denials")
+        if denials and isinstance(denials, list) and len(denials) > 0:
+            tool_names = list({d.get("tool_name") for d in denials if isinstance(d, dict) and d.get("tool_name")})
+            tools_str = ", ".join(tool_names) if tool_names else "tools"
+            res_text = data.get("result", "")
+            q_text = res_text if res_text else f"Permission required to execute tool(s): {tools_str}"
+            return {
+                "question": q_text,
+                "context": f"Runtime sandbox denied permissions for {tools_str}.",
+                "suggested_options": ["Grant permission", "Deny"],
+                "is_permission": True
+            }
+
+        # 1b. Direct tool_use event
         if data.get("type") == "tool_use" and data.get("name") in ("ask_supervisor", "ask_manager", "ask_question", "AskUserQuestion"):
             inp = data.get("input", {})
+            q = None
+            opts = []
+            if isinstance(inp, dict):
+                if inp.get("questions") and isinstance(inp["questions"], list) and len(inp["questions"]) > 0:
+                    q = inp["questions"][0].get("question")
+                    opts = [o.get("label", "") for o in inp["questions"][0].get("options", []) if isinstance(o, dict)]
+                if not q:
+                    q = inp.get("question") or inp.get("prompt")
             return {
-                "question": inp.get("question") or inp.get("prompt") or str(inp),
-                "context": inp.get("context", ""),
-                "suggested_options": inp.get("suggested_options", [])
+                "question": q or str(inp),
+                "context": f"Agent invoked {data.get('name')}.",
+                "suggested_options": opts
             }
+
+        # 1c. Tool call nested inside assistant message
+        if data.get("type") == "assistant":
+            msg = data.get("message", {})
+            content = msg.get("content", [])
+            if isinstance(content, list):
+                for item in content:
+                    if isinstance(item, dict) and item.get("type") == "tool_use":
+                        name = item.get("name")
+                        if name in ("ask_supervisor", "ask_manager", "ask_question", "AskUserQuestion"):
+                            inp = item.get("input", {})
+                            q = None
+                            opts = []
+                            if isinstance(inp, dict):
+                                if inp.get("questions") and isinstance(inp["questions"], list) and len(inp["questions"]) > 0:
+                                    q = inp["questions"][0].get("question")
+                                    opts = [o.get("label", "") for o in inp["questions"][0].get("options", []) if isinstance(o, dict)]
+                                if not q:
+                                    q = inp.get("question") or inp.get("prompt")
+                            return {
+                                "question": q or str(inp),
+                                "context": f"Agent invoked {name}.",
+                                "suggested_options": opts
+                            }
+
+        # 1e. Check nested content or result fields
         if "result" in data and isinstance(data["result"], str):
-            return extract_supervisor_question(data["result"])
+            res_q = extract_supervisor_question(data["result"])
+            if res_q:
+                return res_q
         if "content" in data and isinstance(data["content"], str):
-            return extract_supervisor_question(data["content"])
+            cnt_q = extract_supervisor_question(data["content"])
+            if cnt_q:
+                return cnt_q
 
     # Case 2: String content or result
     if isinstance(data, str):
         text = data.strip()
+        text_lower = text.lower()
+
         if "ask_supervisor" in text or "ask_manager" in text:
             try:
                 match = re.search(r'\{.*"question".*\}', text, re.DOTALL)
@@ -139,13 +198,26 @@ def extract_supervisor_question(data: Any) -> Optional[Dict[str, Any]]:
                 "suggested_options": []
             }
 
+        # Check if this text is actually a completion report describing past actions rather than an active question
+        completion_indicators = [
+            "task is complete", "task completed", "the task is complete", "completed the task",
+            "file has been created", "file was created", "created the file", "i verified",
+            "verification result", "i have implemented", "i created the file", "done.", "finished."
+        ]
+        if any(ci in text_lower for ci in completion_indicators):
+            return None
+
+        # If quoting past questions (e.g. 'question asked:', 'i asked my supervisor'), ignore
+        if "question asked" in text_lower or "i asked my supervisor" in text_lower or "i asked the supervisor" in text_lower:
+            return None
+
         clarification_markers = [
             "please clarify", "could you clarify", "please specify", "please provide",
             "i need to know", "need more information", "before proceeding", "cannot proceed without",
-            "אנא ספק", "תוכל להבהיר", "נא להבהיר", "חסר מידע", "איזה קובץ", "איזה פורמט"
+            "waiting for your response", "waiting for response", "i am waiting for",
+            "אנא ספק", "תוכל להבהיר", "נא להבהיר", "חסר מידע", "איזה קובץ", "איזה פורמט", "איזו מחרוזת", "מה המחרוזת"
         ]
-        text_lower = text.lower()
-        if "?" in text and any(marker in text_lower for marker in clarification_markers):
+        if any(marker in text_lower for marker in clarification_markers):
             return {
                 "question": text,
                 "context": "Agent indicated missing parameters or needed clarification to proceed.",
@@ -155,11 +227,82 @@ def extract_supervisor_question(data: Any) -> Optional[Dict[str, Any]]:
     return None
 
 
+_ACTIVE_TASK_STATUSES = {
+    TaskStatus.QUEUED,
+    TaskStatus.RUNNING,
+    TaskStatus.WAITING_INPUT,
+    TaskStatus.PENDING_APPROVAL,
+}
+
+
+def summarize_runtime_event(event: Optional[Dict[str, Any]]) -> Optional[str]:
+    """Human-readable one-liner for the latest Claude stream-json event."""
+    if not event:
+        return None
+    event_type = event.get("type", "event")
+    if event_type == "assistant":
+        msg = event.get("message", {})
+        content = msg.get("content", []) if isinstance(msg, dict) else []
+        if isinstance(content, list):
+            for item in content:
+                if isinstance(item, dict) and item.get("type") == "tool_use":
+                    return f"Using tool: {item.get('name', 'unknown')}"
+                if isinstance(item, dict) and item.get("type") == "text":
+                    text = (item.get("text") or "").strip()
+                    if text:
+                        return text[:120] + ("..." if len(text) > 120 else "")
+        return "Assistant response"
+    if event_type == "tool_use":
+        return f"Using tool: {event.get('name', 'unknown')}"
+    if event_type == "tool_result":
+        return "Tool result received"
+    if event_type == "result":
+        result = (event.get("result") or "").strip()
+        return result[:120] + ("..." if len(result) > 120 else "") if result else "Task finished"
+    if event_type == "error":
+        err = event.get("error", {})
+        return f"Error: {err.get('message', 'unknown')}" if isinstance(err, dict) else "Error"
+    if event_type == "raw":
+        content = (event.get("content") or "").strip()
+        return content[:80] + ("..." if len(content) > 80 else "") if content else "Raw output"
+    return event_type.replace("_", " ").title()
+
+
+def build_task_progress_payload(run: "AgentRun") -> Dict[str, Any]:
+    """Compact progress snapshot for API responses and SSE events."""
+    events = run.events or []
+    last = events[-1] if events else None
+    elapsed = None
+    if run.started_at:
+        end = run.ended_at or datetime.now()
+        elapsed = max(0, int((end - run.started_at).total_seconds()))
+    type_counts: Dict[str, int] = {}
+    for ev in events:
+        t = ev.get("type", "unknown")
+        type_counts[t] = type_counts.get(t, 0) + 1
+    return {
+        "run_id": run.run_id,
+        "agent_id": run.agent_id,
+        "project_id": run.project_id,
+        "status": run.status.value if hasattr(run.status, "value") else str(run.status),
+        "event_count": len(events),
+        "event_types": type_counts,
+        "last_event_type": last.get("type") if last else None,
+        "last_event_summary": summarize_runtime_event(last),
+        "started_at": run.started_at.isoformat() if run.started_at else None,
+        "elapsed_seconds": elapsed,
+        "session_id": run.session_id,
+        "result_preview": (run.result[:160] + "...") if run.result and len(run.result) > 160 else run.result,
+    }
+
+
 class ClaudeCodeRuntimeAdapter:
     """
     Adapter for Free Claude Code runtime.
     Manages Claude Code subprocesses with appropriate environment.
     """
+
+    extract_supervisor_question = staticmethod(extract_supervisor_question)
 
     def __init__(self):
         # Free Claude Code proxy configuration from environment or defaults
@@ -169,10 +312,67 @@ class ClaudeCodeRuntimeAdapter:
 
         # Active runs
         self._runs: Dict[str, AgentRun] = {}
+        self._last_progress_emit: Dict[str, float] = {}
+        self._checkpoint_interval_sec = float(os.getenv("PLATFORM_TASK_CHECKPOINT_SEC", "2.0"))
+        self._checkpoint_event_batch = int(os.getenv("PLATFORM_TASK_CHECKPOINT_EVENTS", "3"))
         self._processes: Dict[str, subprocess.Popen] = {}
         self._event_queues: Dict[str, queue.Queue] = {}
         self._reader_threads: Dict[str, threading.Thread] = {}
         self._stop_events: Dict[str, threading.Event] = {}
+
+    def _emit_task_event(self, run: AgentRun, event_type: str, extra: Optional[Dict[str, Any]] = None) -> None:
+        """Publish task lifecycle/progress events to the platform EventService."""
+        try:
+            import backend.dependencies as bdep
+            event_service = getattr(bdep, "_event_service", None)
+            if not event_service:
+                return
+            payload = build_task_progress_payload(run)
+            if extra:
+                payload.update(extra)
+            event_service.emit(
+                event_type=event_type,
+                payload=payload,
+                agent_id=run.agent_id,
+                task_id=run.run_id,
+                project_id=run.project_id,
+                source="runtime_adapter",
+            )
+        except Exception as emit_err:
+            logging.getLogger(__name__).debug(f"Task event emit skipped: {emit_err}")
+
+    def _checkpoint_run(self, run: AgentRun, *, emit_progress: bool = True, force_emit: bool = False) -> None:
+        """Persist in-flight task state and optionally broadcast progress over SSE."""
+        try:
+            from persistence import db_manager
+            db_manager.save_task_run(run)
+        except Exception as db_err:
+            logging.getLogger(__name__).warning(f"Failed to checkpoint task {run.run_id}: {db_err}")
+
+        if not emit_progress:
+            return
+
+        now = time.time()
+        last_emit = self._last_progress_emit.get(run.run_id, 0.0)
+        if not force_emit and (now - last_emit) < self._checkpoint_interval_sec:
+            return
+
+        self._last_progress_emit[run.run_id] = now
+        self._emit_task_event(run, "task.progress")
+
+    def _emit_terminal_task_event(self, run: AgentRun) -> None:
+        """Emit completion/failure/waiting lifecycle events once a run reaches a terminal pause state."""
+        status_val = run.status.value if hasattr(run.status, "value") else str(run.status)
+        if status_val == "completed":
+            self._emit_task_event(run, "task.completed")
+        elif status_val == "failed":
+            self._emit_task_event(run, "task.failed")
+        elif status_val == "cancelled":
+            self._emit_task_event(run, "task.cancelled")
+        elif status_val == "waiting_input":
+            self._emit_task_event(run, "task.waiting_input")
+        elif status_val == "pending_approval":
+            self._emit_task_event(run, "approval.required")
 
     def _build_claude_env(self) -> Dict[str, str]:
         """Build environment variables for Claude Code subprocess."""
@@ -197,7 +397,8 @@ class ClaudeCodeRuntimeAdapter:
         project_config: Optional[ProjectConfig],
         prompt: str,
         session_id: Optional[str] = None,
-        fork_session: bool = False
+        fork_session: bool = False,
+        dangerously_skip_permissions: bool = False
     ) -> List[str]:
         """
         Build Claude Code command with appropriate arguments.
@@ -208,6 +409,7 @@ class ClaudeCodeRuntimeAdapter:
             prompt: The prompt to execute
             session_id: Optional session ID to resume
             fork_session: Whether to fork a new session
+            dangerously_skip_permissions: Whether to skip permission prompts
 
         Returns:
             List of command arguments
@@ -216,7 +418,7 @@ class ClaudeCodeRuntimeAdapter:
         if agent_config.model and agent_config.model.lower() != "default":
             cmd.extend(["--model", agent_config.model.lower()])
 
-        if session_id and not session_id.startswith("pending_"):
+        if session_id and not session_id.startswith("pending_") and not session_id.startswith("sess_"):
             cmd.extend(["--resume", session_id])
             if fork_session:
                 cmd.append("--fork-session")
@@ -227,28 +429,54 @@ class ClaudeCodeRuntimeAdapter:
             "--verbose"
         ])
 
-        # Make --dangerously-skip-permissions configurable per-agent or per-environment
+        # Make --dangerously-skip-permissions configurable per-agent, per-run, or per-environment
         skip_permissions = (
+            dangerously_skip_permissions or
             getattr(agent_config, "dangerously_skip_permissions", False) or
-            os.getenv("PLATFORM_DANGEROUSLY_SKIP_PERMISSIONS", "").lower() in ("true", "1")
+            os.getenv("PLATFORM_DANGEROUSLY_SKIP_PERMISSIONS", "true").lower() in ("true", "1")
         )
         if skip_permissions:
             cmd.append("--dangerously-skip-permissions")
 
+        # Add working directory restriction if specified
+        target_dir = None
+        if project_config and getattr(project_config, "working_directory", None) and os.path.exists(project_config.working_directory):
+            target_dir = project_config.working_directory
+        elif getattr(agent_config, "repo_path", None) and os.path.exists(agent_config.repo_path):
+            target_dir = agent_config.repo_path
+        else:
+            target_dir = os.getcwd()
+
+        cmd.extend(["--add-dir", target_dir])
+
+        # Pass agent system prompt with supervisor context and workspace if configured
+        if getattr(agent_config, "system_prompt", None):
+            sys_prompt = agent_config.system_prompt
+            sys_prompt += (
+                f"\n\n[PROJECT WORKSPACE]\n"
+                f"Your assigned project workspace directory is: {target_dir}\n"
+                f"All files created, edited, read, or verified MUST reside inside this directory: {target_dir}"
+            )
+            if getattr(agent_config, "parent_id", None):
+                parent_name = agent_config.parent_id
+                try:
+                    from persistence import db_manager
+                    parent = db_manager.get_agent(agent_config.parent_id)
+                    if parent and parent.name:
+                        parent_name = parent.name
+                except Exception:
+                    pass
+                sys_prompt += (
+                    f"\n\n[ORGANIZATION HIERARCHY & SUPERVISOR INSTRUCTIONS]\n"
+                    f"Your supervisor is {parent_name} (ID: {agent_config.parent_id}).\n"
+                    f"If you lack required information, parameters, or permissions, ask your supervisor directly by stating your question clearly or using AskUserQuestion.\n"
+                    f"State the question clearly so your supervisor can provide the answer or permission."
+                )
+            cmd.extend(["--system-prompt", sys_prompt])
+
         # Enforce agent tool restrictions if configured
         if getattr(agent_config, "allowed_tools", None) and len(agent_config.allowed_tools) > 0:
             cmd.extend(["--allowedTools", ",".join(agent_config.allowed_tools)])
-
-        # Add working directory restriction if specified
-        if project_config and project_config.working_directory:
-            work_dir = project_config.working_directory
-            if os.path.exists(work_dir):
-                cmd.extend(["--add-dir", work_dir])
-            else:
-                # Fallback to current directory if work dir doesn't exist
-                cmd.extend(["--add-dir", os.getcwd()])
-        else:
-            cmd.extend(["--add-dir", os.getcwd()])
 
         return cmd
 
@@ -339,7 +567,8 @@ class ClaudeCodeRuntimeAdapter:
         project_id: Optional[str] = None,
         prompt: Optional[str] = None,
         session_id: Optional[str] = None,
-        fork_session: bool = False
+        fork_session: bool = False,
+        task_id: Optional[str] = None
     ) -> str:
         """
         Start a new agent task, or launch execution of an existing task run by ID.
@@ -350,6 +579,7 @@ class ClaudeCodeRuntimeAdapter:
             prompt: The task prompt to execute (optional if existing run ID provided)
             session_id: Optional session ID to resume
             fork_session: Whether to fork a new session
+            task_id: Optional specific task/run ID to reuse or assign (1 Session == 1 Task)
 
         Returns:
             Run ID for tracking the task
@@ -423,20 +653,63 @@ class ClaudeCodeRuntimeAdapter:
             if not project_config:
                 raise ValueError(f"Project not found: {project_id}")
 
-        # Create run ID
-        run_id = str(uuid.uuid4())
+        # Terminate any hung process for this task_id if one is still running
+        if task_id and task_id in self._processes:
+            p = self._processes[task_id]
+            if p.poll() is None:
+                try:
+                    p.terminate()
+                    p.wait(timeout=2)
+                except Exception:
+                    try:
+                        p.kill()
+                    except Exception:
+                        pass
 
-        # Create agent run record
-        run = AgentRun(
-            run_id=run_id,
-            agent_id=agent_id,
-            project_id=project_id,
-            prompt=prompt,
-            status=TaskStatus.QUEUED,
-            created_at=datetime.now()
-        )
+        # Determine run ID (1 Session == 1 Task: reuses task_id if provided)
+        run_id = task_id or str(uuid.uuid4())
 
-        self._runs[run_id] = run
+        existing_run = self._runs.get(run_id)
+        if not existing_run:
+            try:
+                from persistence import db_manager
+                existing_run = db_manager.get_task_run(run_id)
+            except Exception:
+                pass
+
+        if existing_run:
+            existing_run.prompt = prompt or existing_run.prompt
+            existing_run.status = TaskStatus.QUEUED
+            existing_run.result = None
+            existing_run.error = None
+            existing_run.ended_at = None
+            existing_run.events = []
+            if session_id:
+                existing_run.session_id = session_id
+            self._runs[run_id] = existing_run
+            try:
+                from persistence import db_manager
+                db_manager.save_task_run(existing_run)
+            except Exception as db_err:
+                logger.warning(f"Failed to update task run {run_id}: {db_err}")
+            run = existing_run
+        else:
+            run = AgentRun(
+                run_id=run_id,
+                agent_id=agent_id,
+                project_id=project_id,
+                prompt=prompt or "Session Task",
+                status=TaskStatus.QUEUED,
+                created_at=datetime.now()
+            )
+            if session_id:
+                run.session_id = session_id
+            self._runs[run_id] = run
+            try:
+                from persistence import db_manager
+                db_manager.save_task_run(run)
+            except Exception as db_err:
+                logger.warning(f"Failed to persist queued task run {run_id}: {db_err}")
 
         # Start the task in a background thread to avoid blocking
         thread = threading.Thread(
@@ -455,7 +728,8 @@ class ClaudeCodeRuntimeAdapter:
         project_config: Optional[ProjectConfig],
         prompt: str,
         session_id: Optional[str],
-        fork_session: bool
+        fork_session: bool,
+        dangerously_skip_permissions: bool = False
     ):
         """
         Execute a task in a Claude Code subprocess.
@@ -467,6 +741,7 @@ class ClaudeCodeRuntimeAdapter:
             prompt: The task prompt
             session_id: Optional session ID to resume
             fork_session: Whether to fork a new session
+            dangerously_skip_permissions: Whether to bypass permission dialogs
         """
         run = self._runs[run_id]
 
@@ -476,14 +751,18 @@ class ClaudeCodeRuntimeAdapter:
             run.started_at = datetime.now()
 
             # Build command and environment
-            cmd = self._build_claude_command(agent_config, project_config, prompt, session_id, fork_session)
+            skip_perm = dangerously_skip_permissions or getattr(run, "dangerously_skip_permissions", False)
+            cmd = self._build_claude_command(
+                agent_config, project_config, prompt, session_id, fork_session,
+                dangerously_skip_permissions=skip_perm
+            )
             env = self._build_claude_env()
 
             # Determine working directory
-            if project_config and project_config.working_directory:
+            if project_config and getattr(project_config, "working_directory", None) and os.path.exists(project_config.working_directory):
                 work_dir = project_config.working_directory
-                if not os.path.exists(work_dir):
-                    work_dir = os.getcwd()
+            elif getattr(agent_config, "repo_path", None) and os.path.exists(agent_config.repo_path):
+                work_dir = agent_config.repo_path
             else:
                 work_dir = os.getcwd()
 
@@ -525,12 +804,29 @@ class ClaudeCodeRuntimeAdapter:
                     run.events.append(event)
 
                     # Capture Claude session ID if emitted
+                    captured_sid = None
                     if event.get("session_id"):
-                        run.session_id = event["session_id"]
+                        captured_sid = event["session_id"]
                     elif event.get("data", {}).get("session_id"):
-                        run.session_id = event["data"]["session_id"]
+                        captured_sid = event["data"]["session_id"]
+                    elif event.get("type") == "result" and event.get("session_id"):
+                        captured_sid = event["session_id"]
 
-                    # Check for explicit tool call for supervisor clarification
+                    if captured_sid:
+                        run.session_id = captured_sid
+                        try:
+                            from persistence import db_manager
+                            with db_manager._get_connection() as conn:
+                                conn.execute("""
+                                    UPDATE agent_conversations
+                                    SET claude_session_id = ?, updated_at = ?
+                                    WHERE agent_id = ? AND (task_id = ? OR status = 'ACTIVE')
+                                """, (captured_sid, datetime.now().isoformat(), run.agent_id, run.run_id))
+                                conn.commit()
+                        except Exception:
+                            pass
+
+                    # Check for explicit tool call for supervisor clarification or permission
                     tool_q = extract_supervisor_question(event)
                     if tool_q:
                         from orchestration.supervisor_resolver import SupervisorResolver
@@ -554,7 +850,7 @@ class ClaudeCodeRuntimeAdapter:
                     # Handle special events
                     if event.get("type") == "result":
                         res_val = event.get("result", "")
-                        q_data = extract_supervisor_question(res_val)
+                        q_data = extract_supervisor_question(event) or extract_supervisor_question(res_val)
                         if q_data:
                             from orchestration.supervisor_resolver import SupervisorResolver
                             from persistence import db_manager
@@ -629,18 +925,13 @@ class ClaudeCodeRuntimeAdapter:
                 from persistence import db_manager
                 db_manager.save_task_run(run)
 
-                # Record task execution response in chat_messages for the agent
-                if run.status in (TaskStatus.COMPLETED, TaskStatus.FAILED) and run.agent_id:
+                # Record task response in chat_messages for the agent
+                if run.status in (TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.WAITING_INPUT) and run.agent_id:
                     try:
                         conv = db_manager.get_or_create_conversation(run.agent_id, project_id=run.project_id)
-                        existing = db_manager.get_chat_history(run.agent_id, limit=50)
-                        already_recorded = any(
-                            m.get("task_id") == run.run_id and m.get("sender_type") in ("ASSISTANT", "AGENT")
-                            for m in existing
-                        )
-                        if not already_recorded:
-                            status_val = run.status.value if hasattr(run.status, "value") else str(run.status)
-                            content_text = run.result if (status_val == "completed" and run.result) else (run.error or "Task completed.")
+                        status_val = run.status.value if hasattr(run.status, "value") else str(run.status)
+                        content_text = run.result if (status_val in ("completed", "waiting_input") and run.result) else (run.error or "Task completed.")
+                        if not db_manager.has_chat_message_for_task(run.agent_id, run.run_id, "ASSISTANT", content=content_text):
                             assistant_msg = db_manager.save_chat_message({
                                 "conversation_id": conv["id"],
                                 "agent_id": run.agent_id,
@@ -743,9 +1034,16 @@ class ClaudeCodeRuntimeAdapter:
         run.ended_at = None
         run.result = None
 
+        # Check if user answer or previous run status indicates permission was granted
+        answer_lower = answer.lower()
+        grants_perm = any(w in answer_lower for w in ("permission", "grant", "allow", "continue", "approved", "approve", "yes", "proceed", "ok"))
+        was_perm_blocked = run.result and ("permission" in run.result.lower() or "blocked" in run.result.lower())
+        skip_perm = grants_perm or bool(was_perm_blocked) or getattr(run, "dangerously_skip_permissions", False)
+        run.dangerously_skip_permissions = skip_perm
+
         thread = threading.Thread(
             target=self._execute_task,
-            args=(run_id, agent_config, project_config, continuation_prompt, run.session_id, False)
+            args=(run_id, agent_config, project_config, continuation_prompt, run.session_id, False, skip_perm)
         )
         thread.daemon = True
         thread.start()
