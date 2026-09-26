@@ -374,7 +374,7 @@ class ClaudeCodeRuntimeAdapter:
         elif status_val == "pending_approval":
             self._emit_task_event(run, "approval.required")
 
-    def _build_claude_env(self) -> Dict[str, str]:
+    def _build_claude_env(self, run_id: Optional[str] = None, project_id: Optional[str] = None) -> Dict[str, str]:
         """Build environment variables for Claude Code subprocess."""
         env = os.environ.copy()
         env.update({
@@ -389,6 +389,10 @@ class ClaudeCodeRuntimeAdapter:
             "TERM": "dumb",
             "PYTHONIOENCODING": "utf-8"
         })
+        if run_id:
+            env["PLATFORM_PARENT_TASK_ID"] = run_id
+        if project_id:
+            env["PLATFORM_PROJECT_ID"] = project_id
         return env
 
     def _build_claude_command(
@@ -440,43 +444,112 @@ class ClaudeCodeRuntimeAdapter:
 
         # Add working directory restriction if specified
         target_dir = None
-        if project_config and getattr(project_config, "working_directory", None) and os.path.exists(project_config.working_directory):
-            target_dir = project_config.working_directory
-        elif getattr(agent_config, "repo_path", None) and os.path.exists(agent_config.repo_path):
-            target_dir = agent_config.repo_path
+        if project_config and getattr(project_config, "working_directory", None) and project_config.working_directory.strip():
+            target_dir = os.path.abspath(project_config.working_directory.strip())
+            os.makedirs(target_dir, exist_ok=True)
+        elif getattr(agent_config, "repo_path", None) and agent_config.repo_path.strip():
+            target_dir = os.path.abspath(agent_config.repo_path.strip())
+            os.makedirs(target_dir, exist_ok=True)
         else:
             target_dir = os.getcwd()
 
         cmd.extend(["--add-dir", target_dir])
 
-        # Pass agent system prompt with supervisor context and workspace if configured
-        if getattr(agent_config, "system_prompt", None):
-            sys_prompt = agent_config.system_prompt
-            sys_prompt += (
-                f"\n\n[PROJECT WORKSPACE]\n"
-                f"Your assigned project workspace directory is: {target_dir}\n"
-                f"All files created, edited, read, or verified MUST reside inside this directory: {target_dir}"
+        # Pass agent system prompt with supervisor context, workspace, and equipped skills
+        prompt_parts: List[str] = []
+        if getattr(agent_config, "system_prompt", None) and agent_config.system_prompt.strip():
+            prompt_parts.append(agent_config.system_prompt.strip())
+
+        prompt_parts.append(
+            f"[PROJECT WORKSPACE]\n"
+            f"Your assigned project workspace directory is: {target_dir}\n"
+            f"All files created, edited, read, or verified MUST reside inside this directory: {target_dir}"
+        )
+
+        if getattr(agent_config, "parent_id", None):
+            parent_name = agent_config.parent_id
+            try:
+                from persistence import db_manager
+                parent = db_manager.get_agent(agent_config.parent_id)
+                if parent and parent.name:
+                    parent_name = parent.name
+            except Exception:
+                pass
+            prompt_parts.append(
+                f"[ORGANIZATION HIERARCHY & SUPERVISOR INSTRUCTIONS]\n"
+                f"Your supervisor is {parent_name} (ID: {agent_config.parent_id}).\n"
+                f"If you lack required information, parameters, or permissions, ask your supervisor directly by stating your question clearly or using AskUserQuestion.\n"
+                f"State the question clearly so your supervisor can provide the answer or permission."
             )
-            if getattr(agent_config, "parent_id", None):
-                parent_name = agent_config.parent_id
-                try:
-                    from persistence import db_manager
-                    parent = db_manager.get_agent(agent_config.parent_id)
-                    if parent and parent.name:
-                        parent_name = parent.name
-                except Exception:
-                    pass
-                sys_prompt += (
-                    f"\n\n[ORGANIZATION HIERARCHY & SUPERVISOR INSTRUCTIONS]\n"
-                    f"Your supervisor is {parent_name} (ID: {agent_config.parent_id}).\n"
-                    f"If you lack required information, parameters, or permissions, ask your supervisor directly by stating your question clearly or using AskUserQuestion.\n"
-                    f"State the question clearly so your supervisor can provide the answer or permission."
-                )
-            cmd.extend(["--system-prompt", sys_prompt])
+
+        # Inject delegation mandate for managers and orchestrators
+        allowed_children = getattr(agent_config, "allowed_child_ids", []) or []
+        role_type = (getattr(agent_config, "role_type", "") or "").upper()
+        if allowed_children or role_type in ("ROOT_ORCHESTRATOR", "MANAGER"):
+            subordinates_info = []
+            try:
+                from persistence import db_manager
+                for cid in allowed_children:
+                    child_agent = db_manager.get_agent(cid)
+                    if child_agent:
+                        subordinates_info.append(f"- `{cid}` ({child_agent.name}): {child_agent.description or child_agent.department}")
+                    else:
+                        subordinates_info.append(f"- `{cid}`")
+            except Exception:
+                subordinates_info = [f"- `{cid}`" for cid in allowed_children]
+
+            subordinates_text = "\n".join(subordinates_info) if subordinates_info else "(subordinates defined in organization hierarchy)"
+
+            prompt_parts.append(
+                f"[ORGANIZATION HIERARCHY & TASK DELEGATION MANDATE]\n"
+                f"You are an Orchestrator/Manager agent ({agent_config.name}, Role: {role_type}).\n"
+                f"CRITICAL INVARIANT: You DO NOT execute lower-tier worker tasks yourself (do not write frontend/backend code, test suites, or subordinate specs directly).\n"
+                f"You MUST delegate work packages down the organizational hierarchy to your authorized subordinates:\n"
+                f"{subordinates_text}\n\n"
+                f"HOW TO DELEGATE IN THIS PLATFORM:\n"
+                f"To dispatch a task to a subordinate agent, run this command using Bash:\n"
+                f"python3 -m orchestration.delegate --target-agent <agent_id> --prompt \"<detailed requirements, deliverables, and acceptance criteria>\"\n\n"
+                f"When you run this command:\n"
+                f"1. The platform registers the subtask in the database and live hierarchy tree.\n"
+                f"2. The subordinate agent is invoked with their dedicated model tier, prompt, and specialized skills.\n"
+                f"3. Subordinate managers (Product Manager, Software Architect) will then delegate to their own workers.\n"
+                f"Always delegate tasks to the appropriate subordinate agent rather than doing it yourself."
+            )
+
+        # Inject equipped skills if configured
+        agent_skills = getattr(agent_config, "skills", None)
+        if agent_skills and len(agent_skills) > 0:
+            try:
+                from skills_service import build_skills_system_prompt
+                skills_prompt = build_skills_system_prompt(agent_skills)
+                if skills_prompt:
+                    prompt_parts.append(skills_prompt)
+            except Exception as e:
+                logger.warning(f"Failed to inject equipped skills for agent {agent_config.id}: {e}")
+
+        if prompt_parts:
+            cmd.extend(["--system-prompt", "\n\n".join(prompt_parts)])
 
         # Enforce agent tool restrictions if configured
         if getattr(agent_config, "allowed_tools", None) and len(agent_config.allowed_tools) > 0:
-            cmd.extend(["--allowedTools", ",".join(agent_config.allowed_tools)])
+            tool_mapping = {
+                "read": "View", "view": "View",
+                "write": "FileEdit", "edit": "FileEdit",
+                "grep": "Grep", "glob": "Glob",
+                "bash": "Bash", "Bash": "Bash",
+                "delegate_task": "Bash",
+                "ask_supervisor": "AskUserQuestion", "ask_manager": "AskUserQuestion",
+                "ask_human": "AskUserQuestion", "AskUserQuestion": "AskUserQuestion"
+            }
+            mapped_tools = set()
+            for t in agent_config.allowed_tools:
+                if t in tool_mapping:
+                    mapped_tools.add(tool_mapping[t])
+                else:
+                    mapped_tools.add(t)
+            if allowed_children or role_type in ("ROOT_ORCHESTRATOR", "MANAGER"):
+                mapped_tools.add("Bash")
+            cmd.extend(["--allowedTools", ",".join(sorted(mapped_tools))])
 
         return cmd
 
@@ -749,6 +822,11 @@ class ClaudeCodeRuntimeAdapter:
             # Update status to running
             run.status = TaskStatus.RUNNING
             run.started_at = datetime.now()
+            try:
+                from persistence import db_manager
+                db_manager.save_task_run(run)
+            except Exception:
+                pass
 
             # Build command and environment
             skip_perm = dangerously_skip_permissions or getattr(run, "dangerously_skip_permissions", False)
@@ -756,13 +834,15 @@ class ClaudeCodeRuntimeAdapter:
                 agent_config, project_config, prompt, session_id, fork_session,
                 dangerously_skip_permissions=skip_perm
             )
-            env = self._build_claude_env()
+            env = self._build_claude_env(run_id=run_id, project_id=getattr(run, "project_id", None))
 
             # Determine working directory
-            if project_config and getattr(project_config, "working_directory", None) and os.path.exists(project_config.working_directory):
-                work_dir = project_config.working_directory
-            elif getattr(agent_config, "repo_path", None) and os.path.exists(agent_config.repo_path):
-                work_dir = agent_config.repo_path
+            if project_config and getattr(project_config, "working_directory", None) and project_config.working_directory.strip():
+                work_dir = os.path.abspath(project_config.working_directory.strip())
+                os.makedirs(work_dir, exist_ok=True)
+            elif getattr(agent_config, "repo_path", None) and agent_config.repo_path.strip():
+                work_dir = os.path.abspath(agent_config.repo_path.strip())
+                os.makedirs(work_dir, exist_ok=True)
             else:
                 work_dir = os.getcwd()
 

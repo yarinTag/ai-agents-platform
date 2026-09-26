@@ -171,64 +171,12 @@ async def delete_skill(
 
 
 
+from skills_service import get_skills_search_roots
+
 @router.get("/plugins/scan")
 async def scan_plugins():
     """Scan configured plugin repositories and local folders for available skills."""
-    scan_env = os.environ.get("SKILLS_SCAN_PATHS", "")
-    potential_roots: List[Path] = []
-
-    # 1. Environment variable overrides
-    for env_var in ["SKILLS_REPO_PATH", "MARKETPLACE_PATH"]:
-        val = os.environ.get(env_var, "").strip()
-        if val:
-            p = Path(val)
-            if p.exists() and p not in potential_roots:
-                potential_roots.append(p.resolve())
-
-    if scan_env:
-        for p_str in scan_env.split(";"):
-            p_clean = p_str.strip()
-            if p_clean:
-                p = Path(p_clean)
-                if p.exists() and p not in potential_roots:
-                    potential_roots.append(p.resolve())
-
-    # 2. Dynamic discovery across user directories and workspace
-    home = Path.home()
-    try:
-        for child in home.iterdir():
-            if child.is_dir():
-                cand = child / "Desktop" / "Projects" / "p-skills" / "skills-marketplace"
-                if cand.exists() and cand.resolve() not in potential_roots:
-                    potential_roots.append(cand.resolve())
-                cand2 = child / "Projects" / "p-skills" / "skills-marketplace"
-                if cand2.exists() and cand2.resolve() not in potential_roots:
-                    potential_roots.append(cand2.resolve())
-    except Exception:
-        pass
-
-    for direct_child in [
-        home / "Desktop" / "Projects" / "p-skills" / "skills-marketplace",
-        home / "Projects" / "p-skills" / "skills-marketplace",
-        home / "p-skills" / "skills-marketplace",
-    ]:
-        if direct_child.exists() and direct_child.resolve() not in potential_roots:
-            potential_roots.append(direct_child.resolve())
-
-    # 4. Workspace locations
-    poc_dir = Path(__file__).resolve().parent.parent.parent
-    workspace_dir = poc_dir.parent
-
-    for candidate in [
-        workspace_dir.parent / "p-skills" / "skills-marketplace",
-        poc_dir / "plugins",
-        poc_dir / "config" / "skills",
-        poc_dir / "skills",
-        workspace_dir / "plugins",
-        workspace_dir / "skills",
-    ]:
-        if candidate.exists() and candidate.resolve() not in potential_roots:
-            potential_roots.append(candidate.resolve())
+    potential_roots = get_skills_search_roots()
 
     plugins_map: Dict[str, Dict[str, Any]] = {}
     primary_marketplace_root: Optional[str] = None

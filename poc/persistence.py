@@ -725,9 +725,12 @@ class DatabaseManager:
             try:
                 with open(agents_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                    defaults = list(data.values())
+                    defaults = list(data.values()) if isinstance(data, dict) else []
             except Exception as e:
                 logging.getLogger(__name__).warning(f"Failed to read baseline agents from {agents_file}: {e}")
+
+        if not defaults:
+            return
 
         now = datetime.now().isoformat()
         for item in defaults:
