@@ -28,8 +28,10 @@ This document provides developer instructions, operational invariants, and codin
 ```
 poc/
 ├── backend/
-│   ├── api/             # REST Routers (agents, tasks, schedules, approvals, chat, memories, war_room, events)
-│   ├── security/        # Auth, RateLimiter, CorrelationId, Error Handlers
+│   ├── api/             # REST Routers (agents, tasks, schedules, approvals, chat, memories, war_room, events, fs)
+│   ├── security/        # Auth, RateLimiter, CorrelationId, Error Handlers (see security/AGENTS.md)
+│   ├── teams/           # Multi-Agent Teams router & coordination (see teams/AGENTS.md)
+│   ├── messages/        # Agent-to-Agent (A2A) messaging router (see messages/AGENTS.md)
 │   ├── cron_engine.py   # Async CronSchedulerEngine background polling worker
 │   ├── dependencies.py  # Centralized dependency injection bridge
 │   └── main.py          # FastAPI application entrypoint & lifespan
@@ -37,7 +39,7 @@ poc/
 ├── runtime/             # ClaudeCodeAdapter, RuntimeProtocol
 ├── persistence.py       # DatabaseManager (SQLite schema, migrations, CRUD)
 ├── runtime_adapter.py   # ClaudeCodeRuntimeAdapter (Subprocess CLI, streaming, session resume)
-└── tests/               # 52+ Automated regression and integration test suites
+└── tests/               # 12 Core automated test suites (40 tests)
 ```
 
 ---

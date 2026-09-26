@@ -11,6 +11,8 @@ build/
 # Virtual environments
 venv/
 .venv/
+poc/.venv/
+**/.venv/
 env/
 
 # IDE
@@ -43,3 +45,4 @@ poc/output.txt
 # Environment
 .env
 .env.local
+poc/.venv

@@ -43,6 +43,7 @@ import { CharacterSelector } from '../components/agents/CharacterSelector';
 import { TemplateGallery } from '../components/agents/TemplateGallery';
 import { HierarchyEditor } from '../components/agents/HierarchyEditor';
 import { AgentMiniChatDrawer } from '../components/chat/AgentMiniChatDrawer';
+import FolderPickerModal from '../components/common/FolderPickerModal';
 
 export const AgentsPage: React.FC = () => {
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -50,6 +51,7 @@ export const AgentsPage: React.FC = () => {
   const [availableModels, setAvailableModels] = useState<DiscoveredModel[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [visible, setVisible] = useState<boolean>(false);
+  const [folderPickerVisible, setFolderPickerVisible] = useState<boolean>(false);
   const [form] = Form.useForm();
   const [editingKey, setEditingKey] = useState<string>('');
   const [activeTab, setActiveTab] = useState<string>('roster');
@@ -664,7 +666,20 @@ export const AgentsPage: React.FC = () => {
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <Form.Item name="repo_path" label="Local Repository Path">
-              <Input placeholder="c:\projects\my-repo" />
+              <Input
+                placeholder="/path/to/my-repo"
+                addonAfter={
+                  <Button
+                    type="link"
+                    size="small"
+                    icon={<FolderOpenOutlined />}
+                    onClick={() => setFolderPickerVisible(true)}
+                    style={{ padding: '0 6px', color: '#38bdf8' }}
+                  >
+                    Browse...
+                  </Button>
+                }
+              />
             </Form.Item>
             <Form.Item name="github_url" label="GitHub URL">
               <Input placeholder="https://github.com/org/repo" />
@@ -677,6 +692,13 @@ export const AgentsPage: React.FC = () => {
           </Form.Item>
         </Form>
       </Modal>
+
+      <FolderPickerModal
+        open={folderPickerVisible}
+        onClose={() => setFolderPickerVisible(false)}
+        onSelect={(path) => form.setFieldsValue({ repo_path: path })}
+        title="📁 Select Agent Local Repository Folder"
+      />
 
       {/* Agent Interactive Mini-Chat Drawer */}
       <AgentMiniChatDrawer

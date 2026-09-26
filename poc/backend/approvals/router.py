@@ -130,6 +130,81 @@ async def respond_to_interaction(
 
     # If approved / answered, resume task
     if payload.decision == "approve":
+        try:
+            from persistence import AgentMessage
+            db.save_agent_message(AgentMessage(
+                id=f"msg_ans_{datetime.now().timestamp()}",
+                from_agent_id=payload.responder,
+                to_agent_id=interaction["requester_agent_id"],
+                content=payload.response_text,
+                task_id=task_id,
+                message_type="ANSWER",
+                status="SENT",
+                metadata={"interaction_id": payload.interaction_id, "decision": payload.decision}
+            ))
+        except Exception as msg_err:
+            import logging
+            logging.getLogger(__name__).warning(f"Failed to record AgentMessage response: {msg_err}")
+
+        # Record response in chat_messages for both supervisor and requester
+        try:
+            target_approver = interaction.get("target_approver_id")
+            if target_approver and target_approver != "HUMAN_OPERATOR":
+                sup_conv = db.get_or_create_conversation(target_approver)
+                sup_msg = db.save_chat_message({
+                    "conversation_id": sup_conv["id"],
+                    "agent_id": target_approver,
+                    "task_id": task_id,
+                    "sender_type": "USER",
+                    "message_type": "CHAT",
+                    "content": f"💬 **Response provided to {interaction['requester_agent_id']}:**\n\n{payload.response_text}",
+                    "metadata": {"interaction_id": payload.interaction_id, "task_id": task_id}
+                })
+                event_bus.publish(PlatformEvent(
+                    event_id=f"evt_{datetime.now().timestamp()}",
+                    event_type="chat.message",
+                    agent_id=target_approver,
+                    task_id=task_id,
+                    payload={
+                        "id": sup_msg["id"],
+                        "sender_type": "USER",
+                        "content": sup_msg["content"],
+                        "task_id": task_id,
+                        "created_at": datetime.now().isoformat()
+                    },
+                    source="approvals_api"
+                ))
+
+            requester_id = interaction.get("requester_agent_id")
+            if requester_id:
+                req_conv = db.get_or_create_conversation(requester_id)
+                req_msg = db.save_chat_message({
+                    "conversation_id": req_conv["id"],
+                    "agent_id": requester_id,
+                    "task_id": task_id,
+                    "sender_type": "USER",
+                    "message_type": "CHAT",
+                    "content": f"💬 **Supervisor ({target_approver or 'Lead'}) Answer:**\n\n{payload.response_text}",
+                    "metadata": {"interaction_id": payload.interaction_id, "task_id": task_id}
+                })
+                event_bus.publish(PlatformEvent(
+                    event_id=f"evt_{datetime.now().timestamp()}",
+                    event_type="chat.message",
+                    agent_id=requester_id,
+                    task_id=task_id,
+                    payload={
+                        "id": req_msg["id"],
+                        "sender_type": "USER",
+                        "content": req_msg["content"],
+                        "task_id": task_id,
+                        "created_at": datetime.now().isoformat()
+                    },
+                    source="approvals_api"
+                ))
+        except Exception as chat_err:
+            import logging
+            logging.getLogger(__name__).warning(f"Failed to record approval chat message: {chat_err}")
+
         db.update_task_run(task_id, status=TaskStatus.RUNNING)
         try:
             if hasattr(runtime, "resume_task"):

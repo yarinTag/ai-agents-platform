@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Card, Button, Tag, Modal, Form, Input, Select, message, Spin, Space } from 'antd';
-import { ThunderboltOutlined, UserAddOutlined, BranchesOutlined, CheckCircleOutlined } from '@ant-design/icons';
+import { ThunderboltOutlined, UserAddOutlined, BranchesOutlined, CheckCircleOutlined, FolderOpenOutlined } from '@ant-design/icons';
 import { Agent, AgentTemplate, TemplateInstantiateDto } from '../../types/agent';
 import { getTemplates, instantiateTemplate } from '../../services/api';
+import FolderPickerModal from '../common/FolderPickerModal';
 
 interface TemplateGalleryProps {
   agents: Agent[];
@@ -17,6 +18,7 @@ export const TemplateGallery: React.FC<TemplateGalleryProps> = ({
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedTemplate, setSelectedTemplate] = useState<AgentTemplate | null>(null);
   const [modalVisible, setModalVisible] = useState<boolean>(false);
+  const [folderPickerVisible, setFolderPickerVisible] = useState<boolean>(false);
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [form] = Form.useForm();
 
@@ -221,7 +223,20 @@ export const TemplateGallery: React.FC<TemplateGalleryProps> = ({
           )}
 
           <Form.Item name="repo_path" label="Local Repository Path">
-            <Input placeholder="Optional local folder path for file-system access" />
+            <Input
+              placeholder="Optional local folder path for file-system access"
+              addonAfter={
+                <Button
+                  type="link"
+                  size="small"
+                  icon={<FolderOpenOutlined />}
+                  onClick={() => setFolderPickerVisible(true)}
+                  style={{ padding: '0 6px', color: '#38bdf8' }}
+                >
+                  Browse...
+                </Button>
+              }
+            />
           </Form.Item>
 
           <Form.Item name="system_prompt_override" label="Custom Instructions (Override)">
@@ -232,6 +247,13 @@ export const TemplateGallery: React.FC<TemplateGalleryProps> = ({
           </Form.Item>
         </Form>
       </Modal>
+
+      <FolderPickerModal
+        open={folderPickerVisible}
+        onClose={() => setFolderPickerVisible(false)}
+        onSelect={(path) => form.setFieldsValue({ repo_path: path })}
+        title="📁 Select Template Local Repository Folder"
+      />
     </div>
   );
 };

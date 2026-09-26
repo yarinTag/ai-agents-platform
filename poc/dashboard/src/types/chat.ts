@@ -25,9 +25,17 @@ export interface Conversation {
   project_id?: string | null;
   title: string;
   claude_session_id?: string | null;
+  task_id?: string | null;
+  supervisor_session_id?: string | null;
+  supervisor_agent_id?: string | null;
+  supervisor_agent_name?: string | null;
+  supervisor_session_title?: string | null;
+  status?: 'ACTIVE' | 'CLOSED' | string;
   created_at: string;
   updated_at: string;
 }
+
+export type AgentSession = Conversation;
 
 export interface ChatHistoryResponse {
   conversation: Conversation;

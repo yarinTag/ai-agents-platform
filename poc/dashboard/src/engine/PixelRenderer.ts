@@ -288,17 +288,6 @@ export class PixelRenderer {
           color: '#38bdf8',
           label: 'Super Agent Query',
         });
-      } else if (st === 'running' || st === 'queued') {
-        const inp = typeof t.input_data === 'string' ? t.input_data : JSON.stringify(t.input_data || '');
-        if (inp.toLowerCase().includes('mcp') || inp.toLowerCase().includes('github') || inp.toLowerCase().includes('tool')) {
-          list.push({
-            id: `conn-mcp-${t.id}`,
-            fromAgentId: aid,
-            targetType: 'mcp',
-            color: '#10b981',
-            label: 'MCP Tool Exec',
-          });
-        }
       }
     });
 
@@ -1442,10 +1431,7 @@ export class PixelRenderer {
         state = 'WAITING';
       } else if (st === 'running' || st === 'queued') {
         if (state === 'IDLE') {
-          const inp = typeof activeTask.input_data === 'string' ? activeTask.input_data : JSON.stringify(activeTask.input_data || '');
-          if (inp.toLowerCase().includes('mcp') || inp.toLowerCase().includes('github')) {
-            state = 'USING_MCP';
-          } else if ((agent.status || '').toLowerCase() === 'thinking') {
+          if ((agent.status || '').toLowerCase() === 'thinking') {
             state = 'THINKING';
           } else {
             state = 'WORKING';

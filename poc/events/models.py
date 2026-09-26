@@ -25,6 +25,8 @@ class EventType(str, Enum):
     TASK_STARTED = "task.started"
     TASK_DELEGATED = "task.delegated"
     TASK_DELETED = "task.deleted"
+    TASK_PROGRESS = "task.progress"
+    TASK_WAITING_INPUT = "task.waiting_input"
 
     # Execution events
     EXECUTION_STARTED = "execution.started"
@@ -53,15 +55,6 @@ class EventType(str, Enum):
     AGENT_BLOCKED = "agent.blocked"
     AGENT_COMPLETED = "agent.completed"
     AGENT_FAILED = "agent.failed"
-
-    # MCP Lifecycle & Tool Execution
-    MCP_CONNECTION_CREATED = "mcp.connection.created"
-    MCP_CONNECTION_CONNECTED = "mcp.connection.connected"
-    MCP_CONNECTION_DISCONNECTED = "mcp.connection.disconnected"
-    MCP_TOOL_STARTED = "mcp.tool.started"
-    MCP_TOOL_COMPLETED = "mcp.tool.completed"
-    MCP_TOOL_FAILED = "mcp.tool.failed"
-    MCP_PERMISSION_DENIED = "mcp.permission.denied"
 
     # Human Approvals
     APPROVAL_REQUIRED = "approval.required"
