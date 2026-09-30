@@ -1,6 +1,7 @@
 """
-Runtime adapter for Free Claude Code integration.
-Handles launching and managing Claude Code subprocesses.
+Runtime adapter for Claude Code integration.
+Handles launching and managing Claude Code subprocesses against a selectable
+runtime provider (native CLI auth, Free Claude Code proxy, API key, or gateway).
 """
 
 import subprocess
@@ -19,6 +20,14 @@ import logging
 
 # Import from local modules using absolute imports
 from config import AgentConfig, ProjectConfig
+import runtime_providers as providers
+
+# Setting keys live on the provider registry; re-exported for existing callers.
+RUNTIME_PROVIDER_SETTING_KEY = providers.SETTING_PROVIDER
+RUNTIME_GATEWAY_URL_SETTING_KEY = providers.SETTING_GATEWAY_URL
+RUNTIME_SETUP_COMPLETED_KEY = providers.SETTING_SETUP_COMPLETED
+
+logger = logging.getLogger(__name__)
 
 
 class TaskStatus(Enum):
@@ -305,9 +314,10 @@ class ClaudeCodeRuntimeAdapter:
     extract_supervisor_question = staticmethod(extract_supervisor_question)
 
     def __init__(self):
-        # Free Claude Code proxy configuration from environment or defaults
-        self.proxy_url = os.getenv("ANTHROPIC_BASE_URL", os.getenv("FCC_PROXY_URL", "http://127.0.0.1:8082"))
-        self.auth_token = os.getenv("ANTHROPIC_AUTH_TOKEN", os.getenv("FCC_AUTH_TOKEN", "freecc"))
+        # Legacy attributes retained for callers that still read them; actual
+        # backend routing now comes from the runtime provider registry.
+        self.proxy_url = os.getenv("FCC_PROXY_URL", providers.FREE_CLAUDE_CODE_DEFAULT_URL)
+        self.auth_token = os.getenv("FCC_AUTH_TOKEN", providers.FREE_CLAUDE_CODE_DEFAULT_TOKEN)
         self.max_concurrent_runs = int(os.getenv("PLATFORM_MAX_CONCURRENT_TASKS", "10"))
 
         # Active runs
@@ -374,13 +384,62 @@ class ClaudeCodeRuntimeAdapter:
         elif status_val == "pending_approval":
             self._emit_task_event(run, "approval.required")
 
-    def _build_claude_env(self, run_id: Optional[str] = None, project_id: Optional[str] = None) -> Dict[str, str]:
+    def resolve_runtime_provider(self, agent_config: Optional[AgentConfig] = None) -> str:
+        """
+        Resolve which runtime provider a run should use.
+
+        Precedence, most specific first:
+          1. The agent's own `runtime_provider` override
+          2. PLATFORM_RUNTIME_PROVIDER in the environment
+          3. The default saved by the first-run setup prompt
+          4. Native Claude Code CLI auth
+
+        Detection is intentionally *not* part of this chain: a saved default must
+        not flip because a proxy happened to be asleep. Detection only feeds the
+        setup prompt's suggestion.
+        """
+        agent_choice = getattr(agent_config, "runtime_provider", None)
+        if agent_choice and agent_choice.strip():
+            return agent_choice.strip()
+
+        env_choice = os.getenv("PLATFORM_RUNTIME_PROVIDER", "").strip()
+        if env_choice:
+            return env_choice
+
+        try:
+            from persistence import db_manager
+            saved = db_manager.get_setting(RUNTIME_PROVIDER_SETTING_KEY)
+            if saved and saved.strip():
+                return saved.strip()
+        except Exception as db_err:
+            logging.getLogger(__name__).debug(f"Could not read saved runtime provider: {db_err}")
+
+        return providers.PROVIDER_CLAUDE_CODE_NATIVE
+
+    def _build_claude_env(
+        self,
+        run_id: Optional[str] = None,
+        project_id: Optional[str] = None,
+        agent_config: Optional[AgentConfig] = None,
+    ) -> Dict[str, str]:
         """Build environment variables for Claude Code subprocess."""
-        env = os.environ.copy()
+        provider_id = self.resolve_runtime_provider(agent_config)
+
+        gateway_url = None
+        try:
+            from persistence import db_manager
+            gateway_url = db_manager.get_setting(RUNTIME_GATEWAY_URL_SETTING_KEY)
+        except Exception:
+            pass
+
+        # build_provider_env strips inherited backend-steering vars before
+        # applying the selected provider, so a stale ANTHROPIC_BASE_URL in the
+        # platform's own shell cannot hijack a native-auth run.
+        env = providers.build_provider_env(
+            provider_id, os.environ.copy(), gateway_base_url=gateway_url
+        )
+        env["PLATFORM_RUNTIME_PROVIDER"] = provider_id
         env.update({
-            "ANTHROPIC_BASE_URL": self.proxy_url,
-            "ANTHROPIC_AUTH_TOKEN": self.auth_token,
-            "CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY": "1",
             "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "190000",
             "DISABLE_AUTOUPDATER": "1",
             "DISABLE_FEEDBACK_COMMAND": "1",
@@ -834,7 +893,11 @@ class ClaudeCodeRuntimeAdapter:
                 agent_config, project_config, prompt, session_id, fork_session,
                 dangerously_skip_permissions=skip_perm
             )
-            env = self._build_claude_env(run_id=run_id, project_id=getattr(run, "project_id", None))
+            env = self._build_claude_env(
+                run_id=run_id,
+                project_id=getattr(run, "project_id", None),
+                agent_config=agent_config,
+            )
 
             # Determine working directory
             if project_config and getattr(project_config, "working_directory", None) and project_config.working_directory.strip():

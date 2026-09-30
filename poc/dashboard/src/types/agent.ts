@@ -56,6 +56,8 @@ export interface AgentCreateDto {
   allowed_child_ids?: string[];
   allowed_tools?: string[];
   template_id?: string | null;
+  /** null/undefined = inherit the platform-default runtime provider */
+  runtime_provider?: string | null;
 }
 
 export interface AgentUpdateDto extends Partial<AgentCreateDto> {}

@@ -4,19 +4,33 @@ Agent management API endpoints with organizational hierarchy support.
 
 from fastapi import APIRouter, HTTPException, Depends, status
 from typing import List, Optional, Any, Dict
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from datetime import datetime
 import logging
 
 from ..dependencies import (
     get_config_manager, get_db_manager, get_event_service,
     AgentConfig, EventService, EventType,
-    validate_agent_hierarchy, HierarchyValidationError
+    validate_agent_hierarchy, HierarchyValidationError,
+    runtime_providers as providers
 )
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _check_runtime_provider(value: Optional[str]) -> Optional[str]:
+    """Reject unknown provider IDs at the boundary; None means inherit the default."""
+    if value is None or not value.strip():
+        return None
+    candidate = value.strip()
+    if candidate not in providers.ALL_PROVIDER_IDS:
+        raise ValueError(
+            f"Unknown runtime provider '{candidate}'. "
+            f"Expected one of: {', '.join(providers.ALL_PROVIDER_IDS)}."
+        )
+    return candidate
 
 
 # Pydantic models for request/response
@@ -45,6 +59,10 @@ class AgentBase(BaseModel):
     allow_sibling_communication: bool = Field(default=True)
     allowed_peer_ids: List[str] = Field(default_factory=list)
     mcp_permissions: List[str] = Field(default_factory=list)
+    # None = inherit the platform-default runtime provider
+    runtime_provider: Optional[str] = None
+
+    _validate_provider = field_validator('runtime_provider')(_check_runtime_provider)
 
 
 class AgentCreate(AgentBase):
@@ -76,6 +94,9 @@ class AgentUpdate(BaseModel):
     allow_sibling_communication: Optional[bool] = None
     allowed_peer_ids: Optional[List[str]] = None
     mcp_permissions: Optional[List[str]] = None
+    runtime_provider: Optional[str] = None
+
+    _validate_provider = field_validator('runtime_provider')(_check_runtime_provider)
 
 
 class AgentResponse(AgentBase):
@@ -115,7 +136,8 @@ def agent_to_response(agent: AgentConfig) -> dict:
         "template_id": getattr(agent, "template_id", None),
         "allow_sibling_communication": getattr(agent, "allow_sibling_communication", True),
         "allowed_peer_ids": getattr(agent, "allowed_peer_ids", []) or [],
-        "mcp_permissions": getattr(agent, "mcp_permissions", []) or []
+        "mcp_permissions": getattr(agent, "mcp_permissions", []) or [],
+        "runtime_provider": getattr(agent, "runtime_provider", None)
     }
 
 

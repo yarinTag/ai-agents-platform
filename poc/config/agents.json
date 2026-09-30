@@ -40,6 +40,7 @@
     ],
     "template_id": null,
     "dangerously_skip_permissions": false,
+    "runtime_provider": null,
     "allow_sibling_communication": true,
     "allowed_peer_ids": [],
     "mcp_permissions": []
@@ -84,6 +85,7 @@
     ],
     "template_id": null,
     "dangerously_skip_permissions": false,
+    "runtime_provider": null,
     "allow_sibling_communication": true,
     "allowed_peer_ids": [
       "software-architect"
@@ -131,6 +133,7 @@
     ],
     "template_id": null,
     "dangerously_skip_permissions": false,
+    "runtime_provider": null,
     "allow_sibling_communication": true,
     "allowed_peer_ids": [
       "product-manager",
@@ -171,6 +174,7 @@
     ],
     "template_id": null,
     "dangerously_skip_permissions": false,
+    "runtime_provider": null,
     "allow_sibling_communication": true,
     "allowed_peer_ids": [
       "frontend-developer"
@@ -212,6 +216,7 @@
     ],
     "template_id": null,
     "dangerously_skip_permissions": false,
+    "runtime_provider": null,
     "allow_sibling_communication": true,
     "allowed_peer_ids": [
       "backend-developer",
@@ -258,6 +263,7 @@
     ],
     "template_id": null,
     "dangerously_skip_permissions": false,
+    "runtime_provider": null,
     "allow_sibling_communication": true,
     "allowed_peer_ids": [
       "frontend-developer",
@@ -299,6 +305,7 @@
     ],
     "template_id": null,
     "dangerously_skip_permissions": false,
+    "runtime_provider": null,
     "allow_sibling_communication": true,
     "allowed_peer_ids": [
       "frontend-developer",
@@ -340,6 +347,7 @@
     ],
     "template_id": null,
     "dangerously_skip_permissions": false,
+    "runtime_provider": null,
     "allow_sibling_communication": true,
     "allowed_peer_ids": [
       "software-architect",

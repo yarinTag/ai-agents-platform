@@ -49,6 +49,8 @@ class AgentConfig:
     allowed_tools: List[str] = None
     template_id: Optional[str] = None
     dangerously_skip_permissions: bool = False
+    # Overrides the platform default runtime provider for this agent. None = inherit default.
+    runtime_provider: Optional[str] = None
 
     # Communication & MCP permissions
     allow_sibling_communication: bool = True

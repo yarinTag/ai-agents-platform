@@ -4,6 +4,7 @@ import { Task, TaskCreateDto, TaskDelegateDto, TaskTreeNode } from '../types/tas
 import { Skill, PluginPackage } from '../types/skill';
 import { Project } from '../types/project';
 import { ActivityEvent } from '../types/flow';
+import { RuntimeSetupState, RuntimeSelectionDto } from '../types/runtime';
 
 const API_BASE_URL = 'http://localhost:8000';
 
@@ -11,6 +12,12 @@ export const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 10000,
 });
+
+// Runtime providers (first-run setup)
+export const getRuntimeSetupState = () => api.get<RuntimeSetupState>('/api/v1/runtimes/');
+export const redetectRuntimeProviders = () => api.post<RuntimeSetupState>('/api/v1/runtimes/detect');
+export const selectRuntimeProvider = (data: RuntimeSelectionDto) =>
+  api.put<RuntimeSetupState>('/api/v1/runtimes/selection', data);
 
 // Agents & Hierarchy
 export const getAgents = () => api.get<Agent[]>('/api/v1/agents/');

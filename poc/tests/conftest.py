@@ -15,6 +15,7 @@ if str(poc_dir) not in sys.path:
     sys.path.insert(0, str(poc_dir))
 
 from persistence import db_manager
+from config import config_manager
 
 
 def pytest_sessionstart(session):
@@ -28,9 +29,15 @@ def clean_test_agents_after_each_test():
     Autouse fixture to prevent test agents from accumulating in the database.
     Ensures that test-created agents are deleted after each test and
     the agent count strictly respects the platform maximum of 18 agents.
+
+    The agents API writes to BOTH stores (db_manager and the ConfigManager
+    JSON file), so both are snapshotted and cleaned. Cleaning only the DB
+    leaks test agents into poc/config/agents.json, where they survive the
+    session and make later runs fail with "agent already exists".
     """
-    # Snapshot existing agents before test
+    # Snapshot existing agents before test (both persistence stores)
     initial_agent_ids = {a.id for a in db_manager.list_agents()}
+    initial_config_agent_ids = {a.id for a in config_manager.list_agents()}
 
     yield
 
@@ -40,6 +47,13 @@ def clean_test_agents_after_each_test():
         if agent.id not in initial_agent_ids:
             try:
                 db_manager.delete_agent(agent.id)
+            except Exception:
+                pass
+
+    for agent in config_manager.list_agents():
+        if agent.id not in initial_config_agent_ids:
+            try:
+                config_manager.delete_agent(agent.id)
             except Exception:
                 pass
 
