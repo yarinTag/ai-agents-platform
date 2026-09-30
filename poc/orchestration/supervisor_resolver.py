@@ -222,19 +222,20 @@ class SupervisorResolver:
         })
 
         # Record AgentMessage in SQLite for traceable A2A communication
-        try:
-            self.db.save_agent_message(AgentMessage(
-                id=f"msg_q_{datetime.now().timestamp()}",
-                from_agent_id=requester_agent_id,
-                to_agent_id=target_approver,
-                content=question,
-                task_id=task_id,
-                message_type="QUESTION",
-                status="SENT",
-                metadata={"interaction_id": interaction["id"], "context": context}
-            ))
-        except Exception as msg_err:
-            logger.warning(f"Failed to record A2A Question message: {msg_err}")
+        if target_approver and target_approver != "HUMAN_OPERATOR":
+            try:
+                self.db.save_agent_message(AgentMessage(
+                    id=f"msg_q_{datetime.now().timestamp()}",
+                    from_agent_id=requester_agent_id,
+                    to_agent_id=target_approver,
+                    content=question,
+                    task_id=task_id,
+                    message_type="QUESTION",
+                    status="SENT",
+                    metadata={"interaction_id": interaction["id"], "context": context}
+                ))
+            except Exception as msg_err:
+                logger.warning(f"Failed to record A2A Question message: {msg_err}")
 
         # Ensure task is marked as WAITING_INPUT
         self.db.update_task_run(

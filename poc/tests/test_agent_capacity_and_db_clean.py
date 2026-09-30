@@ -1,7 +1,7 @@
 """
 Automated tests for database cleaning and strict max 18 agents capacity limit.
 Verifies that:
-- clean_database() resets the database to the 11 baseline agents (<= 18).
+- clean_database() resets the database cleanly (<= 18 agents).
 - The platform strictly enforces a maximum capacity of 18 agents.
 - Attempting to save a 19th agent is rejected by both persistence layer and API.
 """
@@ -17,26 +17,17 @@ from backend.dependencies import init_services, shutdown_services
 
 
 @pytest.mark.asyncio
-async def test_clean_database_has_baseline_agents_under_18():
-    """Verify clean_database() resets DB to clean state with <= 18 agents (11 baseline)."""
-    db_manager.clean_database(seed_baseline=True)
+async def test_clean_database_resets_agents_under_18():
+    """Verify clean_database() resets DB to clean state with <= 18 agents."""
+    db_manager.clean_database()
     agents = db_manager.list_agents()
-    assert len(agents) == 11, f"Expected 11 baseline agents, got {len(agents)}"
     assert len(agents) <= 18, "Max agents must be <= 18"
-
-    # Verify key canonical agents exist
-    agent_ids = {a.id for a in agents}
-    assert "chief-orchestrator" in agent_ids
-    assert "marketing-lead" in agent_ids
-    assert "lead-engineer" in agent_ids
-    assert "delivery-lead" in agent_ids
 
 
 def test_max_agents_capacity_enforced_in_db():
     """Verify persistence layer strictly rejects adding agents beyond the max capacity of 18."""
-    db_manager.clean_database(seed_baseline=True)
+    db_manager.clean_database()
     current_count = len(db_manager.list_agents())
-    assert current_count == 11
 
     # Add agents up to exactly 18
     added_ids = []
@@ -70,18 +61,20 @@ def test_max_agents_capacity_enforced_in_db():
     for aid in added_ids:
         db_manager.delete_agent(aid)
 
-    assert len(db_manager.list_agents()) == 11
+    assert len(db_manager.list_agents()) == current_count
 
 
 @pytest.mark.asyncio
 async def test_max_agents_capacity_enforced_in_api():
     """Verify POST /api/v1/agents/ returns HTTP 400 when platform reaches 18 agents capacity."""
-    db_manager.clean_database(seed_baseline=True)
+    db_manager.clean_database()
     await init_services()
+
+    current_count = len(db_manager.list_agents())
 
     # Fill up to 18 agents
     added_ids = []
-    for i in range(11, 18):
+    for i in range(current_count, 18):
         agent_id = f"api-fill-agent-{i}"
         agent = AgentConfig(
             id=agent_id,

@@ -100,20 +100,23 @@ class OrchestrationEngine:
         ]
         is_direct_parent = getattr(target_agent, "parent_id", None) == parent_agent.id
         allowed_child_ids = getattr(parent_agent, "allowed_child_ids", []) or []
+        allowed_peer_ids = getattr(parent_agent, "allowed_peer_ids", []) or []
         in_allowed_children = target_agent.id in allowed_child_ids
+        in_allowed_peers = target_agent.id in allowed_peer_ids
 
-        has_authority = is_manager_or_root or is_direct_parent or in_allowed_children
+        has_authority = is_manager_or_root or is_direct_parent or in_allowed_children or in_allowed_peers
         if not has_authority:
             raise DelegationError(
                 f"Agent '{parent_agent.id}' is not authorized to delegate to '{target_agent.id}'"
             )
 
-        # If target agent's parent_id is set, verify it reports to parent agent (or parent agent is ROOT_ORCHESTRATOR).
+        # If target agent's parent_id is set, verify hierarchy authority (direct child, root orchestrator, or authorized peer/child)
         target_parent_id = getattr(target_agent, "parent_id", None)
         if target_parent_id is not None:
             is_root = parent_role in [AgentRole.ROOT_ORCHESTRATOR.value, "ROOT_ORCHESTRATOR"]
             reports_to_parent = (target_parent_id == parent_agent.id)
-            if not (reports_to_parent or is_root):
+            is_authorized = reports_to_parent or is_root or in_allowed_children or in_allowed_peers
+            if not is_authorized:
                 raise DelegationError(
                     f"Agent '{parent_agent.id}' is not authorized to delegate to '{target_agent.id}'"
                 )

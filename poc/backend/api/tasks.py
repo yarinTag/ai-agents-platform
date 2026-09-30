@@ -287,14 +287,16 @@ async def get_task(
     runtime_adapter = Depends(get_runtime_adapter)
 ):
     """Get a specific task by ID, checking DB and active runtime."""
-    run = db_manager.get_task_run(run_id)
-    if not run and hasattr(runtime_adapter, "get_run_status"):
-        run = runtime_adapter.get_run_status(run_id)
-    if not run and hasattr(runtime_adapter, "list_runs"):
+    active_run = None
+    if hasattr(runtime_adapter, "get_run_status"):
+        active_run = runtime_adapter.get_run_status(run_id)
+    if not active_run and hasattr(runtime_adapter, "list_runs"):
         for r in runtime_adapter.list_runs():
             if getattr(r, "run_id", None) == run_id:
-                run = r
+                active_run = r
                 break
+
+    run = active_run or db_manager.get_task_run(run_id)
     if not run:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
