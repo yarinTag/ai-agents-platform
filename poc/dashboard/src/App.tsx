@@ -1,7 +1,8 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { ConfigProvider, theme } from 'antd';
+import { ConfigProvider, theme, App as AntdApp } from 'antd';
 import AppLayout from './components/layout/AppLayout';
+import RuntimeSetupModal from './components/common/RuntimeSetupModal';
 import OfficeViewPage from './pages/OfficeView';
 import AgentFlowPage from './pages/AgentFlow';
 import AgentsPage from './pages/Agents';
@@ -31,20 +32,23 @@ export const App: React.FC = () => {
         },
       }}
     >
-      <BrowserRouter>
-        <AppLayout>
-          <Routes>
-            <Route path="/" element={<OfficeViewPage />} />
-            <Route path="/flow" element={<AgentFlowPage />} />
-            <Route path="/agents" element={<AgentsPage />} />
-            <Route path="/skills" element={<SkillsPage />} />
-            <Route path="/tasks" element={<TasksPage />} />
-            <Route path="/calendar" element={<CalendarViewPage />} />
-            <Route path="/projects" element={<ProjectsPage />} />
-            <Route path="/dashboard" element={<DashboardPage />} />
-          </Routes>
-        </AppLayout>
-      </BrowserRouter>
+      <AntdApp>
+        <RuntimeSetupModal />
+        <BrowserRouter>
+          <AppLayout>
+            <Routes>
+              <Route path="/" element={<OfficeViewPage />} />
+              <Route path="/flow" element={<AgentFlowPage />} />
+              <Route path="/agents" element={<AgentsPage />} />
+              <Route path="/skills" element={<SkillsPage />} />
+              <Route path="/tasks" element={<TasksPage />} />
+              <Route path="/calendar" element={<CalendarViewPage />} />
+              <Route path="/projects" element={<ProjectsPage />} />
+              <Route path="/dashboard" element={<DashboardPage />} />
+            </Routes>
+          </AppLayout>
+        </BrowserRouter>
+      </AntdApp>
     </ConfigProvider>
   );
 };

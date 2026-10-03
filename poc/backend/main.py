@@ -14,6 +14,7 @@ from .api.tasks import router as tasks_router
 from .events.router import router as events_router
 from .api.templates import router as templates_router
 from .api.models import router as models_router
+from .api.runtimes import router as runtimes_router
 from .api.audit import router as audit_router
 from .scheduler.router import router as schedules_router
 from .approvals.router import router as approvals_router
@@ -81,6 +82,7 @@ app.include_router(tasks_router, prefix="/api/v1/tasks", tags=["tasks"], depende
 app.include_router(events_router, prefix="/api/v1/events", tags=["events"], dependencies=auth_deps)
 app.include_router(templates_router, prefix="/api/v1/templates", tags=["templates"], dependencies=auth_deps)
 app.include_router(models_router, prefix="/api/v1/models", tags=["models"], dependencies=auth_deps)
+app.include_router(runtimes_router, prefix="/api/v1/runtimes", tags=["runtimes"], dependencies=auth_deps)
 app.include_router(schedules_router, prefix="/api/v1/schedules", tags=["schedules"], dependencies=auth_deps)
 app.include_router(approvals_router, prefix="/api/v1/approvals", tags=["approvals"], dependencies=auth_deps)
 app.include_router(chat_router, prefix="/api/v1/chat", tags=["chat"], dependencies=auth_deps)

@@ -9,7 +9,8 @@ import os
 import logging
 import uuid
 from datetime import datetime
-from typing import List, Optional, Dict, Any, Union
+from typing import List, Optional, Dict, Any, Union, Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 from dataclasses import dataclass, asdict, field
@@ -135,18 +136,37 @@ class DatabaseManager:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_database()
 
-    def _get_connection(self) -> sqlite3.Connection:
-        """Get a database connection."""
+    @contextmanager
+    def _get_connection(self) -> Iterator[sqlite3.Connection]:
+        """
+        Yield a database connection, then always close it.
+
+        Mirrors sqlite3's own ``with conn:`` semantics (commit on success,
+        rollback on exception) and additionally closes the connection on the
+        way out. Closing is required: sqlite3's connection context manager
+        ends the transaction but never releases the underlying handle, so
+        every call used to leak a file descriptor and a WAL read lock (which
+        also prevents the -wal file from ever being checkpointed).
+        """
         conn = sqlite3.connect(self.db_path)
-        # Enable foreign keys
-        conn.execute("PRAGMA foreign_keys = ON")
-        # Enable WAL mode for better concurrent access
-        conn.execute("PRAGMA journal_mode = WAL")
-        # Enable busy timeout (5000ms) to prevent immediate locking errors
-        conn.execute("PRAGMA busy_timeout = 5000")
-        # Return rows as dictionaries
-        conn.row_factory = sqlite3.Row
-        return conn
+        try:
+            # Enable foreign keys
+            conn.execute("PRAGMA foreign_keys = ON")
+            # Enable WAL mode for better concurrent access
+            conn.execute("PRAGMA journal_mode = WAL")
+            # Enable busy timeout (5000ms) to prevent immediate locking errors
+            conn.execute("PRAGMA busy_timeout = 5000")
+            # Return rows as dictionaries
+            conn.row_factory = sqlite3.Row
+            try:
+                yield conn
+            except BaseException:
+                conn.rollback()
+                raise
+            else:
+                conn.commit()
+        finally:
+            conn.close()
 
     def _init_database(self):
         """Initialize database tables."""
@@ -188,7 +208,8 @@ class DatabaseManager:
                 ("dangerously_skip_permissions", "INTEGER DEFAULT 0"),
                 ("allow_sibling_communication", "INTEGER DEFAULT 1"),
                 ("allowed_peer_ids", "TEXT"),
-                ("mcp_permissions", "TEXT")
+                ("mcp_permissions", "TEXT"),
+                ("runtime_provider", "TEXT")
             ]:
                 try:
                     conn.execute(f"ALTER TABLE agents ADD COLUMN {col} {col_type}")
@@ -643,10 +664,46 @@ class DatabaseManager:
                 )
             """)
 
+            # Platform-wide key/value settings (runtime provider choice, setup state).
+            # Secrets are never stored here — only non-secret selections.
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS platform_settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
             # Seed default agent templates and baseline agents if tables are empty
             self._seed_default_templates(conn)
             self._seed_default_agents(conn)
 
+            conn.commit()
+
+    # Platform settings methods
+    def get_setting(self, key: str, default: Optional[str] = None) -> Optional[str]:
+        """Read a platform setting, returning `default` when unset."""
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT value FROM platform_settings WHERE key = ?", (key,)
+            )
+            row = cursor.fetchone()
+            return row['value'] if row else default
+
+    def set_setting(self, key: str, value: Optional[str]):
+        """Upsert a platform setting."""
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT INTO platform_settings (key, value, updated_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+            """, (key, value, datetime.now()))
+            conn.commit()
+
+    def delete_setting(self, key: str):
+        """Remove a platform setting."""
+        with self._get_connection() as conn:
+            conn.execute("DELETE FROM platform_settings WHERE key = ?", (key,))
             conn.commit()
 
     def _seed_default_templates(self, conn: sqlite3.Connection):
@@ -708,7 +765,7 @@ class DatabaseManager:
 
         now = datetime.now().isoformat()
         conn.executemany("""
-            INSERT INTO agent_templates
+            INSERT OR IGNORE INTO agent_templates
             (id, name, description, role, system_prompt, model, skills, tools, suggested_children, category, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, [(d[0], d[1], d[2], d[3], d[4], d[5], d[6], d[7], d[8], d[9], now, now) for d in defaults])
@@ -761,8 +818,8 @@ class DatabaseManager:
                  repo_path, github_url, department, avatar, created_at, updated_at,
                  parent_id, role_type, max_concurrent_children, delegation_strategy,
                  allowed_child_ids, allowed_tools, template_id, dangerously_skip_permissions,
-                 allow_sibling_communication, allowed_peer_ids, mcp_permissions)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 allow_sibling_communication, allowed_peer_ids, mcp_permissions, runtime_provider)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 aid,
                 item.get("name", aid),
@@ -788,7 +845,8 @@ class DatabaseManager:
                 1 if item.get("dangerously_skip_permissions") else 0,
                 1 if item.get("allow_sibling_communication", True) else 0,
                 json.dumps(item.get("allowed_peer_ids", [])),
-                json.dumps(item.get("mcp_permissions", []))
+                json.dumps(item.get("mcp_permissions", [])),
+                item.get("runtime_provider")
             ))
 
     def _row_to_agent(self, row: sqlite3.Row) -> AgentConfig:
@@ -823,7 +881,8 @@ class DatabaseManager:
             dangerously_skip_permissions=bool(row['dangerously_skip_permissions']) if 'dangerously_skip_permissions' in keys and row['dangerously_skip_permissions'] is not None else False,
             allow_sibling_communication=bool(row['allow_sibling_communication']) if 'allow_sibling_communication' in keys and row['allow_sibling_communication'] is not None else True,
             allowed_peer_ids=json.loads(row['allowed_peer_ids']) if 'allowed_peer_ids' in keys and row['allowed_peer_ids'] else [],
-            mcp_permissions=json.loads(row['mcp_permissions']) if 'mcp_permissions' in keys and row['mcp_permissions'] else []
+            mcp_permissions=json.loads(row['mcp_permissions']) if 'mcp_permissions' in keys and row['mcp_permissions'] else [],
+            runtime_provider=row['runtime_provider'] if 'runtime_provider' in keys and row['runtime_provider'] else None
         )
 
     def _row_to_template(self, row: sqlite3.Row) -> AgentTemplate:
@@ -861,8 +920,8 @@ class DatabaseManager:
                  repo_path, github_url, department, avatar, created_at, updated_at,
                  parent_id, role_type, max_concurrent_children, delegation_strategy,
                  allowed_child_ids, allowed_tools, template_id, dangerously_skip_permissions,
-                 allow_sibling_communication, allowed_peer_ids, mcp_permissions)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 allow_sibling_communication, allowed_peer_ids, mcp_permissions, runtime_provider)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     name=excluded.name,
                     description=excluded.description,
@@ -887,7 +946,8 @@ class DatabaseManager:
                     dangerously_skip_permissions=excluded.dangerously_skip_permissions,
                     allow_sibling_communication=excluded.allow_sibling_communication,
                     allowed_peer_ids=excluded.allowed_peer_ids,
-                    mcp_permissions=excluded.mcp_permissions
+                    mcp_permissions=excluded.mcp_permissions,
+                    runtime_provider=excluded.runtime_provider
             """, (
                 agent.id,
                 agent.name,
@@ -914,7 +974,8 @@ class DatabaseManager:
                 1 if getattr(agent, "dangerously_skip_permissions", False) else 0,
                 1 if getattr(agent, "allow_sibling_communication", True) else 0,
                 json.dumps(getattr(agent, "allowed_peer_ids", []) or []),
-                json.dumps(getattr(agent, "mcp_permissions", []) or [])
+                json.dumps(getattr(agent, "mcp_permissions", []) or []),
+                getattr(agent, "runtime_provider", None)
             ))
             conn.commit()
 

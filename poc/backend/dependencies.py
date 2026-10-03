@@ -20,6 +20,7 @@ if _poc_root not in sys.path:
 from config import config_manager, ConfigManager, AgentConfig, AgentRole, AgentTemplate, ProjectConfig, Skill
 from persistence import db_manager, DatabaseManager
 from runtime_adapter import runtime_adapter, ClaudeCodeRuntimeAdapter, AgentRun, TaskStatus
+import runtime_providers
 from runtime.claude_adapter import ClaudeCodeAdapter
 from events import EventBus, EventService, PlatformEvent, EventType
 from orchestration import (
@@ -185,4 +186,4 @@ def get_team_coordinator() -> TeamCoordinator:
             orchestration_engine=get_orchestration_engine(),
             event_service=get_event_service()
         )
-    return _team_coordinator
+    return _team_coordinator
