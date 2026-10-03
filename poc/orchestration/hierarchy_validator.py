@@ -31,6 +31,11 @@ class CommunicationAuthorizationError(ValueError):
     pass
 
 
+class DelegationError(ValueError):
+    """Raised when a task delegation violates organizational hierarchy."""
+    pass
+
+
 def validate_agent_hierarchy(
     agent_id: str,
     role_type: str,
@@ -167,3 +172,43 @@ def validate_agent_communication(
         f"Agent '{sender.id}' is not authorized to communicate directly with '{receiver.id}'. "
         f"Direct messages must follow hierarchy (Parent/Child), permitted Siblings, or explicit peer permissions."
     )
+
+
+def validate_delegation_authority(
+    parent_agent: AgentConfig,
+    target_agent: AgentConfig,
+    db_manager: Optional[DatabaseManager] = None
+) -> None:
+    """
+    Validate that parent_agent is authorized to delegate a task to target_agent.
+    Rules:
+    1. Parent agent must have role ROOT_ORCHESTRATOR, MANAGER, or SUPER_AGENT.
+       Workers and Specialists cannot delegate.
+    2. Target agent must report directly to parent_agent (target_agent.parent_id == parent_agent.id),
+       OR target_agent.id must be in parent_agent.allowed_child_ids.
+    3. Workers cannot be delegated to by managers other than their direct manager,
+       preventing bypass of the reporting hierarchy.
+    """
+    if parent_agent.id == target_agent.id:
+        raise DelegationError(f"Agent '{parent_agent.id}' cannot delegate to itself.")
+
+    parent_role = (getattr(parent_agent, "role_type", "") or "WORKER").upper()
+    if parent_role in ("WORKER", "SPECIALIST"):
+        raise DelegationError(
+            f"Agent '{parent_agent.id}' has role '{parent_role}', which is not authorized to delegate tasks. "
+            f"Only ROOT_ORCHESTRATOR, MANAGER, or SUPER_AGENT may delegate."
+        )
+
+    # Check direct reporting line or allowed children
+    target_parent_id = getattr(target_agent, "parent_id", None)
+    allowed_children = getattr(parent_agent, "allowed_child_ids", []) or []
+
+    is_direct_parent = (target_parent_id == parent_agent.id)
+    is_allowed_child = (target_agent.id in allowed_children)
+    is_root = parent_role in ("ROOT_ORCHESTRATOR", AgentRole.ROOT_ORCHESTRATOR.value)
+
+    if not (is_direct_parent or is_allowed_child or (is_root and not target_parent_id)):
+        raise DelegationError(
+            f"Agent '{parent_agent.id}' is not authorized to delegate to '{target_agent.id}'. "
+            f"'{target_agent.id}' reports to '{target_parent_id}', not '{parent_agent.id}'."
+        )

@@ -40,6 +40,7 @@ class AgentMessage:
     metadata: Optional[Dict[str, Any]] = None
     created_at: Optional[str] = None
     responded_at: Optional[str] = None
+    channel_key: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -270,12 +271,16 @@ class DatabaseManager:
                 )
             """)
 
-            # Add delegation, tracing, and session continuation columns to task_runs if not present
+            # Add delegation, tracing, dependencies, structured result, and session continuation columns to task_runs if not present
             for col, col_type in [
                 ("parent_task_id", "TEXT"),
                 ("root_task_id", "TEXT"),
                 ("assigned_by", "TEXT"),
-                ("session_id", "TEXT")
+                ("session_id", "TEXT"),
+                ("dependencies", "TEXT"),
+                ("structured_result", "TEXT"),
+                ("acceptance_criteria", "TEXT"),
+                ("retry_count", "INTEGER DEFAULT 0")
             ]:
                 try:
                     conn.execute(f"ALTER TABLE task_runs ADD COLUMN {col} {col_type}")
@@ -427,13 +432,15 @@ class DatabaseManager:
             for col, col_type in [
                 ("task_id", "TEXT"),
                 ("supervisor_session_id", "TEXT"),
-                ("status", "TEXT DEFAULT 'ACTIVE'")
+                ("status", "TEXT DEFAULT 'ACTIVE'"),
+                ("channel_key", "TEXT")
             ]:
                 try:
                     conn.execute(f"ALTER TABLE agent_conversations ADD COLUMN {col} {col_type}")
                 except Exception:
                     pass
             conn.execute("CREATE INDEX IF NOT EXISTS idx_conversations_agent ON agent_conversations(agent_id, updated_at)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_conversations_channel ON agent_conversations(channel_key)")
 
             # Chat messages table (Messages, Thoughts, Tool calls, Approvals)
             conn.execute("""
@@ -533,6 +540,7 @@ class DatabaseManager:
                     content TEXT NOT NULL,
                     status TEXT NOT NULL DEFAULT 'SENT',
                     metadata TEXT,
+                    channel_key TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     responded_at TIMESTAMP,
                     FOREIGN KEY (from_agent_id) REFERENCES agents(id) ON DELETE CASCADE,
@@ -541,9 +549,14 @@ class DatabaseManager:
                     FOREIGN KEY (task_id) REFERENCES task_runs(run_id) ON DELETE SET NULL
                 )
             """)
+            try:
+                conn.execute("ALTER TABLE agent_messages ADD COLUMN channel_key TEXT")
+            except Exception:
+                pass
             conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_from ON agent_messages(from_agent_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_to ON agent_messages(to_agent_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_task ON agent_messages(task_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_channel ON agent_messages(channel_key)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_parent ON agent_messages(parent_message_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_msg_created ON agent_messages(created_at)")
 
@@ -1270,6 +1283,24 @@ class DatabaseManager:
     def _row_to_task_run(self, row: sqlite3.Row) -> AgentRun:
         """Convert a database row to an AgentRun object."""
         keys = row.keys() if hasattr(row, "keys") else []
+        deps_val = row['dependencies'] if 'dependencies' in keys else None
+        if deps_val:
+            try:
+                deps = json.loads(deps_val) if isinstance(deps_val, str) else list(deps_val)
+            except Exception:
+                deps = []
+        else:
+            deps = []
+
+        sr_val = row['structured_result'] if 'structured_result' in keys else None
+        if sr_val:
+            try:
+                sr = json.loads(sr_val) if isinstance(sr_val, str) else dict(sr_val)
+            except Exception:
+                sr = None
+        else:
+            sr = None
+
         return AgentRun(
             run_id=row['run_id'],
             agent_id=row['agent_id'],
@@ -1286,17 +1317,24 @@ class DatabaseManager:
             parent_task_id=row['parent_task_id'] if 'parent_task_id' in keys else None,
             root_task_id=row['root_task_id'] if 'root_task_id' in keys else None,
             assigned_by=row['assigned_by'] if 'assigned_by' in keys else None,
-            session_id=row['session_id'] if 'session_id' in keys else None
+            session_id=row['session_id'] if 'session_id' in keys else None,
+            dependencies=deps,
+            structured_result=sr,
+            acceptance_criteria=row['acceptance_criteria'] if 'acceptance_criteria' in keys else None,
+            retry_count=int(row['retry_count']) if 'retry_count' in keys and row['retry_count'] is not None else 0
         )
 
     def save_task_run(self, run: AgentRun):
         """Save or update a task run."""
+        deps_json = json.dumps(run.dependencies) if getattr(run, "dependencies", None) else None
+        sr_json = json.dumps(run.structured_result) if getattr(run, "structured_result", None) else None
         with self._get_connection() as conn:
             conn.execute("""
                 INSERT INTO task_runs
                 (run_id, agent_id, project_id, prompt, status, created_at, started_at, ended_at,
-                 result, error, exit_code, events, parent_task_id, root_task_id, assigned_by, session_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 result, error, exit_code, events, parent_task_id, root_task_id, assigned_by, session_id,
+                 dependencies, structured_result, acceptance_criteria, retry_count)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(run_id) DO UPDATE SET
                     agent_id = excluded.agent_id,
                     project_id = excluded.project_id,
@@ -1312,7 +1350,11 @@ class DatabaseManager:
                     parent_task_id = COALESCE(excluded.parent_task_id, task_runs.parent_task_id),
                     root_task_id = COALESCE(excluded.root_task_id, task_runs.root_task_id),
                     assigned_by = COALESCE(excluded.assigned_by, task_runs.assigned_by),
-                    session_id = COALESCE(excluded.session_id, task_runs.session_id)
+                    session_id = COALESCE(excluded.session_id, task_runs.session_id),
+                    dependencies = COALESCE(excluded.dependencies, task_runs.dependencies),
+                    structured_result = COALESCE(excluded.structured_result, task_runs.structured_result),
+                    acceptance_criteria = COALESCE(excluded.acceptance_criteria, task_runs.acceptance_criteria),
+                    retry_count = COALESCE(excluded.retry_count, task_runs.retry_count)
             """, (
                 run.run_id,
                 run.agent_id,
@@ -1329,7 +1371,11 @@ class DatabaseManager:
                 getattr(run, "parent_task_id", None),
                 getattr(run, "root_task_id", None),
                 getattr(run, "assigned_by", None),
-                getattr(run, "session_id", None)
+                getattr(run, "session_id", None),
+                deps_json,
+                sr_json,
+                getattr(run, "acceptance_criteria", None),
+                getattr(run, "retry_count", 0)
             ))
             conn.commit()
 
@@ -1349,7 +1395,12 @@ class DatabaseManager:
         run_id: str,
         status: Optional[TaskStatus] = None,
         error: Optional[str] = None,
-        result: Optional[str] = None
+        result: Optional[str] = None,
+        dependencies: Optional[List[str]] = None,
+        structured_result: Optional[Dict[str, Any]] = None,
+        acceptance_criteria: Optional[str] = None,
+        retry_count: Optional[int] = None,
+        ended_at: Optional[datetime] = None
     ) -> Optional[AgentRun]:
         """Update specific fields of an existing task run."""
         fields = []
@@ -1363,6 +1414,21 @@ class DatabaseManager:
         if result is not None:
             fields.append("result = ?")
             params.append(result)
+        if dependencies is not None:
+            fields.append("dependencies = ?")
+            params.append(json.dumps(dependencies))
+        if structured_result is not None:
+            fields.append("structured_result = ?")
+            params.append(json.dumps(structured_result))
+        if acceptance_criteria is not None:
+            fields.append("acceptance_criteria = ?")
+            params.append(acceptance_criteria)
+        if retry_count is not None:
+            fields.append("retry_count = ?")
+            params.append(retry_count)
+        if ended_at is not None:
+            fields.append("ended_at = ?")
+            params.append(ended_at.isoformat() if isinstance(ended_at, datetime) else str(ended_at))
 
         if not fields:
             return self.get_task_run(run_id)
@@ -1374,6 +1440,7 @@ class DatabaseManager:
             conn.commit()
 
         return self.get_task_run(run_id)
+
 
 
     def list_task_runs(
@@ -2093,6 +2160,40 @@ class DatabaseManager:
             conn.commit()
             return True
 
+    def get_or_create_channel(
+        self,
+        manager_id: str,
+        worker_id: str,
+        task_id: str,
+        project_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Get or create a dedicated, isolated communication channel between a manager and a worker
+        for a specific task, preventing cross-talk between sibling subagents.
+        Channel key format: channel:{manager_id}:{worker_id}:{task_id}
+        """
+        channel_key = f"channel:{manager_id}:{worker_id}:{task_id}"
+        with self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM agent_conversations WHERE channel_key = ? LIMIT 1",
+                (channel_key,)
+            ).fetchone()
+            if row:
+                return dict(row)
+
+            conv_id = f"conv_chan_{uuid.uuid4().hex[:12]}"
+            now = datetime.now().isoformat()
+            title = f"Channel: {manager_id} <-> {worker_id} ({task_id})"
+
+            conn.execute("""
+                INSERT INTO agent_conversations (
+                    id, agent_id, project_id, title, task_id, status, channel_key, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, 'ACTIVE', ?, ?, ?)
+            """, (conv_id, worker_id, project_id, title, task_id, channel_key, now, now))
+            conn.commit()
+
+            return self.get_conversation(conv_id)
+
     def get_or_create_conversation(self, agent_id: str, project_id: Optional[str] = None) -> Dict[str, Any]:
         """Get the active conversation for an agent, or create a new one."""
         with self._get_connection() as conn:
@@ -2491,17 +2592,25 @@ class DatabaseManager:
             msg.created_at = now
 
         meta_str = json.dumps(msg.metadata) if msg.metadata else None
+        channel_key = msg.channel_key
+        if not channel_key and msg.task_id:
+            mtype = getattr(msg, "message_type", "QUESTION").upper()
+            if mtype == "QUESTION":
+                channel_key = f"channel:{msg.to_agent_id}:{msg.from_agent_id}:{msg.task_id}"
+            else:
+                channel_key = f"channel:{msg.from_agent_id}:{msg.to_agent_id}:{msg.task_id}"
 
         with self._get_connection() as conn:
             conn.execute("""
                 INSERT INTO agent_messages (
                     id, from_agent_id, to_agent_id, task_id, run_id, parent_message_id,
-                    message_type, content, status, metadata, created_at, responded_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    message_type, content, status, metadata, channel_key, created_at, responded_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     status=excluded.status,
                     responded_at=excluded.responded_at,
-                    metadata=excluded.metadata
+                    metadata=excluded.metadata,
+                    channel_key=excluded.channel_key
             """, (
                 msg.id,
                 msg.from_agent_id,
@@ -2513,6 +2622,7 @@ class DatabaseManager:
                 msg.content,
                 msg.status,
                 meta_str,
+                channel_key,
                 msg.created_at,
                 msg.responded_at
             ))
@@ -2541,11 +2651,15 @@ class DatabaseManager:
         agent_id: Optional[str] = None,
         task_id: Optional[str] = None,
         parent_message_id: Optional[str] = None,
+        channel_key: Optional[str] = None,
         limit: int = 100
     ) -> List[AgentMessage]:
         """List internal messages between agents with optional filters."""
         query = "SELECT * FROM agent_messages WHERE 1=1"
         params: List[Any] = []
+        if channel_key:
+            query += " AND channel_key = ?"
+            params.append(channel_key)
         if agent_id:
             query += " AND (from_agent_id = ? OR to_agent_id = ?)"
             params.extend([agent_id, agent_id])

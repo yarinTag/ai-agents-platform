@@ -10,7 +10,7 @@ import json
 import time
 import threading
 import queue
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from typing import Dict, List, Optional, Callable, Any
 from enum import Enum
 from datetime import datetime
@@ -35,6 +35,9 @@ class TaskStatus(Enum):
     PENDING = "pending"
     RUNNING = "running"
     SCHEDULED = "scheduled"
+    WAITING_FOR_CHILDREN = "waiting_for_children"
+    WAITING_FOR_MANAGER = "waiting_for_manager"
+    WAITING_FOR_HUMAN = "waiting_for_human"
     WAITING_INPUT = "waiting_input"
     PENDING_APPROVAL = "pending_approval"
     COMPLETED = "completed"
@@ -63,10 +66,16 @@ class AgentRun:
     assigned_by: Optional[str] = None
     session_id: Optional[str] = None
     dangerously_skip_permissions: bool = False
+    dependencies: List[str] = field(default_factory=list)
+    structured_result: Optional[Dict[str, Any]] = None
+    acceptance_criteria: Optional[str] = None
+    retry_count: int = 0
 
     def __post_init__(self):
         if self.events is None:
             self.events = []
+        if self.dependencies is None:
+            self.dependencies = []
 
     def to_dict(self) -> Dict[str, Any]:
         data = asdict(self)
@@ -76,11 +85,15 @@ class AgentRun:
             data['started_at'] = self.started_at.isoformat()
         if self.ended_at:
             data['ended_at'] = self.ended_at.isoformat()
-        data['status'] = self.status.value
+        data['status'] = self.status.value if hasattr(self.status, 'value') else str(self.status)
         data['parent_task_id'] = self.parent_task_id
         data['root_task_id'] = self.root_task_id
         data['assigned_by'] = self.assigned_by
         data['dangerously_skip_permissions'] = self.dangerously_skip_permissions
+        data['dependencies'] = list(self.dependencies) if self.dependencies else []
+        data['structured_result'] = self.structured_result
+        data['acceptance_criteria'] = self.acceptance_criteria
+        data['retry_count'] = self.retry_count
         return data
 
     @classmethod
@@ -94,14 +107,22 @@ class AgentRun:
         if data_copy.get('ended_at') and isinstance(data_copy['ended_at'], str):
             data_copy['ended_at'] = datetime.fromisoformat(data_copy['ended_at'])
         if isinstance(data_copy.get('status'), str):
-            data_copy['status'] = TaskStatus(data_copy['status'])
+            try:
+                data_copy['status'] = TaskStatus(data_copy['status'])
+            except ValueError:
+                data_copy['status'] = TaskStatus.PENDING
         data_copy.setdefault('project_id', None)
         data_copy.setdefault('parent_task_id', None)
         data_copy.setdefault('root_task_id', None)
         data_copy.setdefault('assigned_by', None)
         data_copy.setdefault('session_id', None)
         data_copy.setdefault('dangerously_skip_permissions', False)
+        data_copy.setdefault('dependencies', [])
+        data_copy.setdefault('structured_result', None)
+        data_copy.setdefault('acceptance_criteria', None)
+        data_copy.setdefault('retry_count', 0)
         return cls(**data_copy)
+
 
 
 def extract_supervisor_question(data: Any) -> Optional[Dict[str, Any]]:
@@ -329,6 +350,7 @@ class ClaudeCodeRuntimeAdapter:
         self._event_queues: Dict[str, queue.Queue] = {}
         self._reader_threads: Dict[str, threading.Thread] = {}
         self._stop_events: Dict[str, threading.Event] = {}
+        self.on_task_completed: Optional[Callable[[AgentRun], None]] = None
 
     def _emit_task_event(self, run: AgentRun, event_type: str, extra: Optional[Dict[str, Any]] = None) -> None:
         """Publish task lifecycle/progress events to the platform EventService."""
@@ -454,6 +476,33 @@ class ClaudeCodeRuntimeAdapter:
             env["PLATFORM_PROJECT_ID"] = project_id
         return env
 
+    def _resolve_working_directory(
+        self,
+        project_config: Optional[ProjectConfig],
+        agent_config: Optional[AgentConfig]
+    ) -> str:
+        """Resolve a robust, cross-platform working directory, avoiding invalid macOS paths."""
+        candidate = None
+        if project_config and getattr(project_config, "working_directory", None) and project_config.working_directory.strip():
+            candidate = project_config.working_directory.strip()
+        elif agent_config and getattr(agent_config, "repo_path", None) and agent_config.repo_path.strip():
+            candidate = agent_config.repo_path.strip()
+
+        if candidate:
+            # Detect invalid macOS/Unix paths on Windows
+            if os.name == "nt" and (candidate.startswith("/Users/") or candidate.startswith("/home/")):
+                local_poc_lms = os.path.abspath(os.path.join(os.path.dirname(__file__), "lms"))
+                if os.path.exists(local_poc_lms):
+                    return local_poc_lms
+                return os.getcwd()
+            try:
+                abs_path = os.path.abspath(candidate)
+                os.makedirs(abs_path, exist_ok=True)
+                return abs_path
+            except Exception:
+                pass
+        return os.getcwd()
+
     def _build_claude_command(
         self,
         agent_config: AgentConfig,
@@ -502,16 +551,7 @@ class ClaudeCodeRuntimeAdapter:
             cmd.append("--dangerously-skip-permissions")
 
         # Add working directory restriction if specified
-        target_dir = None
-        if project_config and getattr(project_config, "working_directory", None) and project_config.working_directory.strip():
-            target_dir = os.path.abspath(project_config.working_directory.strip())
-            os.makedirs(target_dir, exist_ok=True)
-        elif getattr(agent_config, "repo_path", None) and agent_config.repo_path.strip():
-            target_dir = os.path.abspath(agent_config.repo_path.strip())
-            os.makedirs(target_dir, exist_ok=True)
-        else:
-            target_dir = os.getcwd()
-
+        target_dir = self._resolve_working_directory(project_config, agent_config)
         cmd.extend(["--add-dir", target_dir])
 
         # Pass agent system prompt with supervisor context, workspace, and equipped skills
@@ -566,8 +606,8 @@ class ClaudeCodeRuntimeAdapter:
                 f"You MUST delegate work packages down the organizational hierarchy to your authorized subordinates:\n"
                 f"{subordinates_text}\n\n"
                 f"HOW TO DELEGATE IN THIS PLATFORM:\n"
-                f"To dispatch a task to a subordinate agent, run this command using Bash:\n"
-                f"python3 -m orchestration.delegate --target-agent <agent_id> --prompt \"<detailed requirements, deliverables, and acceptance criteria>\"\n\n"
+                f"To dispatch a task to a subordinate agent, run this command:\n"
+                f"python -m orchestration.delegate --target-agent <agent_id> --prompt \"<detailed requirements, deliverables, and acceptance criteria>\"\n\n"
                 f"When you run this command:\n"
                 f"1. The platform registers the subtask in the database and live hierarchy tree.\n"
                 f"2. The subordinate agent is invoked with their dedicated model tier, prompt, and specialized skills.\n"
@@ -900,14 +940,7 @@ class ClaudeCodeRuntimeAdapter:
             )
 
             # Determine working directory
-            if project_config and getattr(project_config, "working_directory", None) and project_config.working_directory.strip():
-                work_dir = os.path.abspath(project_config.working_directory.strip())
-                os.makedirs(work_dir, exist_ok=True)
-            elif getattr(agent_config, "repo_path", None) and agent_config.repo_path.strip():
-                work_dir = os.path.abspath(agent_config.repo_path.strip())
-                os.makedirs(work_dir, exist_ok=True)
-            else:
-                work_dir = os.getcwd()
+            work_dir = self._resolve_working_directory(project_config, agent_config)
 
             # Launch Claude Code process
             process = subprocess.Popen(
@@ -1117,6 +1150,22 @@ class ClaudeCodeRuntimeAdapter:
                         logging.getLogger(__name__).warning(f"Failed to record task response to chat: {chat_err}")
             except Exception as dbe:
                 logging.getLogger(__name__).warning(f"Failed to save task run to DB: {dbe}")
+
+            # Notify Orchestration Engine of task completion or failure
+            if run.status in (TaskStatus.COMPLETED, TaskStatus.FAILED):
+                if getattr(self, "on_task_completed", None):
+                    try:
+                        self.on_task_completed(run)
+                    except Exception as cb_err:
+                        logging.getLogger(__name__).error(f"Error in on_task_completed for {run.run_id}: {cb_err}")
+                else:
+                    try:
+                        import backend.dependencies as bdep
+                        engine = bdep.get_orchestration_engine()
+                        if engine:
+                            engine.handle_task_completion(run)
+                    except Exception:
+                        pass
 
             # Signal output reader to stop
             if run_id in self._stop_events:

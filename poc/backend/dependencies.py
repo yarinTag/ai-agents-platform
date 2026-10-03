@@ -70,6 +70,11 @@ async def init_services():
                 runtime_adapter=runtime_adapter,
                 event_service=_event_service
             )
+            runtime_adapter.on_task_completed = _orchestration_engine.handle_task_completion
+            try:
+                _orchestration_engine.recover_pending_tasks()
+            except Exception as e:
+                logger.warning(f"Error during startup pending task recovery: {e}")
         if _cron_engine is None:
             _cron_engine = CronSchedulerEngine(
                 db_manager=db_manager,
@@ -159,7 +164,9 @@ def get_orchestration_engine() -> OrchestrationEngine:
             runtime_adapter=runtime_adapter,
             event_service=get_event_service()
         )
+        runtime_adapter.on_task_completed = _orchestration_engine.handle_task_completion
     return _orchestration_engine
+
 
 
 def get_cron_engine() -> Optional[CronSchedulerEngine]:
