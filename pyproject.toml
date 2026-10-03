@@ -7,7 +7,7 @@ name = "ai-agents-platform"
 version = "0.1.0"
 description = "Generic, multi-runtime AI Agents Office platform with live visualization"
 readme = "poc/README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 authors = [
     { name = "AI Agents Platform Team" }
 ]
@@ -19,7 +19,10 @@ dependencies = [
     "httpx>=0.25.0,<0.28.0",
     "pyyaml>=6.0",
     "requests>=2.31.0",
-    "croniter>=2.0.0"
+    "croniter>=2.0.0",
+    "qdrant-client>=1.19.1",
+    "fastembed>=0.8.1",
+    "cocoindex>=1.0.24",
 ]
 
 [project.optional-dependencies]

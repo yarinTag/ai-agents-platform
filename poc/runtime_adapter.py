@@ -440,7 +440,7 @@ class ClaudeCodeRuntimeAdapter:
         )
         env["PLATFORM_RUNTIME_PROVIDER"] = provider_id
         env.update({
-            "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "190000",
+            "CLAUDE_CODE_AUTO_COMPACT_WINDOW": os.getenv("CLAUDE_CODE_AUTO_COMPACT_WINDOW", "40000"),
             "DISABLE_AUTOUPDATER": "1",
             "DISABLE_FEEDBACK_COMMAND": "1",
             "DISABLE_ERROR_REPORTING": "1",
@@ -448,6 +448,9 @@ class ClaudeCodeRuntimeAdapter:
             "TERM": "dumb",
             "PYTHONIOENCODING": "utf-8"
         })
+        poc_dir = os.path.dirname(os.path.abspath(__file__))
+        existing_pythonpath = env.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = f"{poc_dir}:{existing_pythonpath}" if existing_pythonpath else poc_dir
         if run_id:
             env["PLATFORM_PARENT_TASK_ID"] = run_id
         if project_id:
@@ -566,13 +569,17 @@ class ClaudeCodeRuntimeAdapter:
                 f"You MUST delegate work packages down the organizational hierarchy to your authorized subordinates:\n"
                 f"{subordinates_text}\n\n"
                 f"HOW TO DELEGATE IN THIS PLATFORM:\n"
-                f"To dispatch a task to a subordinate agent, run this command using Bash:\n"
-                f"python3 -m orchestration.delegate --target-agent <agent_id> --prompt \"<detailed requirements, deliverables, and acceptance criteria>\"\n\n"
-                f"When you run this command:\n"
-                f"1. The platform registers the subtask in the database and live hierarchy tree.\n"
-                f"2. The subordinate agent is invoked with their dedicated model tier, prompt, and specialized skills.\n"
-                f"3. Subordinate managers (Product Manager, Software Architect) will then delegate to their own workers.\n"
-                f"Always delegate tasks to the appropriate subordinate agent rather than doing it yourself."
+                f"To dispatch a task to a subordinate agent, run this command using the Bash tool:\n"
+                f"python3 -m orchestration.delegate --target-agent <agent_id> --prompt \"<detailed requirements, deliverables, and acceptance criteria>\"\n"
+                f"CRITICAL TIMEOUT REQUIREMENT:\n"
+                f"Always pass `timeout: 600000` (10 minutes) in your Bash tool call when running delegate commands so the system does not prematurely background your task while waiting for subordinates!\n"
+                f"NOTE: The delegate command automatically WAITS for the subordinate agent to finish and outputs their completed deliverables to your terminal, allowing you to seamlessly verify their work and proceed to the next milestone in your turn!\n\n"
+                f"CRITICAL EXECUTION MANDATE:\n"
+                f"- You interact with this platform EXCLUSIVELY via standard tool calls (Write, Read, Edit, Bash, Grep, Glob).\n"
+                f"- NEVER output XML pseudo-tags such as `<assistant to=...>` or simulated responses in markdown.\n"
+                f"- When initiating a new project charter, first write PROJECT_PLAN.md using the Write tool.\n"
+                f"- Then immediately dispatch your subordinate manager (e.g. `product-manager`) using the Bash tool with `python3 -m orchestration.delegate`.\n"
+                f"- Inspect the output returned by the delegate command and proceed to coordinate subsequent steps."
             )
 
         # Inject equipped skills if configured
@@ -592,18 +599,22 @@ class ClaudeCodeRuntimeAdapter:
         # Enforce agent tool restrictions if configured
         if getattr(agent_config, "allowed_tools", None) and len(agent_config.allowed_tools) > 0:
             tool_mapping = {
-                "read": "View", "view": "View",
-                "write": "FileEdit", "edit": "FileEdit",
-                "grep": "Grep", "glob": "Glob",
-                "bash": "Bash", "Bash": "Bash",
-                "delegate_task": "Bash",
-                "ask_supervisor": "AskUserQuestion", "ask_manager": "AskUserQuestion",
-                "ask_human": "AskUserQuestion", "AskUserQuestion": "AskUserQuestion"
+                "read": ["Read", "View"], "view": ["Read", "View"],
+                "write": ["Write", "Edit", "FileEdit"], "edit": ["Edit", "Write", "FileEdit"],
+                "grep": ["Grep"], "glob": ["Glob"],
+                "bash": ["Bash"], "Bash": ["Bash"],
+                "delegate_task": ["Bash"],
+                "ask_supervisor": ["AskUserQuestion"], "ask_manager": ["AskUserQuestion"],
+                "ask_human": ["AskUserQuestion"], "AskUserQuestion": ["AskUserQuestion"]
             }
             mapped_tools = set()
             for t in agent_config.allowed_tools:
                 if t in tool_mapping:
-                    mapped_tools.add(tool_mapping[t])
+                    mapped = tool_mapping[t]
+                    if isinstance(mapped, list):
+                        mapped_tools.update(mapped)
+                    else:
+                        mapped_tools.add(mapped)
                 else:
                     mapped_tools.add(t)
             if allowed_children or role_type in ("ROOT_ORCHESTRATOR", "MANAGER"):

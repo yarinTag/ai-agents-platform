@@ -9,6 +9,7 @@ from .hierarchy_validator import (
 from .engine import OrchestrationEngine, DelegationError, ConcurrencyLimitExceededError
 from .supervisor_resolver import SupervisorResolver
 from .project_intelligence import ProjectIntelligence
+from .code_indexer import CodeIndexer, code_indexer
 from .team_coordinator import TeamCoordinator
 
 __all__ = [
@@ -22,6 +23,8 @@ __all__ = [
     "ConcurrencyLimitExceededError",
     "SupervisorResolver",
     "ProjectIntelligence",
+    "CodeIndexer",
+    "code_indexer",
     "TeamCoordinator"
 ]
 

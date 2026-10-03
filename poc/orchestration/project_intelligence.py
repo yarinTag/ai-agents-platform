@@ -13,6 +13,13 @@ from typing import Dict, Any, Optional, List
 from pathlib import Path
 
 from persistence import DatabaseManager
+try:
+    from .code_indexer import CodeIndexer, code_indexer as default_code_indexer
+except ImportError:
+    try:
+        from orchestration.code_indexer import CodeIndexer, code_indexer as default_code_indexer
+    except ImportError:
+        default_code_indexer = None
 
 logger = logging.getLogger(__name__)
 
@@ -21,10 +28,12 @@ class ProjectIntelligence:
     """
     Project intelligence aggregator that retrieves and synthesizes deterministic
     context from repository docs, shared memories, conventions, and run histories.
+    Combines Qdrant hybrid vector search with SQLite organizational memories.
     """
 
-    def __init__(self, db_manager: DatabaseManager):
+    def __init__(self, db_manager: DatabaseManager, code_indexer: Optional[Any] = None):
         self.db = db_manager
+        self.code_indexer = code_indexer or default_code_indexer
 
     def retrieve_context(
         self,
@@ -49,6 +58,13 @@ class ProjectIntelligence:
 
         context_items: List[Dict[str, Any]] = []
 
+        def _words_match(w1: str, w2: str) -> bool:
+            if w1 == w2 or w1 in w2 or w2 in w1:
+                return True
+            if len(w1) >= 5 and len(w2) >= 5 and w1[:5] == w2[:5]:
+                return True
+            return False
+
         # 1. Search Project Shared Memories
         try:
             memories = self.db.list_project_memories(project_id=project_id)
@@ -59,11 +75,15 @@ class ProjectIntelligence:
                 tags = [t.lower() for t in mem.get('tags', [])]
 
                 for tok in q_tokens:
-                    if tok in title_lower:
+                    matched_in_title = any(_words_match(tok, w) for w in title_lower.split())
+                    matched_in_tags = any(_words_match(tok, t) for t in tags)
+                    matched_in_content = tok in content_lower
+
+                    if matched_in_title:
                         score += 4
-                    if tok in tags:
+                    if matched_in_tags:
                         score += 3
-                    if tok in content_lower:
+                    if matched_in_content and not matched_in_title:
                         score += 1
 
                 if score >= 3:
@@ -78,24 +98,48 @@ class ProjectIntelligence:
         except Exception as e:
             logger.warning(f"Error querying project memories for intelligence: {e}")
 
-        # 2. Search Project Workspace Files & Docs (Only if project has designated workspace dir)
-        try:
-            proj = self.db.get_project(project_id)
-            if proj and proj.working_directory and proj.working_directory not in (".", "", "./"):
-                wdir = Path(proj.working_directory)
-                if wdir.exists():
-                    doc_candidates = ["CLAUDE.md", "README.md", "ARCHITECTURE.md", "GEMINI.md", "docs"]
-                    for cand in doc_candidates:
-                        cand_path = wdir / cand
-                        if cand_path.is_file():
-                            self._scan_file_for_context(cand_path, q_tokens, context_items)
-                        elif cand_path.is_dir():
-                            for sub_f in list(cand_path.glob("*.md"))[:5]:
-                                self._scan_file_for_context(sub_f, q_tokens, context_items)
-        except Exception as e:
-            logger.warning(f"Error scanning workspace docs for intelligence: {e}")
+        # 2. Search Code & Documentation via Qdrant Hybrid Search (Dense + BM25 Sparse)
+        qdrant_found = False
+        if self.code_indexer and hasattr(self.code_indexer, "is_available") and self.code_indexer.is_available():
+            try:
+                q_items = self.code_indexer.search_code(project_id, query, limit=max_items)
+                if q_items:
+                    qdrant_found = True
+                    for it in q_items:
+                        context_items.append({
+                            "type": it.get("entity_type", "CODE"),
+                            "category": it.get("symbol_type", "CODE"),
+                            "title": f"{it['file_path']} - {it['symbol_name']}",
+                            "content": it["content"],
+                            "score": it["score"],
+                            "source": f"{it['file_path']}#L{it['start_line']}-L{it['end_line']}",
+                            "file_path": it.get("file_path"),
+                            "symbol_name": it.get("symbol_name"),
+                            "start_line": it.get("start_line"),
+                            "end_line": it.get("end_line")
+                        })
+            except Exception as e:
+                logger.warning(f"Error querying Qdrant for code intelligence: {e}")
 
-        # 3. Search Recent Tasks / Previous Agent Results
+        # 3. Fallback: Search Project Workspace Files & Docs if Qdrant didn't match
+        if not qdrant_found:
+            try:
+                proj = self.db.get_project(project_id)
+                if proj and proj.working_directory and proj.working_directory not in (".", "", "./"):
+                    wdir = Path(proj.working_directory)
+                    if wdir.exists():
+                        doc_candidates = ["CLAUDE.md", "README.md", "ARCHITECTURE.md", "GEMINI.md", "docs"]
+                        for cand in doc_candidates:
+                            cand_path = wdir / cand
+                            if cand_path.is_file():
+                                self._scan_file_for_context(cand_path, q_tokens, context_items)
+                            elif cand_path.is_dir():
+                                for sub_f in list(cand_path.glob("*.md"))[:5]:
+                                    self._scan_file_for_context(sub_f, q_tokens, context_items)
+            except Exception as e:
+                logger.warning(f"Error scanning workspace docs for intelligence: {e}")
+
+        # 4. Search Recent Tasks / Previous Agent Results
         try:
             recent_tasks = self.db.list_task_runs(project_id=project_id, limit=10)
             for t in recent_tasks:
@@ -185,8 +229,9 @@ class ProjectIntelligence:
         q_lower = question.lower()
         requires_human = any(marker in q_lower for marker in sensitive_markers)
 
+        prefix = "Project Standard" if best.get("type") == "MEMORY" else "Project Implementation"
         answer_text = (
-            f"Project Standard [{best['category']}: {best['title']}]:\n"
+            f"{prefix} [{best['category']}: {best['title']}]:\n"
             f"{best['content'].strip()}"
         )
 
