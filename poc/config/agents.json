@@ -10,7 +10,7 @@
       "meta-repo-context-router"
     ],
     "model": "fable",
-    "effort": "high",
+    "effort": "medium",
     "max_tokens": 8000,
     "temperature": 0.3,
     "repo_path": "poc/lms",
