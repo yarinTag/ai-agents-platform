@@ -3,11 +3,12 @@ ClaudeCodeAdapter: Implements RuntimeAdapter protocol by wrapping the verified
 ClaudeCodeRuntimeAdapter. Preserves all working subprocess and streaming behavior.
 """
 
-from typing import Optional, Callable, Dict, Any
+from typing import Optional, Callable, Dict, Any, List
 import logging
 
 from config import AgentConfig, ProjectConfig
 from runtime_adapter import ClaudeCodeRuntimeAdapter, runtime_adapter as default_claude_adapter
+from .models import AgentRun
 from .protocol import RuntimeAdapter, RuntimeCapabilities
 
 logger = logging.getLogger(__name__)
@@ -16,7 +17,7 @@ logger = logging.getLogger(__name__)
 class ClaudeCodeAdapter:
     """
     Adapter wrapping ClaudeCodeRuntimeAdapter to conform to RuntimeAdapter protocol.
-    Does NOT rewrite the verified subprocess management logic.
+    Preserves all verified subprocess management, streaming, and resume behavior.
     """
 
     def __init__(self, existing_adapter: Optional[ClaudeCodeRuntimeAdapter] = None):
@@ -25,6 +26,41 @@ class ClaudeCodeAdapter:
     def __getattr__(self, name: str) -> Any:
         """Forward any unknown attributes to the wrapped runtime adapter."""
         return getattr(self._adapter, name)
+
+    def start_task(
+        self,
+        agent_id: str,
+        project_id: Optional[str] = None,
+        prompt: Optional[str] = None,
+        session_id: Optional[str] = None,
+        fork_session: bool = False,
+        task_id: Optional[str] = None,
+    ) -> str:
+        """Start a task run by agent ID or task ID."""
+        return self._adapter.start_task(
+            agent_id=agent_id,
+            project_id=project_id,
+            prompt=prompt,
+            session_id=session_id,
+            fork_session=fork_session,
+            task_id=task_id
+        )
+
+    def get_run_status(self, run_id: str) -> Optional[AgentRun]:
+        """Retrieve execution run status."""
+        return self._adapter.get_run_status(run_id)
+
+    def cancel_run(self, run_id: str) -> bool:
+        """Cancel an in-flight execution run."""
+        return self._adapter.cancel_run(run_id)
+
+    def resume_task(self, run_id: str, answer: str) -> str:
+        """Resume a suspended or waiting task run with an operator or supervisor response."""
+        return self._adapter.resume_task(run_id, answer)
+
+    def list_runs(self) -> List[AgentRun]:
+        """List all tracked runs."""
+        return self._adapter.list_runs()
 
     def start_execution(
         self,
@@ -35,7 +71,7 @@ class ClaudeCodeAdapter:
         correlation_id: Optional[str] = None,
         task_id: Optional[str] = None,
     ) -> str:
-        """Start task execution using Claude Code subprocess."""
+        """Start task execution using full config objects."""
         project_id = project_config.id if project_config else None
         run_id = self._adapter.start_task(
             agent_id=agent_config.id,
@@ -49,7 +85,7 @@ class ClaudeCodeAdapter:
         )
         return run_id
 
-    def get_execution_status(self, execution_id: str) -> Optional[Any]:
+    def get_execution_status(self, execution_id: str) -> Optional[AgentRun]:
         """Retrieve execution run status."""
         return self._adapter.get_run_status(execution_id)
 

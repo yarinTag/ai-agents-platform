@@ -10,7 +10,8 @@ from datetime import datetime
 
 from ..dependencies import get_db_manager, get_runtime_adapter, get_event_bus
 from persistence import DatabaseManager
-from runtime_adapter import ClaudeCodeRuntimeAdapter, TaskStatus
+from runtime.protocol import RuntimeAdapter
+from runtime_adapter import TaskStatus
 from events import EventBus, PlatformEvent, EventType
 
 router = APIRouter()
@@ -52,7 +53,7 @@ async def list_pending_approvals(
 async def create_approval_request(
     payload: InteractionCreate,
     db: DatabaseManager = Depends(get_db_manager),
-    runtime: ClaudeCodeRuntimeAdapter = Depends(get_runtime_adapter),
+    runtime: RuntimeAdapter = Depends(get_runtime_adapter),
     event_bus: EventBus = Depends(get_event_bus)
 ):
     """
@@ -106,7 +107,7 @@ async def create_approval_request(
 async def respond_to_interaction(
     payload: InteractionResponse,
     db: DatabaseManager = Depends(get_db_manager),
-    runtime: ClaudeCodeRuntimeAdapter = Depends(get_runtime_adapter),
+    runtime: RuntimeAdapter = Depends(get_runtime_adapter),
     event_bus: EventBus = Depends(get_event_bus)
 ):
     """

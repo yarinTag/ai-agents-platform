@@ -57,6 +57,9 @@ class AgentConfig:
     allowed_peer_ids: List[str] = None
     mcp_permissions: List[str] = None
 
+    # Logical model capability tier (e.g. "tier:architect", "tier:worker", "tier:executive")
+    model_tier: Optional[str] = None
+
     def __post_init__(self):
         if self.skills is None:
             self.skills = []

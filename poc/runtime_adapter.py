@@ -29,99 +29,12 @@ RUNTIME_SETUP_COMPLETED_KEY = providers.SETTING_SETUP_COMPLETED
 
 logger = logging.getLogger(__name__)
 
+# Import runtime-agnostic domain models and re-export for backward compatibility
+try:
+    from runtime.models import TaskStatus, AgentRun
+except ImportError:
+    from poc.runtime.models import TaskStatus, AgentRun
 
-class TaskStatus(Enum):
-    QUEUED = "queued"
-    PENDING = "pending"
-    RUNNING = "running"
-    SCHEDULED = "scheduled"
-    WAITING_FOR_CHILDREN = "waiting_for_children"
-    WAITING_FOR_MANAGER = "waiting_for_manager"
-    WAITING_FOR_HUMAN = "waiting_for_human"
-    WAITING_INPUT = "waiting_input"
-    PENDING_APPROVAL = "pending_approval"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    CANCELLED = "cancelled"
-
-
-
-@dataclass
-class AgentRun:
-    """Represents a running agent task."""
-    run_id: str
-    agent_id: str
-    project_id: Optional[str]
-    prompt: str
-    status: TaskStatus
-    created_at: datetime
-    started_at: Optional[datetime] = None
-    ended_at: Optional[datetime] = None
-    result: Optional[str] = None
-    error: Optional[str] = None
-    exit_code: Optional[int] = None
-    events: List[Dict[str, Any]] = None
-    parent_task_id: Optional[str] = None
-    root_task_id: Optional[str] = None
-    assigned_by: Optional[str] = None
-    session_id: Optional[str] = None
-    dangerously_skip_permissions: bool = False
-    dependencies: List[str] = field(default_factory=list)
-    structured_result: Optional[Dict[str, Any]] = None
-    acceptance_criteria: Optional[str] = None
-    retry_count: int = 0
-
-    def __post_init__(self):
-        if self.events is None:
-            self.events = []
-        if self.dependencies is None:
-            self.dependencies = []
-
-    def to_dict(self) -> Dict[str, Any]:
-        data = asdict(self)
-        # Convert datetime objects to ISO strings
-        data['created_at'] = self.created_at.isoformat() if self.created_at else None
-        if self.started_at:
-            data['started_at'] = self.started_at.isoformat()
-        if self.ended_at:
-            data['ended_at'] = self.ended_at.isoformat()
-        data['status'] = self.status.value if hasattr(self.status, 'value') else str(self.status)
-        data['parent_task_id'] = self.parent_task_id
-        data['root_task_id'] = self.root_task_id
-        data['assigned_by'] = self.assigned_by
-        data['dangerously_skip_permissions'] = self.dangerously_skip_permissions
-        data['dependencies'] = list(self.dependencies) if self.dependencies else []
-        data['structured_result'] = self.structured_result
-        data['acceptance_criteria'] = self.acceptance_criteria
-        data['retry_count'] = self.retry_count
-        return data
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'AgentRun':
-        data_copy = dict(data)
-        # Convert ISO strings back to datetime objects
-        if data_copy.get('created_at') and isinstance(data_copy['created_at'], str):
-            data_copy['created_at'] = datetime.fromisoformat(data_copy['created_at'])
-        if data_copy.get('started_at') and isinstance(data_copy['started_at'], str):
-            data_copy['started_at'] = datetime.fromisoformat(data_copy['started_at'])
-        if data_copy.get('ended_at') and isinstance(data_copy['ended_at'], str):
-            data_copy['ended_at'] = datetime.fromisoformat(data_copy['ended_at'])
-        if isinstance(data_copy.get('status'), str):
-            try:
-                data_copy['status'] = TaskStatus(data_copy['status'])
-            except ValueError:
-                data_copy['status'] = TaskStatus.PENDING
-        data_copy.setdefault('project_id', None)
-        data_copy.setdefault('parent_task_id', None)
-        data_copy.setdefault('root_task_id', None)
-        data_copy.setdefault('assigned_by', None)
-        data_copy.setdefault('session_id', None)
-        data_copy.setdefault('dangerously_skip_permissions', False)
-        data_copy.setdefault('dependencies', [])
-        data_copy.setdefault('structured_result', None)
-        data_copy.setdefault('acceptance_criteria', None)
-        data_copy.setdefault('retry_count', 0)
-        return cls(**data_copy)
 
 
 
@@ -530,8 +443,16 @@ class ClaudeCodeRuntimeAdapter:
             List of command arguments
         """
         cmd = ["claude"]
-        if agent_config.model and agent_config.model.lower() != "default":
-            cmd.extend(["--model", agent_config.model.lower()])
+        # Resolve logical model tier (e.g. tier:architect, tier:worker) to runtime model
+        resolved_model = agent_config.model
+        try:
+            from runtime.model_policy import model_policy_resolver
+            resolved_model = model_policy_resolver.resolve(agent_config.model, runtime_type="claude_code").resolved_model
+        except Exception:
+            pass
+
+        if resolved_model and resolved_model.lower() != "default":
+            cmd.extend(["--model", resolved_model.lower()])
 
         if session_id and not session_id.startswith("pending_") and not session_id.startswith("sess_"):
             cmd.extend(["--resume", session_id])
@@ -1091,8 +1012,6 @@ class ClaudeCodeRuntimeAdapter:
 
         except Exception as e:
             # Report the real error — do not fabricate fake success results
-            import logging
-            logger = logging.getLogger(__name__)
             logger.error(f"Runtime execution failed for run {run_id}: {e}", exc_info=True)
             run.status = TaskStatus.FAILED
             run.error = f"Runtime execution failed: {str(e)}"
@@ -1158,9 +1077,9 @@ class ClaudeCodeRuntimeAdapter:
                             except Exception:
                                 pass
                     except Exception as chat_err:
-                        logging.getLogger(__name__).warning(f"Failed to record task response to chat: {chat_err}")
+                        logger.warning(f"Failed to record task response to chat: {chat_err}")
             except Exception as dbe:
-                logging.getLogger(__name__).warning(f"Failed to save task run to DB: {dbe}")
+                logger.warning(f"Failed to save task run to DB: {dbe}")
 
             # Notify Orchestration Engine of task completion or failure
             if run.status in (TaskStatus.COMPLETED, TaskStatus.FAILED):
@@ -1168,7 +1087,7 @@ class ClaudeCodeRuntimeAdapter:
                     try:
                         self.on_task_completed(run)
                     except Exception as cb_err:
-                        logging.getLogger(__name__).error(f"Error in on_task_completed for {run.run_id}: {cb_err}")
+                        logger.error(f"Error in on_task_completed for {run.run_id}: {cb_err}")
                 else:
                     try:
                         import backend.dependencies as bdep

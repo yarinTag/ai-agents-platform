@@ -36,10 +36,11 @@ poc/
 │   ├── dependencies.py  # Centralized dependency injection bridge
 │   └── main.py          # FastAPI application entrypoint & lifespan
 ├── orchestration/       # HierarchyValidator, OrchestrationEngine, SupervisorResolver
-├── runtime/             # ClaudeCodeAdapter, RuntimeProtocol
+├── runtime/             # RuntimeAdapter protocol, RuntimeRegistry, ModelPolicyResolver, ClaudeCodeAdapter
 ├── persistence.py       # DatabaseManager (SQLite schema, migrations, CRUD)
 ├── runtime_adapter.py   # ClaudeCodeRuntimeAdapter (Subprocess CLI, streaming, session resume)
-└── tests/               # 12 Core automated test suites (40 tests)
+├── runtime_providers.py # Provider Registry (Native, Anthropic API, Custom Gateway / LiteLLM)
+└── tests/               # 13 Automated test suites (87 tests, zero mocks)
 ```
 
 ---

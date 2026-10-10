@@ -21,7 +21,10 @@ from config import config_manager, ConfigManager, AgentConfig, AgentRole, AgentT
 from persistence import db_manager, DatabaseManager
 from runtime_adapter import runtime_adapter, ClaudeCodeRuntimeAdapter, AgentRun, TaskStatus
 import runtime_providers
+from runtime.protocol import RuntimeAdapter, RuntimeCapabilities
 from runtime.claude_adapter import ClaudeCodeAdapter
+from runtime.registry import runtime_registry, RuntimeRegistry
+from runtime.model_policy import model_policy_resolver, ModelPolicyResolver
 from events import EventBus, EventService, PlatformEvent, EventType
 from orchestration import (
     validate_agent_hierarchy, HierarchyValidationError, OrchestrationEngine,
@@ -64,10 +67,11 @@ async def init_services():
             _event_service = EventService(db_manager=db_manager, event_bus=_event_bus)
         if _claude_adapter is None:
             _claude_adapter = ClaudeCodeAdapter(runtime_adapter)
+            runtime_registry.register("claude_code", _claude_adapter, set_default=True)
         if _orchestration_engine is None:
             _orchestration_engine = OrchestrationEngine(
                 db_manager=db_manager,
-                runtime_adapter=runtime_adapter,
+                runtime_adapter=_claude_adapter,
                 event_service=_event_service
             )
             runtime_adapter.on_task_completed = _orchestration_engine.handle_task_completion
@@ -147,12 +151,18 @@ def get_event_service() -> EventService:
     return _event_service
 
 
-def get_runtime_adapter() -> ClaudeCodeAdapter:
-    """Get the runtime adapter instance returning ClaudeCodeAdapter wrapping runtime_adapter."""
+def get_runtime_adapter() -> RuntimeAdapter:
+    """Get the active runtime adapter instance from the RuntimeRegistry."""
     global _claude_adapter
     if _claude_adapter is None:
         _claude_adapter = ClaudeCodeAdapter(runtime_adapter)
-    return _claude_adapter
+        runtime_registry.register("claude_code", _claude_adapter, set_default=True)
+    return runtime_registry.get()
+
+
+def get_model_policy_resolver() -> ModelPolicyResolver:
+    """Get the global ModelPolicyResolver instance."""
+    return model_policy_resolver
 
 
 def get_orchestration_engine() -> OrchestrationEngine:

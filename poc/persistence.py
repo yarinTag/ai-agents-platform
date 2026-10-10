@@ -419,6 +419,7 @@ class DatabaseManager:
                     project_id TEXT,
                     title TEXT DEFAULT 'Direct Chat Session',
                     claude_session_id TEXT,
+                    runtime_session_id TEXT,
                     task_id TEXT,
                     supervisor_session_id TEXT,
                     status TEXT DEFAULT 'ACTIVE',
@@ -433,7 +434,8 @@ class DatabaseManager:
                 ("task_id", "TEXT"),
                 ("supervisor_session_id", "TEXT"),
                 ("status", "TEXT DEFAULT 'ACTIVE'"),
-                ("channel_key", "TEXT")
+                ("channel_key", "TEXT"),
+                ("runtime_session_id", "TEXT")
             ]:
                 try:
                     conn.execute(f"ALTER TABLE agent_conversations ADD COLUMN {col} {col_type}")
@@ -2043,9 +2045,9 @@ class DatabaseManager:
 
             conn.execute("""
                 INSERT INTO agent_conversations (
-                    id, agent_id, project_id, title, claude_session_id, task_id, supervisor_session_id, status, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?)
-            """, (conv_id, agent_id, project_id, session_title, claude_session_id, assigned_task_id, supervisor_session_id, now, now))
+                    id, agent_id, project_id, title, claude_session_id, runtime_session_id, task_id, supervisor_session_id, status, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?)
+            """, (conv_id, agent_id, project_id, session_title, claude_session_id, claude_session_id, assigned_task_id, supervisor_session_id, now, now))
             conn.commit()
 
             return {
@@ -2054,6 +2056,7 @@ class DatabaseManager:
                 "project_id": project_id,
                 "title": session_title,
                 "claude_session_id": claude_session_id,
+                "runtime_session_id": claude_session_id,
                 "task_id": assigned_task_id,
                 "supervisor_session_id": supervisor_session_id,
                 "status": "ACTIVE",
@@ -2229,21 +2232,21 @@ class DatabaseManager:
         return self.create_agent_session(agent_id, project_id=project_id, close_existing=False)
 
     def update_conversation_session(self, conversation_id: str, claude_session_id: str, task_id: Optional[str] = None):
-        """Associate a Claude CLI session ID and optional task_id with the conversation."""
+        """Associate a runtime/CLI session ID and optional task_id with the conversation."""
         now = datetime.now().isoformat()
         with self._get_connection() as conn:
             if task_id:
                 conn.execute("""
                     UPDATE agent_conversations
-                    SET claude_session_id = ?, task_id = ?, updated_at = ?
+                    SET claude_session_id = ?, runtime_session_id = ?, task_id = ?, updated_at = ?
                     WHERE id = ?
-                """, (claude_session_id, task_id, now, conversation_id))
+                """, (claude_session_id, claude_session_id, task_id, now, conversation_id))
             else:
                 conn.execute("""
                     UPDATE agent_conversations
-                    SET claude_session_id = ?, updated_at = ?
+                    SET claude_session_id = ?, runtime_session_id = ?, updated_at = ?
                     WHERE id = ?
-                """, (claude_session_id, now, conversation_id))
+                """, (claude_session_id, claude_session_id, now, conversation_id))
             conn.commit()
 
     def save_chat_message(self, message_data: Dict[str, Any]) -> Dict[str, Any]:

@@ -10,7 +10,8 @@ from typing import Optional, List, Dict, Any
 from croniter import croniter
 
 from persistence import DatabaseManager
-from runtime_adapter import ClaudeCodeRuntimeAdapter, TaskStatus
+from runtime.protocol import RuntimeAdapter
+from runtime_adapter import TaskStatus
 from events import EventBus, PlatformEvent, EventType
 
 logger = logging.getLogger(__name__)
@@ -48,7 +49,7 @@ class CronSchedulerEngine:
     def __init__(
         self,
         db_manager: DatabaseManager,
-        runtime_adapter: ClaudeCodeRuntimeAdapter,
+        runtime_adapter: RuntimeAdapter,
         event_bus: Optional[EventBus] = None,
         poll_interval_seconds: float = 5.0
     ):

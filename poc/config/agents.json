@@ -43,7 +43,8 @@
     "runtime_provider": null,
     "allow_sibling_communication": true,
     "allowed_peer_ids": [],
-    "mcp_permissions": []
+    "mcp_permissions": [],
+    "model_tier": null
   },
   "product-manager": {
     "id": "product-manager",
@@ -89,7 +90,8 @@
     "allowed_peer_ids": [
       "software-architect"
     ],
-    "mcp_permissions": []
+    "mcp_permissions": [],
+    "model_tier": null
   },
   "software-architect": {
     "id": "software-architect",
@@ -138,7 +140,8 @@
       "product-manager",
       "release-security-reviewer"
     ],
-    "mcp_permissions": []
+    "mcp_permissions": [],
+    "model_tier": null
   },
   "ui-ux-designer": {
     "id": "ui-ux-designer",
@@ -178,7 +181,8 @@
     "allowed_peer_ids": [
       "frontend-developer"
     ],
-    "mcp_permissions": []
+    "mcp_permissions": [],
+    "model_tier": null
   },
   "frontend-developer": {
     "id": "frontend-developer",
@@ -222,7 +226,8 @@
       "ui-ux-designer",
       "qa-test-engineer"
     ],
-    "mcp_permissions": []
+    "mcp_permissions": [],
+    "model_tier": null
   },
   "backend-developer": {
     "id": "backend-developer",
@@ -268,7 +273,8 @@
       "frontend-developer",
       "qa-test-engineer"
     ],
-    "mcp_permissions": []
+    "mcp_permissions": [],
+    "model_tier": null
   },
   "qa-test-engineer": {
     "id": "qa-test-engineer",
@@ -310,7 +316,8 @@
       "frontend-developer",
       "backend-developer"
     ],
-    "mcp_permissions": []
+    "mcp_permissions": [],
+    "model_tier": null
   },
   "release-security-reviewer": {
     "id": "release-security-reviewer",
@@ -352,6 +359,7 @@
       "software-architect",
       "qa-test-engineer"
     ],
-    "mcp_permissions": []
+    "mcp_permissions": [],
+    "model_tier": null
   }
 }
