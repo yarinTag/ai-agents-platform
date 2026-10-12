@@ -1,7 +1,7 @@
 """
 Workflow Definition Parser:
 Loads, validates, and converts workflow definitions between YAML and JSON formats.
-Follows Overcut-style declarative playbooks with step-by-step DAG dependencies.
+Follows declarative playbooks with step-by-step DAG dependencies.
 """
 
 import json

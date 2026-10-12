@@ -140,7 +140,7 @@ class Department:
 
 @dataclass
 class Workflow:
-    """Overcut-style agentic workflow definition."""
+    """Autonomous agentic workflow definition."""
     id: str
     name: str
     description: Optional[str] = None

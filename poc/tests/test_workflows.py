@@ -1,5 +1,5 @@
 """
-Test Suite for Overcut-Inspired Workflows:
+Test Suite for Agentic Workflows:
 Verifies:
 1. YAML & JSON conversion and parsing.
 2. Workflow execution through DAG steps.

@@ -1,5 +1,5 @@
 """
-Live Interactive Workflow Demonstration (Overcut-Inspired Engine)
+Live Interactive Workflow Demonstration (Autonomous Workflow Engine)
 
 Demonstrates:
 1. Defining a multi-agent workflow in YAML.
@@ -31,7 +31,7 @@ from workflows.sandbox import SandboxManager
 
 def run_live_workflow_demo():
     print("=" * 70)
-    print("🚀  AI AGENTS PLATFORM — OVERCUT WORKFLOW LIVE DEMO")
+    print("🚀  AI AGENTS PLATFORM — AGENT WORKFLOW LIVE DEMO")
     print("=" * 70)
 
     # 1. Setup Department & Budget
@@ -109,7 +109,7 @@ steps:
 
     trigger_payload = {
         "pr_number": "104",
-        "pr_title": "Integrate Overcut Workflow Engine & Sandboxing"
+        "pr_title": "Integrate Autonomous Workflow Engine & Sandboxing"
     }
 
     execution = engine.execute_workflow(
