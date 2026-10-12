@@ -352,6 +352,7 @@ export const SkillsPage: React.FC = () => {
                 columns={columns}
                 dataSource={skills}
                 pagination={{ pageSize: 10 }}
+                scroll={{ x: 900 }}
               />
             ),
           },

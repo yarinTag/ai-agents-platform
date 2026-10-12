@@ -25,6 +25,7 @@ from .messages.router import router as messages_router
 from .teams.router import router as teams_router
 from .api.filesystem import router as filesystem_router
 from .api.workflows import router as workflows_router
+from .api.mcp import router as mcp_router
 
 # Import security layer
 from .security import (
@@ -93,6 +94,7 @@ app.include_router(messages_router, prefix="/api/v1/messages", tags=["messages"]
 app.include_router(teams_router, prefix="/api/v1/teams", tags=["teams"], dependencies=auth_deps)
 app.include_router(filesystem_router, prefix="/api/v1/fs", tags=["filesystem"], dependencies=auth_deps)
 app.include_router(workflows_router, prefix="/api/v1/workflows", tags=["workflows"], dependencies=auth_deps)
+app.include_router(mcp_router, prefix="/api/v1/mcp", tags=["mcp"], dependencies=auth_deps)
 app.include_router(audit_router, prefix="/api/v1/audit", tags=["audit"])
 
 app.include_router(audit_router, prefix="/api/v1/auth", tags=["auth"])

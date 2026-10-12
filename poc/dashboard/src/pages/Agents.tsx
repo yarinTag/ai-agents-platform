@@ -27,6 +27,7 @@ import {
   BookOutlined,
   TeamOutlined,
   MessageOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons';
 import { Agent, AgentRole } from '../types/agent';
 import {
@@ -195,6 +196,24 @@ export const AgentsPage: React.FC = () => {
     }
   };
 
+  const officeFloorAgents = React.useMemo(() => {
+    return agents.filter(
+      (a) =>
+        a.role_type !== 'WORKFLOW_AUTOMATION' &&
+        !(a as any).is_workflow_agent &&
+        a.department !== 'Workflow Automations'
+    );
+  }, [agents]);
+
+  const workflowAgents = React.useMemo(() => {
+    return agents.filter(
+      (a) =>
+        a.role_type === 'WORKFLOW_AUTOMATION' ||
+        Boolean((a as any).is_workflow_agent) ||
+        a.department === 'Workflow Automations'
+    );
+  }, [agents]);
+
   const columns = [
     {
       title: 'Agent Name & Role',
@@ -202,10 +221,17 @@ export const AgentsPage: React.FC = () => {
       key: 'name',
       render: (name: string, record: Agent) => {
         const role = (record.role_type || 'WORKER').toUpperCase();
+        const isWorkflowRunner =
+          role === 'WORKFLOW_AUTOMATION' ||
+          Boolean((record as any).is_workflow_agent) ||
+          record.department === 'Workflow Automations';
+
         return (
           <div>
-            <div style={{ fontWeight: 600, color: '#f3f4f6', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              {role === 'ROOT_ORCHESTRATOR' ? (
+            <div style={{ fontWeight: 600, color: '#f3f4f6', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+              {isWorkflowRunner ? (
+                <ThunderboltOutlined style={{ color: '#c084fc' }} />
+              ) : role === 'ROOT_ORCHESTRATOR' ? (
                 <CrownOutlined style={{ color: '#fbbf24' }} />
               ) : role === 'MANAGER' ? (
                 <StarOutlined style={{ color: '#f59e0b' }} />
@@ -215,7 +241,9 @@ export const AgentsPage: React.FC = () => {
               <span>{name}</span>
               <Tag
                 color={
-                  role === 'ROOT_ORCHESTRATOR'
+                  isWorkflowRunner
+                    ? 'purple'
+                    : role === 'ROOT_ORCHESTRATOR'
                     ? 'purple'
                     : role === 'MANAGER'
                     ? 'gold'
@@ -225,8 +253,22 @@ export const AgentsPage: React.FC = () => {
                 }
                 style={{ fontSize: '10px', padding: '0 4px', margin: 0 }}
               >
-                {role}
+                {isWorkflowRunner ? 'WORKFLOW RUNNER' : role}
               </Tag>
+              {isWorkflowRunner && (
+                <Tag
+                  style={{
+                    fontSize: '9px',
+                    padding: '0 4px',
+                    margin: 0,
+                    background: '#1e1b4b',
+                    color: '#c084fc',
+                    border: '1px solid #4338ca',
+                  }}
+                >
+                  Detached from Office Canvas
+                </Tag>
+              )}
             </div>
             <div style={{ fontSize: '11px', color: '#9ca3af' }}>{record.description || 'General Purpose Agent'}</div>
           </div>
@@ -234,10 +276,22 @@ export const AgentsPage: React.FC = () => {
       },
     },
     {
-      title: 'Supervisor (Parent)',
+      title: 'Supervisor (Parent) / Pipeline',
       dataIndex: 'parent_id',
       key: 'parent_id',
-      render: (parentId?: string) => {
+      render: (parentId: string | undefined, record: Agent) => {
+        const isWorkflowRunner =
+          record.role_type === 'WORKFLOW_AUTOMATION' ||
+          Boolean((record as any).is_workflow_agent) ||
+          record.department === 'Workflow Automations';
+
+        if (isWorkflowRunner) {
+          return (
+            <Tag color="purple" style={{ fontSize: '11px' }}>
+              ⚡ Workflow: {record.workflow_id || 'Pipeline'}
+            </Tag>
+          );
+        }
         if (!parentId) return <span style={{ color: '#64748b', fontSize: '12px' }}>— (Root / Direct)</span>;
         const parentAgent = agents.find((a) => a.id === parentId);
         return (
@@ -263,6 +317,7 @@ export const AgentsPage: React.FC = () => {
           Sales: 'orange',
           Operations: 'volcano',
           Finance: 'indigo',
+          'Workflow Automations': 'purple',
         };
         const color = colorMap[d] || 'volcano';
         return <Tag color={color}>{d}</Tag>;
@@ -431,18 +486,64 @@ export const AgentsPage: React.FC = () => {
             key: 'roster',
             label: (
               <span>
-                <TeamOutlined /> Active Roster ({agents.length})
+                <TeamOutlined /> 🏢 Office Floor Team ({officeFloorAgents.length})
               </span>
             ),
             children: (
               <Table
-                dataSource={agents}
+                dataSource={officeFloorAgents}
                 columns={columns}
                 rowKey="id"
                 loading={loading}
                 pagination={{ pageSize: 8 }}
-                style={{ background: '#161b22', borderRadius: '12px', overflow: 'hidden' }}
+                scroll={{ x: 1000 }}
+                style={{ background: '#161b22', borderRadius: '12px' }}
               />
+            ),
+          },
+          {
+            key: 'workflows',
+            label: (
+              <span>
+                <ThunderboltOutlined /> ⚡ Workflow Automations ({workflowAgents.length})
+              </span>
+            ),
+            children: (
+              <div>
+                <div
+                  style={{
+                    background: 'linear-gradient(90deg, rgba(88, 28, 135, 0.25) 0%, rgba(30, 27, 75, 0.45) 100%)',
+                    border: '1px solid #7c3aed',
+                    borderRadius: '10px',
+                    padding: '14px 18px',
+                    marginBottom: '16px',
+                    color: '#e9d5ff',
+                    fontSize: '13px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '14px',
+                  }}
+                >
+                  <span style={{ fontSize: '24px' }}>⚡</span>
+                  <div>
+                    <div style={{ fontWeight: 700, color: '#f3e8ff', fontSize: '14px', marginBottom: '2px' }}>
+                      Decoupled Workflow Automation Agents
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#c084fc', lineHeight: 1.5 }}>
+                      These agents are automatically provisioned when workflows are created to maintain scheduled executions (cron) or listen to selected channel events (Telegram/Slack). They run in the cloud background and are <strong>completely detached from the 2D Pixel Office Canvas</strong>, keeping physical workstations reserved for human-collaborative team agents.
+                    </div>
+                  </div>
+                </div>
+                <Table
+                  dataSource={workflowAgents}
+                  columns={columns}
+                  rowKey="id"
+                  loading={loading}
+                  pagination={{ pageSize: 8 }}
+                  scroll={{ x: 1000 }}
+                  style={{ background: '#161b22', borderRadius: '12px' }}
+                />
+              </div>
             ),
           },
           {

@@ -21,6 +21,9 @@ import {
 } from 'antd';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
+import relativeTime from 'dayjs/plugin/relativeTime';
+
+dayjs.extend(relativeTime);
 import {
   CalendarOutlined,
   ClockCircleOutlined,
@@ -478,6 +481,7 @@ export const CalendarView: React.FC = () => {
                   rowKey="id"
                   loading={loading}
                   pagination={{ pageSize: 8 }}
+                  scroll={{ x: 900 }}
                 />
               </Card>
             ),

@@ -11,6 +11,7 @@ import SkillsPage from './pages/Skills';
 import TasksPage from './pages/Tasks';
 import DashboardPage from './pages/Dashboard';
 import CalendarViewPage from './pages/CalendarView';
+import McpHubPage from './pages/McpHub';
 
 export const App: React.FC = () => {
   return (
@@ -43,6 +44,7 @@ export const App: React.FC = () => {
               <Route path="/skills" element={<SkillsPage />} />
               <Route path="/tasks" element={<TasksPage />} />
               <Route path="/calendar" element={<CalendarViewPage />} />
+              <Route path="/mcp" element={<McpHubPage />} />
               <Route path="/projects" element={<ProjectsPage />} />
               <Route path="/dashboard" element={<DashboardPage />} />
             </Routes>

@@ -19,6 +19,7 @@ class AgentRole(str, Enum):
     MANAGER = "MANAGER"
     WORKER = "WORKER"
     SPECIALIST = "SPECIALIST"
+    WORKFLOW_AUTOMATION = "WORKFLOW_AUTOMATION"
 
 
 @dataclass
@@ -56,6 +57,10 @@ class AgentConfig:
     allow_sibling_communication: bool = True
     allowed_peer_ids: List[str] = None
     mcp_permissions: List[str] = None
+
+    # Workflow automation fields (detached from physical office floor)
+    is_workflow_agent: bool = False
+    workflow_id: Optional[str] = None
 
     # Logical model capability tier (e.g. "tier:architect", "tier:worker", "tier:executive")
     model_tier: Optional[str] = None
@@ -184,6 +189,8 @@ class Skill:
     description: str
     content: str  # Markdown content
     project_id: Optional[str] = None  # None for global skills
+    source: Optional[str] = "custom"  # "builtin", "local", "git", "custom"
+    location: Optional[str] = None    # Repository URL or filesystem path
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)

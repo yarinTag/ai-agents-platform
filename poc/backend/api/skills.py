@@ -24,6 +24,8 @@ class SkillBase(BaseModel):
     description: Optional[str] = None
     content: str = Field(..., min_length=1)
     project_id: Optional[str] = None  # None for global skills
+    source: Optional[str] = "custom"  # "builtin", "local", "git", "custom"
+    location: Optional[str] = None    # Repository URL or filesystem path
 
 
 class SkillCreate(SkillBase):
@@ -35,6 +37,8 @@ class SkillUpdate(BaseModel):
     description: Optional[str] = None
     content: Optional[str] = Field(None, min_length=1)
     project_id: Optional[str] = None
+    source: Optional[str] = None
+    location: Optional[str] = None
 
 
 class SkillResponse(SkillBase):
@@ -54,6 +58,8 @@ def skill_to_response(skill: Skill) -> dict:
         "description": skill.description,
         "content": skill.content,
         "project_id": skill.project_id,
+        "source": getattr(skill, "source", "custom") or "custom",
+        "location": getattr(skill, "location", None),
         "created_at": "",  # Would come from DB in real implementation
         "updated_at": ""   # Would come from DB in real implementation
     }

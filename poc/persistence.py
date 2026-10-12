@@ -305,7 +305,9 @@ class DatabaseManager:
                 ("allow_sibling_communication", "INTEGER DEFAULT 1"),
                 ("allowed_peer_ids", "TEXT"),
                 ("mcp_permissions", "TEXT"),
-                ("runtime_provider", "TEXT")
+                ("runtime_provider", "TEXT"),
+                ("is_workflow_agent", "INTEGER DEFAULT 0"),
+                ("workflow_id", "TEXT")
             ]:
                 try:
                     conn.execute(f"ALTER TABLE agents ADD COLUMN {col} {col_type}")
@@ -1098,7 +1100,9 @@ class DatabaseManager:
             allow_sibling_communication=bool(row['allow_sibling_communication']) if 'allow_sibling_communication' in keys and row['allow_sibling_communication'] is not None else True,
             allowed_peer_ids=json.loads(row['allowed_peer_ids']) if 'allowed_peer_ids' in keys and row['allowed_peer_ids'] else [],
             mcp_permissions=json.loads(row['mcp_permissions']) if 'mcp_permissions' in keys and row['mcp_permissions'] else [],
-            runtime_provider=row['runtime_provider'] if 'runtime_provider' in keys and row['runtime_provider'] else None
+            runtime_provider=row['runtime_provider'] if 'runtime_provider' in keys and row['runtime_provider'] else None,
+            is_workflow_agent=bool(row['is_workflow_agent']) if 'is_workflow_agent' in keys and row['is_workflow_agent'] is not None else False,
+            workflow_id=row['workflow_id'] if 'workflow_id' in keys else None
         )
 
     def _row_to_template(self, row: sqlite3.Row) -> AgentTemplate:
@@ -1124,9 +1128,11 @@ class DatabaseManager:
         with self._get_connection() as conn:
             existing = conn.execute("SELECT created_at FROM agents WHERE id = ?", (agent.id,)).fetchone()
             if not existing:
-                count = conn.execute("SELECT COUNT(*) FROM agents").fetchone()[0]
-                if count >= self.max_agents:
-                    raise ValueError(f"Platform agent capacity reached: maximum {self.max_agents} agents allowed")
+                is_wf = bool(getattr(agent, "is_workflow_agent", False) or getattr(agent, "role_type", "") == "WORKFLOW_AUTOMATION")
+                if not is_wf:
+                    count = conn.execute("SELECT COUNT(*) FROM agents WHERE is_workflow_agent = 0").fetchone()[0]
+                    if count >= self.max_agents:
+                        raise ValueError(f"Platform agent capacity reached: maximum {self.max_agents} agents allowed")
             created_at = existing['created_at'] if existing else (getattr(agent, "created_at", None) or datetime.now().isoformat())
             updated_at = datetime.now().isoformat()
 
@@ -1136,8 +1142,9 @@ class DatabaseManager:
                  repo_path, github_url, department, avatar, created_at, updated_at,
                  parent_id, role_type, max_concurrent_children, delegation_strategy,
                  allowed_child_ids, allowed_tools, template_id, dangerously_skip_permissions,
-                 allow_sibling_communication, allowed_peer_ids, mcp_permissions, runtime_provider)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 allow_sibling_communication, allowed_peer_ids, mcp_permissions, runtime_provider,
+                 is_workflow_agent, workflow_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     name=excluded.name,
                     description=excluded.description,
@@ -1163,7 +1170,9 @@ class DatabaseManager:
                     allow_sibling_communication=excluded.allow_sibling_communication,
                     allowed_peer_ids=excluded.allowed_peer_ids,
                     mcp_permissions=excluded.mcp_permissions,
-                    runtime_provider=excluded.runtime_provider
+                    runtime_provider=excluded.runtime_provider,
+                    is_workflow_agent=excluded.is_workflow_agent,
+                    workflow_id=excluded.workflow_id
             """, (
                 agent.id,
                 agent.name,
@@ -1191,7 +1200,9 @@ class DatabaseManager:
                 1 if getattr(agent, "allow_sibling_communication", True) else 0,
                 json.dumps(getattr(agent, "allowed_peer_ids", []) or []),
                 json.dumps(getattr(agent, "mcp_permissions", []) or []),
-                getattr(agent, "runtime_provider", None)
+                getattr(agent, "runtime_provider", None),
+                1 if getattr(agent, "is_workflow_agent", False) else 0,
+                getattr(agent, "workflow_id", None)
             ))
             conn.commit()
 
@@ -3677,6 +3688,28 @@ class DatabaseManager:
                 updated_at=d.get('updated_at')
             )
 
+    def update_workflow(self, id: str, **kwargs) -> Optional[Workflow]:
+        """Update workflow configuration, definition, and channel bindings."""
+        fields = []
+        params = []
+        now = datetime.now().isoformat()
+        allowed_keys = ("name", "description", "department_id", "definition_json", "webhook_enabled", "cron_expression", "is_active")
+        for k in allowed_keys:
+            if k in kwargs and kwargs[k] is not None:
+                fields.append(f"{k} = ?")
+                if k in ("webhook_enabled", "is_active"):
+                    params.append(1 if kwargs[k] else 0)
+                else:
+                    params.append(kwargs[k])
+        if fields:
+            fields.append("updated_at = ?")
+            params.append(now)
+            params.append(id)
+            with self._get_connection() as conn:
+                conn.execute(f"UPDATE workflows SET {', '.join(fields)} WHERE id = ?", params)
+                conn.commit()
+        return self.get_workflow(id)
+
     def get_workflow_by_webhook_token(self, webhook_token: str) -> Optional[Workflow]:
         """Lookup an active workflow by its incoming webhook token."""
         with self._get_connection() as conn:
@@ -3712,6 +3745,13 @@ class DatabaseManager:
         with self._get_connection() as conn:
             rows = conn.execute(query, params).fetchall()
             return [self.get_workflow(r['id']) for r in rows if r['id']]
+
+    def delete_workflow(self, id: str) -> bool:
+        """Delete a workflow and cascade delete executions."""
+        with self._get_connection() as conn:
+            cursor = conn.execute("DELETE FROM workflows WHERE id = ?", (id,))
+            conn.commit()
+            return cursor.rowcount > 0
 
     def create_workflow_execution(
         self,

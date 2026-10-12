@@ -23,9 +23,20 @@ class WorkflowStepDefinition:
     acceptance_criteria: Optional[str] = None
     retry_count: int = 0
     estimated_cost_usd: float = 0.0
+    mcp_servers: List[str] = field(default_factory=list)
+    skills: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
+        d = asdict(self)
+        if not self.mcp_servers:
+            d.pop("mcp_servers", None)
+        if not self.skills:
+            d.pop("skills", None)
+        if not self.condition:
+            d.pop("condition", None)
+        if not self.acceptance_criteria:
+            d.pop("acceptance_criteria", None)
+        return d
 
 
 @dataclass
@@ -39,18 +50,25 @@ class WorkflowDefinition:
     cron_expression: Optional[str] = None
     webhook_enabled: bool = True
     metadata: Dict[str, Any] = field(default_factory=dict)
+    skills: List[Dict[str, Any]] = field(default_factory=list)
+    mcp_servers: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        res: Dict[str, Any] = {
             "id": self.id,
             "name": self.name,
             "description": self.description,
             "department_id": self.department_id,
-            "steps": [s.to_dict() for s in self.steps],
-            "cron_expression": self.cron_expression,
-            "webhook_enabled": self.webhook_enabled,
-            "metadata": self.metadata
         }
+        if self.mcp_servers:
+            res["mcp_servers"] = self.mcp_servers
+        if self.skills:
+            res["skills"] = self.skills
+        res["steps"] = [s.to_dict() for s in self.steps]
+        res["cron_expression"] = self.cron_expression
+        res["webhook_enabled"] = self.webhook_enabled
+        res["metadata"] = self.metadata
+        return res
 
     def to_json(self, indent: int = 2) -> str:
         """Convert workflow definition to JSON string."""
@@ -82,7 +100,9 @@ class WorkflowParser:
                     timeout_seconds=int(s.get("timeout_seconds", 300)),
                     acceptance_criteria=s.get("acceptance_criteria"),
                     retry_count=int(s.get("retry_count", 0)),
-                    estimated_cost_usd=float(s.get("estimated_cost_usd", 0.0))
+                    estimated_cost_usd=float(s.get("estimated_cost_usd", 0.0)),
+                    mcp_servers=s.get("mcp_servers", []),
+                    skills=s.get("skills", [])
                 )
             )
 
@@ -94,7 +114,9 @@ class WorkflowParser:
             steps=parsed_steps,
             cron_expression=data.get("cron_expression"),
             webhook_enabled=bool(data.get("webhook_enabled", True)),
-            metadata=data.get("metadata", {})
+            metadata=data.get("metadata", {}),
+            skills=data.get("skills", []),
+            mcp_servers=data.get("mcp_servers", [])
         )
 
     @classmethod

@@ -205,6 +205,7 @@ export const ProjectsPage: React.FC = () => {
         columns={columns}
         dataSource={projects}
         pagination={false}
+        scroll={{ x: 900 }}
       />
 
       <Modal

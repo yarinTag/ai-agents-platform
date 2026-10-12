@@ -7,12 +7,14 @@ export interface Task {
   skill_id?: string | null;
   status: TaskStatus | string;
   prompt?: string;
-  input_data: Record<string, any> | string;
+  input_data?: Record<string, any> | string;
   output_data?: Record<string, any> | string | null;
   result?: string | null;
   created_at: string;
   updated_at?: string;
+  started_at?: string | null;
   ended_at?: string | null;
+  events?: any[];
   run_id?: string;
   error?: string | null;
   parent_task_id?: string | null;

@@ -1,10 +1,39 @@
+export interface MCPCatalogField {
+  type: 'text' | 'password' | 'number';
+  label: string;
+  required: boolean;
+  placeholder?: string;
+  default?: any;
+}
+
+export interface MCPCatalogTool {
+  name: string;
+  description: string;
+}
+
+export interface MCPCatalogItem {
+  id: string;
+  name: string;
+  provider: string;
+  category: string;
+  icon: string;
+  description: string;
+  package: string;
+  config_schema: Record<string, MCPCatalogField>;
+  default_tools: MCPCatalogTool[];
+}
+
 export interface MCPConnector {
   id: string;
   name: string;
-  description?: string;
-  connector_type: string;
+  provider: string;
+  connector_type?: string;
   status: 'CONNECTED' | 'CONNECTING' | 'DISCONNECTED' | 'ERROR';
+  configuration?: Record<string, any>;
+  configuration_masked?: Record<string, any>;
   capabilities?: string[];
+  error_message?: string | null;
+  tools_count?: number;
   created_at?: string;
   updated_at?: string;
 }
@@ -32,6 +61,15 @@ export interface MCPToolCall {
   completed_at?: string;
 }
 
+export interface AgentMCPPermission {
+  id: string;
+  agent_id: string;
+  agent_name?: string;
+  connector_id: string;
+  tool_id?: string | null;
+  created_at?: string;
+}
+
 export interface AgentMessage {
   id: string;
   from_agent_id: string;
@@ -56,6 +94,32 @@ export interface AgentTeam {
   description?: string;
   status: string;
   members: Array<{ agent_id: string; role_in_team: string }>;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface WorkflowChannelBinding {
+  provider: 'slack' | 'telegram';
+  connector_id?: string;
+  channel_id: string;
+  channel_name?: string;
+  trigger_enabled: boolean;
+  notify_mode: 'ON_COMPLETE' | 'ON_FAILURE' | 'ALWAYS' | 'NONE';
+  message_template?: string;
+}
+
+export interface PlatformWorkflow {
+  id: string;
+  name: string;
+  description?: string;
+  department_id?: string;
+  definition_json: string;
+  definition_yaml?: string;
+  webhook_enabled: boolean;
+  webhook_token?: string;
+  cron_expression?: string;
+  is_active: boolean;
+  channel_binding?: WorkflowChannelBinding;
   created_at?: string;
   updated_at?: string;
 }

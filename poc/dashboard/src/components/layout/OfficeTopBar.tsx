@@ -1,7 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { Tooltip, Button } from 'antd';
+import { MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
 
-export const OfficeTopBar: React.FC = () => {
+interface OfficeTopBarProps {
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
+}
+
+const routeTitles: Record<string, { title: string; subtitle: string; icon: string }> = {
+  // '/': { title: 'OFFICE CANVAS', subtitle: 'Interactive Autonomous Workstation', icon: '🏢' },
+  '/flow': { title: 'LIVE FLOW', subtitle: 'Execution Pipeline & Dag', icon: '⚡' },
+  '/agents': { title: 'AGENTS ROSTER', subtitle: 'Autonomous Agent Fleet', icon: '🤖' },
+  '/skills': { title: 'PLUGINS HUB', subtitle: 'Extensible Capabilities & Skills', icon: '🧩' },
+  '/mcp': { title: 'MCP HUB', subtitle: 'Model Context Protocol Integrations', icon: '🔌' },
+  '/tasks': { title: 'TASKS QUEUE', subtitle: 'Orchestrated Assignments', icon: '📋' },
+  '/projects': { title: 'PROJECTS & MEMORY', subtitle: 'Persistent Knowledge Base', icon: '🗂️' },
+  '/calendar': { title: 'SCHEDULE & CALENDAR', subtitle: 'Automated Cron Routines', icon: '🗓️' },
+  '/dashboard': { title: 'SYSTEM METRICS', subtitle: 'Health & Runtime Statistics', icon: '📊' },
+};
+
+export const OfficeTopBar: React.FC<OfficeTopBarProps> = ({ collapsed = false, onToggleCollapse }) => {
   const [timeStr, setTimeStr] = useState('');
   const location = useLocation();
 
@@ -23,15 +42,11 @@ export const OfficeTopBar: React.FC = () => {
     return () => clearInterval(timer);
   }, []);
 
-  const navLinks = [
-    { to: '/', label: 'OFFICE CANVAS' },
-    { to: '/flow', label: 'LIVE FLOW' },
-    { to: '/agents', label: 'AGENTS ROSTER' },
-    { to: '/skills', label: 'PLUGINS HUB' },
-    { to: '/tasks', label: 'TASKS QUEUE' },
-    { to: '/projects', label: 'PROJECTS & MEMORY' },
-    { to: '/calendar', label: '🗓️ SCHEDULE / CALENDAR' },
-  ];
+  const currentRoute = routeTitles[location.pathname] || {
+    title: 'AGENTS PLATFORM',
+    subtitle: 'Autonomous AI Office',
+    icon: '⚡',
+  };
 
   return (
     <header
@@ -39,7 +54,7 @@ export const OfficeTopBar: React.FC = () => {
         height: '52px',
         background: '#0d1117',
         borderBottom: '1px solid #21262d',
-        padding: '0 24px',
+        padding: '0 20px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -47,8 +62,34 @@ export const OfficeTopBar: React.FC = () => {
         zIndex: 100,
       }}
     >
-      {/* Left: Brand + Connected App Icons */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+      {/* Left: Collapse Toggle + Brand + Live Status */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+        {onToggleCollapse && (
+          <Tooltip title={collapsed ? 'Expand Menu' : 'Collapse Menu'} placement="bottom">
+            <Button
+              type="text"
+              icon={
+                collapsed ? (
+                  <MenuUnfoldOutlined style={{ fontSize: '16px', color: '#8b949e' }} />
+                ) : (
+                  <MenuFoldOutlined style={{ fontSize: '16px', color: '#8b949e' }} />
+                )
+              }
+              onClick={onToggleCollapse}
+              style={{
+                width: 34,
+                height: 34,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: '6px',
+                border: '1px solid #21262d',
+                background: '#161b22',
+              }}
+            />
+          </Tooltip>
+        )}
+
         {/* Brand */}
         <Link to="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ fontSize: '15px', fontWeight: 900, color: '#f0f6fc', letterSpacing: '1px' }}>
@@ -89,30 +130,26 @@ export const OfficeTopBar: React.FC = () => {
         </div>
       </div>
 
-      {/* Navigation Links in Center */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        {navLinks.map((link) => {
-          const isActive = location.pathname === link.to;
-          return (
-            <Link
-              key={link.to}
-              to={link.to}
-              style={{
-                fontSize: '11px',
-                fontWeight: 700,
-                color: isActive ? '#f0f6fc' : '#8b949e',
-                textDecoration: 'none',
-                padding: '5px 11px',
-                borderRadius: '6px',
-                background: isActive ? '#21262d' : 'transparent',
-                border: isActive ? '1px solid #30363d' : '1px solid transparent',
-                transition: 'all 0.15s ease',
-              }}
-            >
-              {link.label}
-            </Link>
-          );
-        })}
+      {/* Center: Current View Indicator */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          background: '#161b22',
+          padding: '4px 12px',
+          borderRadius: '20px',
+          border: '1px solid #21262d',
+        }}
+      >
+        <span style={{ fontSize: '13px' }}>{currentRoute.icon}</span>
+        <span style={{ fontSize: '11px', fontWeight: 700, color: '#f0f6fc', letterSpacing: '0.5px' }}>
+          {currentRoute.title}
+        </span>
+        <span style={{ color: '#30363d' }}>•</span>
+        <span style={{ fontSize: '10px', fontWeight: 500, color: '#8b949e' }}>
+          {currentRoute.subtitle}
+        </span>
       </div>
 
       {/* Right: Headless status + Clock */}
@@ -145,3 +182,4 @@ export const OfficeTopBar: React.FC = () => {
 };
 
 export default OfficeTopBar;
+
