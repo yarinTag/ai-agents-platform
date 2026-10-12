@@ -9,6 +9,7 @@ Welcome to the AI Agents Platform codebase. This repository contains an enterpri
 * **Backend (`poc/backend/`)**: FastAPI, SQLite3 (WAL), Cron Scheduler Engine, SSE EventBus. See [`poc/backend/CLAUDE.md`](poc/backend/CLAUDE.md).
 * **Frontend (`poc/dashboard/`)**: React 18, Vite, Ant Design, TypeScript, Pixel Office Canvas Engine. See [`poc/dashboard/CLAUDE.md`](poc/dashboard/CLAUDE.md).
 * **Orchestration (`poc/orchestration/`)**: Multi-agent task trees, hierarchy depth validation, and `SupervisorResolver`. See [`poc/orchestration/AGENTS.md`](poc/orchestration/AGENTS.md).
+* **Workflows Engine (`poc/workflows/`)**: Overcut-inspired agentic workflows: DAG execution, YAML/JSON definitions, Docker & ephemeral sandboxes, per-department budget caps (`HARD_STOP`), webhook triggers, token/cost accumulation, and human-in-the-loop learning loops.
 * **Runtime Abstraction (`poc/runtime/`)**: Provider-agnostic `RuntimeAdapter` protocol, `RuntimeRegistry`, `ModelPolicyResolver` (logical intelligence tiers), and concrete adapters (Claude Code CLI with stream-json and `--resume`). See [`poc/runtime/AGENTS.md`](poc/runtime/AGENTS.md).
 * **Security & Auth (`poc/backend/security/`)**: Authentication, rate limiting, correlation IDs. See [`poc/backend/security/AGENTS.md`](poc/backend/security/AGENTS.md).
 * **Multi-Agent Teams (`poc/backend/teams/`)**: Team coordination, roles, and mission dispatch. See [`poc/backend/teams/AGENTS.md`](poc/backend/teams/AGENTS.md).
@@ -21,7 +22,7 @@ Welcome to the AI Agents Platform codebase. This repository contains an enterpri
 Before committing any changes, run both verification suites:
 
 ```bash
-# 1. Run all Backend tests (87 tests, zero mocks, real SQLite)
+# 1. Run all Backend tests (97 tests, zero mocks, real SQLite)
 pytest poc/tests/ -v
 
 # 2. Build Frontend (strict TypeScript compilation & bundle verification)

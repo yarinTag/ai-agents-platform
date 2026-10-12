@@ -204,3 +204,21 @@ def get_team_coordinator() -> TeamCoordinator:
             event_service=get_event_service()
         )
     return _team_coordinator
+
+
+_workflow_engine = None
+
+
+def get_workflow_engine():
+    """Get the global WorkflowEngine singleton instance."""
+    global _workflow_engine
+    if _workflow_engine is None:
+        from workflows.engine import WorkflowEngine
+        from workflows.sandbox import SandboxManager
+        _workflow_engine = WorkflowEngine(
+            db_manager=get_db_manager(),
+            runtime_adapter=get_runtime_adapter(),
+            orchestration_engine=get_orchestration_engine(),
+            sandbox_manager=SandboxManager()
+        )
+    return _workflow_engine

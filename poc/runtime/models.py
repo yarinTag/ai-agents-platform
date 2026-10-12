@@ -51,6 +51,13 @@ class AgentRun:
     structured_result: Optional[Dict[str, Any]] = None
     acceptance_criteria: Optional[str] = None
     retry_count: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
+    cost_usd: float = 0.0
+    cost_source: str = "UNKNOWN"
+    model: Optional[str] = None
 
     def __post_init__(self):
         if self.events is None:
@@ -74,6 +81,13 @@ class AgentRun:
         data['structured_result'] = self.structured_result
         data['acceptance_criteria'] = self.acceptance_criteria
         data['retry_count'] = self.retry_count
+        data['input_tokens'] = self.input_tokens
+        data['output_tokens'] = self.output_tokens
+        data['cache_read_tokens'] = self.cache_read_tokens
+        data['cache_write_tokens'] = self.cache_write_tokens
+        data['cost_usd'] = self.cost_usd
+        data['cost_source'] = self.cost_source
+        data['model'] = self.model
         return data
 
     @classmethod
@@ -129,5 +143,12 @@ class AgentRun:
             dependencies=data.get('dependencies') or [],
             structured_result=data.get('structured_result'),
             acceptance_criteria=data.get('acceptance_criteria'),
-            retry_count=data.get('retry_count', 0)
+            retry_count=data.get('retry_count', 0),
+            input_tokens=data.get('input_tokens', 0) or 0,
+            output_tokens=data.get('output_tokens', 0) or 0,
+            cache_read_tokens=data.get('cache_read_tokens', 0) or 0,
+            cache_write_tokens=data.get('cache_write_tokens', 0) or 0,
+            cost_usd=float(data.get('cost_usd', 0.0) or 0.0),
+            cost_source=data.get('cost_source', 'UNKNOWN'),
+            model=data.get('model')
         )

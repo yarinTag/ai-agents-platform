@@ -859,6 +859,24 @@ class ClaudeCodeRuntimeAdapter:
             except Exception:
                 pass
 
+            # Determine model and cost source
+            resolved_model = getattr(agent_config, "model", None)
+            try:
+                from runtime.model_policy import model_policy_resolver
+                resolved_model = model_policy_resolver.resolve(agent_config.model, runtime_type="claude_code").resolved_model
+            except Exception:
+                pass
+            run.model = resolved_model
+
+            # Determine provider cost source
+            chosen_prov_id = self.resolve_runtime_provider(agent_config)
+            if chosen_prov_id in (providers.PROVIDER_ANTHROPIC_API, providers.PROVIDER_CUSTOM_GATEWAY):
+                run.cost_source = "API_KEY"
+            elif chosen_prov_id in (providers.PROVIDER_CLAUDE_CODE_NATIVE, providers.PROVIDER_FREE_CLAUDE_CODE):
+                run.cost_source = "SUBSCRIPTION_CLI"
+            else:
+                run.cost_source = "ESTIMATED"
+
             # Build command and environment
             skip_perm = dangerously_skip_permissions or getattr(run, "dangerously_skip_permissions", False)
             cmd = self._build_claude_command(
@@ -927,9 +945,9 @@ class ClaudeCodeRuntimeAdapter:
                             with db_manager._get_connection() as conn:
                                 conn.execute("""
                                     UPDATE agent_conversations
-                                    SET claude_session_id = ?, updated_at = ?
+                                    SET claude_session_id = ?, runtime_session_id = ?, updated_at = ?
                                     WHERE agent_id = ? AND (task_id = ? OR status = 'ACTIVE')
-                                """, (captured_sid, datetime.now().isoformat(), run.agent_id, run.run_id))
+                                """, (captured_sid, captured_sid, datetime.now().isoformat(), run.agent_id, run.run_id))
                                 conn.commit()
                         except Exception:
                             pass
@@ -958,6 +976,26 @@ class ClaudeCodeRuntimeAdapter:
                     # Handle special events
                     if event.get("type") == "result":
                         res_val = event.get("result", "")
+
+                        # Extract token usage and cost metrics emitted by Claude Code
+                        usage_dict = event.get("usage") or event.get("data", {}).get("usage") or {}
+                        if isinstance(usage_dict, dict):
+                            run.input_tokens = usage_dict.get("input_tokens", 0) or run.input_tokens
+                            run.output_tokens = usage_dict.get("output_tokens", 0) or run.output_tokens
+                            run.cache_read_tokens = usage_dict.get("cache_read_input_tokens", 0) or usage_dict.get("cache_read_tokens", 0) or run.cache_read_tokens
+                            run.cache_write_tokens = usage_dict.get("cache_creation_input_tokens", 0) or usage_dict.get("cache_write_tokens", 0) or run.cache_write_tokens
+
+                        reported_cost = event.get("total_cost_usd") or event.get("cost_usd") or event.get("data", {}).get("total_cost_usd")
+                        if reported_cost is not None:
+                            try:
+                                run.cost_usd = float(reported_cost)
+                            except Exception:
+                                pass
+
+                        model_reported = event.get("model") or event.get("data", {}).get("model")
+                        if model_reported:
+                            run.model = str(model_reported)
+
                         q_data = extract_supervisor_question(event) or extract_supervisor_question(res_val)
                         if q_data:
                             from orchestration.supervisor_resolver import SupervisorResolver

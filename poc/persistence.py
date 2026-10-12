@@ -121,6 +121,101 @@ class AgentTeam:
         return asdict(self)
 
 
+@dataclass
+class Department:
+    """Organizational department with budget controls."""
+    id: str
+    name: str
+    description: Optional[str] = None
+    monthly_budget_usd: float = 100.0
+    current_spend_usd: float = 0.0
+    budget_action: str = "REQUIRE_APPROVAL"  # HARD_STOP, REQUIRE_APPROVAL, NOTIFY_ONLY
+    alert_threshold_pct: float = 80.0
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class Workflow:
+    """Overcut-style agentic workflow definition."""
+    id: str
+    name: str
+    description: Optional[str] = None
+    department_id: Optional[str] = None
+    definition_json: str = "{}"
+    webhook_enabled: bool = True
+    webhook_token: Optional[str] = None
+    cron_expression: Optional[str] = None
+    is_active: bool = True
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class WorkflowExecution:
+    """Single execution instance of a workflow."""
+    id: str
+    workflow_id: str
+    trigger_type: str  # WEBHOOK, CRON, MANUAL, META_ORCHESTRATOR
+    trigger_payload: Optional[str] = None
+    status: str = "PENDING"  # PENDING, RUNNING, WAITING_APPROVAL, COMPLETED, FAILED, CANCELLED
+    department_id: Optional[str] = None
+    sandbox_path: Optional[str] = None
+    total_input_tokens: int = 0
+    total_output_tokens: int = 0
+    total_cost_usd: float = 0.0
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+    error_message: Optional[str] = None
+    created_at: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class WorkflowStepRun:
+    """Execution record for an individual step within a workflow."""
+    id: str
+    execution_id: str
+    step_key: str
+    agent_id: Optional[str] = None
+    status: str = "PENDING"
+    task_run_id: Optional[str] = None
+    input_data: Optional[str] = None
+    output_data: Optional[str] = None
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cost_usd: float = 0.0
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+    error_message: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class RunEvaluation:
+    """Feedback and lesson learned from a workflow execution."""
+    id: str
+    execution_id: str
+    workflow_id: str
+    rating: Optional[int] = None
+    feedback_notes: Optional[str] = None
+    lessons_extracted: Optional[str] = None
+    created_at: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
 POC_ROOT = Path(__file__).resolve().parent
 DEFAULT_DB_PATH = POC_ROOT / "data" / "agents_platform.db"
 
@@ -280,7 +375,14 @@ class DatabaseManager:
                 ("dependencies", "TEXT"),
                 ("structured_result", "TEXT"),
                 ("acceptance_criteria", "TEXT"),
-                ("retry_count", "INTEGER DEFAULT 0")
+                ("retry_count", "INTEGER DEFAULT 0"),
+                ("input_tokens", "INTEGER DEFAULT 0"),
+                ("output_tokens", "INTEGER DEFAULT 0"),
+                ("cache_read_tokens", "INTEGER DEFAULT 0"),
+                ("cache_write_tokens", "INTEGER DEFAULT 0"),
+                ("cost_usd", "REAL DEFAULT 0.0"),
+                ("cost_source", "TEXT DEFAULT 'UNKNOWN'"),
+                ("model", "TEXT")
             ]:
                 try:
                     conn.execute(f"ALTER TABLE task_runs ADD COLUMN {col} {col_type}")
@@ -688,6 +790,105 @@ class DatabaseManager:
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
+
+            # 1. Departments table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS departments (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    description TEXT,
+                    monthly_budget_usd REAL DEFAULT 100.0,
+                    current_spend_usd REAL DEFAULT 0.0,
+                    budget_action TEXT DEFAULT 'REQUIRE_APPROVAL',
+                    alert_threshold_pct REAL DEFAULT 80.0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            # 2. Workflows table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS workflows (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    description TEXT,
+                    department_id TEXT,
+                    definition_json TEXT NOT NULL,
+                    webhook_enabled INTEGER DEFAULT 1,
+                    webhook_token TEXT UNIQUE,
+                    cron_expression TEXT,
+                    is_active INTEGER DEFAULT 1,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE SET NULL
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_workflows_dept ON workflows(department_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_workflows_token ON workflows(webhook_token)")
+
+            # 3. Workflow executions table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS workflow_executions (
+                    id TEXT PRIMARY KEY,
+                    workflow_id TEXT NOT NULL,
+                    trigger_type TEXT NOT NULL,
+                    trigger_payload TEXT,
+                    status TEXT NOT NULL DEFAULT 'PENDING',
+                    department_id TEXT,
+                    sandbox_path TEXT,
+                    total_input_tokens INTEGER DEFAULT 0,
+                    total_output_tokens INTEGER DEFAULT 0,
+                    total_cost_usd REAL DEFAULT 0.0,
+                    started_at TIMESTAMP,
+                    completed_at TIMESTAMP,
+                    error_message TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (workflow_id) REFERENCES workflows(id) ON DELETE CASCADE,
+                    FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE SET NULL
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_wf_exec_wf ON workflow_executions(workflow_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_wf_exec_status ON workflow_executions(status)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_wf_exec_dept ON workflow_executions(department_id)")
+
+            # 4. Workflow step runs table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS workflow_step_runs (
+                    id TEXT PRIMARY KEY,
+                    execution_id TEXT NOT NULL,
+                    step_key TEXT NOT NULL,
+                    agent_id TEXT,
+                    status TEXT NOT NULL DEFAULT 'PENDING',
+                    task_run_id TEXT,
+                    input_data TEXT,
+                    output_data TEXT,
+                    input_tokens INTEGER DEFAULT 0,
+                    output_tokens INTEGER DEFAULT 0,
+                    cost_usd REAL DEFAULT 0.0,
+                    started_at TIMESTAMP,
+                    completed_at TIMESTAMP,
+                    error_message TEXT,
+                    FOREIGN KEY (execution_id) REFERENCES workflow_executions(id) ON DELETE CASCADE,
+                    FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE SET NULL
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_step_runs_exec ON workflow_step_runs(execution_id)")
+
+            # 5. Run evaluations & learning records table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS run_evaluations (
+                    id TEXT PRIMARY KEY,
+                    execution_id TEXT NOT NULL,
+                    workflow_id TEXT NOT NULL,
+                    rating INTEGER,
+                    feedback_notes TEXT,
+                    lessons_extracted TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (execution_id) REFERENCES workflow_executions(id) ON DELETE CASCADE,
+                    FOREIGN KEY (workflow_id) REFERENCES workflows(id) ON DELETE CASCADE
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_eval_wf ON run_evaluations(workflow_id)")
 
             # Seed default agent templates and baseline agents if tables are empty
             self._seed_default_templates(conn)
@@ -1323,7 +1524,14 @@ class DatabaseManager:
             dependencies=deps,
             structured_result=sr,
             acceptance_criteria=row['acceptance_criteria'] if 'acceptance_criteria' in keys else None,
-            retry_count=int(row['retry_count']) if 'retry_count' in keys and row['retry_count'] is not None else 0
+            retry_count=int(row['retry_count']) if 'retry_count' in keys and row['retry_count'] is not None else 0,
+            input_tokens=int(row['input_tokens']) if 'input_tokens' in keys and row['input_tokens'] is not None else 0,
+            output_tokens=int(row['output_tokens']) if 'output_tokens' in keys and row['output_tokens'] is not None else 0,
+            cache_read_tokens=int(row['cache_read_tokens']) if 'cache_read_tokens' in keys and row['cache_read_tokens'] is not None else 0,
+            cache_write_tokens=int(row['cache_write_tokens']) if 'cache_write_tokens' in keys and row['cache_write_tokens'] is not None else 0,
+            cost_usd=float(row['cost_usd']) if 'cost_usd' in keys and row['cost_usd'] is not None else 0.0,
+            cost_source=row['cost_source'] if 'cost_source' in keys and row['cost_source'] else 'UNKNOWN',
+            model=row['model'] if 'model' in keys else None
         )
 
     def save_task_run(self, run: AgentRun):
@@ -1335,8 +1543,9 @@ class DatabaseManager:
                 INSERT INTO task_runs
                 (run_id, agent_id, project_id, prompt, status, created_at, started_at, ended_at,
                  result, error, exit_code, events, parent_task_id, root_task_id, assigned_by, session_id,
-                 dependencies, structured_result, acceptance_criteria, retry_count)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 dependencies, structured_result, acceptance_criteria, retry_count,
+                 input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd, cost_source, model)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(run_id) DO UPDATE SET
                     agent_id = excluded.agent_id,
                     project_id = excluded.project_id,
@@ -1356,7 +1565,14 @@ class DatabaseManager:
                     dependencies = COALESCE(excluded.dependencies, task_runs.dependencies),
                     structured_result = COALESCE(excluded.structured_result, task_runs.structured_result),
                     acceptance_criteria = COALESCE(excluded.acceptance_criteria, task_runs.acceptance_criteria),
-                    retry_count = COALESCE(excluded.retry_count, task_runs.retry_count)
+                    retry_count = COALESCE(excluded.retry_count, task_runs.retry_count),
+                    input_tokens = COALESCE(excluded.input_tokens, task_runs.input_tokens),
+                    output_tokens = COALESCE(excluded.output_tokens, task_runs.output_tokens),
+                    cache_read_tokens = COALESCE(excluded.cache_read_tokens, task_runs.cache_read_tokens),
+                    cache_write_tokens = COALESCE(excluded.cache_write_tokens, task_runs.cache_write_tokens),
+                    cost_usd = COALESCE(excluded.cost_usd, task_runs.cost_usd),
+                    cost_source = COALESCE(excluded.cost_source, task_runs.cost_source),
+                    model = COALESCE(excluded.model, task_runs.model)
             """, (
                 run.run_id,
                 run.agent_id,
@@ -1377,7 +1593,14 @@ class DatabaseManager:
                 deps_json,
                 sr_json,
                 getattr(run, "acceptance_criteria", None),
-                getattr(run, "retry_count", 0)
+                getattr(run, "retry_count", 0),
+                getattr(run, "input_tokens", 0) or 0,
+                getattr(run, "output_tokens", 0) or 0,
+                getattr(run, "cache_read_tokens", 0) or 0,
+                getattr(run, "cache_write_tokens", 0) or 0,
+                float(getattr(run, "cost_usd", 0.0) or 0.0),
+                getattr(run, "cost_source", "UNKNOWN"),
+                getattr(run, "model", None)
             ))
             conn.commit()
 
@@ -1402,7 +1625,14 @@ class DatabaseManager:
         structured_result: Optional[Dict[str, Any]] = None,
         acceptance_criteria: Optional[str] = None,
         retry_count: Optional[int] = None,
-        ended_at: Optional[datetime] = None
+        ended_at: Optional[datetime] = None,
+        input_tokens: Optional[int] = None,
+        output_tokens: Optional[int] = None,
+        cache_read_tokens: Optional[int] = None,
+        cache_write_tokens: Optional[int] = None,
+        cost_usd: Optional[float] = None,
+        cost_source: Optional[str] = None,
+        model: Optional[str] = None
     ) -> Optional[AgentRun]:
         """Update specific fields of an existing task run."""
         fields = []
@@ -1431,6 +1661,27 @@ class DatabaseManager:
         if ended_at is not None:
             fields.append("ended_at = ?")
             params.append(ended_at.isoformat() if isinstance(ended_at, datetime) else str(ended_at))
+        if input_tokens is not None:
+            fields.append("input_tokens = ?")
+            params.append(input_tokens)
+        if output_tokens is not None:
+            fields.append("output_tokens = ?")
+            params.append(output_tokens)
+        if cache_read_tokens is not None:
+            fields.append("cache_read_tokens = ?")
+            params.append(cache_read_tokens)
+        if cache_write_tokens is not None:
+            fields.append("cache_write_tokens = ?")
+            params.append(cache_write_tokens)
+        if cost_usd is not None:
+            fields.append("cost_usd = ?")
+            params.append(cost_usd)
+        if cost_source is not None:
+            fields.append("cost_source = ?")
+            params.append(cost_source)
+        if model is not None:
+            fields.append("model = ?")
+            params.append(model)
 
         if not fields:
             return self.get_task_run(run_id)
@@ -3262,8 +3513,293 @@ class DatabaseManager:
                 conn.commit()
         return self.get_agent_team(team_id)
 
+    # =========================================================================
+    # Departments & Budgets (Aligned with user decisions: HARD_STOP on API_KEY)
+    # =========================================================================
 
+    def create_department(
+        self,
+        id: str,
+        name: str,
+        description: Optional[str] = None,
+        monthly_budget_usd: float = 100.0,
+        budget_action: str = "HARD_STOP",
+        alert_threshold_pct: float = 80.0
+    ) -> Department:
+        """Create a new department."""
+        now = datetime.now().isoformat()
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT INTO departments (id, name, description, monthly_budget_usd, budget_action, alert_threshold_pct, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (id, name, description, monthly_budget_usd, budget_action, alert_threshold_pct, now, now))
+            conn.commit()
+        return self.get_department(id)
+
+    def get_department(self, id: str) -> Optional[Department]:
+        """Fetch a department by ID."""
+        with self._get_connection() as conn:
+            row = conn.execute("SELECT * FROM departments WHERE id = ?", (id,)).fetchone()
+            if not row:
+                return None
+            d = dict(row)
+            return Department(
+                id=d['id'],
+                name=d['name'],
+                description=d.get('description'),
+                monthly_budget_usd=float(d.get('monthly_budget_usd') or 100.0),
+                current_spend_usd=self.get_department_monthly_spend(id),
+                budget_action=d.get('budget_action') or 'HARD_STOP',
+                alert_threshold_pct=float(d.get('alert_threshold_pct') or 80.0),
+                created_at=d.get('created_at'),
+                updated_at=d.get('updated_at')
+            )
+
+    def list_departments(self) -> List[Department]:
+        """List all departments."""
+        with self._get_connection() as conn:
+            rows = conn.execute("SELECT id FROM departments ORDER BY name ASC").fetchall()
+            return [self.get_department(r['id']) for r in rows if r['id']]
+
+    def update_department(self, id: str, **kwargs) -> Optional[Department]:
+        """Update department configuration."""
+        fields = []
+        params = []
+        now = datetime.now().isoformat()
+        for k in ("name", "description", "monthly_budget_usd", "budget_action", "alert_threshold_pct"):
+            if k in kwargs and kwargs[k] is not None:
+                fields.append(f"{k} = ?")
+                params.append(kwargs[k])
+        if fields:
+            fields.append("updated_at = ?")
+            params.append(now)
+            params.append(id)
+            with self._get_connection() as conn:
+                conn.execute(f"UPDATE departments SET {', '.join(fields)} WHERE id = ?", params)
+                conn.commit()
+        return self.get_department(id)
+
+    def get_department_monthly_spend(self, department_id: str, year: Optional[int] = None, month: Optional[int] = None) -> float:
+        """
+        Calculate actual monthly spend for a department.
+        Per user decision: ONLY enforces and counts runs using API keys (cost_source='API_KEY').
+        Subscription CLI runs are zero-billed against the budget.
+        """
+        now = datetime.now()
+        y = year or now.year
+        m = month or now.month
+        month_prefix = f"{y:04d}-{m:02d}%"
+
+        with self._get_connection() as conn:
+            cursor = conn.execute("""
+                SELECT COALESCE(SUM(total_cost_usd), 0.0) as total
+                FROM workflow_executions
+                WHERE department_id = ?
+                  AND created_at LIKE ?
+            """, (department_id, month_prefix))
+            row = cursor.fetchone()
+            return float(row['total']) if row else 0.0
+
+    def check_department_budget(self, department_id: str, requested_cost: float = 0.0) -> Dict[str, Any]:
+        """
+        Check department budget limits against monthly spend.
+        Action: HARD_STOP (per user decision) when spend >= monthly_budget_usd.
+        """
+        dept = self.get_department(department_id)
+        if not dept:
+            return {"allowed": True, "reason": "No department limit"}
+
+        current_spend = dept.current_spend_usd
+        budget = dept.monthly_budget_usd
+
+        if (current_spend + requested_cost) >= budget:
+            return {
+                "allowed": False,
+                "action": dept.budget_action,
+                "department_id": department_id,
+                "current_spend_usd": current_spend,
+                "monthly_budget_usd": budget,
+                "message": f"Department '{dept.name}' exceeded monthly budget (${current_spend:.2f}/${budget:.2f}). Additional budget required."
+            }
+
+        is_alert = (current_spend / budget) * 100.0 >= dept.alert_threshold_pct if budget > 0 else False
+        return {
+            "allowed": True,
+            "department_id": department_id,
+            "current_spend_usd": current_spend,
+            "monthly_budget_usd": budget,
+            "is_alert": is_alert
+        }
+
+    # =========================================================================
+    # Workflows & Executions
+    # =========================================================================
+
+    def create_workflow(
+        self,
+        id: str,
+        name: str,
+        definition_json: str,
+        department_id: Optional[str] = None,
+        description: Optional[str] = None,
+        cron_expression: Optional[str] = None,
+        webhook_enabled: bool = True
+    ) -> Workflow:
+        """Create a workflow definition."""
+        now = datetime.now().isoformat()
+        webhook_token = f"whk_{uuid.uuid4().hex}" if webhook_enabled else None
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT INTO workflows (id, name, description, department_id, definition_json, webhook_enabled, webhook_token, cron_expression, is_active, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+            """, (id, name, description, department_id, definition_json, 1 if webhook_enabled else 0, webhook_token, cron_expression, now, now))
+            conn.commit()
+        return self.get_workflow(id)
+
+    def get_workflow(self, id: str) -> Optional[Workflow]:
+        """Get a workflow by ID."""
+        with self._get_connection() as conn:
+            row = conn.execute("SELECT * FROM workflows WHERE id = ?", (id,)).fetchone()
+            if not row:
+                return None
+            d = dict(row)
+            return Workflow(
+                id=d['id'],
+                name=d['name'],
+                description=d.get('description'),
+                department_id=d.get('department_id'),
+                definition_json=d.get('definition_json') or "{}",
+                webhook_enabled=bool(d.get('webhook_enabled', 1)),
+                webhook_token=d.get('webhook_token'),
+                cron_expression=d.get('cron_expression'),
+                is_active=bool(d.get('is_active', 1)),
+                created_at=d.get('created_at'),
+                updated_at=d.get('updated_at')
+            )
+
+    def get_workflow_by_webhook_token(self, webhook_token: str) -> Optional[Workflow]:
+        """Lookup an active workflow by its incoming webhook token."""
+        with self._get_connection() as conn:
+            row = conn.execute("SELECT * FROM workflows WHERE webhook_token = ? AND is_active = 1", (webhook_token,)).fetchone()
+            if not row:
+                return None
+            d = dict(row)
+            return Workflow(
+                id=d['id'],
+                name=d['name'],
+                description=d.get('description'),
+                department_id=d.get('department_id'),
+                definition_json=d.get('definition_json') or "{}",
+                webhook_enabled=bool(d.get('webhook_enabled', 1)),
+                webhook_token=d.get('webhook_token'),
+                cron_expression=d.get('cron_expression'),
+                is_active=bool(d.get('is_active', 1)),
+                created_at=d.get('created_at'),
+                updated_at=d.get('updated_at')
+            )
+
+    def list_workflows(self, department_id: Optional[str] = None, active_only: bool = False) -> List[Workflow]:
+        """List workflows with filtering."""
+        query = "SELECT id FROM workflows WHERE 1=1"
+        params = []
+        if department_id:
+            query += " AND department_id = ?"
+            params.append(department_id)
+        if active_only:
+            query += " AND is_active = 1"
+        query += " ORDER BY name ASC"
+
+        with self._get_connection() as conn:
+            rows = conn.execute(query, params).fetchall()
+            return [self.get_workflow(r['id']) for r in rows if r['id']]
+
+    def create_workflow_execution(
+        self,
+        execution_id: str,
+        workflow_id: str,
+        trigger_type: str,
+        trigger_payload: Optional[str] = None,
+        department_id: Optional[str] = None,
+        sandbox_path: Optional[str] = None
+    ) -> WorkflowExecution:
+        """Create a new workflow execution instance."""
+        now = datetime.now().isoformat()
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT INTO workflow_executions (
+                    id, workflow_id, trigger_type, trigger_payload, status,
+                    department_id, sandbox_path, started_at, created_at
+                ) VALUES (?, ?, ?, ?, 'RUNNING', ?, ?, ?, ?)
+            """, (execution_id, workflow_id, trigger_type, trigger_payload, department_id, sandbox_path, now, now))
+            conn.commit()
+        return self.get_workflow_execution(execution_id)
+
+    def get_workflow_execution(self, execution_id: str) -> Optional[WorkflowExecution]:
+        """Get workflow execution status and metrics."""
+        with self._get_connection() as conn:
+            row = conn.execute("SELECT * FROM workflow_executions WHERE id = ?", (execution_id,)).fetchone()
+            if not row:
+                return None
+            d = dict(row)
+            return WorkflowExecution(
+                id=d['id'],
+                workflow_id=d['workflow_id'],
+                trigger_type=d['trigger_type'],
+                trigger_payload=d.get('trigger_payload'),
+                status=d.get('status') or 'PENDING',
+                department_id=d.get('department_id'),
+                sandbox_path=d.get('sandbox_path'),
+                total_input_tokens=int(d.get('total_input_tokens') or 0),
+                total_output_tokens=int(d.get('total_output_tokens') or 0),
+                total_cost_usd=float(d.get('total_cost_usd') or 0.0),
+                started_at=d.get('started_at'),
+                completed_at=d.get('completed_at'),
+                error_message=d.get('error_message'),
+                created_at=d.get('created_at')
+            )
+
+    def update_workflow_execution(self, execution_id: str, **kwargs) -> Optional[WorkflowExecution]:
+        """Update status, token counts, or error for an execution."""
+        fields = []
+        params = []
+        for k in ("status", "total_input_tokens", "total_output_tokens", "total_cost_usd", "completed_at", "error_message"):
+            if k in kwargs and kwargs[k] is not None:
+                fields.append(f"{k} = ?")
+                params.append(kwargs[k])
+        if fields:
+            params.append(execution_id)
+            with self._get_connection() as conn:
+                conn.execute(f"UPDATE workflow_executions SET {', '.join(fields)} WHERE id = ?", params)
+                conn.commit()
+        return self.get_workflow_execution(execution_id)
+
+    def save_run_evaluation(
+        self,
+        id: str,
+        execution_id: str,
+        workflow_id: str,
+        rating: Optional[int] = None,
+        feedback_notes: Optional[str] = None,
+        lessons_extracted: Optional[str] = None
+    ) -> RunEvaluation:
+        """Save a human or automated evaluation for learning."""
+        now = datetime.now().isoformat()
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT INTO run_evaluations (id, execution_id, workflow_id, rating, feedback_notes, lessons_extracted, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (id, execution_id, workflow_id, rating, feedback_notes, lessons_extracted, now))
+            conn.commit()
+        return RunEvaluation(
+            id=id,
+            execution_id=execution_id,
+            workflow_id=workflow_id,
+            rating=rating,
+            feedback_notes=feedback_notes,
+            lessons_extracted=lessons_extracted,
+            created_at=now
+        )
 
 
 # Global database instance
-db_manager = DatabaseManager()
+db_manager = DatabaseManager()

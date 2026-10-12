@@ -62,6 +62,13 @@ class TaskResponse(BaseModel):
     structured_result: Optional[Dict[str, Any]] = None
     acceptance_criteria: Optional[str] = None
     retry_count: Optional[int] = 0
+    input_tokens: Optional[int] = 0
+    output_tokens: Optional[int] = 0
+    cache_read_tokens: Optional[int] = 0
+    cache_write_tokens: Optional[int] = 0
+    cost_usd: Optional[float] = 0.0
+    cost_source: Optional[str] = "UNKNOWN"
+    model: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -110,6 +117,13 @@ def task_run_to_response(run: AgentRun) -> dict:
         "structured_result": getattr(run, "structured_result", None),
         "acceptance_criteria": getattr(run, "acceptance_criteria", None),
         "retry_count": getattr(run, "retry_count", 0),
+        "input_tokens": getattr(run, "input_tokens", 0) or 0,
+        "output_tokens": getattr(run, "output_tokens", 0) or 0,
+        "cache_read_tokens": getattr(run, "cache_read_tokens", 0) or 0,
+        "cache_write_tokens": getattr(run, "cache_write_tokens", 0) or 0,
+        "cost_usd": float(getattr(run, "cost_usd", 0.0) or 0.0),
+        "cost_source": getattr(run, "cost_source", "UNKNOWN"),
+        "model": getattr(run, "model", None),
     }
 
 
