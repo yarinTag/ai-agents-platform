@@ -41,7 +41,7 @@ poc/
 ├── persistence.py       # DatabaseManager (SQLite schema, migrations, CRUD, workflows, departments)
 ├── runtime_adapter.py   # ClaudeCodeRuntimeAdapter (Subprocess CLI, streaming, session resume, cost tracking)
 ├── runtime_providers.py # Provider Registry (Native, Anthropic API, Custom Gateway / LiteLLM)
-└── tests/               # 14 Automated test suites (97 tests, zero mocks)
+└── tests/               # 14 Automated test suites (103 tests, zero mocks)
 ```
 
 ---

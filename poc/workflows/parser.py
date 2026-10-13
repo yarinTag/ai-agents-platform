@@ -1,13 +1,25 @@
 """
 Workflow Definition Parser:
 Loads, validates, and converts workflow definitions between YAML and JSON formats.
-Follows declarative playbooks with step-by-step DAG dependencies.
+Supports declarative playbooks with DAG dependencies, explicit flow transitions,
+triggers with conditional matching, and step-level skills.
 """
 
 import json
+import re
 import yaml
 from dataclasses import dataclass, field, asdict
 from typing import Dict, List, Optional, Any, Union
+
+
+def _slugify(text: str) -> str:
+    """Convert text to a clean slug identifier."""
+    if not text:
+        return ""
+    s = text.lower().strip()
+    s = re.sub(r'[^\w\s-]', '', s)
+    s = re.sub(r'[\s_]+', '-', s)
+    return s.strip('-')
 
 
 @dataclass
@@ -25,6 +37,7 @@ class WorkflowStepDefinition:
     estimated_cost_usd: float = 0.0
     mcp_servers: List[str] = field(default_factory=list)
     skills: List[str] = field(default_factory=list)
+    params: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         d = asdict(self)
@@ -36,17 +49,23 @@ class WorkflowStepDefinition:
             d.pop("condition", None)
         if not self.acceptance_criteria:
             d.pop("acceptance_criteria", None)
+        if not self.params:
+            d.pop("params", None)
         return d
 
 
 @dataclass
 class WorkflowDefinition:
-    """Full workflow definition containing metadata and ordered/DAG steps."""
+    """Full workflow definition containing metadata, triggers, steps, and flow."""
     id: str
     name: str
     description: Optional[str] = None
     department_id: Optional[str] = None
+    priority: int = 0
+    timeout_ms: int = 0
+    triggers: List[Dict[str, Any]] = field(default_factory=list)
     steps: List[WorkflowStepDefinition] = field(default_factory=list)
+    flow: List[Dict[str, str]] = field(default_factory=list)
     cron_expression: Optional[str] = None
     webhook_enabled: bool = True
     metadata: Dict[str, Any] = field(default_factory=dict)
@@ -60,11 +79,19 @@ class WorkflowDefinition:
             "description": self.description,
             "department_id": self.department_id,
         }
+        if self.priority:
+            res["priority"] = self.priority
+        if self.timeout_ms:
+            res["timeoutMs"] = self.timeout_ms
+        if self.triggers:
+            res["triggers"] = self.triggers
         if self.mcp_servers:
             res["mcp_servers"] = self.mcp_servers
         if self.skills:
             res["skills"] = self.skills
         res["steps"] = [s.to_dict() for s in self.steps]
+        if self.flow:
+            res["flow"] = self.flow
         res["cron_expression"] = self.cron_expression
         res["webhook_enabled"] = self.webhook_enabled
         res["metadata"] = self.metadata
@@ -84,34 +111,93 @@ class WorkflowParser:
 
     @staticmethod
     def from_dict(data: Dict[str, Any]) -> WorkflowDefinition:
-        """Parse raw dictionary into WorkflowDefinition."""
+        """Parse raw dictionary into WorkflowDefinition with flow resolution."""
         steps_raw = data.get("steps", [])
         parsed_steps: List[WorkflowStepDefinition] = []
 
+        flow_raw = data.get("flow", [])
+        flow_deps: Dict[str, List[str]] = {}
+
+        # Parse flow transitions (from -> to)
+        for transition in flow_raw:
+            if isinstance(transition, dict):
+                src = transition.get("from", "").strip()
+                dst = transition.get("to", "").strip()
+                if dst:
+                    if dst not in flow_deps:
+                        flow_deps[dst] = []
+                    if src and src not in flow_deps[dst]:
+                        flow_deps[dst].append(src)
+
         for s in steps_raw:
+            name = s.get("name", "")
+            raw_key = s.get("key") or s.get("id") or _slugify(name) or f"step_{len(parsed_steps)+1}"
+            step_key = _slugify(raw_key) or raw_key
+
+            # Determine agent_id from step or params
+            params = s.get("params", {})
+            agent_id = s.get("agent_id") or params.get("agentId") or s.get("agent") or "default-agent"
+
+            # Determine prompt from instructions, prompt_template, prompt, or action
+            prompt = s.get("prompt_template") or s.get("instructions") or s.get("prompt") or s.get("action") or ""
+
+            # Determine timeout (seconds)
+            timeout_sec = int(s.get("timeout_seconds") or 0)
+            if not timeout_sec:
+                if "stepMaxDurationMinutes" in s:
+                    timeout_sec = int(s["stepMaxDurationMinutes"]) * 60
+                elif "timeoutMs" in s:
+                    timeout_sec = int(s["timeoutMs"]) // 1000
+                else:
+                    timeout_sec = 300
+
+            # Dependencies: combine explicit depends_on with flow transitions
+            deps = list(s.get("depends_on", []))
+            if step_key in flow_deps:
+                for src_dep in flow_deps[step_key]:
+                    if src_dep not in deps:
+                        deps.append(src_dep)
+            # Also check if raw_key in flow_deps
+            if raw_key in flow_deps and raw_key != step_key:
+                for src_dep in flow_deps[raw_key]:
+                    if src_dep not in deps:
+                        deps.append(src_dep)
+
             parsed_steps.append(
                 WorkflowStepDefinition(
-                    key=s.get("key", s.get("id", "")),
-                    name=s.get("name", s.get("key", "")),
-                    agent_id=s.get("agent_id", ""),
-                    prompt_template=s.get("prompt_template", s.get("prompt", "")),
-                    depends_on=s.get("depends_on", []),
+                    key=step_key,
+                    name=name or step_key,
+                    agent_id=agent_id,
+                    prompt_template=prompt,
+                    depends_on=deps,
                     condition=s.get("condition"),
-                    timeout_seconds=int(s.get("timeout_seconds", 300)),
+                    timeout_seconds=timeout_sec,
                     acceptance_criteria=s.get("acceptance_criteria"),
                     retry_count=int(s.get("retry_count", 0)),
                     estimated_cost_usd=float(s.get("estimated_cost_usd", 0.0)),
                     mcp_servers=s.get("mcp_servers", []),
-                    skills=s.get("skills", [])
+                    skills=s.get("skills", []),
+                    params=params
                 )
             )
 
+        name = data.get("name", "Unnamed Workflow")
+        wf_id = data.get("id") or _slugify(name) or "unnamed-workflow"
+
+        timeout_ms = int(data.get("timeoutMs") or data.get("timeout_ms") or 0)
+        priority = int(data.get("priority", 0))
+        triggers = data.get("triggers", [])
+
         return WorkflowDefinition(
-            id=data.get("id", ""),
-            name=data.get("name", "Unnamed Workflow"),
+            id=wf_id,
+            name=name,
             description=data.get("description"),
             department_id=data.get("department_id"),
+            priority=priority,
+            timeout_ms=timeout_ms,
+            triggers=triggers,
             steps=parsed_steps,
+            flow=flow_raw,
             cron_expression=data.get("cron_expression"),
             webhook_enabled=bool(data.get("webhook_enabled", True)),
             metadata=data.get("metadata", {}),

@@ -137,7 +137,8 @@ class WorkflowEngine:
         failure_error: Optional[str] = None
 
         try:
-            for step in wf_def.steps:
+            ordered_steps = self._topological_sort_steps(wf_def.steps)
+            for step in ordered_steps:
                 # Check mid-run budget cap before launching next step
                 if dept_id:
                     check = self.db.check_department_budget(dept_id, requested_cost=total_cost_usd)
@@ -157,7 +158,26 @@ class WorkflowEngine:
                         formatted_prompt = formatted_prompt.replace(f"{{{{{k}}}}}", str(v))
                         formatted_prompt = formatted_prompt.replace(f"${{{k}}}", str(v))
 
-                # Ensure agent exists in database (avoid foreign key failure)
+                # Step-level Skills injection (dynamic resolution)
+                step_skills = []
+                for sk in getattr(step, "skills", []) or []:
+                    sk_rendered = str(sk)
+                    if trigger_payload:
+                        for k, v in trigger_payload.items():
+                            sk_rendered = sk_rendered.replace(f"{{{{{k}}}}}", str(v))
+                            sk_rendered = sk_rendered.replace(f"${{{k}}}", str(v))
+                    step_skills.append(sk_rendered)
+
+                if step_skills:
+                    try:
+                        from skills_service import build_skills_system_prompt
+                        skills_context = build_skills_system_prompt(step_skills)
+                        if skills_context:
+                            formatted_prompt = f"{skills_context}\n\n[TASK INSTRUCTIONS]\n{formatted_prompt}"
+                    except Exception as sk_err:
+                        logger.warning(f"Failed to build skills prompt for step '{step.key}': {sk_err}")
+
+                # Ensure agent exists in database (reuse or auto-provision)
                 agent = self.db.get_agent(step.agent_id)
                 actual_agent_id = step.agent_id
                 if not agent:
@@ -165,9 +185,9 @@ class WorkflowEngine:
                         from config import AgentConfig
                         placeholder = AgentConfig(
                             id=step.agent_id,
-                            name=step.agent_id,
+                            name=step.name or step.agent_id,
                             description=f"Auto-generated agent for workflow step {step.key}",
-                            system_prompt="You are an autonomous workflow step agent.",
+                            system_prompt=f"You are an autonomous agent specialized in {step.name or step.key}.",
                             model="default"
                         )
                         self.db.save_agent(placeholder)
@@ -368,3 +388,35 @@ class WorkflowEngine:
             logger.warning(f"Failed to dispatch channel binding notification: {notify_err}")
 
         return self.db.get_workflow_execution(execution_id)
+
+    def _topological_sort_steps(self, steps: List[Any]) -> List[Any]:
+        """Order steps according to their DAG dependencies (from depends_on / flow)."""
+        if not steps:
+            return []
+        step_map = {s.key: s for s in steps}
+        in_degree = {s.key: 0 for s in steps}
+        adj: Dict[str, List[str]] = {s.key: [] for s in steps}
+
+        for s in steps:
+            for dep in s.depends_on:
+                if dep in step_map:
+                    adj[dep].append(s.key)
+                    in_degree[s.key] += 1
+
+        queue = [s.key for s in steps if in_degree[s.key] == 0]
+        ordered_keys: List[str] = []
+
+        while queue:
+            curr = queue.pop(0)
+            ordered_keys.append(curr)
+            for neighbor in adj.get(curr, []):
+                in_degree[neighbor] -= 1
+                if in_degree[neighbor] == 0:
+                    queue.append(neighbor)
+
+        # In case of disconnected steps or cycles, append remaining steps
+        for s in steps:
+            if s.key not in ordered_keys:
+                ordered_keys.append(s.key)
+
+        return [step_map[k] for k in ordered_keys if k in step_map]

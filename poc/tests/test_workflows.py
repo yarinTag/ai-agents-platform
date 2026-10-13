@@ -247,3 +247,151 @@ def test_run_evaluations_and_learning_capture(client):
     })
     assert resp.status_code == 201
     assert resp.json()["status"] == "SUCCESS"
+
+
+def test_workflow_flow_transitions_and_triggers_parsing():
+    """Verify parsing industry-standard YAML schema with triggers, conditions, step skills and flow graph."""
+    raw_yaml = """
+name: Questionnaire Flow Build Failure Investigation
+priority: 5
+timeoutMs: 2700000
+
+triggers:
+  - event: manual
+  - event: channel_message
+    conditions:
+      combinator: and
+      rules:
+        - field: context.channel.id
+          operator: matches
+          value: ^(C051G5J4C2W|C083U3EH5TL)$
+        - field: context.message.text
+          operator: matches
+          value: \\b(FAILURE|FAILED)\\b
+
+steps:
+  - name: Clone skyscraper
+    params:
+      agentId: cmv3u8pdc00518bmdaqcrrygx
+    stepMaxDurationMinutes: 10
+
+  - name: Investigate failure
+    skills:
+      - jenkins-mcp
+      - github-read
+      - jira-read
+    instructions: |
+      ## Process
+      1. Investigate build failure using Jenkins MCP.
+      2. Identify culprit commit via GitHub.
+    params:
+      agentId: cmv3u8pdc00518bmdaqcrrygx
+    stepMaxDurationMinutes: 30
+
+flow:
+  - from: ""
+    to: clone-skyscraper
+  - from: clone-skyscraper
+    to: investigate-failure
+"""
+    wf = WorkflowParser.from_yaml(raw_yaml)
+    assert wf.name == "Questionnaire Flow Build Failure Investigation"
+    assert wf.id == "questionnaire-flow-build-failure-investigation"
+    assert wf.priority == 5
+    assert wf.timeout_ms == 2700000
+
+    assert len(wf.triggers) == 2
+    assert wf.triggers[0]["event"] == "manual"
+    assert wf.triggers[1]["conditions"]["combinator"] == "and"
+
+    assert len(wf.steps) == 2
+    step1 = wf.steps[0]
+    step2 = wf.steps[1]
+
+    assert step1.key == "clone-skyscraper"
+    assert step1.agent_id == "cmv3u8pdc00518bmdaqcrrygx"
+    assert step1.timeout_seconds == 600
+
+    assert step2.key == "investigate-failure"
+    assert step2.agent_id == "cmv3u8pdc00518bmdaqcrrygx"
+    assert step2.timeout_seconds == 1800
+    assert step2.skills == ["jenkins-mcp", "github-read", "jira-read"]
+    assert "Investigate build failure" in step2.prompt_template
+
+    # Check that flow-to-DAG conversion automatically resolved dependency!
+    assert "clone-skyscraper" in step2.depends_on
+
+    # Roundtrip conversion
+    json_rep = wf.to_json()
+    wf_back = WorkflowParser.from_json(json_rep)
+    assert wf_back.name == wf.name
+    assert wf_back.steps[1].depends_on == ["clone-skyscraper"]
+    assert len(wf_back.flow) == 2
+
+
+def test_step_level_skills_and_agent_reuse_execution():
+    """Verify executing workflow with step-level skills and agent reuse."""
+    raw_yaml = """
+name: Feature Flag Injection Workflow
+steps:
+  - name: Create Flag
+    skills:
+      - "{{provider_skill}}"
+    instructions: "Create feature flag {{flag_key}}"
+    params:
+      agentId: ff-specialist-worker
+
+  - name: Update Code
+    skills:
+      - "{{target_repo_skill}}"
+    instructions: "Inject flag into codebase: {{create-flag.output}}"
+    params:
+      agentId: ff-specialist-worker
+
+flow:
+  - from: ""
+    to: create-flag
+  - from: create-flag
+    to: update-code
+"""
+    wf = WorkflowParser.from_yaml(raw_yaml)
+    assert wf.id == "feature-flag-injection-workflow"
+
+    # Persist and execute workflow
+    wf_record = db_manager.create_workflow(
+        id=wf.id,
+        name=wf.name,
+        definition_json=wf.to_json()
+    )
+
+    engine = WorkflowEngine(db_manager=db_manager)
+    exec_res = engine.execute_workflow(
+        workflow_id=wf_record.id,
+        trigger_type="MANUAL",
+        trigger_payload={
+            "flag_key": "enable_new_auth",
+            "provider_skill": "launchdarkly-api",
+            "target_repo_skill": "repo-auth-sdk"
+        }
+    )
+
+    assert exec_res.status == "COMPLETED"
+    assert exec_res.workflow_id == wf.id
+
+    # Verify that ff-specialist-worker was created once and reused for both steps
+    worker = db_manager.get_agent("ff-specialist-worker")
+    assert worker is not None
+    assert worker.id == "ff-specialist-worker"
+
+    # Verify both steps were recorded
+    with db_manager._get_connection() as conn:
+        steps_run = conn.execute(
+            "SELECT step_key, agent_id, status FROM workflow_step_runs WHERE execution_id = ? ORDER BY started_at ASC",
+            (exec_res.id,)
+        ).fetchall()
+        assert len(steps_run) == 2
+        assert steps_run[0]["step_key"] == "create-flag"
+        assert steps_run[0]["agent_id"] == "ff-specialist-worker"
+        assert steps_run[1]["step_key"] == "update-code"
+        assert steps_run[1]["agent_id"] == "ff-specialist-worker"
+
