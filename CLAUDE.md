@@ -22,7 +22,7 @@ Welcome to the AI Agents Platform codebase. This repository contains an enterpri
 Before committing any changes, run both verification suites:
 
 ```bash
-# 1. Run all Backend tests (103 tests, zero mocks, real SQLite)
+# 1. Run all Backend tests (105 tests, zero mocks, real SQLite)
 pytest poc/tests/ -v
 
 # 2. Build Frontend (strict TypeScript compilation & bundle verification)

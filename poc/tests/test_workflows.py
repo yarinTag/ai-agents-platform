@@ -357,9 +357,11 @@ flow:
     wf = WorkflowParser.from_yaml(raw_yaml)
     assert wf.id == "feature-flag-injection-workflow"
 
-    # Persist and execute workflow
+    # Persist and execute workflow with isolated test ID
+    unique_wf_id = f"wf_ff_{uuid.uuid4().hex[:8]}"
+    wf.id = unique_wf_id
     wf_record = db_manager.create_workflow(
-        id=wf.id,
+        id=unique_wf_id,
         name=wf.name,
         definition_json=wf.to_json()
     )
@@ -394,4 +396,126 @@ flow:
         assert steps_run[0]["agent_id"] == "ff-specialist-worker"
         assert steps_run[1]["step_key"] == "update-code"
         assert steps_run[1]["agent_id"] == "ff-specialist-worker"
+
+
+def test_multi_agent_parallel_stage_execution():
+    """Verify Multi-Agent DAG with parallel Fan-Out and Fan-In stages."""
+    fan_out_yaml = """
+name: Parallel Multi-Agent Audit Pipeline
+steps:
+  - name: Setup Workspace
+    instructions: "Prepare test environment"
+    params:
+      agentId: devops-specialist
+
+  - name: Frontend Audit
+    instructions: "Audit UI components for accessibility"
+    params:
+      agentId: frontend-developer
+    depends_on:
+      - setup-workspace
+
+  - name: Backend Audit
+    instructions: "Audit API endpoints for performance"
+    params:
+      agentId: backend-developer
+    depends_on:
+      - setup-workspace
+
+  - name: Executive Synthesis
+    instructions: "Synthesize Frontend: {{frontend-audit.output}} and Backend: {{backend-audit.output}}"
+    params:
+      agentId: ceo-orchestrator
+    depends_on:
+      - frontend-audit
+      - backend-audit
+"""
+    wf = WorkflowParser.from_yaml(fan_out_yaml)
+    engine = WorkflowEngine(db_manager=db_manager)
+
+    # 1. Test stage grouping
+    stages = engine._group_steps_into_stages(wf.steps)
+    assert len(stages) == 3
+    assert len(stages[0]) == 1 # Setup
+    assert len(stages[1]) == 2 # Parallel: Frontend + Backend
+    assert len(stages[2]) == 1 # Synthesis
+
+    stage1_keys = {s.key for s in stages[1]}
+    assert stage1_keys == {"frontend-audit", "backend-audit"}
+
+    # 2. Persist & Execute with isolated test ID
+    unique_fan_id = f"wf_fan_{uuid.uuid4().hex[:8]}"
+    wf.id = unique_fan_id
+    wf_record = db_manager.create_workflow(
+        id=unique_fan_id,
+        name=wf.name,
+        definition_json=wf.to_json()
+    )
+
+    exec_res = engine.execute_workflow(workflow_id=wf_record.id, trigger_type="MANUAL")
+    assert exec_res.status == "COMPLETED"
+
+    # Verify all 4 step runs persisted
+    with db_manager._get_connection() as conn:
+        runs = conn.execute(
+            "SELECT step_key, agent_id FROM workflow_step_runs WHERE execution_id = ?",
+            (exec_res.id,)
+        ).fetchall()
+        assert len(runs) == 4
+        ran_agents = {r["agent_id"] for r in runs}
+        assert "frontend-developer" in ran_agents
+        assert "backend-developer" in ran_agents
+        assert "ceo-orchestrator" in ran_agents
+
+
+def test_trigger_condition_matching_logic():
+    """Verify conditional matching logic on incoming trigger payloads."""
+    from workflows.engine import evaluate_trigger_conditions
+
+    trigger = {
+        "event": "channel_message",
+        "conditions": {
+            "combinator": "and",
+            "rules": [
+                {
+                    "field": "context.channel.id",
+                    "operator": "matches",
+                    "value": "^(C051G5J4C2W|C083U3EH5TL)$"
+                },
+                {
+                    "field": "context.message.text",
+                    "operator": "matches",
+                    "value": "\\b(FAILURE|FAILED)\\b"
+                }
+            ]
+        }
+    }
+
+    # 1. Matching payload
+    valid_payload = {
+        "context": {
+            "channel": {"id": "C051G5J4C2W"},
+            "message": {"text": "Job #42 status: FAILURE detected on master"}
+        }
+    }
+    assert evaluate_trigger_conditions(trigger, valid_payload) is True
+
+    # 2. Non-matching channel
+    wrong_channel_payload = {
+        "context": {
+            "channel": {"id": "C_OTHER_CHANNEL"},
+            "message": {"text": "Job #42 FAILURE"}
+        }
+    }
+    assert evaluate_trigger_conditions(trigger, wrong_channel_payload) is False
+
+    # 3. Non-matching message text
+    success_payload = {
+        "context": {
+            "channel": {"id": "C051G5J4C2W"},
+            "message": {"text": "Job #42 SUCCESS"}
+        }
+    }
+    assert evaluate_trigger_conditions(trigger, success_payload) is False
+
 
