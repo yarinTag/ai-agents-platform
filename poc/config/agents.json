@@ -44,6 +44,8 @@
     "allow_sibling_communication": true,
     "allowed_peer_ids": [],
     "mcp_permissions": [],
+    "is_workflow_agent": false,
+    "workflow_id": null,
     "model_tier": null
   },
   "product-manager": {
@@ -91,6 +93,8 @@
       "software-architect"
     ],
     "mcp_permissions": [],
+    "is_workflow_agent": false,
+    "workflow_id": null,
     "model_tier": null
   },
   "software-architect": {
@@ -141,6 +145,8 @@
       "release-security-reviewer"
     ],
     "mcp_permissions": [],
+    "is_workflow_agent": false,
+    "workflow_id": null,
     "model_tier": null
   },
   "ui-ux-designer": {
@@ -182,6 +188,8 @@
       "frontend-developer"
     ],
     "mcp_permissions": [],
+    "is_workflow_agent": false,
+    "workflow_id": null,
     "model_tier": null
   },
   "frontend-developer": {
@@ -227,6 +235,8 @@
       "qa-test-engineer"
     ],
     "mcp_permissions": [],
+    "is_workflow_agent": false,
+    "workflow_id": null,
     "model_tier": null
   },
   "backend-developer": {
@@ -274,6 +284,8 @@
       "qa-test-engineer"
     ],
     "mcp_permissions": [],
+    "is_workflow_agent": false,
+    "workflow_id": null,
     "model_tier": null
   },
   "qa-test-engineer": {
@@ -317,6 +329,8 @@
       "backend-developer"
     ],
     "mcp_permissions": [],
+    "is_workflow_agent": false,
+    "workflow_id": null,
     "model_tier": null
   },
   "release-security-reviewer": {
@@ -360,6 +374,8 @@
       "qa-test-engineer"
     ],
     "mcp_permissions": [],
+    "is_workflow_agent": false,
+    "workflow_id": null,
     "model_tier": null
   }
 }

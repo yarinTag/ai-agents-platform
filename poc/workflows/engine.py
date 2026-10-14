@@ -32,6 +32,16 @@ class BudgetExceededError(Exception):
         self.budget = budget
 
 
+class MCPGovernanceViolationError(Exception):
+    """Raised when an MCP connector or tool violates department governance policies."""
+    def __init__(self, department_id: str, connector_id: str, reason: str, tool_name: Optional[str] = None):
+        super().__init__(reason)
+        self.department_id = department_id
+        self.connector_id = connector_id
+        self.tool_name = tool_name
+        self.reason = reason
+
+
 @dataclass
 class WorkflowStepResult:
     """Result of an individual workflow step execution."""
@@ -182,6 +192,30 @@ class WorkflowEngine:
                 sandbox.cleanup()
                 return self.db.get_workflow_execution(execution_id)
 
+        # 4b. Pre-flight MCP Governance check
+        if dept_id:
+            all_mcp_servers = set(getattr(wf_def, "mcp_servers", []) or [])
+            for s in wf_def.steps:
+                for sm in (getattr(s, "mcp_servers", []) or []):
+                    all_mcp_servers.add(sm)
+
+            for conn_id in sorted(all_mcp_servers):
+                perm = self.db.check_department_mcp_permission(dept_id, conn_id)
+                if not perm.get("allowed", False):
+                    err_msg = f"MCP Governance Violation: {perm.get('reason')}"
+                    self.db.update_workflow_execution(
+                        execution_id,
+                        status="FAILED",
+                        error_message=err_msg,
+                        completed_at=datetime.now().isoformat()
+                    )
+                    sandbox.cleanup()
+                    raise MCPGovernanceViolationError(
+                        department_id=dept_id,
+                        connector_id=conn_id,
+                        reason=err_msg
+                    )
+
         # 5. Execute steps in DAG dependency stages (multi-agent parallel execution)
         step_outputs: Dict[str, str] = {}
         total_input_tokens = 0
@@ -244,6 +278,20 @@ class WorkflowEngine:
                     if final_status != "COMPLETED":
                         break
 
+        except MCPGovernanceViolationError as e:
+            final_status = "FAILED"
+            failure_error = str(e)
+            sandbox.cleanup()
+            self.db.update_workflow_execution(
+                execution_id=execution_id,
+                status=final_status,
+                total_input_tokens=total_input_tokens,
+                total_output_tokens=total_output_tokens,
+                total_cost_usd=total_cost_usd,
+                completed_at=datetime.now().isoformat(),
+                error_message=failure_error
+            )
+            raise
         except Exception as e:
             final_status = "FAILED"
             failure_error = str(e)
@@ -367,6 +415,36 @@ class WorkflowEngine:
             for k, v in trigger_payload.items():
                 formatted_prompt = formatted_prompt.replace(f"{{{{{k}}}}}", str(v))
                 formatted_prompt = formatted_prompt.replace(f"${{{k}}}", str(v))
+
+        # Step-level MCP Governance check & Tool filtering (Least Privilege & Hard Block)
+        if dept_id and getattr(step, "mcp_servers", None):
+            for conn_id in step.mcp_servers:
+                perm = self.db.check_department_mcp_permission(dept_id, conn_id)
+                if not perm.get("allowed", False):
+                    raise MCPGovernanceViolationError(
+                        department_id=dept_id,
+                        connector_id=conn_id,
+                        reason=perm.get("reason", f"Access to MCP connector '{conn_id}' denied for department '{dept_id}'")
+                    )
+
+                # Tool-level filtering
+                step_tools = []
+                if hasattr(step, "params") and isinstance(step.params, dict):
+                    raw_tools = step.params.get("tools") or step.params.get("mcp_tools") or []
+                    if isinstance(raw_tools, list):
+                        step_tools = raw_tools
+                    elif isinstance(raw_tools, str):
+                        step_tools = [raw_tools]
+
+                for t in step_tools:
+                    tool_perm = self.db.check_department_mcp_permission(dept_id, conn_id, tool_name=t)
+                    if not tool_perm.get("allowed", False):
+                        raise MCPGovernanceViolationError(
+                            department_id=dept_id,
+                            connector_id=conn_id,
+                            reason=tool_perm.get("reason", f"Tool '{t}' blocked by department policy"),
+                            tool_name=t
+                        )
 
         # Step-level Skills injection (dynamic resolution)
         step_skills = []

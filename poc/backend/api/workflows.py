@@ -18,7 +18,7 @@ import logging
 
 from ..dependencies import get_db_manager, get_workflow_engine, DatabaseManager, AgentConfig, AgentRole
 from workflows.parser import WorkflowParser, WorkflowDefinition
-from workflows.engine import WorkflowEngine, BudgetExceededError
+from workflows.engine import WorkflowEngine, BudgetExceededError, MCPGovernanceViolationError
 
 logger = logging.getLogger(__name__)
 
@@ -788,6 +788,11 @@ def execute_workflow(
             error_message=execution.error_message,
             created_at=execution.created_at
         )
+    except MCPGovernanceViolationError as mcp_err:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"MCP Governance Violation: {str(mcp_err)}"
+        )
     except BudgetExceededError as be:
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
@@ -839,6 +844,11 @@ async def trigger_webhook(
             completed_at=execution.completed_at,
             error_message=execution.error_message,
             created_at=execution.created_at
+        )
+    except MCPGovernanceViolationError as mcp_err:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"MCP Governance Violation: {str(mcp_err)}"
         )
     except BudgetExceededError as be:
         raise HTTPException(

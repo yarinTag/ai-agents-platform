@@ -122,6 +122,21 @@ class AgentTeam:
 
 
 @dataclass
+class Organization:
+    """Enterprise tenant organization."""
+    id: str
+    name: str
+    slug: str
+    domain: Optional[str] = None
+    settings_json: str = "{}"
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
 class Department:
     """Organizational department with budget controls."""
     id: str
@@ -131,8 +146,25 @@ class Department:
     current_spend_usd: float = 0.0
     budget_action: str = "REQUIRE_APPROVAL"  # HARD_STOP, REQUIRE_APPROVAL, NOTIFY_ONLY
     alert_threshold_pct: float = 80.0
+    organization_id: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class DepartmentMCPAccess:
+    """Department-level MCP access grant with tool filtering."""
+    id: str
+    department_id: str
+    connector_id: str
+    allowed_tools: str = "*"
+    organization_id: Optional[str] = None
+    is_active: bool = True
+    granted_by_user_id: Optional[str] = None
+    granted_at: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -793,6 +825,19 @@ class DatabaseManager:
                 )
             """)
 
+            # 0. Organizations table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS organizations (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    slug TEXT UNIQUE NOT NULL,
+                    domain TEXT,
+                    settings_json TEXT DEFAULT '{}',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
             # 1. Departments table
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS departments (
@@ -803,10 +848,35 @@ class DatabaseManager:
                     current_spend_usd REAL DEFAULT 0.0,
                     budget_action TEXT DEFAULT 'REQUIRE_APPROVAL',
                     alert_threshold_pct REAL DEFAULT 80.0,
+                    organization_id TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
                 )
             """)
+            try:
+                conn.execute("ALTER TABLE departments ADD COLUMN organization_id TEXT REFERENCES organizations(id) ON DELETE CASCADE")
+            except Exception:
+                pass
+
+            # 1b. Department MCP Access Governance table (Tool-level filtering)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS department_mcp_access (
+                    id TEXT PRIMARY KEY,
+                    organization_id TEXT,
+                    department_id TEXT NOT NULL,
+                    connector_id TEXT NOT NULL,
+                    allowed_tools TEXT DEFAULT '*',
+                    is_active INTEGER DEFAULT 1,
+                    granted_by_user_id TEXT,
+                    granted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+                    FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE CASCADE,
+                    FOREIGN KEY (connector_id) REFERENCES mcp_connectors(id) ON DELETE CASCADE,
+                    UNIQUE(department_id, connector_id)
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_dept_mcp_lookup ON department_mcp_access(department_id, is_active)")
 
             # 2. Workflows table
             conn.execute("""
@@ -3535,15 +3605,16 @@ class DatabaseManager:
         description: Optional[str] = None,
         monthly_budget_usd: float = 100.0,
         budget_action: str = "HARD_STOP",
-        alert_threshold_pct: float = 80.0
+        alert_threshold_pct: float = 80.0,
+        organization_id: Optional[str] = None
     ) -> Department:
         """Create a new department."""
         now = datetime.now().isoformat()
         with self._get_connection() as conn:
             conn.execute("""
-                INSERT INTO departments (id, name, description, monthly_budget_usd, budget_action, alert_threshold_pct, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (id, name, description, monthly_budget_usd, budget_action, alert_threshold_pct, now, now))
+                INSERT INTO departments (id, name, description, monthly_budget_usd, budget_action, alert_threshold_pct, organization_id, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (id, name, description, monthly_budget_usd, budget_action, alert_threshold_pct, organization_id, now, now))
             conn.commit()
         return self.get_department(id)
 
@@ -3562,6 +3633,7 @@ class DatabaseManager:
                 current_spend_usd=self.get_department_monthly_spend(id),
                 budget_action=d.get('budget_action') or 'HARD_STOP',
                 alert_threshold_pct=float(d.get('alert_threshold_pct') or 80.0),
+                organization_id=d.get('organization_id'),
                 created_at=d.get('created_at'),
                 updated_at=d.get('updated_at')
             )
@@ -3640,6 +3712,267 @@ class DatabaseManager:
             "current_spend_usd": current_spend,
             "monthly_budget_usd": budget,
             "is_alert": is_alert
+        }
+
+    # =========================================================================
+    # Organizations & Department Governance
+    # =========================================================================
+
+    def create_organization(
+        self,
+        id: str,
+        name: str,
+        slug: str,
+        domain: Optional[str] = None,
+        settings_json: str = "{}"
+    ) -> Organization:
+        """Create an organization tenant."""
+        now = datetime.now().isoformat()
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT INTO organizations (id, name, slug, domain, settings_json, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (id, name, slug, domain, settings_json, now, now))
+            conn.commit()
+        return self.get_organization(id)
+
+    def get_organization(self, id: str) -> Optional[Organization]:
+        """Get an organization by ID."""
+        with self._get_connection() as conn:
+            row = conn.execute("SELECT * FROM organizations WHERE id = ?", (id,)).fetchone()
+            if not row:
+                return None
+            return Organization(
+                id=row['id'],
+                name=row['name'],
+                slug=row['slug'],
+                domain=row['domain'],
+                settings_json=row['settings_json'] or "{}",
+                created_at=row['created_at'],
+                updated_at=row['updated_at']
+            )
+
+    def get_organization_by_slug(self, slug: str) -> Optional[Organization]:
+        """Get an organization by slug."""
+        with self._get_connection() as conn:
+            row = conn.execute("SELECT * FROM organizations WHERE slug = ?", (slug,)).fetchone()
+            if not row:
+                return None
+            return Organization(
+                id=row['id'],
+                name=row['name'],
+                slug=row['slug'],
+                domain=row['domain'],
+                settings_json=row['settings_json'] or "{}",
+                created_at=row['created_at'],
+                updated_at=row['updated_at']
+            )
+
+    def list_organizations(self) -> List[Organization]:
+        """List all organizations."""
+        with self._get_connection() as conn:
+            rows = conn.execute("SELECT * FROM organizations ORDER BY name ASC").fetchall()
+            return [
+                Organization(
+                    id=r['id'],
+                    name=r['name'],
+                    slug=r['slug'],
+                    domain=r['domain'],
+                    settings_json=r['settings_json'] or "{}",
+                    created_at=r['created_at'],
+                    updated_at=r['updated_at']
+                )
+                for r in rows
+            ]
+
+    def update_organization(self, id: str, **kwargs) -> Optional[Organization]:
+        """Update organization attributes."""
+        fields = []
+        params = []
+        now = datetime.now().isoformat()
+        for k in ("name", "slug", "domain", "settings_json"):
+            if k in kwargs and kwargs[k] is not None:
+                fields.append(f"{k} = ?")
+                params.append(kwargs[k])
+        if fields:
+            fields.append("updated_at = ?")
+            params.append(now)
+            params.append(id)
+            with self._get_connection() as conn:
+                conn.execute(f"UPDATE organizations SET {', '.join(fields)} WHERE id = ?", params)
+                conn.commit()
+        return self.get_organization(id)
+
+    def grant_department_mcp_access(
+        self,
+        department_id: str,
+        connector_id: str,
+        allowed_tools: Union[str, List[str]] = "*",
+        organization_id: Optional[str] = None,
+        granted_by_user_id: Optional[str] = None
+    ) -> DepartmentMCPAccess:
+        """
+        Grant or update a department's access to an MCP connector with tool-level filtering.
+        allowed_tools can be '*' (all tools) or a list of specific tool names e.g. ['git_diff', 'list_issues'].
+        """
+        if isinstance(allowed_tools, list):
+            tools_str = json.dumps(allowed_tools)
+        elif isinstance(allowed_tools, str):
+            tools_str = allowed_tools.strip()
+        else:
+            tools_str = "*"
+
+        if not organization_id:
+            dept = self.get_department(department_id)
+            if dept:
+                organization_id = dept.organization_id
+
+        access_id = f"dmcp_{uuid.uuid4().hex[:12]}"
+        now = datetime.now().isoformat()
+
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT OR IGNORE INTO mcp_connectors (id, name, provider, status)
+                VALUES (?, ?, ?, 'CONNECTED')
+            """, (connector_id, connector_id.replace('-', ' ').replace('_', ' ').title(), connector_id))
+
+            conn.execute("""
+                INSERT INTO department_mcp_access (
+                    id, organization_id, department_id, connector_id, allowed_tools, is_active, granted_by_user_id, granted_at
+                ) VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+                ON CONFLICT(department_id, connector_id) DO UPDATE SET
+                    allowed_tools = excluded.allowed_tools,
+                    is_active = 1,
+                    organization_id = COALESCE(excluded.organization_id, department_mcp_access.organization_id),
+                    granted_by_user_id = excluded.granted_by_user_id,
+                    granted_at = excluded.granted_at
+            """, (access_id, organization_id, department_id, connector_id, tools_str, granted_by_user_id, now))
+            conn.commit()
+
+        access = self.get_department_mcp_access(department_id, connector_id)
+        if not access:
+            raise RuntimeError(f"Failed to grant MCP access to department {department_id}")
+        return access
+
+    def revoke_department_mcp_access(self, department_id: str, connector_id: str) -> bool:
+        """Revoke a department's access to an MCP connector (soft-delete / deactivate)."""
+        with self._get_connection() as conn:
+            cursor = conn.execute("""
+                UPDATE department_mcp_access
+                SET is_active = 0
+                WHERE department_id = ? AND connector_id = ?
+            """, (department_id, connector_id))
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def get_department_mcp_access(self, department_id: str, connector_id: str) -> Optional[DepartmentMCPAccess]:
+        """Get active MCP access record for department and connector."""
+        with self._get_connection() as conn:
+            row = conn.execute("""
+                SELECT * FROM department_mcp_access
+                WHERE department_id = ? AND connector_id = ? AND is_active = 1
+            """, (department_id, connector_id)).fetchone()
+            if not row:
+                return None
+            return DepartmentMCPAccess(
+                id=row['id'],
+                department_id=row['department_id'],
+                connector_id=row['connector_id'],
+                allowed_tools=row['allowed_tools'] or "*",
+                organization_id=row['organization_id'],
+                is_active=bool(row['is_active']),
+                granted_by_user_id=row['granted_by_user_id'],
+                granted_at=row['granted_at']
+            )
+
+    def list_department_mcp_access(self, department_id: str) -> List[DepartmentMCPAccess]:
+        """List all active MCP grants for a department."""
+        with self._get_connection() as conn:
+            rows = conn.execute("""
+                SELECT * FROM department_mcp_access
+                WHERE department_id = ? AND is_active = 1
+                ORDER BY connector_id ASC
+            """, (department_id,)).fetchall()
+            return [
+                DepartmentMCPAccess(
+                    id=r['id'],
+                    department_id=r['department_id'],
+                    connector_id=r['connector_id'],
+                    allowed_tools=r['allowed_tools'] or "*",
+                    organization_id=r['organization_id'],
+                    is_active=bool(r['is_active']),
+                    granted_by_user_id=r['granted_by_user_id'],
+                    granted_at=r['granted_at']
+                )
+                for r in rows
+            ]
+
+    def check_department_mcp_permission(
+        self,
+        department_id: Optional[str],
+        connector_id: str,
+        tool_name: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Check if a department is permitted to access an MCP connector and an optional specific tool.
+        Returns:
+            {
+                "allowed": bool,
+                "reason": str,
+                "allowed_tools": List[str]
+            }
+        """
+        if not department_id:
+            return {
+                "allowed": True,
+                "reason": "No department restriction applied (unassigned/local access)",
+                "allowed_tools": ["*"]
+            }
+
+        access = self.get_department_mcp_access(department_id, connector_id)
+        if not access:
+            return {
+                "allowed": False,
+                "reason": f"Department '{department_id}' does not have granted access to MCP connector '{connector_id}'",
+                "allowed_tools": []
+            }
+
+        allowed_raw = access.allowed_tools.strip() if access.allowed_tools else "*"
+
+        if allowed_raw == "*":
+            return {
+                "allowed": True,
+                "reason": f"Department '{department_id}' has full access to all tools in connector '{connector_id}'",
+                "allowed_tools": ["*"]
+            }
+
+        parsed_tools = []
+        try:
+            if allowed_raw.startswith("["):
+                parsed_tools = json.loads(allowed_raw)
+            else:
+                parsed_tools = [t.strip() for t in allowed_raw.split(",") if t.strip()]
+        except Exception:
+            parsed_tools = []
+
+        if not tool_name:
+            return {
+                "allowed": True,
+                "reason": f"Department '{department_id}' has filtered access to connector '{connector_id}'",
+                "allowed_tools": parsed_tools
+            }
+
+        if tool_name in parsed_tools:
+            return {
+                "allowed": True,
+                "reason": f"Tool '{tool_name}' is explicitly allowed for department '{department_id}'",
+                "allowed_tools": parsed_tools
+            }
+
+        return {
+            "allowed": False,
+            "reason": f"Tool '{tool_name}' is blocked by department policy: not in allowed tools list for department '{department_id}' on connector '{connector_id}'",
+            "allowed_tools": parsed_tools
         }
 
     # =========================================================================
