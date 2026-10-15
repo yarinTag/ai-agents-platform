@@ -18,7 +18,7 @@ import logging
 
 from ..dependencies import get_db_manager, get_workflow_engine, DatabaseManager, AgentConfig, AgentRole
 from workflows.parser import WorkflowParser, WorkflowDefinition
-from workflows.engine import WorkflowEngine, BudgetExceededError, MCPGovernanceViolationError
+from workflows.engine import WorkflowEngine, BudgetExceededError, MCPGovernanceViolationError, UnauthorizedUserDepartmentError
 
 logger = logging.getLogger(__name__)
 
@@ -762,15 +762,18 @@ def delete_workflow(
 @router.post("/{workflow_id}/execute", response_model=WorkflowExecutionResponse)
 def execute_workflow(
     workflow_id: str,
+    request: Request,
     payload: Optional[Dict[str, Any]] = None,
     engine: WorkflowEngine = Depends(get_workflow_engine)
 ):
     """Manually trigger a workflow execution."""
     try:
+        user_ctx = getattr(request.state, "user", None)
         execution = engine.execute_workflow(
             workflow_id=workflow_id,
             trigger_type="MANUAL",
-            trigger_payload=payload
+            trigger_payload=payload,
+            user_context=user_ctx
         )
         return WorkflowExecutionResponse(
             id=execution.id,
@@ -787,6 +790,11 @@ def execute_workflow(
             completed_at=execution.completed_at,
             error_message=execution.error_message,
             created_at=execution.created_at
+        )
+    except UnauthorizedUserDepartmentError as uude:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Department Access Denied: {str(uude)}"
         )
     except MCPGovernanceViolationError as mcp_err:
         raise HTTPException(

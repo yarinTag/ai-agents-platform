@@ -29,14 +29,30 @@ async def authenticate_request(
     If PLATFORM_API_KEY is not configured, allows development mode.
     Exempts public endpoints such as health and docs.
     """
-    # Exempt public documentation and health check endpoints
-    exempt_paths = {"/", "/health", "/docs", "/openapi.json", "/redoc", "/api/v1/auth/status"}
+    # Exempt public documentation, health check, and auth endpoints
+    exempt_paths = {
+        "/", "/health", "/docs", "/openapi.json", "/redoc",
+        "/api/v1/auth/status", "/api/v1/auth/login", "/api/v1/auth/org-register", "/api/v1/invitations/accept"
+    }
     if request.url.path in exempt_paths:
         return {
             "authenticated": True,
             "mode": "public_exempt",
             "actor": "anonymous"
         }
+
+    # 1. First check if incoming Authorization is a valid signed JWT bearer token
+    if bearer_creds and bearer_creds.credentials:
+        from .tokens import decode_access_token
+        jwt_claims = decode_access_token(bearer_creds.credentials.strip())
+        if jwt_claims:
+            request.state.user = jwt_claims
+            return {
+                "authenticated": True,
+                "mode": "jwt_bearer",
+                "actor": jwt_claims.get("email", jwt_claims.get("sub", "user")),
+                "user": jwt_claims
+            }
 
     configured_key = get_configured_api_key()
     if not configured_key:
@@ -59,7 +75,7 @@ async def authenticate_request(
     if not provided_key or provided_key != configured_key:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or missing API key. Provide via 'X-API-Key' header, 'Authorization: Bearer <key>', or 'api_key' query param."
+            detail="Invalid or missing authentication credentials. Provide a valid JWT Bearer token or configured API key."
         )
 
     return {
