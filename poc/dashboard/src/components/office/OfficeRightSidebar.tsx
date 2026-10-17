@@ -12,6 +12,7 @@ import {
 import { Task } from '../../types/task';
 import { Agent } from '../../types/agent';
 import { createTask, deleteTask } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 
 interface OfficeRightSidebarProps {
   agents: Agent[];
@@ -48,33 +49,59 @@ export const OfficeRightSidebar: React.FC<OfficeRightSidebarProps> = ({
   onSelectDepartment,
   onSelectAgent,
 }) => {
+  const { departments } = useAuth();
+
   const departmentList: DepartmentOption[] = React.useMemo(() => {
     const list: DepartmentOption[] = [];
     const seen = new Set<string>();
 
-    // Dynamically collect custom departments strictly from defined agents
-    agents.forEach((agent) => {
-      const rawDept = (agent.department || '').trim();
-      if (!rawDept) return;
-      const lower = rawDept.toLowerCase();
-      if (!seen.has(lower)) {
-        seen.add(lower);
-        const color = DEPT_PALETTE[list.length % DEPT_PALETTE.length];
-        list.push({
-          key: rawDept,
-          name: rawDept.toUpperCase(),
-          color,
-          suggestions: [
-            `Dispatch task to ${rawDept}`,
-            `Review ${rawDept} sprint goals`,
-            `Verify ${rawDept} outputs`,
-          ],
-        });
-      }
-    });
+    // 1. Populate from enterprise departments
+    if (departments && departments.length > 0) {
+      departments.forEach((dept) => {
+        const rawDept = dept.name.trim();
+        const lower = rawDept.toLowerCase();
+        if (!seen.has(lower)) {
+          seen.add(lower);
+          const color = DEPT_PALETTE[list.length % DEPT_PALETTE.length];
+          list.push({
+            key: rawDept,
+            name: rawDept,
+            color,
+            suggestions: [
+              `Dispatch task to ${rawDept}`,
+              `Review ${rawDept} sprint goals`,
+              `Verify ${rawDept} outputs`,
+            ],
+          });
+        }
+      });
+    }
+
+    // 2. Fallback to agents departments if empty
+    if (list.length === 0) {
+      agents.forEach((agent) => {
+        const rawDept = (agent.department || '').trim();
+        if (!rawDept) return;
+        const lower = rawDept.toLowerCase();
+        if (!seen.has(lower)) {
+          seen.add(lower);
+          const color = DEPT_PALETTE[list.length % DEPT_PALETTE.length];
+          list.push({
+            key: rawDept,
+            name: rawDept,
+            color,
+            suggestions: [
+              `Dispatch task to ${rawDept}`,
+              `Review ${rawDept} sprint goals`,
+              `Verify ${rawDept} outputs`,
+            ],
+          });
+        }
+      });
+    }
 
     return list;
-  }, [agents]);
+  }, [departments, agents]);
 
   const [selectedDeptKey, setSelectedDeptKey] = useState<string>('');
 

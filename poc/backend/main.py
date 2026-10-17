@@ -97,9 +97,8 @@ app.include_router(filesystem_router, prefix="/api/v1/fs", tags=["filesystem"], 
 app.include_router(workflows_router, prefix="/api/v1/workflows", tags=["workflows"], dependencies=auth_deps)
 app.include_router(mcp_router, prefix="/api/v1/mcp", tags=["mcp"], dependencies=auth_deps)
 app.include_router(organizations_router, prefix="/api/v1", tags=["organizations", "departments", "mcp-governance"], dependencies=auth_deps)
-app.include_router(audit_router, prefix="/api/v1/audit", tags=["audit"])
-
-app.include_router(audit_router, prefix="/api/v1/auth", tags=["auth"])
+app.include_router(audit_router, prefix="/api/v1/audit", tags=["audit"], dependencies=auth_deps)
+app.include_router(audit_router, prefix="/api/v1/auth", tags=["auth"], dependencies=auth_deps)
 
 
 @app.get("/")

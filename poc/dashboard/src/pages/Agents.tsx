@@ -30,6 +30,7 @@ import {
   ThunderboltOutlined,
 } from '@ant-design/icons';
 import { Agent, AgentRole } from '../types/agent';
+import { useAuth } from '../context/AuthContext';
 import {
   getAgents,
   createAgent,
@@ -45,8 +46,10 @@ import { TemplateGallery } from '../components/agents/TemplateGallery';
 import { HierarchyEditor } from '../components/agents/HierarchyEditor';
 import { AgentMiniChatDrawer } from '../components/chat/AgentMiniChatDrawer';
 import FolderPickerModal from '../components/common/FolderPickerModal';
+import { ModelSelector } from '../components/robotic';
 
 export const AgentsPage: React.FC = () => {
+  const { departments, activeDepartmentId, organization } = useAuth();
   const [agents, setAgents] = useState<Agent[]>([]);
   const [availableSkills, setAvailableSkills] = useState<any[]>([]);
   const [availableModels, setAvailableModels] = useState<DiscoveredModel[]>([]);
@@ -78,6 +81,17 @@ export const AgentsPage: React.FC = () => {
     }
     return opts;
   }, [agents, customDepartments, deptSearchText]);
+
+  const departmentOptions = React.useMemo(() => {
+    if (departments && departments.length > 0) {
+      return departments.map((d) => ({
+        value: d.id,
+        label: `📁 ${d.name}`,
+        name: d.name,
+      }));
+    }
+    return dynamicDepartments;
+  }, [departments, dynamicDepartments]);
 
   const handleAddCustomDept = (nameToAdd?: string) => {
     const val = (nameToAdd || newCustomDept).trim();
@@ -158,9 +172,15 @@ export const AgentsPage: React.FC = () => {
 
   const handleCreate = () => {
     form.resetFields();
+    const activeDept = departments.find((d) => d.id === activeDepartmentId) || departments[0];
+    const initialDeptId = activeDept?.id || null;
+    const initialDeptName = activeDept?.name || customDepartments[0] || (agents[0]?.department) || 'Engineering';
+
     form.setFieldsValue({
       role_type: 'WORKER',
-      department: customDepartments[0] || (agents[0]?.department) || '',
+      department_id: initialDeptId,
+      department: initialDeptName,
+      organization_id: organization?.id || null,
       model: 'default',
       max_tokens: 8000,
       temperature: 0.7,
@@ -180,6 +200,28 @@ export const AgentsPage: React.FC = () => {
       if (typeof values.department === 'string') {
         values.department = values.department.trim();
       }
+
+      // Link both department_id and department
+      const selectedDeptId =
+        values.department_id ||
+        departments.find((d) => d.name === values.department)?.id ||
+        activeDepartmentId;
+
+      const matchedDept = departments.find(
+        (d) => d.id === selectedDeptId || d.id === values.department || d.name === values.department
+      );
+
+      if (matchedDept) {
+        values.department_id = matchedDept.id;
+        values.department = matchedDept.name;
+      } else if (selectedDeptId) {
+        values.department_id = selectedDeptId;
+      }
+
+      if (organization?.id && !values.organization_id) {
+        values.organization_id = organization.id;
+      }
+
       if (editingKey) {
         await updateAgent(editingKey, values);
         message.success('Agent updated successfully');
@@ -305,8 +347,9 @@ export const AgentsPage: React.FC = () => {
       title: 'Department',
       dataIndex: 'department',
       key: 'department',
-      render: (dept?: string) => {
-        const d = dept || 'Engineering';
+      render: (dept?: string, record?: Agent) => {
+        const linkedDept = departments.find((d) => d.id === record?.department_id);
+        const d = linkedDept ? linkedDept.name : dept || 'Engineering';
         const colorMap: Record<string, string> = {
           Architecture: 'purple',
           'QA & Testing': 'cyan',
@@ -319,8 +362,14 @@ export const AgentsPage: React.FC = () => {
           Finance: 'indigo',
           'Workflow Automations': 'purple',
         };
-        const color = colorMap[d] || 'volcano';
-        return <Tag color={color}>{d}</Tag>;
+        const color = colorMap[d] || 'geekblue';
+        return (
+          <Tooltip title={record?.department_id ? `Department ID: ${record.department_id}` : undefined}>
+            <Tag color={color} style={{ fontSize: '11px', margin: 0 }}>
+              📁 {d}
+            </Tag>
+          </Tooltip>
+        );
       },
     },
     {
@@ -402,11 +451,16 @@ export const AgentsPage: React.FC = () => {
             size="small"
             icon={<EditOutlined />}
             onClick={() => {
+              const matchedDept = departments.find(
+                (d) => d.id === record.department_id || d.name === record.department
+              );
               form.setFieldsValue({
                 name: record.name,
                 description: record.description,
                 system_prompt: record.system_prompt,
-                department: record.department || 'Engineering',
+                department_id: record.department_id || matchedDept?.id || null,
+                department: record.department || matchedDept?.name || 'Engineering',
+                organization_id: record.organization_id || organization?.id || null,
                 role_type: record.role_type || 'WORKER',
                 parent_id: record.parent_id || null,
                 max_concurrent_children: record.max_concurrent_children || 3,
@@ -588,60 +642,35 @@ export const AgentsPage: React.FC = () => {
             </Form.Item>
 
             <Form.Item
-              name="department"
+              name="department_id"
               label="Department"
-              help="Select or enter any custom department"
+              help="Assign agent to an enterprise department for budget and tool governance"
             >
               <Select
                 showSearch
                 allowClear
-                placeholder="Select or enter custom department"
-                options={dynamicDepartments}
-                searchValue={deptSearchText}
-                onSearch={setDeptSearchText}
+                placeholder="Select enterprise department"
+                options={departmentOptions}
                 onChange={(val) => {
-                  if (val) {
-                    const trimmed = String(val).trim();
-                    if (!customDepartments.includes(trimmed)) {
-                      setCustomDepartments((prev) => [...prev, trimmed]);
-                    }
+                  const matched = departments.find((d) => d.id === val || d.name === val);
+                  if (matched) {
+                    form.setFieldsValue({
+                      department_id: matched.id,
+                      department: matched.name,
+                    });
+                  } else if (val) {
+                    form.setFieldsValue({
+                      department: val,
+                    });
                   }
-                  setDeptSearchText('');
                 }}
-                dropdownRender={(menu) => (
-                  <>
-                    {menu}
-                    <div
-                      style={{
-                        display: 'flex',
-                        gap: '6px',
-                        padding: '8px',
-                        borderTop: '1px solid #30363d',
-                        background: '#161b22',
-                      }}
-                      onMouseDown={(e) => e.preventDefault()}
-                    >
-                      <Input
-                        size="small"
-                        placeholder="Define custom department"
-                        value={newCustomDept}
-                        onChange={(e) => setNewCustomDept(e.target.value)}
-                        onPressEnter={() => handleAddCustomDept()}
-                        style={{ background: '#0d1117', color: '#fff', borderColor: '#30363d' }}
-                      />
-                      <Button
-                        size="small"
-                        type="primary"
-                        icon={<PlusOutlined />}
-                        onClick={() => handleAddCustomDept()}
-                        style={{ background: '#10b981', borderColor: '#10b981' }}
-                      >
-                        Add
-                      </Button>
-                    </div>
-                  </>
-                )}
               />
+            </Form.Item>
+            <Form.Item name="department" hidden>
+              <Input />
+            </Form.Item>
+            <Form.Item name="organization_id" hidden>
+              <Input />
             </Form.Item>
           </div>
 
@@ -729,17 +758,7 @@ export const AgentsPage: React.FC = () => {
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <Form.Item name="model" label="AI Model">
-              <Select>
-                {availableModels.length > 0 ? (
-                  availableModels.map((m) => (
-                    <Select.Option key={m.id} value={m.id}>
-                      {m.name} ({m.provider})
-                    </Select.Option>
-                  ))
-                ) : (
-                  <Select.Option value="default">Default Claude</Select.Option>
-                )}
-              </Select>
+              <ModelSelector placeholder="Select AI Model..." />
             </Form.Item>
 
             <Form.Item

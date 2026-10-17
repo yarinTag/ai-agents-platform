@@ -30,3 +30,10 @@ export interface PluginPackage {
   skills_count: number;
   skills: PluginSkill[];
 }
+
+export interface PluginsConfig {
+  source_mode: 'local' | 'git';
+  git_repo?: string;
+  local_path?: string;
+  updated_at?: string;
+}

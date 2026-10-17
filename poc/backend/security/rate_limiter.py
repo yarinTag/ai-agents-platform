@@ -14,11 +14,11 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
     """Sliding-window in-memory rate limiter."""
     _instances = []
 
-    def __init__(self, app, default_requests_per_minute: int = 120):
+    def __init__(self, app, default_requests_per_minute: int = 2000):
         super().__init__(app)
         self.default_rpm = default_requests_per_minute
         self.history = defaultdict(list)
-        self.exempt_paths = {"/health", "/docs", "/redoc", "/openapi.json"}
+        self.exempt_paths = {"/health", "/docs", "/redoc", "/openapi.json", "/api/v1/events/stream"}
         RateLimiterMiddleware._instances.append(self)
 
     @classmethod
@@ -37,6 +37,8 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
         return self.default_rpm
 
     async def dispatch(self, request: Request, call_next):
+        if request.method == "OPTIONS":
+            return await call_next(request)
         rpm = self.get_limit()
         if rpm <= 0 or request.url.path in self.exempt_paths:
             return await call_next(request)

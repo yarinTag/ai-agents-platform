@@ -58,6 +58,7 @@ class AgentRun:
     cost_usd: float = 0.0
     cost_source: str = "UNKNOWN"
     model: Optional[str] = None
+    organization_id: Optional[str] = None
 
     def __post_init__(self):
         if self.events is None:
@@ -88,6 +89,7 @@ class AgentRun:
         data['cost_usd'] = self.cost_usd
         data['cost_source'] = self.cost_source
         data['model'] = self.model
+        data['organization_id'] = self.organization_id
         return data
 
     @classmethod
@@ -150,5 +152,6 @@ class AgentRun:
             cache_write_tokens=data.get('cache_write_tokens', 0) or 0,
             cost_usd=float(data.get('cost_usd', 0.0) or 0.0),
             cost_source=data.get('cost_source', 'UNKNOWN'),
-            model=data.get('model')
+            model=data.get('model'),
+            organization_id=data.get('organization_id')
         )

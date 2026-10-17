@@ -23,10 +23,14 @@ import {
   Radio,
   Space,
   Table,
+  Alert,
 } from 'antd';
 import {
   ApiOutlined,
   GithubOutlined,
+  GitlabOutlined,
+  LockOutlined,
+  UnlockOutlined,
   SendOutlined,
   SlackOutlined,
   DatabaseOutlined,
@@ -86,10 +90,12 @@ import {
   WorkflowChannelBinding,
 } from '../types/mcp';
 import { Agent } from '../types/agent';
+import { useAuth } from '../context/AuthContext';
 
 const { Text, Paragraph } = Typography;
 
 export const McpHubPage: React.FC = () => {
+  const { departments, activeDepartmentId } = useAuth();
   const [loading, setLoading] = useState<boolean>(true);
   const [catalog, setCatalog] = useState<MCPCatalogItem[]>([]);
   const [connectors, setConnectors] = useState<MCPConnector[]>([]);
@@ -113,6 +119,7 @@ export const McpHubPage: React.FC = () => {
   const [selectedResources, setSelectedResources] = useState<string[]>([]);
   const [customResourceInput, setCustomResourceInput] = useState<string>('');
   const [fetchingResources, setFetchingResources] = useState<boolean>(false);
+  const [resourceDiscoveryError, setResourceDiscoveryError] = useState<string | null>(null);
 
   // Custom MCP Modal
   const [customModalVisible, setCustomModalVisible] = useState<boolean>(false);
@@ -137,6 +144,11 @@ export const McpHubPage: React.FC = () => {
   const [canvasModalVisible, setCanvasModalVisible] = useState<boolean>(false);
   const [canvasWorkflow, setCanvasWorkflow] = useState<PlatformWorkflow | null>(null);
   const [bindingForm] = Form.useForm();
+  const [quickAddBindingInput, setQuickAddBindingInput] = useState<string>('');
+  const [extraBindingChannels, setExtraBindingChannels] = useState<{ slack: string[]; telegram: string[] }>({
+    slack: [],
+    telegram: [],
+  });
 
   // Testing status maps
   const [testingMap, setTestingMap] = useState<Record<string, boolean>>({});
@@ -176,6 +188,8 @@ export const McpHubPage: React.FC = () => {
       case 'github':
       case 'git':
         return <GithubOutlined style={{ fontSize: size, color: '#f0f6fc' }} />;
+      case 'gitlab':
+        return <GitlabOutlined style={{ fontSize: size, color: '#fc6d26' }} />;
       case 'trello':
         return <CheckSquareOutlined style={{ fontSize: size, color: '#0079bf' }} />;
       case 'telegram':
@@ -195,12 +209,41 @@ export const McpHubPage: React.FC = () => {
     }
   };
 
-  // Trigger Resource Discovery for Git / Slack / Telegram
-  const handleFetchResources = async (provider: string, token?: string, currentSelected?: string[]) => {
+  // Trigger Resource Discovery for Git / GitLab / Slack / Telegram
+  const handleFetchResources = async (
+    provider: string,
+    token?: string,
+    currentSelected?: string[],
+    isManual: boolean = false
+  ) => {
     setFetchingResources(true);
+    setResourceDiscoveryError(null);
+
+    const isGitProvider = provider === 'github' || provider === 'git' || provider === 'gitlab';
+    const trimmedToken = (token || '').trim();
+
+    if (isGitProvider && isManual && !trimmedToken) {
+      const providerLabel = provider === 'gitlab' ? 'GitLab' : 'GitHub';
+      const errMsg = `Please enter a valid ${providerLabel} Personal Access Token before fetching repositories.`;
+      setResourceDiscoveryError(errMsg);
+      message.error(errMsg);
+      setFetchingResources(false);
+      return;
+    }
+
     try {
-      const res = await discoverMCPResources(provider, token);
-      if (provider === 'github' || provider === 'git') {
+      const allFormValues = form.getFieldsValue();
+      const res = await discoverMCPResources(provider, trimmedToken || undefined, allFormValues);
+
+      if (res.data?.requires_token && isManual) {
+        const errMsg = res.data.message || 'Please enter a valid Personal Access Token to view accessible repositories.';
+        setResourceDiscoveryError(errMsg);
+        message.error(errMsg);
+        setFetchingResources(false);
+        return;
+      }
+
+      if (isGitProvider) {
         const repos = res.data?.repositories || [];
         const mergedRepos = [...repos];
         if (currentSelected) {
@@ -212,8 +255,11 @@ export const McpHubPage: React.FC = () => {
         }
         setDiscoveredResources(mergedRepos);
         if (selectedResources.length === 0 && (!currentSelected || currentSelected.length === 0) && mergedRepos.length > 0) {
-          const mainRepo = mergedRepos.find((r: any) => r.name === 'ai-agents-platform') || mergedRepos[0];
-          setSelectedResources([mainRepo.name || mainRepo.full_name]);
+          const mainRepo = mergedRepos.find((r: any) => (r.name || r.full_name) === 'ai-agents-platform') || mergedRepos[0];
+          setSelectedResources([mainRepo.full_name || mainRepo.name]);
+        }
+        if (isManual) {
+          message.success(`Discovered ${repos.length} accessible ${provider === 'gitlab' ? 'GitLab' : 'GitHub'} repositories!`);
         }
       } else if (provider === 'slack') {
         const channels = res.data?.channels || [];
@@ -229,6 +275,9 @@ export const McpHubPage: React.FC = () => {
         if (selectedResources.length === 0 && (!currentSelected || currentSelected.length === 0) && mergedChannels.length > 0) {
           setSelectedResources(['#general', '#dev-team', '#pr-review']);
         }
+        if (isManual) {
+          message.success(`Discovered ${channels.length} Slack channels`);
+        }
       } else if (provider === 'telegram') {
         const chats = res.data?.chats || [];
         const mergedChats = [...chats];
@@ -243,13 +292,28 @@ export const McpHubPage: React.FC = () => {
         if (selectedResources.length === 0 && (!currentSelected || currentSelected.length === 0) && mergedChats.length > 0) {
           setSelectedResources(['@agents_office_alerts']);
         }
+        if (isManual) {
+          message.success(`Discovered ${chats.length} Telegram chats`);
+        }
       }
-      message.success(`Discovered ${provider} resources`);
-    } catch (err) {
-      message.warning('Using default resource catalog');
+    } catch (err: any) {
+      console.error('Resource discovery failed', err);
+      const detail = err.response?.data?.detail || err.message || `Failed to discover ${provider} resources`;
+      if (isManual) {
+        setResourceDiscoveryError(detail);
+        message.error(detail);
+      } else {
+        message.warning('Using default resource catalog');
+      }
     } finally {
       setFetchingResources(false);
     }
+  };
+
+  const handleFetchTokenRepositories = async () => {
+    const provider = (selectedCatalogItem?.provider || editingConnector?.provider || 'github').toLowerCase();
+    const token = form.getFieldValue('token') || form.getFieldValue('personal_access_token') || form.getFieldValue('api_key');
+    await handleFetchResources(provider, token, selectedResources, true);
   };
 
   // Open Connect / Configure Modal
@@ -258,6 +322,7 @@ export const McpHubPage: React.FC = () => {
     setEditingConnector(existingConn || null);
     form.resetFields();
     setCustomResourceInput('');
+    setResourceDiscoveryError(null);
 
     const provider = catItem.provider.toLowerCase();
     let initialSelected: string[] = [];
@@ -269,10 +334,24 @@ export const McpHubPage: React.FC = () => {
         ...existingConn.configuration,
       });
 
-      if (provider === 'github' || provider === 'git') {
+      if (provider === 'github' || provider === 'git' || provider === 'gitlab') {
         initialSelected = existingConn.configuration?.allowed_repos || ['ai-agents-platform'];
-      } else if (provider === 'slack' || provider === 'telegram') {
-        initialSelected = existingConn.configuration?.allowed_channels || (provider === 'telegram' ? ['@agents_office_alerts'] : ['#general']);
+      } else if (provider === 'telegram') {
+        if (Array.isArray(existingConn.configuration?.allowed_channels) && existingConn.configuration.allowed_channels.length > 0) {
+          initialSelected = existingConn.configuration.allowed_channels;
+        } else if (typeof existingConn.configuration?.chat_id === 'string' && existingConn.configuration.chat_id.trim()) {
+          initialSelected = [existingConn.configuration.chat_id.trim()];
+        } else {
+          initialSelected = ['@agents_office_alerts'];
+        }
+      } else if (provider === 'slack') {
+        if (Array.isArray(existingConn.configuration?.allowed_channels) && existingConn.configuration.allowed_channels.length > 0) {
+          initialSelected = existingConn.configuration.allowed_channels;
+        } else if (typeof existingConn.configuration?.default_channel === 'string' && existingConn.configuration.default_channel.trim()) {
+          initialSelected = [existingConn.configuration.default_channel.trim()];
+        } else {
+          initialSelected = ['#general'];
+        }
       }
     } else {
       const defaults: Record<string, any> = { name: catItem.name };
@@ -282,12 +361,12 @@ export const McpHubPage: React.FC = () => {
         }
       });
       form.setFieldsValue(defaults);
-      if (provider === 'github' || provider === 'git') {
+      if (provider === 'github' || provider === 'git' || provider === 'gitlab') {
         initialSelected = ['ai-agents-platform'];
       } else if (provider === 'telegram') {
         initialSelected = ['@agents_office_alerts'];
       } else if (provider === 'slack') {
-        initialSelected = ['#general', '#dev-team'];
+        initialSelected = ['#general'];
       }
     }
 
@@ -295,8 +374,11 @@ export const McpHubPage: React.FC = () => {
     setModalVisible(true);
 
     // Fetch available resources for selection
-    if (['github', 'git', 'slack', 'telegram'].includes(provider)) {
-      await handleFetchResources(provider, existingConn?.configuration?.token || existingConn?.configuration?.bot_token, initialSelected);
+    if (['github', 'git', 'gitlab', 'slack', 'telegram'].includes(provider)) {
+      const existingToken = existingConn?.configuration?.token || existingConn?.configuration?.personal_access_token || existingConn?.configuration?.bot_token;
+      if (existingToken) {
+        await handleFetchResources(provider, existingToken, initialSelected, false);
+      }
     }
   };
 
@@ -331,10 +413,16 @@ export const McpHubPage: React.FC = () => {
       const provider = (selectedCatalogItem?.provider || editingConnector?.provider || '').toLowerCase();
 
       // Attach selected repos or channels
-      if (provider === 'github' || provider === 'git') {
+      if (provider === 'github' || provider === 'git' || provider === 'gitlab') {
         config.allowed_repos = selectedResources;
       } else if (provider === 'slack' || provider === 'telegram') {
         config.allowed_channels = selectedResources;
+        if (provider === 'telegram') {
+          config.chat_id = selectedResources[0] || '';
+        }
+        if (provider === 'slack') {
+          config.default_channel = selectedResources[0] || '';
+        }
       }
 
       if (editingConnector) {
@@ -586,13 +674,48 @@ export const McpHubPage: React.FC = () => {
   });
 
   // Extract authorized channels from Slack & Telegram connectors
-  const slackConnector = connectors.find((c) => c.provider === 'slack' || c.id === 'slack');
-  const telegramConnector = connectors.find((c) => c.provider === 'telegram' || c.id === 'telegram');
+  const slackConnectors = connectors.filter((c) => c.provider === 'slack' || c.id === 'slack');
+  const telegramConnectors = connectors.filter((c) => c.provider === 'telegram' || c.id === 'telegram');
+  const slackConnector = slackConnectors[0];
+  const telegramConnector = telegramConnectors[0];
 
+  const configuredSlackChannels = Array.from(
+    new Set(
+      slackConnectors.flatMap((c) => {
+        const list: string[] = [];
+        if (Array.isArray(c.configuration?.allowed_channels)) {
+          list.push(...c.configuration.allowed_channels);
+        }
+        if (typeof c.configuration?.default_channel === 'string' && c.configuration.default_channel.trim()) {
+          list.push(c.configuration.default_channel.trim());
+        }
+        return list;
+      }).filter(Boolean)
+    )
+  );
   const availableSlackChannels: string[] =
-    slackConnector?.configuration?.allowed_channels || ['#general', '#dev-team', '#alerts', '#pr-review', '#workflows-feed'];
+    configuredSlackChannels.length > 0
+      ? configuredSlackChannels
+      : ['#general', '#dev-team', '#alerts', '#pr-review', '#workflows-feed'];
+
+  const configuredTelegramChats = Array.from(
+    new Set(
+      telegramConnectors.flatMap((c) => {
+        const list: string[] = [];
+        if (Array.isArray(c.configuration?.allowed_channels)) {
+          list.push(...c.configuration.allowed_channels);
+        }
+        if (typeof c.configuration?.chat_id === 'string' && c.configuration.chat_id.trim()) {
+          list.push(c.configuration.chat_id.trim());
+        }
+        return list;
+      }).filter(Boolean)
+    )
+  );
   const availableTelegramChats: string[] =
-    telegramConnector?.configuration?.allowed_channels || ['@agents_office_alerts', '@workflow_dev_channel', '@pr_review_bot'];
+    configuredTelegramChats.length > 0
+      ? configuredTelegramChats
+      : ['@agents_office_alerts', '@workflow_dev_channel', '@pr_review_bot'];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -728,7 +851,7 @@ export const McpHubPage: React.FC = () => {
                         (c) => c.provider === item.provider || c.id === item.id
                       );
 
-                      const isGit = item.provider === 'github' || item.provider === 'git';
+                      const isGit = item.provider === 'github' || item.provider === 'git' || item.provider === 'gitlab';
                       const isSlack = item.provider === 'slack';
                       const isTelegram = item.provider === 'telegram';
 
@@ -995,7 +1118,7 @@ export const McpHubPage: React.FC = () => {
                       const catDef = catalog.find((c) => c.provider === conn.provider || c.id === conn.id);
                       const permittedAgentCount = permissions.filter((p) => p.connector_id === conn.id).length;
 
-                      const isGit = conn.provider === 'github' || conn.provider === 'git';
+                      const isGit = conn.provider === 'github' || conn.provider === 'git' || conn.provider === 'gitlab';
                       const isSlack = conn.provider === 'slack';
                       const isTelegram = conn.provider === 'telegram';
                       const allowedRepos: string[] = conn.configuration?.allowed_repos || [];
@@ -1236,6 +1359,29 @@ export const McpHubPage: React.FC = () => {
                           <div style={{ fontSize: '11px', color: '#8b949e' }}>ID: {record.id}</div>
                         </div>
                       ),
+                    },
+                    {
+                      title: 'Department',
+                      key: 'department',
+                      width: 150,
+                      render: (_: any, record: PlatformWorkflow) => {
+                        const dept = departments.find((d) => d.id === record.department_id);
+                        if (dept) {
+                          return (
+                            <Tag color="geekblue" style={{ fontSize: '11px', borderRadius: '4px' }}>
+                              📁 {dept.name}
+                            </Tag>
+                          );
+                        }
+                        if (record.department_id) {
+                          return (
+                            <Tag style={{ background: '#21262d', color: '#8b949e', fontSize: '11px' }}>
+                              {record.department_id}
+                            </Tag>
+                          );
+                        }
+                        return <span style={{ color: '#6e7681', fontSize: '11px' }}>Global</span>;
+                      },
                     },
                     {
                       title: 'Bound Channel',
@@ -1492,13 +1638,8 @@ export const McpHubPage: React.FC = () => {
         confirmLoading={submitting}
         okText={editingConnector ? 'Save Changes' : 'Install & Connect'}
         width={620}
-        styles={{
-          body: { background: '#161b22', color: '#f0f6fc' },
-          header: { background: '#161b22', borderBottom: '1px solid #21262d' },
-        }}
       >
-        <div style={{ padding: '10px 0' }}>
-          <p style={{ color: '#8b949e', fontSize: '13px', marginBottom: '16px' }}>
+        <p style={{ color: '#8b949e', fontSize: '13px', marginBottom: '16px' }}>
             {selectedCatalogItem?.description}
           </p>
 
@@ -1512,29 +1653,56 @@ export const McpHubPage: React.FC = () => {
             </Form.Item>
 
             {selectedCatalogItem &&
-              Object.entries(selectedCatalogItem.config_schema).map(([key, field]) => (
-                <Form.Item
-                  key={key}
-                  name={key}
-                  label={<span style={{ color: '#f0f6fc' }}>{field.label}</span>}
-                  rules={[{ required: field.required, message: `${field.label} is required` }]}
-                >
-                  {field.type === 'password' ? (
-                    <Input.Password
-                      placeholder={field.placeholder}
-                      style={{ background: '#0d1117', borderColor: '#30363d', color: '#f0f6fc' }}
-                    />
-                  ) : (
-                    <Input
-                      placeholder={field.placeholder}
-                      style={{ background: '#0d1117', borderColor: '#30363d', color: '#f0f6fc' }}
-                    />
-                  )}
-                </Form.Item>
-              ))}
+              Object.entries(selectedCatalogItem.config_schema)
+                .filter(([key]) => key !== 'chat_id' && key !== 'default_channel')
+                .map(([key, field]) => {
+                const isTokenField =
+                  (key === 'token' || key === 'personal_access_token' || key === 'api_key') &&
+                  (selectedCatalogItem.provider === 'github' || selectedCatalogItem.provider === 'git' || selectedCatalogItem.provider === 'gitlab');
+
+                return (
+                  <Form.Item
+                    key={key}
+                    name={key}
+                    label={<span style={{ color: '#f0f6fc' }}>{field.label}</span>}
+                    rules={[{ required: field.required, message: `${field.label} is required` }]}
+                    extra={
+                      isTokenField ? (
+                        <div style={{ marginTop: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ color: '#8b949e', fontSize: '11px' }}>
+                            Query remote repositories using this Personal Access Token
+                          </span>
+                          <Button
+                            size="small"
+                            type="primary"
+                            icon={<BranchesOutlined />}
+                            loading={fetchingResources}
+                            onClick={handleFetchTokenRepositories}
+                            style={{ background: '#10b981', borderColor: '#10b981', color: '#0d1117', fontWeight: 600, fontSize: '11px', height: '26px' }}
+                          >
+                            Fetch Token Repositories
+                          </Button>
+                        </div>
+                      ) : undefined
+                    }
+                  >
+                    {field.type === 'password' ? (
+                      <Input.Password
+                        placeholder={field.placeholder}
+                        style={{ background: '#0d1117', borderColor: '#30363d', color: '#f0f6fc' }}
+                      />
+                    ) : (
+                      <Input
+                        placeholder={field.placeholder}
+                        style={{ background: '#0d1117', borderColor: '#30363d', color: '#f0f6fc' }}
+                      />
+                    )}
+                  </Form.Item>
+                );
+              })}
 
             {/* Git Repos Selection Section */}
-            {selectedCatalogItem && (selectedCatalogItem.provider === 'github' || selectedCatalogItem.provider === 'git') && (
+            {selectedCatalogItem && (selectedCatalogItem.provider === 'github' || selectedCatalogItem.provider === 'git' || selectedCatalogItem.provider === 'gitlab') && (
               <div
                 style={{
                   marginTop: '16px',
@@ -1544,19 +1712,34 @@ export const McpHubPage: React.FC = () => {
                   border: '1px solid #30363d',
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
                   <div style={{ fontWeight: 700, color: '#38bdf8', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <BranchesOutlined /> Authorized Repositories (בחירת Repos מאושרים)
+                    <BranchesOutlined /> Authorized Repositories
                   </div>
                   <Button
                     size="small"
+                    type="primary"
                     icon={<SyncOutlined spin={fetchingResources} />}
-                    onClick={() => handleFetchResources('github', form.getFieldValue('token'), selectedResources)}
-                    style={{ background: '#161b22', borderColor: '#30363d', color: '#8b949e' }}
+                    loading={fetchingResources}
+                    onClick={handleFetchTokenRepositories}
+                    style={{ background: '#10b981', borderColor: '#10b981', color: '#0d1117', fontWeight: 600 }}
                   >
-                    Scan Repos
+                    Fetch Token Repositories
                   </Button>
                 </div>
+
+                {resourceDiscoveryError && (
+                  <Alert
+                    type="error"
+                    showIcon
+                    message="Token Authentication / Discovery Error"
+                    description={resourceDiscoveryError}
+                    closable
+                    onClose={() => setResourceDiscoveryError(null)}
+                    style={{ marginBottom: '12px', background: 'rgba(239, 68, 68, 0.12)', border: '1px solid #ef4444' }}
+                  />
+                )}
+
                 <div style={{ color: '#8b949e', fontSize: '12px', marginBottom: '12px' }}>
                   Select which local and remote repositories the platform agents are authorized to access and modify:
                 </div>
@@ -1573,7 +1756,7 @@ export const McpHubPage: React.FC = () => {
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                     <span style={{ fontSize: '12px', fontWeight: 700, color: '#38bdf8' }}>
-                      ✓ Selected Repositories ({selectedResources.length}) - Repos שנבחרו:
+                      ✓ Selected Repositories ({selectedResources.length}):
                     </span>
                     {selectedResources.length > 0 && (
                       <Button
@@ -1583,7 +1766,7 @@ export const McpHubPage: React.FC = () => {
                         onClick={() => setSelectedResources([])}
                         style={{ padding: 0, height: 'auto', fontSize: '11px' }}
                       >
-                        Clear All (מחק הכל)
+                        Clear All
                       </Button>
                     )}
                   </div>
@@ -1623,16 +1806,19 @@ export const McpHubPage: React.FC = () => {
                 </div>
 
                 {discoveredResources.length > 0 && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '160px', overflowY: 'auto', marginBottom: '12px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '180px', overflowY: 'auto', marginBottom: '12px', paddingRight: '4px' }}>
                     {discoveredResources.map((repo: any) => {
-                      const repoName = repo.name || repo.full_name;
-                      const isChecked = selectedResources.includes(repoName);
+                      const repoName = repo.full_name || repo.name;
+                      const isChecked = selectedResources.includes(repoName) || selectedResources.includes(repo.name);
+                      const isPrivate = repo.private !== undefined ? Boolean(repo.private) : false;
+                      const defaultBranch = repo.default_branch || 'main';
+
                       return (
                         <div
                           key={repoName}
                           onClick={() => {
                             if (isChecked) {
-                              setSelectedResources(selectedResources.filter((r) => r !== repoName));
+                              setSelectedResources(selectedResources.filter((r) => r !== repoName && r !== repo.name));
                             } else {
                               setSelectedResources([...selectedResources, repoName]);
                             }
@@ -1641,27 +1827,48 @@ export const McpHubPage: React.FC = () => {
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'space-between',
-                            padding: '6px 12px',
+                            padding: '8px 12px',
                             background: isChecked ? 'rgba(56, 189, 248, 0.12)' : '#161b22',
                             border: isChecked ? '1px solid #38bdf8' : '1px solid #21262d',
                             borderRadius: '6px',
                             cursor: 'pointer',
+                            transition: 'all 0.15s ease',
+                            gap: '10px',
                           }}
                         >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
                             <Checkbox checked={isChecked} />
-                            <span style={{ color: '#f0f6fc', fontWeight: 600, fontSize: '13px' }}>
-                              {repo.name}
-                            </span>
-                            {repo.full_name && (
-                              <span style={{ color: '#8b949e', fontSize: '11px' }}>({repo.full_name})</span>
+                            <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                              <span style={{ color: '#f0f6fc', fontWeight: 600, fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {repo.full_name || repo.name}
+                              </span>
+                              {repo.name && repo.full_name && repo.name !== repo.full_name && (
+                                <span style={{ color: '#8b949e', fontSize: '11px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {repo.name}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                            {repo.private !== undefined && (
+                              <Tag
+                                color={isPrivate ? 'gold' : 'green'}
+                                icon={isPrivate ? <LockOutlined /> : <UnlockOutlined />}
+                                style={{ fontSize: '11px', margin: 0, fontWeight: 600 }}
+                              >
+                                {isPrivate ? 'Private' : 'Public'}
+                              </Tag>
+                            )}
+                            <Tag color="blue" icon={<BranchesOutlined />} style={{ fontSize: '11px', margin: 0 }}>
+                              {defaultBranch}
+                            </Tag>
+                            {repo.is_local && (
+                              <Tag color="cyan" style={{ fontSize: '10px', margin: 0 }}>
+                                Local
+                              </Tag>
                             )}
                           </div>
-                          {repo.is_local && (
-                            <Tag color="cyan" style={{ fontSize: '10px' }}>
-                              Local
-                            </Tag>
-                          )}
                         </div>
                       );
                     })}
@@ -1698,26 +1905,50 @@ export const McpHubPage: React.FC = () => {
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                   <div style={{ fontWeight: 700, color: '#f59e0b', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <SlackOutlined /> Authorized Channels (בחירת ערוצי Slack)
+                    <SlackOutlined /> Authorized Channels Array
                   </div>
+                  <Tag color="gold" style={{ fontSize: '11px', margin: 0 }}>
+                    Multi-Channel
+                  </Tag>
                 </div>
                 <div style={{ color: '#8b949e', fontSize: '12px', marginBottom: '12px' }}>
-                  Select authorized Slack channels that can be connected to workflows:
+                  Manage authorized Slack channels array for workflows and alerting:
                 </div>
 
-                {/* Currently Selected Slack Channels */}
+                {/* 1. Add Custom Channel Input & Button at TOP */}
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
+                  <Input
+                    size="middle"
+                    placeholder="Add Slack channel to array (e.g. #general, #incidents, C0123456789)"
+                    value={customResourceInput}
+                    onChange={(e) => setCustomResourceInput(e.target.value)}
+                    onPressEnter={handleAddCustomResource}
+                    style={{ background: '#161b22', borderColor: '#30363d', color: '#f0f6fc' }}
+                  />
+                  <Button
+                    type="primary"
+                    icon={<PlusOutlined />}
+                    onClick={handleAddCustomResource}
+                    style={{ background: '#ECB22E', borderColor: '#ECB22E', color: '#0d1117', fontWeight: 600, whiteSpace: 'nowrap' }}
+                  >
+                    + Add Channel
+                  </Button>
+                </div>
+
+                {/* 2. Configured Channels Array Box */}
                 <div
                   style={{
                     background: '#161b22',
                     border: '1px solid #30363d',
                     borderRadius: '8px',
-                    padding: '10px 12px',
+                    padding: '12px',
                     marginBottom: '14px',
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#f59e0b' }}>
-                      ✓ Selected Slack Channels ({selectedResources.length}) - ערוצים שנבחרו:
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <CheckCircleOutlined style={{ color: '#f59e0b' }} />
+                      Configured Channels Array ({selectedResources.length}):
                     </span>
                     {selectedResources.length > 0 && (
                       <Button
@@ -1727,17 +1958,17 @@ export const McpHubPage: React.FC = () => {
                         onClick={() => setSelectedResources([])}
                         style={{ padding: 0, height: 'auto', fontSize: '11px' }}
                       >
-                        Clear All (מחק הכל)
+                        Clear All
                       </Button>
                     )}
                   </div>
                   {selectedResources.length === 0 ? (
                     <div style={{ color: '#8b949e', fontSize: '12px', fontStyle: 'italic' }}>
-                      No channels selected. Click on suggested channels below or add a custom channel.
+                      No channels added yet. Type a channel above and click "+ Add Channel" or select from suggestions below.
                     </div>
                   ) : (
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                      {selectedResources.map((chName) => (
+                      {selectedResources.map((chName, idx) => (
                         <Tag
                           key={chName}
                           closable
@@ -1753,20 +1984,23 @@ export const McpHubPage: React.FC = () => {
                             fontWeight: 600,
                             display: 'inline-flex',
                             alignItems: 'center',
+                            gap: '4px',
                           }}
                         >
-                          {chName}
+                          <span style={{ opacity: 0.65, fontSize: '10px' }}>#{idx + 1}</span>
+                          <span>{chName}</span>
                         </Tag>
                       ))}
                     </div>
                   )}
                 </div>
 
+                {/* 3. Quick-toggle suggested Slack channels */}
                 <div style={{ color: '#8b949e', fontSize: '12px', marginBottom: '8px' }}>
                   Suggested Slack channels (click to toggle):
                 </div>
 
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                   {(discoveredResources.length > 0
                     ? discoveredResources.map((c: any) => c.id || c.name)
                     : ['#general', '#dev-team', '#alerts', '#pr-review', '#workflows-feed', '#deployments']
@@ -1797,20 +2031,6 @@ export const McpHubPage: React.FC = () => {
                     );
                   })}
                 </div>
-
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <Input
-                    size="small"
-                    placeholder="Add custom channel (e.g. #incident-response)"
-                    value={customResourceInput}
-                    onChange={(e) => setCustomResourceInput(e.target.value)}
-                    onPressEnter={handleAddCustomResource}
-                    style={{ background: '#161b22', borderColor: '#30363d', color: '#f0f6fc' }}
-                  />
-                  <Button size="small" type="primary" onClick={handleAddCustomResource}>
-                    Add
-                  </Button>
-                </div>
               </div>
             )}
 
@@ -1825,26 +2045,52 @@ export const McpHubPage: React.FC = () => {
                   border: '1px solid #30363d',
                 }}
               >
-                <div style={{ fontWeight: 700, color: '#38bdf8', fontSize: '13px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <SendOutlined /> Authorized Chats & Channels (בחירת ערוצי Telegram)
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <div style={{ fontWeight: 700, color: '#38bdf8', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <SendOutlined /> Authorized Chats & Channels Array
+                  </div>
+                  <Tag color="blue" style={{ fontSize: '11px', margin: 0 }}>
+                    Multi-Channel
+                  </Tag>
                 </div>
                 <div style={{ color: '#8b949e', fontSize: '12px', marginBottom: '12px' }}>
-                  Select or add authorized Telegram channels / chats for alerts and command triggers:
+                  Manage authorized Telegram channels and chats array for workflows and alerting:
                 </div>
 
-                {/* Currently Selected Telegram Chats */}
+                {/* 1. Add Custom Channel Input & Button at TOP */}
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
+                  <Input
+                    size="middle"
+                    placeholder="Add channel or chat ID to array (e.g. Hermes_test, @my_channel, -100123456789)"
+                    value={customResourceInput}
+                    onChange={(e) => setCustomResourceInput(e.target.value)}
+                    onPressEnter={handleAddCustomResource}
+                    style={{ background: '#161b22', borderColor: '#30363d', color: '#f0f6fc' }}
+                  />
+                  <Button
+                    type="primary"
+                    icon={<PlusOutlined />}
+                    onClick={handleAddCustomResource}
+                    style={{ background: '#229ED9', borderColor: '#229ED9', color: '#fff', fontWeight: 600, whiteSpace: 'nowrap' }}
+                  >
+                    + Add Channel
+                  </Button>
+                </div>
+
+                {/* 2. Configured Channels Array Box */}
                 <div
                   style={{
                     background: '#161b22',
                     border: '1px solid #30363d',
                     borderRadius: '8px',
-                    padding: '10px 12px',
+                    padding: '12px',
                     marginBottom: '14px',
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#38bdf8' }}>
-                      ✓ Selected Telegram Chats ({selectedResources.length}) - ערוצים שנבחרו:
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <CheckCircleOutlined style={{ color: '#38bdf8' }} />
+                      Configured Channels Array ({selectedResources.length}):
                     </span>
                     {selectedResources.length > 0 && (
                       <Button
@@ -1854,17 +2100,17 @@ export const McpHubPage: React.FC = () => {
                         onClick={() => setSelectedResources([])}
                         style={{ padding: 0, height: 'auto', fontSize: '11px' }}
                       >
-                        Clear All (מחק הכל)
+                        Clear All
                       </Button>
                     )}
                   </div>
                   {selectedResources.length === 0 ? (
                     <div style={{ color: '#8b949e', fontSize: '12px', fontStyle: 'italic' }}>
-                      No channels selected. Click on suggested channels below or add a custom chat ID / @channel.
+                      No channels added yet. Type a chat ID or @channel above and click "+ Add Channel" or select from suggestions below.
                     </div>
                   ) : (
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                      {selectedResources.map((chatName) => (
+                      {selectedResources.map((chatName, idx) => (
                         <Tag
                           key={chatName}
                           closable
@@ -1883,20 +2129,23 @@ export const McpHubPage: React.FC = () => {
                             color: '#38bdf8',
                             display: 'inline-flex',
                             alignItems: 'center',
+                            gap: '4px',
                           }}
                         >
-                          {chatName}
+                          <span style={{ opacity: 0.65, fontSize: '10px' }}>#{idx + 1}</span>
+                          <span>{chatName}</span>
                         </Tag>
                       ))}
                     </div>
                   )}
                 </div>
 
+                {/* 3. Quick-toggle suggested Telegram channels */}
                 <div style={{ color: '#8b949e', fontSize: '12px', marginBottom: '8px' }}>
                   Suggested Telegram channels (click to toggle):
                 </div>
 
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                   {(discoveredResources.length > 0
                     ? discoveredResources.map((c: any) => c.id || c.name)
                     : ['@agents_office_alerts', '@workflow_dev_channel', '@pr_review_bot']
@@ -1927,24 +2176,9 @@ export const McpHubPage: React.FC = () => {
                     );
                   })}
                 </div>
-
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <Input
-                    size="small"
-                    placeholder="Add custom chat ID / @channel (e.g. @alerts or 1176967752)"
-                    value={customResourceInput}
-                    onChange={(e) => setCustomResourceInput(e.target.value)}
-                    onPressEnter={handleAddCustomResource}
-                    style={{ background: '#161b22', borderColor: '#30363d', color: '#f0f6fc' }}
-                  />
-                  <Button size="small" type="primary" onClick={handleAddCustomResource}>
-                    Add
-                  </Button>
-                </div>
               </div>
             )}
           </Form>
-        </div>
       </Modal>
 
       {/* Workflow Channel Binding Modal */}
@@ -1973,7 +2207,7 @@ export const McpHubPage: React.FC = () => {
               cancelText="Cancel"
             >
               <Button danger icon={<DisconnectOutlined />} style={{ float: 'left' }}>
-                Unbind Channel (נתק ערוץ)
+                Unbind Channel
               </Button>
             </Popconfirm>
           ) : null,
@@ -1985,13 +2219,8 @@ export const McpHubPage: React.FC = () => {
           </Button>,
         ]}
         width={540}
-        styles={{
-          body: { background: '#161b22', color: '#f0f6fc' },
-          header: { background: '#161b22', borderBottom: '1px solid #21262d' },
-        }}
       >
-        <div style={{ padding: '10px 0' }}>
-          <p style={{ color: '#8b949e', fontSize: '13px', marginBottom: '16px' }}>
+        <p style={{ color: '#8b949e', fontSize: '13px', marginBottom: '16px' }}>
             Choose an authorized Slack or Telegram channel to connect to this workflow. You can enable incoming command triggers and configure automatic reporting.
           </p>
 
@@ -2019,21 +2248,120 @@ export const McpHubPage: React.FC = () => {
 
             <Form.Item noStyle shouldUpdate={(prev, curr) => prev.provider !== curr.provider}>
               {({ getFieldValue }) => {
-                const prov = getFieldValue('provider');
-                const channels = prov === 'telegram' ? availableTelegramChats : availableSlackChannels;
+                const prov = getFieldValue('provider') || 'slack';
+                const baseChannels = prov === 'telegram' ? availableTelegramChats : availableSlackChannels;
+                const extraList = prov === 'telegram' ? extraBindingChannels.telegram : extraBindingChannels.slack;
+                const allChannels = Array.from(new Set([...baseChannels, ...extraList])).filter(Boolean);
+                const currentConnector = prov === 'telegram' ? telegramConnector : slackConnector;
 
                 return (
-                  <Form.Item
-                    name="channel_id"
-                    label={<span style={{ color: '#f0f6fc' }}>Target Channel / Chat</span>}
-                    rules={[{ required: true, message: 'Please select a channel' }]}
-                  >
-                    <Select
-                      style={{ width: '100%' }}
-                      placeholder="Select authorized channel"
-                      options={channels.map((ch) => ({ label: ch, value: ch }))}
-                    />
-                  </Form.Item>
+                  <div>
+                    <Form.Item
+                      name="channel_id"
+                      label={<span style={{ color: '#f0f6fc' }}>Target Channel / Chat</span>}
+                      rules={[{ required: true, message: 'Please select a channel' }]}
+                      style={{ marginBottom: '8px' }}
+                    >
+                      <Select
+                        showSearch
+                        filterOption={(input, option) =>
+                          (option?.value ?? '').toString().toLowerCase().includes(input.toLowerCase())
+                        }
+                        style={{ width: '100%' }}
+                        placeholder={`Select configured ${prov === 'telegram' ? 'Telegram' : 'Slack'} channel`}
+                        options={allChannels.map((ch) => ({
+                          label: (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span>{ch}</span>
+                              <Tag color={prov === 'telegram' ? 'blue' : 'gold'} style={{ fontSize: '10px', marginRight: 0 }}>
+                                {prov}
+                              </Tag>
+                            </div>
+                          ),
+                          value: ch,
+                        }))}
+                      />
+                    </Form.Item>
+
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '6px 10px',
+                        background: '#161b22',
+                        borderRadius: '6px',
+                        border: '1px solid #30363d',
+                        marginBottom: '16px',
+                        fontSize: '12px',
+                      }}
+                    >
+                      <span style={{ color: '#8b949e' }}>
+                        {allChannels.length} configured channel{allChannels.length === 1 ? '' : 's'} in {prov} array
+                      </span>
+                      <Space size="small">
+                        <Input
+                          size="small"
+                          placeholder={prov === 'telegram' ? '+ Quick add @chat' : '+ Quick add #channel'}
+                          value={quickAddBindingInput}
+                          onChange={(e) => setQuickAddBindingInput(e.target.value)}
+                          onPressEnter={() => {
+                            if (!quickAddBindingInput.trim()) return;
+                            const newChan = quickAddBindingInput.trim();
+                            setExtraBindingChannels((prev) => ({
+                              ...prev,
+                              [prov]: [...prev[prov as 'slack' | 'telegram'], newChan],
+                            }));
+                            bindingForm.setFieldValue('channel_id', newChan);
+                            setQuickAddBindingInput('');
+                            message.success(`Added ${newChan} and selected`);
+                          }}
+                          style={{ width: 140, background: '#0d1117', borderColor: '#30363d', color: '#f0f6fc', fontSize: '11px' }}
+                        />
+                        <Button
+                          size="small"
+                          onClick={() => {
+                            if (!quickAddBindingInput.trim()) return;
+                            const newChan = quickAddBindingInput.trim();
+                            setExtraBindingChannels((prev) => ({
+                              ...prev,
+                              [prov]: [...prev[prov as 'slack' | 'telegram'], newChan],
+                            }));
+                            bindingForm.setFieldValue('channel_id', newChan);
+                            setQuickAddBindingInput('');
+                            message.success(`Added ${newChan} and selected`);
+                          }}
+                          style={{ fontSize: '11px', height: '24px' }}
+                        >
+                          Add
+                        </Button>
+                        {currentConnector && (
+                          <Button
+                            type="link"
+                            size="small"
+                            onClick={() => {
+                              setBindingModalVisible(false);
+                              const catItem = catalog.find((i) => i.provider === prov) || {
+                                id: prov,
+                                name: prov === 'telegram' ? 'Telegram Bot' : 'Slack',
+                                provider: prov,
+                                category: 'Communication',
+                                description: '',
+                                icon: prov,
+                                config_schema: {},
+                                default_tools: [],
+                                package: '',
+                              };
+                              handleOpenConnect(catItem, currentConnector);
+                            }}
+                            style={{ padding: '0 4px', fontSize: '11px', color: '#38bdf8' }}
+                          >
+                            ⚙️ Configure MCP
+                          </Button>
+                        )}
+                      </Space>
+                    </div>
+                  </div>
                 );
               }}
             </Form.Item>
@@ -2051,16 +2379,16 @@ export const McpHubPage: React.FC = () => {
 
             <Form.Item
               name="notify_mode"
-              label={<span style={{ color: '#f0f6fc' }}>Outgoing Notification Mode (כתיבת תוצאות לערוץ)</span>}
+              label={<span style={{ color: '#f0f6fc' }}>Outgoing Notification Mode</span>}
               rules={[{ required: true }]}
             >
               <Select
                 style={{ width: '100%' }}
                 options={[
-                  { label: '✓ Post on Complete only (הודעה בסיום מוצלח)', value: 'ON_COMPLETE' },
-                  { label: '⚠️ Post on Failure only (התראה רק בכשלון)', value: 'ON_FAILURE' },
-                  { label: '📢 Always (הודעה בהתחלה ובסיום)', value: 'ALWAYS' },
-                  { label: '🔒 Read-only (ללא שליחת הודעות חזרה)', value: 'NONE' },
+                  { label: '✓ Post on Complete only', value: 'ON_COMPLETE' },
+                  { label: '⚠️ Post on Failure only', value: 'ON_FAILURE' },
+                  { label: '📢 Always', value: 'ALWAYS' },
+                  { label: '🔒 Read-only (no responses sent)', value: 'NONE' },
                 ]}
               />
             </Form.Item>
@@ -2076,7 +2404,6 @@ export const McpHubPage: React.FC = () => {
               />
             </Form.Item>
           </Form>
-        </div>
       </Modal>
 
       {/* Custom MCP Modal */}
@@ -2093,13 +2420,8 @@ export const McpHubPage: React.FC = () => {
         confirmLoading={submitting}
         okText="Register Server"
         width={560}
-        styles={{
-          body: { background: '#161b22', color: '#f0f6fc' },
-          header: { background: '#161b22', borderBottom: '1px solid #21262d' },
-        }}
       >
-        <div style={{ padding: '10px 0' }}>
-          <p style={{ color: '#8b949e', fontSize: '13px', marginBottom: '16px' }}>
+        <p style={{ color: '#8b949e', fontSize: '13px', marginBottom: '16px' }}>
             Register any local or external MCP stdio server command (e.g. <code>npx -y @modelcontextprotocol/server-...</code> or <code>python mcp_server.py</code>).
           </p>
 
@@ -2138,7 +2460,6 @@ export const McpHubPage: React.FC = () => {
               />
             </Form.Item>
           </Form>
-        </div>
       </Modal>
 
       {/* Tools Drawer */}
@@ -2211,13 +2532,8 @@ export const McpHubPage: React.FC = () => {
         onCancel={() => setPermModalVisible(false)}
         footer={null}
         width={500}
-        styles={{
-          body: { background: '#161b22', color: '#f0f6fc' },
-          header: { background: '#161b22', borderBottom: '1px solid #21262d' },
-        }}
       >
-        <div style={{ padding: '10px 0' }}>
-          <p style={{ color: '#8b949e', fontSize: '13px', marginBottom: '16px' }}>
+        <p style={{ color: '#8b949e', fontSize: '13px', marginBottom: '16px' }}>
             Control which agents are authorized to invoke tools from this MCP connector.
           </p>
 
@@ -2267,7 +2583,6 @@ export const McpHubPage: React.FC = () => {
               );
             }}
           />
-        </div>
       </Modal>
 
       {/* Workflow Canvas Graph Modal */}
@@ -2286,10 +2601,6 @@ export const McpHubPage: React.FC = () => {
           </Button>,
         ]}
         width={1000}
-        styles={{
-          body: { background: '#0d1117', color: '#f0f6fc' },
-          header: { background: '#0d1117', borderBottom: '1px solid #21262d' },
-        }}
       >
         {canvasWorkflow && (() => {
           let parsedSteps: any[] = [];
@@ -2321,7 +2632,12 @@ export const McpHubPage: React.FC = () => {
         onClose={() => setCreateWfModalVisible(false)}
         onSuccess={() => loadData()}
         defaultChannelProvider={telegramConnector ? 'telegram' : 'slack'}
-        defaultChannelId={telegramConnector?.configuration?.chat_id || 'Hermes_test'}
+        defaultChannelId={
+          telegramConnector?.configuration?.allowed_channels?.[0] ||
+          telegramConnector?.configuration?.chat_id ||
+          'Hermes_test'
+        }
+        departmentId={activeDepartmentId || departments[0]?.id}
       />
     </div>
   );

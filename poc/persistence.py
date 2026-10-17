@@ -64,6 +64,7 @@ class MCPConnector:
     configuration: Optional[Dict[str, Any]] = None
     capabilities: Optional[List[str]] = None
     error_message: Optional[str] = None
+    organization_id: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
@@ -132,6 +133,9 @@ class Organization:
     settings_json: str = "{}"
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+    plugins_source_mode: str = "local"
+    plugins_git_repo: Optional[str] = None
+    plugins_local_path: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -233,6 +237,7 @@ class Workflow:
     webhook_token: Optional[str] = None
     cron_expression: Optional[str] = None
     is_active: bool = True
+    organization_id: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
@@ -312,6 +317,7 @@ class DatabaseManager:
         else:
             self.db_path = Path(db_path)
         self.max_agents: int = int(os.getenv("PLATFORM_MAX_AGENTS", "18"))
+        self._initializing_db: bool = False
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_database()
 
@@ -319,14 +325,13 @@ class DatabaseManager:
     def _get_connection(self) -> Iterator[sqlite3.Connection]:
         """
         Yield a database connection, then always close it.
-
-        Mirrors sqlite3's own ``with conn:`` semantics (commit on success,
-        rollback on exception) and additionally closes the connection on the
-        way out. Closing is required: sqlite3's connection context manager
-        ends the transaction but never releases the underlying handle, so
-        every call used to leak a file descriptor and a WAL read lock (which
-        also prevents the -wal file from ever being checkpointed).
+        Automatically recreates parent directory and schema if the DB file was removed at runtime.
         """
+        db_missing = not self.db_path.exists()
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        if db_missing and not getattr(self, "_initializing_db", False):
+            self._init_database()
+
         conn = sqlite3.connect(self.db_path)
         try:
             # Enable foreign keys
@@ -347,8 +352,50 @@ class DatabaseManager:
         finally:
             conn.close()
 
+    def claim_orphaned_records(self, org_id: str, default_dept_id: Optional[str] = None) -> None:
+        """Assign any legacy/orphaned records (organization_id IS NULL) to the specified organization."""
+        if not org_id:
+            return
+        with self._get_connection() as conn:
+            if not default_dept_id:
+                dept_row = conn.execute(
+                    "SELECT id FROM departments WHERE organization_id = ? ORDER BY created_at ASC LIMIT 1",
+                    (org_id,)
+                ).fetchone()
+                if dept_row:
+                    default_dept_id = dept_row["id"]
+            for tbl in ("projects", "task_runs", "mcp_connectors"):
+                try:
+                    conn.execute(f"UPDATE {tbl} SET organization_id = ? WHERE organization_id IS NULL", (org_id,))
+                except Exception:
+                    pass
+            if default_dept_id:
+                for tbl in ("agents", "workflows"):
+                    try:
+                        conn.execute(
+                            f"UPDATE {tbl} SET organization_id = ?, department_id = COALESCE(department_id, ?) WHERE organization_id IS NULL OR department_id IS NULL",
+                            (org_id, default_dept_id)
+                        )
+                    except Exception:
+                        pass
+            else:
+                for tbl in ("agents", "workflows"):
+                    try:
+                        conn.execute(f"UPDATE {tbl} SET organization_id = ? WHERE organization_id IS NULL", (org_id,))
+                    except Exception:
+                        pass
+            conn.commit()
+
     def _init_database(self):
         """Initialize database tables."""
+        self._initializing_db = True
+        try:
+            self._init_database_tables()
+        finally:
+            self._initializing_db = False
+
+    def _init_database_tables(self):
+        """Create and migrate all database tables."""
         with self._get_connection() as conn:
             # Agents table
             conn.execute("""
@@ -390,7 +437,9 @@ class DatabaseManager:
                 ("mcp_permissions", "TEXT"),
                 ("runtime_provider", "TEXT"),
                 ("is_workflow_agent", "INTEGER DEFAULT 0"),
-                ("workflow_id", "TEXT")
+                ("workflow_id", "TEXT"),
+                ("organization_id", "TEXT"),
+                ("department_id", "TEXT")
             ]:
                 try:
                     conn.execute(f"ALTER TABLE agents ADD COLUMN {col} {col_type}")
@@ -398,6 +447,8 @@ class DatabaseManager:
                     pass
 
             conn.execute("CREATE INDEX IF NOT EXISTS idx_agents_parent ON agents(parent_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_agents_org ON agents(organization_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_agents_department_id ON agents(department_id)")
 
             # Projects table
             conn.execute("""
@@ -413,6 +464,11 @@ class DatabaseManager:
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
+            try:
+                conn.execute("ALTER TABLE projects ADD COLUMN organization_id TEXT")
+            except Exception:
+                pass
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_org ON projects(organization_id)")
 
             # Skills table
             conn.execute("""
@@ -467,7 +523,8 @@ class DatabaseManager:
                 ("cache_write_tokens", "INTEGER DEFAULT 0"),
                 ("cost_usd", "REAL DEFAULT 0.0"),
                 ("cost_source", "TEXT DEFAULT 'UNKNOWN'"),
-                ("model", "TEXT")
+                ("model", "TEXT"),
+                ("organization_id", "TEXT")
             ]:
                 try:
                     conn.execute(f"ALTER TABLE task_runs ADD COLUMN {col} {col_type}")
@@ -482,6 +539,7 @@ class DatabaseManager:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_task_runs_parent ON task_runs(parent_task_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_task_runs_root ON task_runs(root_task_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_task_runs_assigned ON task_runs(assigned_by)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_task_runs_org ON task_runs(organization_id)")
 
             # Event log table
             conn.execute("""
@@ -784,6 +842,11 @@ class DatabaseManager:
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
+            try:
+                conn.execute("ALTER TABLE mcp_connectors ADD COLUMN organization_id TEXT")
+            except Exception:
+                pass
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_mcp_connectors_org ON mcp_connectors(organization_id)")
 
             # MCP Tools table
             conn.execute("""
@@ -888,6 +951,18 @@ class DatabaseManager:
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
+            try:
+                conn.execute("ALTER TABLE organizations ADD COLUMN plugins_source_mode TEXT DEFAULT 'local'")
+            except Exception:
+                pass
+            try:
+                conn.execute("ALTER TABLE organizations ADD COLUMN plugins_git_repo TEXT")
+            except Exception:
+                pass
+            try:
+                conn.execute("ALTER TABLE organizations ADD COLUMN plugins_local_path TEXT")
+            except Exception:
+                pass
 
             # 1. Departments table
             conn.execute("""
@@ -1002,6 +1077,11 @@ class DatabaseManager:
             """)
             conn.execute("CREATE INDEX IF NOT EXISTS idx_workflows_dept ON workflows(department_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_workflows_token ON workflows(webhook_token)")
+            try:
+                conn.execute("ALTER TABLE workflows ADD COLUMN organization_id TEXT")
+            except Exception:
+                pass
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_workflows_org ON workflows(organization_id)")
 
             # 3. Workflow executions table
             conn.execute("""
@@ -1277,7 +1357,9 @@ class DatabaseManager:
             mcp_permissions=json.loads(row['mcp_permissions']) if 'mcp_permissions' in keys and row['mcp_permissions'] else [],
             runtime_provider=row['runtime_provider'] if 'runtime_provider' in keys and row['runtime_provider'] else None,
             is_workflow_agent=bool(row['is_workflow_agent']) if 'is_workflow_agent' in keys and row['is_workflow_agent'] is not None else False,
-            workflow_id=row['workflow_id'] if 'workflow_id' in keys else None
+            workflow_id=row['workflow_id'] if 'workflow_id' in keys else None,
+            organization_id=row['organization_id'] if 'organization_id' in keys else None,
+            department_id=row['department_id'] if 'department_id' in keys else None
         )
 
     def _row_to_template(self, row: sqlite3.Row) -> AgentTemplate:
@@ -1318,8 +1400,8 @@ class DatabaseManager:
                  parent_id, role_type, max_concurrent_children, delegation_strategy,
                  allowed_child_ids, allowed_tools, template_id, dangerously_skip_permissions,
                  allow_sibling_communication, allowed_peer_ids, mcp_permissions, runtime_provider,
-                 is_workflow_agent, workflow_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 is_workflow_agent, workflow_id, organization_id, department_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     name=excluded.name,
                     description=excluded.description,
@@ -1347,7 +1429,9 @@ class DatabaseManager:
                     mcp_permissions=excluded.mcp_permissions,
                     runtime_provider=excluded.runtime_provider,
                     is_workflow_agent=excluded.is_workflow_agent,
-                    workflow_id=excluded.workflow_id
+                    workflow_id=excluded.workflow_id,
+                    organization_id=COALESCE(excluded.organization_id, agents.organization_id),
+                    department_id=COALESCE(excluded.department_id, agents.department_id)
             """, (
                 agent.id,
                 agent.name,
@@ -1377,7 +1461,9 @@ class DatabaseManager:
                 json.dumps(getattr(agent, "mcp_permissions", []) or []),
                 getattr(agent, "runtime_provider", None),
                 1 if getattr(agent, "is_workflow_agent", False) else 0,
-                getattr(agent, "workflow_id", None)
+                getattr(agent, "workflow_id", None),
+                getattr(agent, "organization_id", None),
+                getattr(agent, "department_id", None)
             ))
             conn.commit()
 
@@ -1398,10 +1484,26 @@ class DatabaseManager:
                 return self._row_to_agent(row)
         return None
 
-    def list_agents(self) -> List[AgentConfig]:
-        """List all agents."""
+    def list_agents(
+        self,
+        organization_id: Optional[str] = None,
+        department_ids: Optional[List[str]] = None
+    ) -> List[AgentConfig]:
+        """List all agents, strictly scoped by organization and optionally filtered by department_ids."""
         with self._get_connection() as conn:
-            cursor = conn.execute("SELECT * FROM agents ORDER BY name")
+            query = "SELECT * FROM agents WHERE 1=1"
+            params = []
+            if organization_id:
+                query += " AND organization_id = ?"
+                params.append(organization_id)
+            if department_ids is not None:
+                if not department_ids:
+                    return []
+                placeholders = ",".join("?" for _ in department_ids)
+                query += f" AND department_id IN ({placeholders})"
+                params.extend(department_ids)
+            query += " ORDER BY name"
+            cursor = conn.execute(query, params)
             return [self._row_to_agent(row) for row in cursor.fetchall()]
 
     def get_child_agents(self, parent_id: str) -> List[AgentConfig]:
@@ -1410,13 +1512,18 @@ class DatabaseManager:
             cursor = conn.execute("SELECT * FROM agents WHERE parent_id = ? ORDER BY name", (parent_id,))
             return [self._row_to_agent(row) for row in cursor.fetchall()]
 
-    def get_agent_hierarchy(self, root_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    def get_agent_hierarchy(
+        self,
+        root_id: Optional[str] = None,
+        organization_id: Optional[str] = None,
+        department_ids: Optional[List[str]] = None
+    ) -> List[Dict[str, Any]]:
         """
         Build an organizational hierarchy tree.
         If root_id is provided, returns the subtree rooted at that agent.
         Otherwise, returns all tree hierarchies from root agents (parent_id is NULL).
         """
-        all_agents = self.list_agents()
+        all_agents = self.list_agents(organization_id=organization_id, department_ids=department_ids)
         agents_by_parent: Dict[Optional[str], List[AgentConfig]] = {}
         for a in all_agents:
             pid = a.parent_id
@@ -1549,9 +1656,18 @@ class DatabaseManager:
         """Save or update a project."""
         with self._get_connection() as conn:
             conn.execute("""
-                INSERT OR REPLACE INTO projects
-                (id, name, description, working_directory, instructions, skills, allowed_tools, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO projects
+                (id, name, description, working_directory, instructions, skills, allowed_tools, updated_at, organization_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    name=excluded.name,
+                    description=excluded.description,
+                    working_directory=excluded.working_directory,
+                    instructions=excluded.instructions,
+                    skills=excluded.skills,
+                    allowed_tools=excluded.allowed_tools,
+                    updated_at=excluded.updated_at,
+                    organization_id=COALESCE(excluded.organization_id, projects.organization_id)
             """, (
                 project.id,
                 project.name,
@@ -1560,7 +1676,8 @@ class DatabaseManager:
                 project.instructions,
                 json.dumps(project.skills),
                 json.dumps(project.allowed_tools),
-                datetime.now()
+                datetime.now(),
+                getattr(project, "organization_id", None)
             ))
             conn.commit()
 
@@ -1579,14 +1696,21 @@ class DatabaseManager:
                     working_directory=row['working_directory'],
                     instructions=row['instructions'],
                     skills=json.loads(row['skills']) if row['skills'] else [],
-                    allowed_tools=json.loads(row['allowed_tools']) if row['allowed_tools'] else []
+                    allowed_tools=json.loads(row['allowed_tools']) if row['allowed_tools'] else [],
+                    organization_id=row['organization_id'] if 'organization_id' in row.keys() else None
                 )
         return None
 
-    def list_projects(self) -> List[ProjectConfig]:
-        """List all projects."""
+    def list_projects(self, organization_id: Optional[str] = None) -> List[ProjectConfig]:
+        """List all projects, optionally scoped by organization."""
         with self._get_connection() as conn:
-            cursor = conn.execute("SELECT * FROM projects ORDER BY name")
+            if organization_id:
+                cursor = conn.execute(
+                    "SELECT * FROM projects WHERE organization_id = ? ORDER BY name",
+                    (organization_id,)
+                )
+            else:
+                cursor = conn.execute("SELECT * FROM projects ORDER BY name")
             return [
                 ProjectConfig(
                     id=row['id'],
@@ -1595,7 +1719,8 @@ class DatabaseManager:
                     working_directory=row['working_directory'],
                     instructions=row['instructions'],
                     skills=json.loads(row['skills']) if row['skills'] else [],
-                    allowed_tools=json.loads(row['allowed_tools']) if row['allowed_tools'] else []
+                    allowed_tools=json.loads(row['allowed_tools']) if row['allowed_tools'] else [],
+                    organization_id=row['organization_id'] if 'organization_id' in row.keys() else None
                 )
                 for row in cursor.fetchall()
             ]
@@ -1717,7 +1842,8 @@ class DatabaseManager:
             cache_write_tokens=int(row['cache_write_tokens']) if 'cache_write_tokens' in keys and row['cache_write_tokens'] is not None else 0,
             cost_usd=float(row['cost_usd']) if 'cost_usd' in keys and row['cost_usd'] is not None else 0.0,
             cost_source=row['cost_source'] if 'cost_source' in keys and row['cost_source'] else 'UNKNOWN',
-            model=row['model'] if 'model' in keys else None
+            model=row['model'] if 'model' in keys else None,
+            organization_id=row['organization_id'] if 'organization_id' in keys else None
         )
 
     def save_task_run(self, run: AgentRun):
@@ -1730,8 +1856,8 @@ class DatabaseManager:
                 (run_id, agent_id, project_id, prompt, status, created_at, started_at, ended_at,
                  result, error, exit_code, events, parent_task_id, root_task_id, assigned_by, session_id,
                  dependencies, structured_result, acceptance_criteria, retry_count,
-                 input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd, cost_source, model)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd, cost_source, model, organization_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(run_id) DO UPDATE SET
                     agent_id = excluded.agent_id,
                     project_id = excluded.project_id,
@@ -1758,7 +1884,8 @@ class DatabaseManager:
                     cache_write_tokens = COALESCE(excluded.cache_write_tokens, task_runs.cache_write_tokens),
                     cost_usd = COALESCE(excluded.cost_usd, task_runs.cost_usd),
                     cost_source = COALESCE(excluded.cost_source, task_runs.cost_source),
-                    model = COALESCE(excluded.model, task_runs.model)
+                    model = COALESCE(excluded.model, task_runs.model),
+                    organization_id = COALESCE(excluded.organization_id, task_runs.organization_id)
             """, (
                 run.run_id,
                 run.agent_id,
@@ -1786,7 +1913,8 @@ class DatabaseManager:
                 getattr(run, "cache_write_tokens", 0) or 0,
                 float(getattr(run, "cost_usd", 0.0) or 0.0),
                 getattr(run, "cost_source", "UNKNOWN"),
-                getattr(run, "model", None)
+                getattr(run, "model", None),
+                getattr(run, "organization_id", None)
             ))
             conn.commit()
 
@@ -1887,13 +2015,17 @@ class DatabaseManager:
         agent_id: Optional[str] = None,
         project_id: Optional[str] = None,
         status: Optional[TaskStatus] = None,
-        limit: int = 100
+        limit: int = 100,
+        organization_id: Optional[str] = None
     ) -> List[AgentRun]:
-        """List task runs with optional filtering."""
+        """List task runs with optional filtering, scoped by organization if provided."""
         with self._get_connection() as conn:
             query = "SELECT * FROM task_runs WHERE 1=1"
             params = []
 
+            if organization_id:
+                query += " AND organization_id = ?"
+                params.append(organization_id)
             if agent_id:
                 query += " AND agent_id = ?"
                 params.append(agent_id)
@@ -3268,8 +3400,8 @@ class DatabaseManager:
         with self._get_connection() as conn:
             conn.execute("""
                 INSERT INTO mcp_connectors (
-                    id, name, provider, status, configuration, capabilities, error_message, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    id, name, provider, status, configuration, capabilities, error_message, created_at, updated_at, organization_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     name=excluded.name,
                     provider=excluded.provider,
@@ -3277,7 +3409,8 @@ class DatabaseManager:
                     configuration=excluded.configuration,
                     capabilities=excluded.capabilities,
                     error_message=excluded.error_message,
-                    updated_at=excluded.updated_at
+                    updated_at=excluded.updated_at,
+                    organization_id=COALESCE(excluded.organization_id, mcp_connectors.organization_id)
             """, (
                 c.id,
                 c.name,
@@ -3287,7 +3420,8 @@ class DatabaseManager:
                 caps_str,
                 c.error_message,
                 c.created_at or now,
-                now
+                now,
+                getattr(c, "organization_id", None)
             ))
             conn.commit()
 
@@ -3312,10 +3446,13 @@ class DatabaseManager:
                     pass
             return MCPConnector(**d)
 
-    def list_mcp_connectors(self) -> List[MCPConnector]:
-        """List all registered MCP connectors."""
+    def list_mcp_connectors(self, organization_id: Optional[str] = None) -> List[MCPConnector]:
+        """List all registered MCP connectors, optionally scoped by organization."""
         with self._get_connection() as conn:
-            rows = conn.execute("SELECT * FROM mcp_connectors ORDER BY name ASC").fetchall()
+            if organization_id:
+                rows = conn.execute("SELECT * FROM mcp_connectors WHERE organization_id = ? ORDER BY name ASC", (organization_id,)).fetchall()
+            else:
+                rows = conn.execute("SELECT * FROM mcp_connectors ORDER BY name ASC").fetchall()
             results = []
             for r in rows:
                 d = dict(r)
@@ -3705,8 +3842,8 @@ class DatabaseManager:
 
     def create_department(
         self,
-        id: str,
-        name: str,
+        id: Optional[str] = None,
+        name: str = "",
         description: Optional[str] = None,
         monthly_budget_usd: float = 100.0,
         budget_action: str = "HARD_STOP",
@@ -3714,6 +3851,8 @@ class DatabaseManager:
         organization_id: Optional[str] = None
     ) -> Department:
         """Create a new department."""
+        if not id:
+            id = f"dept_{uuid.uuid4().hex[:10]}"
         now = datetime.now().isoformat()
         with self._get_connection() as conn:
             conn.execute("""
@@ -3743,10 +3882,16 @@ class DatabaseManager:
                 updated_at=d.get('updated_at')
             )
 
-    def list_departments(self) -> List[Department]:
-        """List all departments."""
+    def list_departments(self, organization_id: Optional[str] = None) -> List[Department]:
+        """List all departments, optionally filtered by organization_id."""
         with self._get_connection() as conn:
-            rows = conn.execute("SELECT id FROM departments ORDER BY name ASC").fetchall()
+            if organization_id:
+                rows = conn.execute(
+                    "SELECT id FROM departments WHERE organization_id = ? ORDER BY name ASC",
+                    (organization_id,)
+                ).fetchall()
+            else:
+                rows = conn.execute("SELECT id FROM departments ORDER BY name ASC").fetchall()
             return [self.get_department(r['id']) for r in rows if r['id']]
 
     def update_department(self, id: str, **kwargs) -> Optional[Department]:
@@ -3823,21 +3968,65 @@ class DatabaseManager:
     # Organizations & Department Governance
     # =========================================================================
 
+    def _row_to_organization(self, row) -> Organization:
+        settings_str = row['settings_json'] or "{}"
+        source_mode = "local"
+        git_repo = None
+        local_path = None
+        keys = row.keys() if hasattr(row, 'keys') else []
+        try:
+            if 'plugins_source_mode' in keys and row['plugins_source_mode']:
+                source_mode = row['plugins_source_mode']
+            if 'plugins_git_repo' in keys:
+                git_repo = row['plugins_git_repo']
+            if 'plugins_local_path' in keys:
+                local_path = row['plugins_local_path']
+        except Exception:
+            pass
+
+        # Backwards compatibility sync with settings_json only if column is None
+        try:
+            settings_dict = json.loads(settings_str)
+            if git_repo is None and "plugins_git_repo" in settings_dict:
+                git_repo = settings_dict.get("plugins_git_repo")
+            if local_path is None and "plugins_local_path" in settings_dict:
+                local_path = settings_dict.get("plugins_local_path")
+            if source_mode == "local" and settings_dict.get("plugins_source_mode"):
+                source_mode = settings_dict.get("plugins_source_mode")
+        except Exception:
+            pass
+
+        return Organization(
+            id=row['id'],
+            name=row['name'],
+            slug=row['slug'],
+            domain=row['domain'],
+            settings_json=settings_str,
+            created_at=row['created_at'],
+            updated_at=row['updated_at'],
+            plugins_source_mode=source_mode or "local",
+            plugins_git_repo=git_repo or "",
+            plugins_local_path=local_path or ""
+        )
+
     def create_organization(
         self,
         id: str,
         name: str,
         slug: str,
         domain: Optional[str] = None,
-        settings_json: str = "{}"
+        settings_json: str = "{}",
+        plugins_source_mode: str = "local",
+        plugins_git_repo: Optional[str] = None,
+        plugins_local_path: Optional[str] = None
     ) -> Organization:
         """Create an organization tenant."""
         now = datetime.now().isoformat()
         with self._get_connection() as conn:
             conn.execute("""
-                INSERT INTO organizations (id, name, slug, domain, settings_json, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (id, name, slug, domain, settings_json, now, now))
+                INSERT INTO organizations (id, name, slug, domain, settings_json, plugins_source_mode, plugins_git_repo, plugins_local_path, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (id, name, slug, domain, settings_json, plugins_source_mode, plugins_git_repo, plugins_local_path, now, now))
             conn.commit()
         return self.get_organization(id)
 
@@ -3847,15 +4036,7 @@ class DatabaseManager:
             row = conn.execute("SELECT * FROM organizations WHERE id = ?", (id,)).fetchone()
             if not row:
                 return None
-            return Organization(
-                id=row['id'],
-                name=row['name'],
-                slug=row['slug'],
-                domain=row['domain'],
-                settings_json=row['settings_json'] or "{}",
-                created_at=row['created_at'],
-                updated_at=row['updated_at']
-            )
+            return self._row_to_organization(row)
 
     def get_organization_by_slug(self, slug: str) -> Optional[Organization]:
         """Get an organization by slug."""
@@ -3863,42 +4044,44 @@ class DatabaseManager:
             row = conn.execute("SELECT * FROM organizations WHERE slug = ?", (slug,)).fetchone()
             if not row:
                 return None
-            return Organization(
-                id=row['id'],
-                name=row['name'],
-                slug=row['slug'],
-                domain=row['domain'],
-                settings_json=row['settings_json'] or "{}",
-                created_at=row['created_at'],
-                updated_at=row['updated_at']
-            )
+            return self._row_to_organization(row)
 
     def list_organizations(self) -> List[Organization]:
         """List all organizations."""
         with self._get_connection() as conn:
             rows = conn.execute("SELECT * FROM organizations ORDER BY name ASC").fetchall()
-            return [
-                Organization(
-                    id=r['id'],
-                    name=r['name'],
-                    slug=r['slug'],
-                    domain=r['domain'],
-                    settings_json=r['settings_json'] or "{}",
-                    created_at=r['created_at'],
-                    updated_at=r['updated_at']
-                )
-                for r in rows
-            ]
+            return [self._row_to_organization(r) for r in rows]
 
     def update_organization(self, id: str, **kwargs) -> Optional[Organization]:
         """Update organization attributes."""
         fields = []
         params = []
         now = datetime.now().isoformat()
-        for k in ("name", "slug", "domain", "settings_json"):
+
+        # Sync settings_json if plugins attributes are updated
+        current = self.get_organization(id)
+        if current:
+            try:
+                s_dict = json.loads(current.settings_json or "{}")
+            except Exception:
+                s_dict = {}
+            if "plugins_source_mode" in kwargs and kwargs["plugins_source_mode"] is not None:
+                s_dict["plugins_source_mode"] = kwargs["plugins_source_mode"]
+            if "plugins_git_repo" in kwargs:
+                s_dict["plugins_git_repo"] = kwargs["plugins_git_repo"] or ""
+            if "plugins_local_path" in kwargs:
+                s_dict["plugins_local_path"] = kwargs["plugins_local_path"] or ""
+            if "settings_json" not in kwargs:
+                kwargs["settings_json"] = json.dumps(s_dict)
+
+        for k in ("name", "slug", "domain", "settings_json", "plugins_source_mode"):
             if k in kwargs and kwargs[k] is not None:
                 fields.append(f"{k} = ?")
                 params.append(kwargs[k])
+        for k in ("plugins_git_repo", "plugins_local_path"):
+            if k in kwargs:
+                fields.append(f"{k} = ?")
+                params.append(kwargs[k] or "")
         if fields:
             fields.append("updated_at = ?")
             params.append(now)
@@ -4429,16 +4612,17 @@ class DatabaseManager:
         department_id: Optional[str] = None,
         description: Optional[str] = None,
         cron_expression: Optional[str] = None,
-        webhook_enabled: bool = True
+        webhook_enabled: bool = True,
+        organization_id: Optional[str] = None
     ) -> Workflow:
         """Create a workflow definition."""
         now = datetime.now().isoformat()
         webhook_token = f"whk_{uuid.uuid4().hex}" if webhook_enabled else None
         with self._get_connection() as conn:
             conn.execute("""
-                INSERT INTO workflows (id, name, description, department_id, definition_json, webhook_enabled, webhook_token, cron_expression, is_active, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
-            """, (id, name, description, department_id, definition_json, 1 if webhook_enabled else 0, webhook_token, cron_expression, now, now))
+                INSERT INTO workflows (id, name, description, department_id, definition_json, webhook_enabled, webhook_token, cron_expression, is_active, created_at, updated_at, organization_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+            """, (id, name, description, department_id, definition_json, 1 if webhook_enabled else 0, webhook_token, cron_expression, now, now, organization_id))
             conn.commit()
         return self.get_workflow(id)
 
@@ -4459,6 +4643,7 @@ class DatabaseManager:
                 webhook_token=d.get('webhook_token'),
                 cron_expression=d.get('cron_expression'),
                 is_active=bool(d.get('is_active', 1)),
+                organization_id=d.get('organization_id'),
                 created_at=d.get('created_at'),
                 updated_at=d.get('updated_at')
             )
@@ -4468,7 +4653,7 @@ class DatabaseManager:
         fields = []
         params = []
         now = datetime.now().isoformat()
-        allowed_keys = ("name", "description", "department_id", "definition_json", "webhook_enabled", "cron_expression", "is_active")
+        allowed_keys = ("name", "description", "department_id", "definition_json", "webhook_enabled", "cron_expression", "is_active", "organization_id")
         for k in allowed_keys:
             if k in kwargs and kwargs[k] is not None:
                 fields.append(f"{k} = ?")
@@ -4502,17 +4687,33 @@ class DatabaseManager:
                 webhook_token=d.get('webhook_token'),
                 cron_expression=d.get('cron_expression'),
                 is_active=bool(d.get('is_active', 1)),
+                organization_id=d.get('organization_id'),
                 created_at=d.get('created_at'),
                 updated_at=d.get('updated_at')
             )
 
-    def list_workflows(self, department_id: Optional[str] = None, active_only: bool = False) -> List[Workflow]:
+    def list_workflows(
+        self,
+        department_id: Optional[str] = None,
+        active_only: bool = False,
+        organization_id: Optional[str] = None,
+        department_ids: Optional[List[str]] = None
+    ) -> List[Workflow]:
         """List workflows with filtering."""
         query = "SELECT id FROM workflows WHERE 1=1"
         params = []
+        if organization_id:
+            query += " AND organization_id = ?"
+            params.append(organization_id)
         if department_id:
             query += " AND department_id = ?"
             params.append(department_id)
+        if department_ids is not None:
+            if not department_ids:
+                return []
+            placeholders = ",".join("?" for _ in department_ids)
+            query += f" AND department_id IN ({placeholders})"
+            params.extend(department_ids)
         if active_only:
             query += " AND is_active = 1"
         query += " ORDER BY name ASC"

@@ -1,10 +1,26 @@
 import axios from 'axios';
 import { Agent, AgentCreateDto, AgentUpdateDto, AgentTemplate, TemplateInstantiateDto } from '../types/agent';
 import { Task, TaskCreateDto, TaskDelegateDto, TaskTreeNode } from '../types/task';
-import { Skill, PluginPackage } from '../types/skill';
+import { Skill, PluginPackage, PluginsConfig } from '../types/skill';
 import { Project } from '../types/project';
 import { ActivityEvent } from '../types/flow';
 import { RuntimeSetupState, RuntimeSelectionDto } from '../types/runtime';
+import {
+  AuthResponse,
+  CurrentUserProfileResponse,
+  Department,
+  DepartmentMember,
+  BulkInviteResponse,
+  OrganizationUser,
+  LoginDto,
+  RegisterOrgDto,
+  AcceptInviteDto,
+  CreateDepartmentDto,
+  BulkInviteDto
+} from '../types/auth';
+
+export const AUTH_TOKEN_KEY = 'agents_platform_auth_token';
+export const AUTH_SESSION_KEY = 'agents_platform_auth_session';
 
 const API_BASE_URL = 'http://localhost:8000';
 
@@ -12,6 +28,41 @@ export const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 10000,
 });
+
+// Axios Request Interceptor: Attach Bearer token from localStorage
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
+    if (token) {
+      if (config.headers) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+// Axios Response Interceptor: Catch 401 and broadcast auth:unauthorized
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      const url = error.config?.url || '';
+      const isAuthExempt =
+        url.includes('/auth/login') ||
+        url.includes('/auth/org-register') ||
+        url.includes('/invitations/accept');
+
+      if (!isAuthExempt) {
+        localStorage.removeItem(AUTH_TOKEN_KEY);
+        localStorage.removeItem(AUTH_SESSION_KEY);
+        window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+      }
+    }
+    return Promise.reject(error);
+  }
+);
 
 // Runtime providers (first-run setup)
 export const getRuntimeSetupState = () => api.get<RuntimeSetupState>('/api/v1/runtimes/');
@@ -52,7 +103,15 @@ export const getSkill = (id: string) => api.get<Skill>(`/api/v1/skills/${id}`);
 export const createSkill = (data: Partial<Skill>) => api.post<Skill>('/api/v1/skills/', data);
 export const updateSkill = (id: string, data: Partial<Skill>) => api.put<Skill>(`/api/v1/skills/${id}`, data);
 export const deleteSkill = (id: string) => api.delete(`/api/v1/skills/${id}`);
-export const scanPlugins = () => api.get<{ status: string; marketplace_path?: string; plugins: PluginPackage[]; total_skills: number }>('/api/v1/skills/plugins/scan');
+export const scanPlugins = (params?: { source_mode?: 'local' | 'git'; git_repo?: string; local_path?: string }) =>
+  api.get<{ status: string; marketplace_path?: string; plugins: PluginPackage[]; total_skills: number }>('/api/v1/skills/plugins/scan', { params });
+export const getPluginsConfig = () => api.get<PluginsConfig>('/api/v1/skills/plugins/config');
+export const updatePluginsConfig = (data: { source_mode: 'local' | 'git'; git_repo?: string; local_path?: string }) =>
+  api.put<PluginsConfig>('/api/v1/skills/plugins/config', data);
+export const getPluginGitRepos = (token?: string) =>
+  api.get<{ repositories: any[]; has_token: boolean; provider?: string }>('/api/v1/skills/plugins/git-repos', {
+    params: token ? { token } : {},
+  });
 export const getPluginSkillContent = (path: string) => api.get<{ path: string; content: string }>('/api/v1/skills/plugins/content', { params: { path } });
 
 // Tasks
@@ -274,7 +333,7 @@ export const revokeMCPPermission = (data: { agent_id: string; connector_id: stri
   api.post('/api/v1/mcp/permissions/revoke', data);
 
 export const discoverMCPResources = (provider: string, token?: string, configuration?: any) =>
-  api.post<{ provider: string; repositories?: any[]; channels?: any[]; chats?: any[] }>('/api/v1/mcp/discover-resources', {
+  api.post<{ provider: string; repositories?: any[]; channels?: any[]; chats?: any[]; requires_token?: boolean; message?: string }>('/api/v1/mcp/discover-resources', {
     provider,
     token,
     configuration,
@@ -308,6 +367,7 @@ export const executeWorkflow = (workflowId: string, payload?: Record<string, any
 export const createWorkflow = (data: {
   name: string;
   description?: string;
+  department_id?: string;
   definition_yaml?: string;
   definition_json?: string;
   cron_expression?: string;
@@ -335,6 +395,37 @@ export const generateWorkflowDefinition = (params: {
 
 export const convertWorkflowFormat = (data: { yaml_content?: string; json_content?: string }) =>
   api.post<{ yaml_content: string; json_content: string }>('/api/v1/workflows/convert-format', data);
+
+// Enterprise Organization & Authentication
+export const loginOrganizationUser = (data: LoginDto) =>
+  api.post<AuthResponse>('/api/v1/auth/login', data);
+
+export const registerOrganization = (data: RegisterOrgDto) =>
+  api.post<AuthResponse>('/api/v1/auth/org-register', data);
+
+export const acceptOrgInvitation = (data: AcceptInviteDto) =>
+  api.post<AuthResponse>('/api/v1/invitations/accept', data);
+
+export const getCurrentUserProfile = () =>
+  api.get<CurrentUserProfileResponse>('/api/v1/auth/me');
+
+export const getDepartments = (organization_id?: string) =>
+  api.get<Department[]>('/api/v1/departments', { params: organization_id ? { organization_id } : {} });
+
+export const createDepartment = (data: CreateDepartmentDto) =>
+  api.post<Department>('/api/v1/departments', data);
+
+export const getDepartmentMembers = (deptId: string) =>
+  api.get<DepartmentMember[]>(`/api/v1/departments/${deptId}/members`);
+
+export const bulkInviteDepartmentMembers = (deptId: string, data: BulkInviteDto) =>
+  api.post<BulkInviteResponse>(`/api/v1/departments/${deptId}/members/bulk-invite`, data);
+
+export const removeDepartmentMember = (deptId: string, userId: string) =>
+  api.delete<{ status: string; message: string }>(`/api/v1/departments/${deptId}/members/${userId}`);
+
+export const getOrganizationUsers = (orgId: string) =>
+  api.get<OrganizationUser[]>(`/api/v1/organizations/${orgId}/users`);
 
 export default api;
 
