@@ -25,7 +25,8 @@ import {
 import { Agent } from '../../types/agent';
 import { Task } from '../../types/task';
 import { createTask, updateAgent, scanPlugins, getSkills } from '../../services/api';
-import { AI_MODELS } from '../../constants/models';
+import { ModelSelector } from '../robotic';
+import { useAuth } from '../../context/AuthContext';
 
 const { Paragraph } = Typography;
 
@@ -46,6 +47,7 @@ export const AgentDeskDrawer: React.FC<AgentDeskDrawerProps> = ({
   onTaskCreated,
   agents,
 }) => {
+  const { departments, activeDepartmentId, organization } = useAuth();
   const [form] = Form.useForm();
   const [repoForm] = Form.useForm();
   const [running, setRunning] = useState(false);
@@ -76,6 +78,17 @@ export const AgentDeskDrawer: React.FC<AgentDeskDrawerProps> = ({
     }
     return opts;
   }, [agents, agent, customDepartments, deptSearchText]);
+
+  const departmentOptions = React.useMemo(() => {
+    if (departments && departments.length > 0) {
+      return departments.map((d) => ({
+        value: d.id,
+        label: `📁 ${d.name}`,
+        name: d.name,
+      }));
+    }
+    return dynamicDepartments;
+  }, [departments, dynamicDepartments]);
 
   const handleAddCustomDept = (nameToAdd?: string) => {
     const val = (nameToAdd || newCustomDept).trim();
@@ -132,15 +145,19 @@ export const AgentDeskDrawer: React.FC<AgentDeskDrawerProps> = ({
 
   useEffect(() => {
     if (agent) {
+      const matchedDept = departments.find(
+        (d) => d.id === agent.department_id || d.name === agent.department
+      );
       repoForm.setFieldsValue({
         repo_path: agent.repo_path || 'C:\\Users\\taguo\\Desktop\\ai-agents-platform',
         github_url: agent.github_url || '',
         model: agent.model || 'default',
-        department: agent.department || 'Engineering',
+        department_id: agent.department_id || matchedDept?.id || activeDepartmentId || null,
+        department: agent.department || matchedDept?.name || 'Engineering',
         skills: agent.skills || [],
       });
     }
-  }, [agent, repoForm]);
+  }, [agent, repoForm, departments, activeDepartmentId]);
 
   if (!agent) return null;
 
@@ -185,12 +202,31 @@ export const AgentDeskDrawer: React.FC<AgentDeskDrawerProps> = ({
       if (typeof values.department === 'string') {
         values.department = values.department.trim() || 'Engineering';
       }
+
+      const selectedDeptId =
+        values.department_id ||
+        departments.find((d) => d.name === values.department)?.id ||
+        activeDepartmentId;
+
+      const matchedDept = departments.find(
+        (d) => d.id === selectedDeptId || d.id === values.department || d.name === values.department
+      );
+
+      if (matchedDept) {
+        values.department_id = matchedDept.id;
+        values.department = matchedDept.name;
+      } else if (selectedDeptId) {
+        values.department_id = selectedDeptId;
+      }
+
       setSavingRepo(true);
       await updateAgent(agent.id, {
         repo_path: values.repo_path,
         github_url: values.github_url,
         model: values.model,
         department: values.department,
+        department_id: values.department_id,
+        organization_id: organization?.id,
         skills: values.skills || [],
       });
       message.success('Workstation configuration updated!');
@@ -198,6 +234,8 @@ export const AgentDeskDrawer: React.FC<AgentDeskDrawerProps> = ({
       agent.github_url = values.github_url;
       agent.model = values.model;
       agent.department = values.department;
+      agent.department_id = values.department_id;
+      agent.organization_id = organization?.id;
       agent.skills = values.skills || [];
       onTaskCreated();
     } catch (err) {
@@ -216,7 +254,7 @@ export const AgentDeskDrawer: React.FC<AgentDeskDrawerProps> = ({
             <span style={{ fontSize: '22px' }}>💻</span>
             <div>
               <div style={{ fontWeight: 600, color: '#f3f4f6', fontSize: '16px' }}>{agent.name} Workstation</div>
-              <div style={{ fontSize: '11px', color: '#9ca3af' }}>{agent.department || 'Engineering'} Desk</div>
+              <div style={{ fontSize: '11px', color: '#9ca3af' }}>{agent.department || 'Engineering'} Department</div>
             </div>
           </div>
           <Tag color={activeTask ? 'green' : 'blue'}>
@@ -388,69 +426,36 @@ export const AgentDeskDrawer: React.FC<AgentDeskDrawerProps> = ({
                     name="model"
                     label={<span style={{ color: '#9ca3af' }}>AI Model (FCC Overridden)</span>}
                   >
-                    <Select
-                      showSearch
-                      options={AI_MODELS}
-                      optionFilterProp="label"
-                      placeholder="Select Model (Default, Sonnet, Opus, Haiku, Fable)"
-                    />
+                    <ModelSelector placeholder="Select Model (Default, Sonnet, Opus, Haiku, Fable)" />
                   </Form.Item>
 
                   <Form.Item
-                    name="department"
-                    label={<span style={{ color: '#9ca3af' }}>Department Wing</span>}
-                    help="Select existing department or define a custom department"
+                    name="department_id"
+                    label={<span style={{ color: '#9ca3af' }}>Department</span>}
+                    help="Select department to govern budget and tool permissions"
                   >
                     <Select
                       showSearch
                       allowClear
-                      placeholder="Select or enter custom department"
-                      options={dynamicDepartments}
-                      searchValue={deptSearchText}
-                      onSearch={setDeptSearchText}
+                      placeholder="Select enterprise department"
+                      options={departmentOptions}
                       onChange={(val) => {
-                        if (val) {
-                          const trimmed = String(val).trim();
-                          if (!customDepartments.includes(trimmed)) {
-                            setCustomDepartments((prev) => [...prev, trimmed]);
-                          }
+                        const matched = departments.find((d) => d.id === val || d.name === val);
+                        if (matched) {
+                          repoForm.setFieldsValue({
+                            department_id: matched.id,
+                            department: matched.name,
+                          });
+                        } else if (val) {
+                          repoForm.setFieldsValue({
+                            department: val,
+                          });
                         }
-                        setDeptSearchText('');
                       }}
-                      dropdownRender={(menu) => (
-                        <>
-                          {menu}
-                          <div
-                            style={{
-                              display: 'flex',
-                              gap: '6px',
-                              padding: '8px',
-                              borderTop: '1px solid #30363d',
-                              background: '#161b22',
-                            }}
-                            onMouseDown={(e) => e.preventDefault()}
-                          >
-                            <Input
-                              size="small"
-                              placeholder="Define custom department"
-                              value={newCustomDept}
-                              onChange={(e) => setNewCustomDept(e.target.value)}
-                              onPressEnter={() => handleAddCustomDept()}
-                              style={{ background: '#0d1117', color: '#fff', borderColor: '#30363d' }}
-                            />
-                            <Button
-                              size="small"
-                              type="primary"
-                              icon={<PlusOutlined />}
-                              onClick={() => handleAddCustomDept()}
-                              style={{ background: '#10b981', borderColor: '#10b981' }}
-                            >
-                              Add
-                            </Button>
-                          </div>
-                        </>
-                      )}
                     />
+                  </Form.Item>
+                  <Form.Item name="department" hidden>
+                    <Input />
                   </Form.Item>
 
                   <Form.Item

@@ -14,11 +14,11 @@
       "glob"
     ]
   },
-  "p-skills": {
-    "id": "p-skills",
-    "name": "p-skills",
-    "description": "Source of truth",
-    "working_directory": "C:\\Users\\taguo\\OneDrive\\Desktop\\Projects/p-skills",
+  "t-skills": {
+    "id": "t-skills",
+    "name": "t-skills",
+    "description": "Local project at /Users/yarintag/Desktop/Projects/t-skills",
+    "working_directory": "/Users/yarintag/Desktop/Projects/t-skills",
     "instructions": null,
     "skills": [],
     "allowed_tools": [

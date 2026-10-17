@@ -180,7 +180,8 @@ class OrchestrationEngine:
             root_task_id=root_task_id,
             assigned_by=parent_agent.id,
             dependencies=deps,
-            acceptance_criteria=acceptance_criteria
+            acceptance_criteria=acceptance_criteria,
+            organization_id=getattr(parent_task, "organization_id", None)
         )
         self.db_manager.save_task_run(subtask_run)
 

@@ -53,9 +53,16 @@ class EventStreamService {
       return;
     }
 
+    const token = localStorage.getItem('agents_platform_auth_token');
+    if (!token) {
+      this.setStatus('disconnected');
+      return;
+    }
+
     this.setStatus('connecting');
 
     const streamUrl = new URL(`${this.baseUrl}/api/v1/events/stream`);
+    streamUrl.searchParams.set('token', token);
     if (this.lastSequence > 0) {
       streamUrl.searchParams.set('after_sequence', String(this.lastSequence));
     }
@@ -175,6 +182,8 @@ class EventStreamService {
 
   private scheduleReconnect(): void {
     if (this.reconnectTimer) return;
+    const token = localStorage.getItem('agents_platform_auth_token');
+    if (!token) return;
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this.connect();

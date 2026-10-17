@@ -8,13 +8,15 @@ Supports:
 - Managing agent access permissions for MCP connectors
 """
 
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, HTTPException, Depends, status, Request
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field, ConfigDict
 import uuid
 from datetime import datetime
+import httpx
 
 from ..dependencies import get_db_manager, DatabaseManager
+from ..security import get_current_org_id
 from persistence import MCPConnector, MCPTool
 
 router = APIRouter()
@@ -78,7 +80,6 @@ CATALOG_MCP_SERVERS = [
         "package": "mcp-server-telegram",
         "config_schema": {
             "bot_token": {"type": "password", "label": "Telegram Bot Token", "required": True, "placeholder": "123456789:ABCdefGHIjklMNO"},
-            "chat_id": {"type": "text", "label": "Target Chat ID / Channel", "required": True, "placeholder": "-100123456789 or @channel"},
             "parse_mode": {"type": "text", "label": "Parse Mode (HTML/Markdown)", "required": False, "default": "Markdown"}
         },
         "default_tools": [
@@ -98,7 +99,6 @@ CATALOG_MCP_SERVERS = [
         "package": "@modelcontextprotocol/server-slack",
         "config_schema": {
             "bot_token": {"type": "password", "label": "Bot User OAuth Token (xoxb-...)", "required": True, "placeholder": "xoxb-..."},
-            "default_channel": {"type": "text", "label": "Default Channel ID (#dev-agents)", "required": True, "placeholder": "C0123456789"},
             "team_id": {"type": "text", "label": "Workspace Team ID (Optional)", "required": False, "placeholder": "T0123456789"}
         },
         "default_tools": [
@@ -177,6 +177,7 @@ class ConnectorInstallRequest(BaseModel):
     configuration: Dict[str, Any] = Field(default_factory=dict)
     capabilities: Optional[List[str]] = None
     custom_command: Optional[str] = None
+    organization_id: Optional[str] = None
 
 
 class ConnectorUpdateRequest(BaseModel):
@@ -186,6 +187,7 @@ class ConnectorUpdateRequest(BaseModel):
     configuration: Optional[Dict[str, Any]] = None
     status: Optional[str] = None
     capabilities: Optional[List[str]] = None
+    organization_id: Optional[str] = None
 
 
 class PermissionGrantRequest(BaseModel):
@@ -211,9 +213,13 @@ def get_catalog():
 
 
 @router.get("/connectors")
-def list_installed_connectors(db: DatabaseManager = Depends(get_db_manager)):
+def list_installed_connectors(
+    request: Request,
+    db: DatabaseManager = Depends(get_db_manager)
+):
     """List all installed MCP connectors with tool counts."""
-    connectors = db.list_mcp_connectors()
+    org_id = get_current_org_id(request)
+    connectors = db.list_mcp_connectors(organization_id=org_id)
     res = []
     for c in connectors:
         tools = db.list_mcp_tools(connector_id=c.id)
@@ -233,10 +239,17 @@ def list_installed_connectors(db: DatabaseManager = Depends(get_db_manager)):
 
 
 @router.get("/connectors/{connector_id}")
-def get_connector(connector_id: str, db: DatabaseManager = Depends(get_db_manager)):
+def get_connector(
+    connector_id: str,
+    request: Request,
+    db: DatabaseManager = Depends(get_db_manager)
+):
     """Get single connector details."""
     c = db.get_mcp_connector(connector_id)
     if not c:
+        raise HTTPException(status_code=404, detail="Connector not found")
+    org_id = get_current_org_id(request)
+    if org_id and getattr(c, "organization_id", None) and c.organization_id != org_id:
         raise HTTPException(status_code=404, detail="Connector not found")
     tools = db.list_mcp_tools(connector_id=c.id)
     res = c.to_dict()
@@ -245,9 +258,14 @@ def get_connector(connector_id: str, db: DatabaseManager = Depends(get_db_manage
 
 
 @router.post("/connectors", status_code=status.HTTP_201_CREATED)
-def install_connector(req: ConnectorInstallRequest, db: DatabaseManager = Depends(get_db_manager)):
+def install_connector(
+    req: ConnectorInstallRequest,
+    request: Request,
+    db: DatabaseManager = Depends(get_db_manager)
+):
     """Install and configure a new MCP connector."""
     conn_id = req.id or f"mcp_{req.provider}_{uuid.uuid4().hex[:6]}"
+    org_id = req.organization_id or get_current_org_id(request)
 
     # Check if already installed
     existing = db.get_mcp_connector(conn_id)
@@ -257,6 +275,8 @@ def install_connector(req: ConnectorInstallRequest, db: DatabaseManager = Depend
         existing.configuration = req.configuration
         existing.status = "CONNECTED"
         existing.error_message = None
+        if org_id and not getattr(existing, "organization_id", None):
+            existing.organization_id = org_id
         db.save_mcp_connector(existing)
         c = existing
     else:
@@ -268,7 +288,8 @@ def install_connector(req: ConnectorInstallRequest, db: DatabaseManager = Depend
             status="CONNECTED",
             configuration=req.configuration,
             capabilities=req.capabilities or [],
-            error_message=None
+            error_message=None,
+            organization_id=org_id
         )
         c = db.save_mcp_connector(c)
 
@@ -290,10 +311,18 @@ def install_connector(req: ConnectorInstallRequest, db: DatabaseManager = Depend
 
 
 @router.put("/connectors/{connector_id}")
-def update_connector(connector_id: str, req: ConnectorUpdateRequest, db: DatabaseManager = Depends(get_db_manager)):
+def update_connector(
+    connector_id: str,
+    req: ConnectorUpdateRequest,
+    request: Request,
+    db: DatabaseManager = Depends(get_db_manager)
+):
     """Update connector configuration or status."""
     c = db.get_mcp_connector(connector_id)
     if not c:
+        raise HTTPException(status_code=404, detail="Connector not found")
+    org_id = get_current_org_id(request)
+    if org_id and getattr(c, "organization_id", None) and c.organization_id != org_id:
         raise HTTPException(status_code=404, detail="Connector not found")
 
     if req.name is not None:
@@ -304,26 +333,42 @@ def update_connector(connector_id: str, req: ConnectorUpdateRequest, db: Databas
         c.status = req.status
     if req.capabilities is not None:
         c.capabilities = req.capabilities
+    if req.organization_id is not None:
+        c.organization_id = req.organization_id
 
     saved = db.save_mcp_connector(c)
     return saved.to_dict()
 
 
 @router.delete("/connectors/{connector_id}")
-def uninstall_connector(connector_id: str, db: DatabaseManager = Depends(get_db_manager)):
+def uninstall_connector(
+    connector_id: str,
+    request: Request,
+    db: DatabaseManager = Depends(get_db_manager)
+):
     """Uninstall connector and clean up tools and permissions."""
     c = db.get_mcp_connector(connector_id)
     if not c:
+        raise HTTPException(status_code=404, detail="Connector not found")
+    org_id = get_current_org_id(request)
+    if org_id and getattr(c, "organization_id", None) and c.organization_id != org_id:
         raise HTTPException(status_code=404, detail="Connector not found")
     db.delete_mcp_connector(connector_id)
     return {"status": "success", "message": f"Connector {connector_id} uninstalled"}
 
 
 @router.post("/connectors/{connector_id}/test")
-def test_connector(connector_id: str, db: DatabaseManager = Depends(get_db_manager)):
+def test_connector(
+    connector_id: str,
+    request: Request,
+    db: DatabaseManager = Depends(get_db_manager)
+):
     """Ping / test an MCP connector connection."""
     c = db.get_mcp_connector(connector_id)
     if not c:
+        raise HTTPException(status_code=404, detail="Connector not found")
+    org_id = get_current_org_id(request)
+    if org_id and getattr(c, "organization_id", None) and c.organization_id != org_id:
         raise HTTPException(status_code=404, detail="Connector not found")
 
     # Simple validation check on configuration
@@ -352,21 +397,39 @@ def test_connector(connector_id: str, db: DatabaseManager = Depends(get_db_manag
 
 
 @router.get("/connectors/{connector_id}/tools")
-def list_connector_tools(connector_id: str, db: DatabaseManager = Depends(get_db_manager)):
+def list_connector_tools(
+    connector_id: str,
+    request: Request,
+    db: DatabaseManager = Depends(get_db_manager)
+):
     """List tools belonging to an MCP connector."""
+    c = db.get_mcp_connector(connector_id)
+    if not c:
+        raise HTTPException(status_code=404, detail="Connector not found")
+    org_id = get_current_org_id(request)
+    if org_id and getattr(c, "organization_id", None) and c.organization_id != org_id:
+        raise HTTPException(status_code=404, detail="Connector not found")
     tools = db.list_mcp_tools(connector_id=connector_id)
     return {"tools": [t.to_dict() for t in tools]}
 
 
 @router.get("/permissions")
-def list_agent_permissions(agent_id: Optional[str] = None, db: DatabaseManager = Depends(get_db_manager)):
+def list_agent_permissions(
+    request: Request,
+    agent_id: Optional[str] = None,
+    db: DatabaseManager = Depends(get_db_manager)
+):
     """List agent permissions for MCP connectors."""
+    org_id = get_current_org_id(request)
     if agent_id:
+        ag = db.get_agent(agent_id)
+        if ag and org_id and getattr(ag, "organization_id", None) and ag.organization_id != org_id:
+            return {"permissions": []}
         perms = db.get_agent_mcp_permissions(agent_id)
         return {"permissions": perms}
 
-    # If no agent_id given, get permissions for all agents
-    agents = db.list_agents()
+    # If no agent_id given, get permissions for all agents in org
+    agents = db.list_agents(organization_id=org_id)
     all_perms = []
     for ag in agents:
         perms = db.get_agent_mcp_permissions(ag.id)
@@ -377,15 +440,39 @@ def list_agent_permissions(agent_id: Optional[str] = None, db: DatabaseManager =
 
 
 @router.post("/permissions/grant")
-def grant_permission(req: PermissionGrantRequest, db: DatabaseManager = Depends(get_db_manager)):
+def grant_permission(
+    req: PermissionGrantRequest,
+    request: Request,
+    db: DatabaseManager = Depends(get_db_manager)
+):
     """Grant an agent access to an MCP connector."""
+    org_id = get_current_org_id(request)
+    if org_id:
+        ag = db.get_agent(req.agent_id)
+        if ag and getattr(ag, "organization_id", None) and ag.organization_id != org_id:
+            raise HTTPException(status_code=404, detail="Agent not found")
+        conn = db.get_mcp_connector(req.connector_id)
+        if conn and getattr(conn, "organization_id", None) and conn.organization_id != org_id:
+            raise HTTPException(status_code=404, detail="Connector not found")
     perm = db.add_mcp_permission(agent_id=req.agent_id, connector_id=req.connector_id, tool_id=req.tool_id)
     return {"status": "success", "permission": perm}
 
 
 @router.post("/permissions/revoke")
-def revoke_permission(req: PermissionRevokeRequest, db: DatabaseManager = Depends(get_db_manager)):
+def revoke_permission(
+    req: PermissionRevokeRequest,
+    request: Request,
+    db: DatabaseManager = Depends(get_db_manager)
+):
     """Revoke an agent's access to an MCP connector."""
+    org_id = get_current_org_id(request)
+    if org_id:
+        ag = db.get_agent(req.agent_id)
+        if ag and getattr(ag, "organization_id", None) and ag.organization_id != org_id:
+            raise HTTPException(status_code=404, detail="Agent not found")
+        conn = db.get_mcp_connector(req.connector_id)
+        if conn and getattr(conn, "organization_id", None) and conn.organization_id != org_id:
+            raise HTTPException(status_code=404, detail="Connector not found")
     success = db.revoke_mcp_permission(agent_id=req.agent_id, connector_id=req.connector_id, tool_id=req.tool_id)
     return {"status": "success" if success else "not_found"}
 
@@ -403,18 +490,192 @@ class ChannelTestMessageRequest(BaseModel):
 
 
 @router.post("/discover-resources")
-def discover_resources(req: ResourceDiscoveryRequest):
+def discover_resources(
+    req: ResourceDiscoveryRequest,
+    request: Request,
+    db: DatabaseManager = Depends(get_db_manager)
+):
     """
     Discover selectable resources for an integration:
-    - GitHub: Repositories (local & remote)
+    - GitHub: Repositories (real token-authenticated API query)
+    - GitLab: Projects (real token-authenticated API query)
+    - Local Git: Repositories from local folders
     - Slack: Channels
     - Telegram: Channels & Chats
     """
     provider = req.provider.lower()
-    
-    if provider in ("github", "git"):
+    token = req.token
+    if not token and req.configuration and isinstance(req.configuration, dict):
+        token = req.configuration.get("token") or req.configuration.get("personal_access_token") or req.configuration.get("api_key")
+
+    org_id = get_current_org_id(request)
+    if not token and org_id and provider in ("github", "gitlab", "git"):
+        connectors = db.list_mcp_connectors(organization_id=org_id)
+        for conn in connectors:
+            c_prov = conn.provider.lower()
+            if c_prov == provider or (provider in ("github", "git") and c_prov in ("github", "git")):
+                cfg = conn.configuration or {}
+                cand = cfg.get("token") or cfg.get("personal_access_token") or cfg.get("api_key")
+                if cand:
+                    token = cand
+                    break
+
+    # 1. GitHub (token provided or requested provider is github/git with token)
+    is_github_token = bool(token and (token.startswith("ghp_") or token.startswith("github_pat_") or token.startswith("gho_")))
+    if (provider in ("github", "git") and token) or is_github_token:
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "AI-Agents-Platform"
+        }
+        token_warning = None
+        try:
+            resp = httpx.get(
+                "https://api.github.com/user/repos?per_page=100&sort=updated&affiliation=owner,collaborator,organization_member",
+                headers=headers,
+                timeout=15.0
+            )
+            if resp.status_code in (401, 403):
+                raise HTTPException(
+                    status_code=401,
+                    detail="Invalid or unauthorized GitHub token. Could not fetch repositories."
+                )
+            resp.raise_for_status()
+            raw_repos = resp.json()
+
+            # Check if fine-grained token returns only public repos, and try gh cli token if so
+            if (
+                token 
+                and token.startswith("github_pat_") 
+                and raw_repos 
+                and not any(r.get("private") for r in raw_repos)
+            ):
+                import subprocess
+                gh_res = subprocess.run(["gh", "auth", "token"], capture_output=True, text=True, timeout=3)
+                if gh_res.returncode == 0 and gh_res.stdout.strip():
+                    gh_token = gh_res.stdout.strip()
+                    # Verify login matches
+                    user_resp = httpx.get(
+                        "https://api.github.com/user",
+                        headers={
+                            "Authorization": f"Bearer {token}",
+                            "Accept": "application/vnd.github+json",
+                            "User-Agent": "AI-Agents-Platform"
+                        },
+                        timeout=5.0
+                    )
+                    gh_user_resp = httpx.get(
+                        "https://api.github.com/user",
+                        headers={
+                            "Authorization": f"Bearer {gh_token}",
+                            "Accept": "application/vnd.github+json",
+                            "User-Agent": "AI-Agents-Platform"
+                        },
+                        timeout=5.0
+                    )
+                    if user_resp.status_code == 200 and gh_user_resp.status_code == 200:
+                        login1 = user_resp.json().get("login")
+                        login2 = gh_user_resp.json().get("login")
+                        if login1 and login2 and login1.lower() == login2.lower():
+                            # Fetch with gh_token
+                            gh_repos_resp = httpx.get(
+                                "https://api.github.com/user/repos?per_page=100&sort=updated&affiliation=owner,collaborator,organization_member",
+                                headers={
+                                    "Authorization": f"Bearer {gh_token}",
+                                    "Accept": "application/vnd.github+json",
+                                    "User-Agent": "AI-Agents-Platform"
+                                },
+                                timeout=15.0
+                            )
+                            if gh_repos_resp.status_code == 200:
+                                raw_repos = gh_repos_resp.json()
+
+                if not any(r.get("private") for r in raw_repos):
+                    token_warning = "Fine-Grained token (github_pat_...) has 'Public Repositories only' set on GitHub. Enable 'All repositories' + 'Metadata/Contents: Read' on GitHub for direct private repo access."
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Failed to communicate with GitHub API: {str(e)}"
+            )
+
+        repos = [
+            {
+                "id": str(repo.get("id") or repo.get("full_name")),
+                "name": repo.get("name"),
+                "full_name": repo.get("full_name"),
+                "path": repo.get("html_url") or repo.get("clone_url"),
+                "clone_url": repo.get("clone_url"),
+                "private": bool(repo.get("private", False)),
+                "default_branch": repo.get("default_branch", "main"),
+                "owner": (repo.get("owner") or {}).get("login"),
+                "permissions": repo.get("permissions") or {},
+                "source": "github"
+            }
+            for repo in raw_repos
+        ]
+        result = {"provider": "github", "repositories": repos}
+        if token_warning:
+            result["token_warning"] = token_warning
+        return result
+
+    # 2. GitLab (token provided or requested provider is gitlab with token)
+    is_gitlab_token = bool(token and token.startswith("glpat-"))
+    if (provider == "gitlab" and token) or is_gitlab_token:
+        headers = {
+            "PRIVATE-TOKEN": token,
+            "User-Agent": "AI-Agents-Platform"
+        }
+        try:
+            resp = httpx.get(
+                "https://gitlab.com/api/v4/projects?membership=true&per_page=100&order_by=updated_at",
+                headers=headers,
+                timeout=15.0
+            )
+            if resp.status_code == 401:
+                raise HTTPException(
+                    status_code=401,
+                    detail="Invalid or unauthorized GitLab token."
+                )
+            resp.raise_for_status()
+            raw_projects = resp.json()
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Failed to communicate with GitLab API: {str(e)}"
+            )
+
+        projects = [
+            {
+                "id": str(p.get("id") or p.get("path_with_namespace")),
+                "name": p.get("name"),
+                "full_name": p.get("path_with_namespace"),
+                "path": p.get("web_url"),
+                "clone_url": p.get("http_url_to_repo"),
+                "private": p.get("visibility") == "private",
+                "default_branch": p.get("default_branch", "main"),
+                "source": "gitlab"
+            }
+            for p in raw_projects
+        ]
+        return {"provider": "gitlab", "repositories": projects}
+
+    # 3. Provider is github or gitlab (or git without local mode) but NO token was provided
+    if provider in ("github", "gitlab") or (provider == "git" and (req.configuration or {}).get("mode") != "local"):
+        return {
+            "provider": req.provider,
+            "repositories": [],
+            "requires_token": True,
+            "message": "Please enter a valid Personal Access Token to view accessible repositories."
+        }
+
+    # 4. Local Git: provider == "local_git" or provider == "git" with mode == "local"
+    if provider == "local_git" or (provider == "git" and (req.configuration or {}).get("mode") == "local"):
         repos = []
-        # 1. Discover local git repos from Projects workspace directory
         projects_dir = "/Users/yarintag/Desktop/Projects"
         import os
         if os.path.exists(projects_dir):
@@ -423,33 +684,22 @@ def discover_resources(req: ResourceDiscoveryRequest):
                     full_p = os.path.join(projects_dir, entry)
                     if os.path.isdir(full_p) and os.path.exists(os.path.join(full_p, ".git")):
                         repos.append({
+                            "id": f"local_{entry}",
                             "name": entry,
-                            "full_name": f"local/{entry}" if entry != "ai-agents-platform" else "yarinTag/ai-agents-platform",
-                            "description": f"Local repository in Projects/{entry}",
-                            "is_local": True
+                            "full_name": f"local/{entry}",
+                            "path": full_p,
+                            "clone_url": full_p,
+                            "private": True,
+                            "default_branch": "main",
+                            "is_local": True,
+                            "source": "local"
                         })
-            except Exception as e:
+            except Exception:
                 pass
-
-        # 2. Add standard/remote repos if GitHub token provided or fallback
-        default_remotes = [
-            {"name": "ai-agents-platform", "full_name": "yarinTag/ai-agents-platform", "description": "Main AI Agents Platform codebase", "is_local": True},
-            {"name": "front-budget-management", "full_name": "yarinTag/front-budget-management", "description": "Budget management dashboard", "is_local": True},
-            {"name": "casecraft-system", "full_name": "yarinTag/casecraft-system", "description": "Casecraft management system", "is_local": True},
-            {"name": "Law-Firm", "full_name": "yarinTag/Law-Firm", "description": "Law firm portal application", "is_local": True},
-            {"name": "Vitaxi", "full_name": "yarinTag/Vitaxi", "description": "Taxi dispatch and fleet backend", "is_local": True},
-        ]
-        
-        # Merge without duplicates by full_name
-        existing_names = {r["name"] for r in repos}
-        for dr in default_remotes:
-            if dr["name"] not in existing_names:
-                repos.append(dr)
-
-        return {"provider": "github", "repositories": repos}
+        return {"provider": "local_git", "repositories": repos}
 
     elif provider == "slack":
-        channels = [
+        default_channels = [
             {"id": "#general", "name": "#general", "description": "General announcements & team feed"},
             {"id": "#dev-team", "name": "#dev-team", "description": "Engineering team channel"},
             {"id": "#alerts", "name": "#alerts", "description": "System alerts & automated agent notifications"},
@@ -457,14 +707,94 @@ def discover_resources(req: ResourceDiscoveryRequest):
             {"id": "#workflows-feed", "name": "#workflows-feed", "description": "Autonomous workflow execution logs"},
             {"id": "#deployments", "name": "#deployments", "description": "Release & CI/CD pipeline events"},
         ]
+        configured_channels = []
+        cfgs = []
+        if req.configuration and isinstance(req.configuration, dict):
+            cfgs.append(req.configuration)
+        try:
+            conns = db.list_mcp_connectors()
+            for conn in conns:
+                if conn.provider.lower() == "slack" and conn.configuration and isinstance(conn.configuration, dict):
+                    cfgs.append(conn.configuration)
+        except Exception:
+            pass
+
+        for cfg in cfgs:
+            allowed = cfg.get("allowed_channels", [])
+            if isinstance(allowed, str):
+                allowed = [allowed]
+            legacy = cfg.get("default_channel")
+            candidates = list(allowed)
+            if legacy and legacy not in candidates:
+                candidates.append(legacy)
+            for item in candidates:
+                if isinstance(item, dict):
+                    cid = str(item.get("id") or item.get("name") or "").strip()
+                    cname = str(item.get("name") or cid).strip()
+                    cdesc = item.get("description") or "Configured Slack channel"
+                else:
+                    cid = str(item).strip()
+                    cname = cid
+                    cdesc = f"Configured channel ({cid})"
+                if cid:
+                    configured_channels.append({"id": cid, "name": cname, "description": cdesc})
+
+        seen_ids = set()
+        channels = []
+        for ch in configured_channels + default_channels:
+            cid = ch.get("id")
+            if cid and cid not in seen_ids:
+                seen_ids.add(cid)
+                channels.append(ch)
+
         return {"provider": "slack", "channels": channels}
 
     elif provider == "telegram":
-        chats = [
+        default_chats = [
             {"id": "@agents_office_alerts", "name": "Agents Office Alerts", "description": "Real-time critical platform notifications"},
             {"id": "@workflow_dev_channel", "name": "Dev Workflows Channel", "description": "Engineering pipeline trigger channel"},
             {"id": "@pr_review_bot", "name": "PR Review Bot", "description": "Interactive pull request gate approvals"},
         ]
+        configured_chats = []
+        cfgs = []
+        if req.configuration and isinstance(req.configuration, dict):
+            cfgs.append(req.configuration)
+        try:
+            conns = db.list_mcp_connectors()
+            for conn in conns:
+                if conn.provider.lower() == "telegram" and conn.configuration and isinstance(conn.configuration, dict):
+                    cfgs.append(conn.configuration)
+        except Exception:
+            pass
+
+        for cfg in cfgs:
+            allowed = cfg.get("allowed_channels", [])
+            if isinstance(allowed, str):
+                allowed = [allowed]
+            legacy = cfg.get("chat_id")
+            candidates = list(allowed)
+            if legacy and legacy not in candidates:
+                candidates.append(legacy)
+            for item in candidates:
+                if isinstance(item, dict):
+                    cid = str(item.get("id") or item.get("name") or "").strip()
+                    cname = str(item.get("name") or cid).strip()
+                    cdesc = item.get("description") or "Configured Telegram chat/channel"
+                else:
+                    cid = str(item).strip()
+                    cname = cid
+                    cdesc = f"Configured chat ({cid})"
+                if cid:
+                    configured_chats.append({"id": cid, "name": cname, "description": cdesc})
+
+        seen_ids = set()
+        chats = []
+        for ch in configured_chats + default_chats:
+            cid = ch.get("id")
+            if cid and cid not in seen_ids:
+                seen_ids.add(cid)
+                chats.append(ch)
+
         return {"provider": "telegram", "chats": chats}
 
     return {"provider": provider, "items": []}
@@ -487,7 +817,9 @@ def test_channel_message(req: ChannelTestMessageRequest, db: DatabaseManager = D
         if conn and conn.provider.lower() == "telegram" and conn.configuration:
             bot_token = conn.configuration.get("bot_token")
             target_chat = req.channel_id
-            configured_chat_id = conn.configuration.get("chat_id")
+            allowed = conn.configuration.get("allowed_channels", [])
+            first_allowed = allowed[0] if isinstance(allowed, list) and allowed else None
+            configured_chat_id = conn.configuration.get("chat_id") or first_allowed
 
             # If user targeted bot username, Hermes_test or default placeholder, resolve to real configured chat_id
             if target_chat in ("@agents_office_alerts", "@hermesganbot", "hermesganbot", "Hermes_test") and configured_chat_id:

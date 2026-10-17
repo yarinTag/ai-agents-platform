@@ -42,6 +42,14 @@ class MCPGovernanceViolationError(Exception):
         self.reason = reason
 
 
+class UnauthorizedUserDepartmentError(Exception):
+    """Raised when an authenticated user attempts to execute a workflow outside their authorized departments."""
+    def __init__(self, user_id: str, department_id: str, message: str):
+        super().__init__(message)
+        self.user_id = user_id
+        self.department_id = department_id
+
+
 @dataclass
 class WorkflowStepResult:
     """Result of an individual workflow step execution."""
@@ -131,22 +139,40 @@ class WorkflowEngine:
         trigger_type: str = "MANUAL",
         trigger_payload: Optional[Dict[str, Any]] = None,
         source_workspace: Optional[str] = None,
-        runtime_provider: Optional[str] = None
+        runtime_provider: Optional[str] = None,
+        user_context: Optional[Dict[str, Any]] = None
     ) -> WorkflowExecution:
         """
         Execute an entire workflow instance.
-        1. Checks department budget (HARD_STOP if exceeded).
-        2. Sets up isolated sandbox environment.
-        3. Executes DAG steps in dependency order and parallel multi-agent stages.
-        4. Accumulates token usage, cost, outputs, and dispatches notifications.
+        1. Checks user department authorization (Tenant & Department Isolation).
+        2. Checks department budget (HARD_STOP if exceeded).
+        3. Sets up isolated sandbox environment.
+        4. Executes DAG steps in dependency order and parallel multi-agent stages.
+        5. Accumulates token usage, cost, outputs, and dispatches notifications.
         """
         workflow = self.db.get_workflow(workflow_id)
         if not workflow:
             raise ValueError(f"Workflow '{workflow_id}' not found")
 
-        # 1. Budget pre-check (HARD_STOP enforcement on API_KEY runs)
+        # 1. Budget and Department Access Authorization pre-check
         dept_id = workflow.department_id
         if dept_id:
+            # Check user department authorization if user context is provided
+            if user_context:
+                user_role = user_context.get("role", "MEMBER")
+                if user_role != "ORG_ADMIN":
+                    raw_depts = user_context.get("departments", [])
+                    authorized_depts = [
+                        d.get("id") if isinstance(d, dict) else str(d)
+                        for d in raw_depts
+                    ]
+                    if dept_id not in authorized_depts:
+                        raise UnauthorizedUserDepartmentError(
+                            user_id=user_context.get("sub", "unknown"),
+                            department_id=dept_id,
+                            message=f"User '{user_context.get('email', user_context.get('sub'))}' is not an authorized member of department '{dept_id}'"
+                        )
+
             budget_status = self.db.check_department_budget(dept_id)
             if not budget_status.get("allowed", True):
                 raise BudgetExceededError(

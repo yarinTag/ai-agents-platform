@@ -2,7 +2,7 @@
 Task management API endpoints.
 """
 
-from fastapi import APIRouter, HTTPException, Depends, status, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Depends, status, BackgroundTasks, Request
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 import uuid
@@ -14,6 +14,7 @@ from ..dependencies import (
     get_orchestration_engine, OrchestrationEngine, DelegationError, ConcurrencyLimitExceededError,
     AgentConfig, ProjectConfig, AgentRun, TaskStatus, EventService, EventType
 )
+from ..security import get_current_org_id
 import asyncio
 import json
 
@@ -28,6 +29,7 @@ class TaskCreate(BaseModel):
     input_data: Optional[Any] = None
     project_id: Optional[str] = None
     skill_id: Optional[str] = None
+    organization_id: Optional[str] = None
 
 
 class TaskDelegateRequest(BaseModel):
@@ -44,6 +46,7 @@ class TaskResponse(BaseModel):
     run_id: str
     agent_id: str
     project_id: Optional[str] = None
+    organization_id: Optional[str] = None
     prompt: str = ""
     input_data: Optional[Any] = None
     output_data: Optional[Any] = None
@@ -99,6 +102,7 @@ def task_run_to_response(run: AgentRun) -> dict:
         "run_id": run.run_id,
         "agent_id": run.agent_id,
         "project_id": run.project_id,
+        "organization_id": getattr(run, "organization_id", None),
         "prompt": run.prompt,
         "input_data": {"task": run.prompt, "prompt": run.prompt},
         "output_data": {"result": run.result} if run.result else None,
@@ -133,12 +137,15 @@ def task_run_to_response(run: AgentRun) -> dict:
 async def create_task(
     task_data: TaskCreate,
     background_tasks: BackgroundTasks,
+    request: Request,
     config_manager = Depends(get_config_manager),
     db_manager = Depends(get_db_manager),
     runtime_adapter = Depends(get_runtime_adapter),
     event_service: EventService = Depends(get_event_service)
 ):
     """Submit a new task for execution."""
+    org_id = task_data.organization_id or get_current_org_id(request)
+
     # Find agent from config or db
     agent = config_manager.get_agent(task_data.agent_id) or db_manager.get_agent(task_data.agent_id)
     if not agent:
@@ -181,8 +188,12 @@ async def create_task(
             prompt=prompt,
             status=TaskStatus.RUNNING,
             created_at=datetime.now(),
-            started_at=datetime.now()
+            started_at=datetime.now(),
+            organization_id=org_id
         )
+    else:
+        if org_id and not getattr(run, "organization_id", None):
+            run.organization_id = org_id
 
     try:
         db_manager.save_task_run(run)
@@ -218,7 +229,8 @@ async def create_task(
             details={
                 "agent_id": run.agent_id,
                 "project_id": run.project_id,
-                "prompt_preview": prompt[:80] if prompt else ""
+                "prompt_preview": prompt[:80] if prompt else "",
+                "organization_id": org_id
             }
         )
     except Exception:
@@ -231,6 +243,7 @@ async def create_task(
 @router.get("/", response_model=List[TaskResponse])
 @router.get("", response_model=List[TaskResponse])
 async def list_tasks(
+    request: Request,
     agent_id: Optional[str] = None,
     project_id: Optional[str] = None,
     status: Optional[str] = None,
@@ -249,17 +262,22 @@ async def list_tasks(
                 detail=f"Invalid status: {status}"
             )
 
+    org_id = get_current_org_id(request)
+
     runs_map = {}
     for run in db_manager.list_task_runs(
         agent_id=agent_id,
         project_id=project_id,
         status=task_status,
-        limit=limit
+        limit=limit,
+        organization_id=org_id
     ):
         runs_map[run.run_id] = run
 
     if hasattr(runtime_adapter, 'list_runs'):
         for run in runtime_adapter.list_runs():
+            if org_id and getattr(run, "organization_id", None) and run.organization_id != org_id:
+                continue
             if agent_id and run.agent_id != agent_id:
                 continue
             if project_id and run.project_id != project_id:
@@ -277,11 +295,22 @@ async def list_tasks(
 @router.delete("/{run_id}/", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_task(
     run_id: str,
+    request: Request,
     db_manager = Depends(get_db_manager),
     runtime_adapter = Depends(get_runtime_adapter),
     event_service: EventService = Depends(get_event_service)
 ):
     """Delete a task run."""
+    org_id = get_current_org_id(request)
+    existing = db_manager.get_task_run(run_id)
+    if not existing and hasattr(runtime_adapter, "get_run_status"):
+        existing = runtime_adapter.get_run_status(run_id)
+    if org_id and existing and getattr(existing, "organization_id", None) and existing.organization_id != org_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Task not found: {run_id}"
+        )
+
     try:
         # Cancel if currently active in runtime
         if hasattr(runtime_adapter, "active_runs") and run_id in runtime_adapter.active_runs:
@@ -308,6 +337,7 @@ async def delete_task(
 @router.get("/{run_id}/", response_model=TaskResponse)
 async def get_task(
     run_id: str,
+    request: Request,
     db_manager = Depends(get_db_manager),
     runtime_adapter = Depends(get_runtime_adapter)
 ):
@@ -327,6 +357,12 @@ async def get_task(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Task not found: {run_id}"
         )
+    org_id = get_current_org_id(request)
+    if org_id and getattr(run, "organization_id", None) and run.organization_id != org_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Task not found: {run_id}"
+        )
     return task_run_to_response(run)
 
 
@@ -334,6 +370,7 @@ async def get_task(
 @router.post("/{run_id}/cancel/", response_model=TaskResponse)
 async def cancel_task(
     run_id: str,
+    request: Request,
     runtime_adapter = Depends(get_runtime_adapter),
     db_manager = Depends(get_db_manager)
 ):
@@ -343,6 +380,12 @@ async def cancel_task(
     if not existing_run and hasattr(runtime_adapter, "get_run_status"):
         existing_run = runtime_adapter.get_run_status(run_id)
     if not existing_run:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Task not found: {run_id}"
+        )
+    org_id = get_current_org_id(request)
+    if org_id and getattr(existing_run, "organization_id", None) and existing_run.organization_id != org_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Task not found: {run_id}"
@@ -370,6 +413,7 @@ async def cancel_task(
 @router.get("/{run_id}/events/")
 async def task_events(
     run_id: str,
+    request: Request,
     runtime_adapter = Depends(get_runtime_adapter),
     db_manager = Depends(get_db_manager)
 ):
@@ -384,6 +428,12 @@ async def task_events(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Task not found: {run_id}"
             )
+    org_id = get_current_org_id(request)
+    if org_id and getattr(run, "organization_id", None) and run.organization_id != org_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Task not found: {run_id}"
+        )
 
     async def event_generator():
         """Generate SSE events for the task."""
@@ -481,6 +531,7 @@ async def task_events(
 @router.get("/{run_id}/logs/")
 async def get_task_logs(
     run_id: str,
+    request: Request,
     db_manager = Depends(get_db_manager),
     runtime_adapter = Depends(get_runtime_adapter)
 ):
@@ -494,6 +545,12 @@ async def get_task_logs(
                 run = r
                 break
     if not run:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Task not found: {run_id}"
+        )
+    org_id = get_current_org_id(request)
+    if org_id and getattr(run, "organization_id", None) and run.organization_id != org_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Task not found: {run_id}"
@@ -513,10 +570,18 @@ async def get_task_logs(
 async def delegate_task(
     run_id: str,
     delegate_req: TaskDelegateRequest,
+    request: Request,
     orchestration_engine = Depends(get_orchestration_engine),
     db_manager = Depends(get_db_manager)
 ):
     """Delegate a subtask from a parent task to a target agent."""
+    org_id = get_current_org_id(request)
+    parent_run = db_manager.get_task_run(run_id)
+    if org_id and parent_run and getattr(parent_run, "organization_id", None) and parent_run.organization_id != org_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Task not found: {run_id}"
+        )
     try:
         subtask = orchestration_engine.delegate_task(
             parent_task_id=run_id,
@@ -554,9 +619,18 @@ async def delegate_task(
 @router.get("/{run_id}/subtasks/", response_model=List[TaskResponse])
 async def get_subtasks(
     run_id: str,
+    request: Request,
     db_manager = Depends(get_db_manager)
 ):
     """Get all subtasks delegated by a parent task."""
+    org_id = get_current_org_id(request)
+    if org_id:
+        parent_run = db_manager.get_task_run(run_id)
+        if parent_run and getattr(parent_run, "organization_id", None) and parent_run.organization_id != org_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Task not found: {run_id}"
+            )
     subtasks = db_manager.get_subtasks(run_id)
     return [task_run_to_response(s) for s in subtasks]
 
@@ -565,9 +639,18 @@ async def get_subtasks(
 @router.get("/{run_id}/tree/")
 async def get_task_tree(
     run_id: str,
+    request: Request,
     db_manager = Depends(get_db_manager)
 ):
     """Get recursive task execution tree rooted at this task."""
+    org_id = get_current_org_id(request)
+    if org_id:
+        parent_run = db_manager.get_task_run(run_id)
+        if parent_run and getattr(parent_run, "organization_id", None) and parent_run.organization_id != org_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Task tree not found: {run_id}"
+            )
     tree = db_manager.get_task_tree(run_id)
     if not tree:
         raise HTTPException(

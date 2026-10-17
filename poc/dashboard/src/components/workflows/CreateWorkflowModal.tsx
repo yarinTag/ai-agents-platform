@@ -37,6 +37,7 @@ import {
   GithubOutlined,
   FolderOpenOutlined,
   GlobalOutlined,
+  LinkOutlined,
 } from '@ant-design/icons';
 import {
   createWorkflow,
@@ -48,6 +49,7 @@ import {
   createSkill,
 } from '../../services/api';
 import { PlatformWorkflow } from '../../types/mcp';
+import { useAuth } from '../../context/AuthContext';
 import {
   WorkflowCanvasGraph,
   WorkflowCanvasStep,
@@ -80,6 +82,7 @@ interface CreateWorkflowModalProps {
   onSuccess: (workflow: PlatformWorkflow) => void;
   defaultChannelProvider?: string;
   defaultChannelId?: string;
+  departmentId?: string;
 }
 
 const AVAILABLE_AGENTS = [
@@ -100,7 +103,11 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = ({
   onSuccess,
   defaultChannelProvider = 'telegram',
   defaultChannelId = 'Hermes_test',
+  departmentId,
 }) => {
+  const { departments, activeDepartmentId } = useAuth();
+  const effectiveDepartmentId = departmentId || activeDepartmentId || departments[0]?.id;
+
   const [activeTab, setActiveTab] = useState<string>('ai');
   const [generating, setGenerating] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
@@ -121,6 +128,9 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = ({
   const [channelId, setChannelId] = useState<string>(defaultChannelId);
   const [triggerEnabled, setTriggerEnabled] = useState<boolean>(true);
   const [notifyMode, setNotifyMode] = useState<string>('ON_COMPLETE');
+  const [telegramChannels, setTelegramChannels] = useState<string[]>(['Hermes_test', '@agents_office_alerts']);
+  const [slackChannels, setSlackChannels] = useState<string[]>(['#general', '#dev-team']);
+  const [githubRepos, setGithubRepos] = useState<string[]>(['yarinTag/ai-agents-platform']);
 
   // MCP Connectors scope
   const [installedMcps, setInstalledMcps] = useState<string[]>(['telegram', 'github', 'trello', 'slack']);
@@ -189,6 +199,59 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = ({
             const ids = conns.map((c: any) => c.id || c.provider);
             setInstalledMcps(Array.from(new Set(ids)));
             setAllowedMcps(Array.from(new Set(ids)));
+
+            // Extract all configured Telegram channels
+            const tgConnectors = conns.filter((c: any) => c.provider === 'telegram' || c.id === 'telegram');
+            const tgList: string[] = [];
+            tgConnectors.forEach((c: any) => {
+              if (Array.isArray(c.configuration?.allowed_channels)) {
+                tgList.push(...c.configuration.allowed_channels);
+              }
+              if (typeof c.configuration?.chat_id === 'string' && c.configuration.chat_id.trim()) {
+                tgList.push(c.configuration.chat_id.trim());
+              }
+            });
+            const tgChans = Array.from(new Set(tgList.filter(Boolean)));
+            if (tgChans.length > 0) {
+              setTelegramChannels(tgChans);
+              if (channelProvider === 'telegram' && !tgChans.includes(channelId)) {
+                setChannelId(tgChans[0]);
+              }
+            }
+
+            // Extract all configured Slack channels
+            const slackConnectors = conns.filter((c: any) => c.provider === 'slack' || c.id === 'slack');
+            const slList: string[] = [];
+            slackConnectors.forEach((c: any) => {
+              if (Array.isArray(c.configuration?.allowed_channels)) {
+                slList.push(...c.configuration.allowed_channels);
+              }
+              if (typeof c.configuration?.default_channel === 'string' && c.configuration.default_channel.trim()) {
+                slList.push(c.configuration.default_channel.trim());
+              }
+            });
+            const slChans = Array.from(new Set(slList.filter(Boolean)));
+            if (slChans.length > 0) {
+              setSlackChannels(slChans);
+            }
+
+            // Extract all configured GitHub repos
+            const gitConnectors = conns.filter(
+              (c: any) => c.provider === 'github' || c.provider === 'git' || c.id === 'github' || c.id === 'git'
+            );
+            const gitList: string[] = [];
+            gitConnectors.forEach((c: any) => {
+              if (Array.isArray(c.configuration?.allowed_repos)) {
+                gitList.push(...c.configuration.allowed_repos);
+              }
+              if (typeof c.configuration?.default_repo === 'string' && c.configuration.default_repo.trim()) {
+                gitList.push(c.configuration.default_repo.trim());
+              }
+            });
+            const gitRepos = Array.from(new Set(gitList.filter(Boolean)));
+            if (gitRepos.length > 0) {
+              setGithubRepos(gitRepos);
+            }
           }
         })
         .catch(() => {});
@@ -462,6 +525,7 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = ({
       const res = await createWorkflow({
         name: workflowName,
         description,
+        department_id: effectiveDepartmentId,
         definition_yaml: yamlContent,
         cron_expression: cronExpression || undefined,
         webhook_enabled: webhookEnabled,
@@ -495,10 +559,6 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = ({
       open={open}
       onCancel={onClose}
       width={1000}
-      styles={{
-        body: { background: '#0d1117', color: '#f0f6fc' },
-        header: { background: '#0d1117', borderBottom: '1px solid #21262d' },
-      }}
       footer={[
         <div key="summary" style={{ float: 'left', display: 'flex', alignItems: 'center', gap: '8px', paddingTop: '4px' }}>
           <Tag color="cyan">{steps.length} Steps in DAG</Tag>
@@ -533,7 +593,7 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = ({
             key: 'ai',
             label: (
               <span style={{ fontWeight: 600 }}>
-                <ThunderboltOutlined style={{ color: '#38bdf8' }} /> 1. AI & MCP Scope (מחולל מהיר + הגדרת MCPs)
+                <ThunderboltOutlined style={{ color: '#38bdf8' }} /> 1. AI & MCP Scope (Quick Generator & MCP Setup)
               </span>
             ),
             children: (
@@ -550,7 +610,7 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = ({
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <ToolOutlined style={{ color: '#a855f7' }} />
                       <span style={{ color: '#f0f6fc', fontWeight: 700, fontSize: '13px' }}>
-                        Configured MCP Scope (ה-MCPs המורשים לוורק-פלואו זה בלבד):
+                        Configured MCP Scope (Authorized MCPs for this workflow):
                       </span>
                     </div>
                   }
@@ -584,7 +644,7 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = ({
                 {/* Templates Grid */}
                 <div style={{ marginBottom: '16px' }}>
                   <div style={{ fontSize: '12px', fontWeight: 700, color: '#f0f6fc', marginBottom: '8px' }}>
-                    READY-TO-USE PRESETS (תבניות מוכנות בלחיצה אחת):
+                    READY-TO-USE PRESETS (One-Click Templates):
                   </div>
                   <Row gutter={[12, 12]}>
                     <Col span={12}>
@@ -685,11 +745,11 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = ({
                 {/* Free Text Generator */}
                 <div>
                   <div style={{ fontSize: '12px', fontWeight: 700, color: '#f0f6fc', marginBottom: '6px' }}>
-                    OR DESCRIBE YOUR CUSTOM WORKFLOW (שפה חופשית בעברית או באנגלית):
+                    OR DESCRIBE YOUR CUSTOM WORKFLOW (Natural language description):
                   </div>
                   <Input.TextArea
                     rows={3}
-                    placeholder="לדוגמה: בהינתן הודעה בערוץ טלגרם כלשהו הרץ וורקפלו שבודק שינויים אחרונים בגיטאהב בריפו yarinTag/ai-agents-platform ושלח דוח יומי מסוכם בחזרה לערוץ..."
+                    placeholder="e.g. Upon receiving a message in a Telegram channel, run a workflow that inspects recent changes in the GitHub repo yarinTag/ai-agents-platform and posts an executive summary back to the channel..."
                     value={promptText}
                     onChange={(e) => setPromptText(e.target.value)}
                     style={{ background: '#161b22', borderColor: '#30363d', color: '#f0f6fc', marginBottom: '12px' }}
@@ -701,7 +761,30 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = ({
                       <Select
                         size="small"
                         value={channelProvider}
-                        onChange={setChannelProvider}
+                        onChange={(val) => {
+                          const newProv = val;
+                          let newChan = '';
+                          if (newProv === 'telegram') {
+                            newChan = telegramChannels[0] || '';
+                          } else if (newProv === 'slack') {
+                            newChan = slackChannels[0] || '';
+                          }
+                          setChannelProvider(newProv);
+                          setChannelId(newChan);
+                          syncToYaml(
+                            workflowName,
+                            description,
+                            steps,
+                            cronExpression,
+                            webhookEnabled,
+                            newProv,
+                            newChan,
+                            triggerEnabled,
+                            notifyMode,
+                            allowedMcps,
+                            workflowSkills
+                          );
+                        }}
                         style={{ width: '100%', marginTop: '4px' }}
                         options={[
                           { label: 'Telegram Bot', value: 'telegram' },
@@ -712,22 +795,49 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = ({
                     </Col>
                     <Col span={8}>
                       <span style={{ fontSize: '12px', color: '#8b949e' }}>Channel ID / Chat:</span>
-                      <Input
+                      <Select
                         size="small"
-                        value={channelId}
-                        onChange={(e) => setChannelId(e.target.value)}
-                        placeholder="e.g. Hermes_test"
-                        style={{ width: '100%', marginTop: '4px', background: '#161b22', borderColor: '#30363d', color: '#f0f6fc' }}
+                        showSearch
+                        allowClear
+                        value={channelId || undefined}
+                        disabled={!channelProvider}
+                        placeholder={channelProvider ? 'Select or search channel' : 'Select provider first'}
+                        onChange={(val) => {
+                          const newChan = val || '';
+                          setChannelId(newChan);
+                          syncToYaml(
+                            workflowName,
+                            description,
+                            steps,
+                            cronExpression,
+                            webhookEnabled,
+                            channelProvider,
+                            newChan,
+                            triggerEnabled,
+                            notifyMode,
+                            allowedMcps,
+                            workflowSkills
+                          );
+                        }}
+                        style={{ width: '100%', marginTop: '4px' }}
+                        options={(channelProvider === 'telegram'
+                          ? telegramChannels
+                          : channelProvider === 'slack'
+                          ? slackChannels
+                          : []
+                        ).map((ch) => ({ label: ch, value: ch }))}
                       />
                     </Col>
                     <Col span={8}>
                       <span style={{ fontSize: '12px', color: '#8b949e' }}>Target Repo (owner/repo):</span>
-                      <Input
+                      <Select
                         size="small"
+                        showSearch
                         value={targetRepo}
-                        onChange={(e) => setTargetRepo(e.target.value)}
-                        placeholder="e.g. yarinTag/ai-agents-platform"
-                        style={{ width: '100%', marginTop: '4px', background: '#161b22', borderColor: '#30363d', color: '#f0f6fc' }}
+                        onChange={(val) => setTargetRepo(val)}
+                        placeholder="Select target repo"
+                        style={{ width: '100%', marginTop: '4px' }}
+                        options={githubRepos.map((r) => ({ label: r, value: r }))}
                       />
                     </Col>
                   </Row>
@@ -751,7 +861,7 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = ({
             key: 'canvas',
             label: (
               <span style={{ fontWeight: 600 }}>
-                <ApartmentOutlined style={{ color: '#10b981' }} /> 2. Workflow Canvas (תרשים קאנבס)
+                <ApartmentOutlined style={{ color: '#10b981' }} /> 2. Workflow Canvas (Visual Flow)
               </span>
             ),
             children: (
@@ -791,7 +901,7 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = ({
             key: 'builder',
             label: (
               <span style={{ fontWeight: 600 }}>
-                <ToolOutlined style={{ color: '#a855f7' }} /> 3. Visual Step & Skill Builder (שלבים וסקילים)
+                <ToolOutlined style={{ color: '#a855f7' }} /> 3. Visual Step & Skill Builder (Steps & Skills)
               </span>
             ),
             children: (
@@ -837,6 +947,158 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = ({
                   />
                 </Form.Item>
 
+                {/* Channel Binding Section */}
+                <Card
+                  size="small"
+                  style={{ background: '#161b22', borderColor: '#30363d', marginBottom: '16px' }}
+                  title={
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <LinkOutlined style={{ color: '#10b981' }} />
+                      <span style={{ color: '#f0f6fc', fontWeight: 700, fontSize: '13px' }}>
+                        Channel Binding (Link Workflow to Configured Channel)
+                      </span>
+                    </div>
+                  }
+                >
+                  <Row gutter={16} align="middle">
+                    <Col span={6}>
+                      <span style={{ fontSize: '12px', color: '#8b949e', display: 'block', marginBottom: '4px' }}>
+                        Channel Provider:
+                      </span>
+                      <Select
+                        size="small"
+                        value={channelProvider}
+                        onChange={(val) => {
+                          const newProv = val;
+                          let newChan = '';
+                          if (newProv === 'telegram') {
+                            newChan = telegramChannels[0] || '';
+                          } else if (newProv === 'slack') {
+                            newChan = slackChannels[0] || '';
+                          }
+                          setChannelProvider(newProv);
+                          setChannelId(newChan);
+                          syncToYaml(
+                            workflowName,
+                            description,
+                            steps,
+                            cronExpression,
+                            webhookEnabled,
+                            newProv,
+                            newChan,
+                            triggerEnabled,
+                            notifyMode,
+                            allowedMcps,
+                            workflowSkills
+                          );
+                        }}
+                        style={{ width: '100%' }}
+                        options={[
+                          { label: 'Telegram', value: 'telegram' },
+                          { label: 'Slack', value: 'slack' },
+                          { label: 'None', value: '' },
+                        ]}
+                      />
+                    </Col>
+                    <Col span={7}>
+                      <span style={{ fontSize: '12px', color: '#8b949e', display: 'block', marginBottom: '4px' }}>
+                        Target Channel:
+                      </span>
+                      <Select
+                        size="small"
+                        showSearch
+                        allowClear
+                        value={channelId || undefined}
+                        disabled={!channelProvider}
+                        placeholder={channelProvider ? 'Select configured channel' : 'Select provider first'}
+                        onChange={(val) => {
+                          const newChan = val || '';
+                          setChannelId(newChan);
+                          syncToYaml(
+                            workflowName,
+                            description,
+                            steps,
+                            cronExpression,
+                            webhookEnabled,
+                            channelProvider,
+                            newChan,
+                            triggerEnabled,
+                            notifyMode,
+                            allowedMcps,
+                            workflowSkills
+                          );
+                        }}
+                        style={{ width: '100%' }}
+                        options={(channelProvider === 'telegram'
+                          ? telegramChannels
+                          : channelProvider === 'slack'
+                          ? slackChannels
+                          : []
+                        ).map((ch) => ({ label: ch, value: ch }))}
+                      />
+                    </Col>
+                    <Col span={6}>
+                      <span style={{ fontSize: '12px', color: '#8b949e', display: 'block', marginBottom: '4px' }}>
+                        Notification Mode:
+                      </span>
+                      <Select
+                        size="small"
+                        value={notifyMode}
+                        onChange={(val) => {
+                          setNotifyMode(val);
+                          syncToYaml(
+                            workflowName,
+                            description,
+                            steps,
+                            cronExpression,
+                            webhookEnabled,
+                            channelProvider,
+                            channelId,
+                            triggerEnabled,
+                            val,
+                            allowedMcps,
+                            workflowSkills
+                          );
+                        }}
+                        style={{ width: '100%' }}
+                        options={[
+                          { label: 'Post on Complete', value: 'ON_COMPLETE' },
+                          { label: 'Post on Failure', value: 'ON_FAILURE' },
+                          { label: 'Always Post', value: 'ALWAYS' },
+                          { label: 'Read-only (None)', value: 'NONE' },
+                        ]}
+                      />
+                    </Col>
+                    <Col span={5}>
+                      <div style={{ paddingTop: '18px' }}>
+                        <Checkbox
+                          checked={triggerEnabled}
+                          onChange={(e) => {
+                            const val = e.target.checked;
+                            setTriggerEnabled(val);
+                            syncToYaml(
+                              workflowName,
+                              description,
+                              steps,
+                              cronExpression,
+                              webhookEnabled,
+                              channelProvider,
+                              channelId,
+                              val,
+                              notifyMode,
+                              allowedMcps,
+                              workflowSkills
+                            );
+                          }}
+                          style={{ color: '#f0f6fc', fontSize: '12px' }}
+                        >
+                          Trigger Enabled
+                        </Checkbox>
+                      </div>
+                    </Col>
+                  </Row>
+                </Card>
+
                 {/* Skills Management Section */}
                 <Card
                   size="small"
@@ -846,7 +1108,7 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = ({
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <FileTextOutlined style={{ color: '#f59e0b' }} />
                         <span style={{ color: '#f0f6fc', fontWeight: 700, fontSize: '13px' }}>
-                          Connected Skills ({workflowSkills.length}) - סקילים המחוברים לוורק-פלואו
+                          Connected Skills ({workflowSkills.length}) - Skills Connected to Workflow
                         </span>
                       </div>
                       <Space>
@@ -1065,7 +1327,7 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = ({
             key: 'yaml',
             label: (
               <span style={{ fontWeight: 600 }}>
-                <CodeOutlined style={{ color: '#f59e0b' }} /> 4. Live YAML Playbook (קובץ ה-YAML שנוצר)
+                <CodeOutlined style={{ color: '#f59e0b' }} /> 4. Live YAML Playbook (Generated YAML File)
               </span>
             ),
             children: (
@@ -1133,7 +1395,7 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = ({
         title={
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <FileTextOutlined style={{ color: '#f59e0b' }} />
-            <span>Create New Skill for Workflow (הגדרת סקיל חדש עם מיקום בריפו)</span>
+            <span>Create New Skill for Workflow (Define New Skill with Repo Location)</span>
           </div>
         }
         open={createSkillModalOpen}
@@ -1141,10 +1403,6 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = ({
         onOk={() => newSkillForm.submit()}
         confirmLoading={creatingSkill}
         okText="Add Skill to Workflow"
-        styles={{
-          body: { background: '#0d1117', color: '#f0f6fc' },
-          header: { background: '#0d1117', borderBottom: '1px solid #21262d' },
-        }}
       >
         <Form
           form={newSkillForm}
@@ -1173,7 +1431,7 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = ({
 
           <Form.Item
             name="location"
-            label={<span style={{ color: '#f0f6fc' }}>Repository / Path Location (מיקום בריפו או מקומי)</span>}
+            label={<span style={{ color: '#f0f6fc' }}>Repository / Path Location (Repo or Local Path)</span>}
             tooltip="URL of Git repo (e.g. https://github.com/my-org/skills.git) or local path (e.g. /Users/.../skills/my-skill)"
           >
             <Input

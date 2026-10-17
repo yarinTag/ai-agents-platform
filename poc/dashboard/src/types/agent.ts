@@ -37,6 +37,10 @@ export interface Agent {
   // Workflow automation fields (detached from office floor)
   is_workflow_agent?: boolean;
   workflow_id?: string | null;
+
+  // Enterprise organization & department link
+  organization_id?: string | null;
+  department_id?: string | null;
 }
 
 export interface AgentCreateDto {
@@ -53,6 +57,10 @@ export interface AgentCreateDto {
   department?: string;
   avatar?: string;
 
+  // Enterprise organization & department link
+  organization_id?: string | null;
+  department_id?: string | null;
+
   parent_id?: string | null;
   role_type?: AgentRole | string;
   max_concurrent_children?: number;
@@ -64,7 +72,10 @@ export interface AgentCreateDto {
   runtime_provider?: string | null;
 }
 
-export interface AgentUpdateDto extends Partial<AgentCreateDto> {}
+export interface AgentUpdateDto extends Partial<AgentCreateDto> {
+  organization_id?: string | null;
+  department_id?: string | null;
+}
 
 export interface AgentTemplate {
   id: string;

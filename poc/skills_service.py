@@ -39,33 +39,58 @@ def get_skills_search_roots() -> List[Path]:
                 if p.exists() and p.resolve() not in roots:
                     roots.append(p.resolve())
 
-    # 2. Dynamic discovery in user home directory (Desktop/Projects, Projects, etc.)
+    # 2. Check organization plugins_local_path configured in Database
+    try:
+        from persistence import db_manager
+        for org in db_manager.list_organizations():
+            local_p = getattr(org, "plugins_local_path", None)
+            if local_p:
+                lp = Path(local_p)
+                if lp.exists():
+                    if lp.resolve() not in roots:
+                        roots.append(lp.resolve())
+                    sub_mp = lp / "skills-marketplace"
+                    if sub_mp.exists() and sub_mp.resolve() not in roots:
+                        roots.append(sub_mp.resolve())
+    except Exception:
+        pass
+
+    # 3. Dynamic discovery in user home directory (Desktop/Projects, Projects, etc.)
     home = Path.home()
     for cand in [
+        home / "Desktop" / "Projects" / "t-skills" / "skills-marketplace",
+        home / "Desktop" / "Projects" / "t-skills",
         home / "Desktop" / "Projects" / "p-skills" / "skills-marketplace",
+        home / "Desktop" / "Projects" / "p-skills",
+        home / "Projects" / "t-skills" / "skills-marketplace",
+        home / "Projects" / "t-skills",
         home / "Projects" / "p-skills" / "skills-marketplace",
+        home / "Projects" / "p-skills",
+        home / "t-skills" / "skills-marketplace",
         home / "p-skills" / "skills-marketplace",
     ]:
         if cand.exists() and cand.resolve() not in roots:
             roots.append(cand.resolve())
 
-    try:
-        for child in home.iterdir():
-            if child.is_dir():
-                cand = child / "Desktop" / "Projects" / "p-skills" / "skills-marketplace"
-                if cand.exists() and cand.resolve() not in roots:
-                    roots.append(cand.resolve())
-                cand2 = child / "Projects" / "p-skills" / "skills-marketplace"
-                if cand2.exists() and cand2.resolve() not in roots:
-                    roots.append(cand2.resolve())
-    except Exception:
-        pass
+    # Dynamically discover any skills-marketplace in Desktop/Projects or Projects
+    for parent_dir in [home / "Desktop" / "Projects", home / "Projects"]:
+        if parent_dir.exists() and parent_dir.is_dir():
+            try:
+                for child in parent_dir.iterdir():
+                    if child.is_dir():
+                        for sub_name in ["skills-marketplace", "plugins", "skills"]:
+                            sub = child / sub_name
+                            if sub.exists() and sub.resolve() not in roots:
+                                roots.append(sub.resolve())
+            except Exception:
+                pass
 
-    # 3. Workspace and relative locations
+    # 4. Workspace and relative locations
     poc_dir = Path(__file__).resolve().parent
     workspace_dir = poc_dir.parent
 
     for candidate in [
+        workspace_dir.parent / "t-skills" / "skills-marketplace",
         workspace_dir.parent / "p-skills" / "skills-marketplace",
         poc_dir / "plugins",
         poc_dir / "config" / "skills",

@@ -64,6 +64,8 @@ class AgentConfig:
 
     # Logical model capability tier (e.g. "tier:architect", "tier:worker", "tier:executive")
     model_tier: Optional[str] = None
+    organization_id: Optional[str] = None
+    department_id: Optional[str] = None
 
     def __post_init__(self):
         if self.skills is None:
@@ -165,6 +167,7 @@ class ProjectConfig:
     instructions: Optional[str] = None
     skills: List[str] = None
     allowed_tools: List[str] = None
+    organization_id: Optional[str] = None
 
     def __post_init__(self):
         if self.skills is None:

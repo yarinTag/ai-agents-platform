@@ -293,24 +293,67 @@ body {
   background: rgba(16, 185, 129, 0.08) !important;
 }
 
-/* Modals & Drawers */
-.ant-modal-content {
-  background-color: var(--bg-card) !important;
-  border: 1px solid var(--border-default) !important;
-  border-radius: var(--radius-xl) !important;
-  box-shadow: var(--shadow-lg) !important;
+/* Modals & Drawers - Clean Enterprise Layout */
+.ant-modal .ant-modal-content {
+  background-color: #161b22 !important;
+  border: 1px solid #30363d !important;
+  border-radius: 14px !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.65) !important;
   color: var(--text-primary) !important;
 }
 
-.ant-modal-header {
-  background-color: var(--bg-card) !important;
-  border-bottom: 1px solid var(--border-subtle) !important;
-  padding-bottom: var(--space-md) !important;
-  margin-bottom: var(--space-md) !important;
+.ant-modal .ant-modal-header {
+  background-color: #0d1117 !important;
+  border-bottom: 1px solid #21262d !important;
+  padding: 18px 24px !important;
+  margin: 0 !important;
 }
 
-.ant-modal-title {
+.ant-modal .ant-modal-title {
   color: var(--text-primary) !important;
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  line-height: 1.4 !important;
+}
+
+.ant-modal .ant-modal-close {
+  top: 16px !important;
+  inset-inline-end: 18px !important;
+  color: #8b949e !important;
+  border-radius: 6px !important;
+}
+
+.ant-modal .ant-modal-close:hover {
+  color: #f0f6fc !important;
+  background-color: #21262d !important;
+}
+
+.ant-modal .ant-modal-body {
+  background-color: #161b22 !important;
+  padding: 24px !important;
+  margin: 0 !important;
+  color: var(--text-primary) !important;
+  max-height: calc(85vh - 130px);
+  overflow-y: auto;
+}
+
+.ant-modal .ant-modal-footer {
+  background-color: #0d1117 !important;
+  border-top: 1px solid #21262d !important;
+  padding: 14px 24px !important;
+  margin: 0 !important;
+}
+
+.ant-modal .ant-form-item {
+  margin-bottom: 18px !important;
+}
+
+.ant-modal .ant-form-item-label > label {
+  color: #c9d1d9 !important;
+  font-weight: 600 !important;
+  font-size: 13px !important;
 }
 
 .ant-drawer-content {

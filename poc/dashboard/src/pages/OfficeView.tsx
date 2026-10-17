@@ -8,7 +8,6 @@ import { OfficeRightSidebar } from '../components/office/OfficeRightSidebar';
 import { AgentDeskDrawer } from '../components/office/AgentDeskDrawer';
 import { AgentMiniChatDrawer } from '../components/chat/AgentMiniChatDrawer';
 import { WarRoomModal } from '../components/warroom/WarRoomModal';
-import { ProjectSharedMemoryModal } from '../components/memory/ProjectSharedMemoryModal';
 import { Agent } from '../types/agent';
 import { useOfficeEvents } from '../hooks/useOfficeEvents';
 
@@ -18,7 +17,6 @@ export const OfficeViewPage: React.FC = () => {
   const [drawerVisible, setDrawerVisible] = useState<boolean>(false);
   const [chatVisible, setChatVisible] = useState<boolean>(false);
   const [warRoomVisible, setWarRoomVisible] = useState<boolean>(false);
-  const [memoryVisible, setMemoryVisible] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<string>('pixel');
 
   // Filter out workflow automation agents: they run background pipelines and are detached from the physical office floor
@@ -125,20 +123,6 @@ export const OfficeViewPage: React.FC = () => {
           >
             🏛️ War Room
           </Button>
-
-          <Button
-            icon={<BookOutlined />}
-            onClick={() => setMemoryVisible(true)}
-            style={{
-              background: 'rgba(16, 185, 129, 0.2)',
-              borderColor: '#10b981',
-              color: '#34d399',
-              backdropFilter: 'blur(8px)',
-              fontWeight: 600,
-            }}
-          >
-            🧠 Shared Memory
-          </Button>
         </div>
 
         {/* View Mode Switcher in Top Right */}
@@ -229,11 +213,6 @@ export const OfficeViewPage: React.FC = () => {
         agents={agents}
       />
 
-      {/* Project Shared Memory & Knowledge Base Modal */}
-      <ProjectSharedMemoryModal
-        open={memoryVisible}
-        onClose={() => setMemoryVisible(false)}
-      />
     </div>
   );
 };

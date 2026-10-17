@@ -18,7 +18,8 @@ import logging
 
 from ..dependencies import get_db_manager, get_workflow_engine, DatabaseManager, AgentConfig, AgentRole
 from workflows.parser import WorkflowParser, WorkflowDefinition
-from workflows.engine import WorkflowEngine, BudgetExceededError, MCPGovernanceViolationError
+from workflows.engine import WorkflowEngine, BudgetExceededError, MCPGovernanceViolationError, UnauthorizedUserDepartmentError
+from ..security import get_current_org_id, get_authorized_scope
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,7 @@ class WorkflowCreateRequest(BaseModel):
     definition_json: Optional[str] = None
     cron_expression: Optional[str] = None
     webhook_enabled: bool = True
+    organization_id: Optional[str] = None
 
 
 class WorkflowUpdateRequest(BaseModel):
@@ -44,6 +46,7 @@ class WorkflowUpdateRequest(BaseModel):
     cron_expression: Optional[str] = None
     webhook_enabled: Optional[bool] = None
     is_active: Optional[bool] = None
+    organization_id: Optional[str] = None
 
 
 class ChannelBindingDto(BaseModel):
@@ -69,6 +72,7 @@ class WorkflowResponse(BaseModel):
     is_active: bool
     channel_binding: Optional[Dict[str, Any]] = None
     runner_agent_id: Optional[str] = None
+    organization_id: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
@@ -488,6 +492,7 @@ def convert_format(req: WorkflowFormatConvertRequest):
 @router.post("/", response_model=WorkflowResponse, status_code=status.HTTP_201_CREATED)
 def create_workflow(
     req: WorkflowCreateRequest,
+    request: Request,
     db: DatabaseManager = Depends(get_db_manager)
 ):
     """Create a new workflow from YAML or JSON definition."""
@@ -499,6 +504,19 @@ def create_workflow(
             raise HTTPException(status_code=400, detail=f"Invalid YAML definition: {e}")
     elif not def_json:
         raise HTTPException(status_code=400, detail="Either definition_yaml or definition_json is required")
+
+    scope = get_authorized_scope(request, db)
+    org_id = scope["org_id"]
+    is_org_admin = scope["is_org_admin"]
+    authorized_dept_ids = scope["department_ids"]
+
+    target_dept_id = req.department_id or scope["default_department_id"]
+    if target_dept_id:
+        dept = db.get_department(target_dept_id)
+        if not dept or (org_id and dept.organization_id and dept.organization_id != org_id):
+            raise HTTPException(status_code=400, detail=f"Department '{target_dept_id}' does not belong to your organization")
+        if not is_org_admin and target_dept_id not in authorized_dept_ids:
+            raise HTTPException(status_code=403, detail=f"Not authorized to assign workflow to department '{target_dept_id}'")
 
     wf_id = f"wf_{uuid.uuid4().hex[:10]}"
     runner_agent_id = f"wf-agent-{wf_id}"
@@ -531,7 +549,7 @@ def create_workflow(
         f"3. Strictly enforce the assigned MCP scope and skills during DAG execution."
     )
 
-    # Save dedicated workflow automation agent
+    # Save dedicated workflow automation agent (bound to BOTH org_id and department_id)
     try:
         runner_agent = AgentConfig(
             id=runner_agent_id,
@@ -543,6 +561,8 @@ def create_workflow(
             role_type="WORKFLOW_AUTOMATION",
             is_workflow_agent=True,
             workflow_id=wf_id,
+            organization_id=org_id,
+            department_id=target_dept_id,
             mcp_permissions=mcps,
             allowed_tools=["*"],
             avatar=f"https://api.dicebear.com/7.x/bottts/svg?seed={wf_id}",
@@ -561,10 +581,11 @@ def create_workflow(
         id=wf_id,
         name=req.name,
         definition_json=def_json,
-        department_id=req.department_id,
+        department_id=target_dept_id,
         description=req.description,
         cron_expression=req.cron_expression,
-        webhook_enabled=req.webhook_enabled
+        webhook_enabled=req.webhook_enabled,
+        organization_id=org_id
     )
 
     yaml_repr = None
@@ -585,9 +606,21 @@ def create_workflow(
         cron_expression=wf.cron_expression,
         is_active=wf.is_active,
         runner_agent_id=runner_agent_id,
+        organization_id=getattr(wf, "organization_id", None),
         created_at=wf.created_at,
         updated_at=wf.updated_at
     )
+
+
+def _check_workflow_scope(wf, scope: Dict[str, Any]):
+    org_id = scope["org_id"]
+    is_org_admin = scope["is_org_admin"]
+    authorized_dept_ids = scope["department_ids"]
+
+    if org_id and getattr(wf, "organization_id", None) and wf.organization_id != org_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workflow not found")
+    if not is_org_admin and getattr(wf, "department_id", None) and authorized_dept_ids and wf.department_id not in authorized_dept_ids:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to access workflow in this department")
 
 
 def _workflow_to_response(wf) -> WorkflowResponse:
@@ -620,6 +653,7 @@ def _workflow_to_response(wf) -> WorkflowResponse:
         is_active=wf.is_active,
         channel_binding=channel_binding,
         runner_agent_id=runner_agent_id,
+        organization_id=getattr(wf, "organization_id", None),
         created_at=wf.created_at,
         updated_at=wf.updated_at
     )
@@ -628,24 +662,46 @@ def _workflow_to_response(wf) -> WorkflowResponse:
 @router.get("", response_model=List[WorkflowResponse])
 @router.get("/", response_model=List[WorkflowResponse])
 def list_workflows(
+    request: Request,
     department_id: Optional[str] = None,
     active_only: bool = False,
     db: DatabaseManager = Depends(get_db_manager)
 ):
-    """List workflows."""
-    workflows = db.list_workflows(department_id=department_id, active_only=active_only)
+    """List workflows strictly scoped by organization and authorized departments."""
+    scope = get_authorized_scope(request, db)
+    org_id = scope["org_id"]
+    is_org_admin = scope["is_org_admin"]
+    authorized_dept_ids = scope["department_ids"]
+
+    target_dept_ids = None
+    if department_id:
+        if not is_org_admin and department_id not in authorized_dept_ids:
+            raise HTTPException(status_code=403, detail="Not authorized to access workflows in this department")
+        target_dept_ids = [department_id]
+    elif not is_org_admin and org_id:
+        target_dept_ids = authorized_dept_ids
+
+    workflows = db.list_workflows(
+        department_id=None,
+        active_only=active_only,
+        organization_id=org_id,
+        department_ids=target_dept_ids
+    )
     return [_workflow_to_response(wf) for wf in workflows]
 
 
 @router.get("/{workflow_id}", response_model=WorkflowResponse)
 def get_workflow(
     workflow_id: str,
+    request: Request,
     db: DatabaseManager = Depends(get_db_manager)
 ):
     """Get workflow by ID."""
     wf = db.get_workflow(workflow_id)
     if not wf:
         raise HTTPException(status_code=404, detail="Workflow not found")
+    scope = get_authorized_scope(request, db)
+    _check_workflow_scope(wf, scope)
     return _workflow_to_response(wf)
 
 
@@ -653,12 +709,22 @@ def get_workflow(
 def update_workflow(
     workflow_id: str,
     req: WorkflowUpdateRequest,
+    request: Request,
     db: DatabaseManager = Depends(get_db_manager)
 ):
-    """Update workflow settings or definition."""
+    """Update workflow settings or definition with scope validation."""
     wf = db.get_workflow(workflow_id)
     if not wf:
         raise HTTPException(status_code=404, detail="Workflow not found")
+    scope = get_authorized_scope(request, db)
+    _check_workflow_scope(wf, scope)
+
+    if req.department_id:
+        dept = db.get_department(req.department_id)
+        if not dept or (scope["org_id"] and dept.organization_id and dept.organization_id != scope["org_id"]):
+            raise HTTPException(status_code=400, detail=f"Department '{req.department_id}' does not belong to your organization")
+        if not scope["is_org_admin"] and req.department_id not in scope["department_ids"]:
+            raise HTTPException(status_code=403, detail=f"Not authorized to assign workflow to department '{req.department_id}'")
 
     def_json = req.definition_json
     if not def_json and req.definition_yaml:
@@ -675,8 +741,16 @@ def update_workflow(
         definition_json=def_json,
         cron_expression=req.cron_expression,
         webhook_enabled=req.webhook_enabled,
-        is_active=req.is_active
+        is_active=req.is_active,
+        organization_id=req.organization_id
     )
+
+    if req.department_id:
+        runner_agent = db.get_agent(f"wf-agent-{workflow_id}")
+        if runner_agent:
+            runner_agent.department_id = req.department_id
+            db.save_agent(runner_agent)
+
     return _workflow_to_response(updated)
 
 
@@ -684,6 +758,7 @@ def update_workflow(
 def bind_workflow_channel(
     workflow_id: str,
     req: ChannelBindingDto,
+    request: Request,
     db: DatabaseManager = Depends(get_db_manager)
 ):
     """
@@ -694,6 +769,8 @@ def bind_workflow_channel(
     wf = db.get_workflow(workflow_id)
     if not wf:
         raise HTTPException(status_code=404, detail="Workflow not found")
+    scope = get_authorized_scope(request, db)
+    _check_workflow_scope(wf, scope)
 
     try:
         def_dict = json.loads(wf.definition_json or "{}")
@@ -712,6 +789,7 @@ def bind_workflow_channel(
 @router.delete("/{workflow_id}/channel-binding", response_model=WorkflowResponse)
 def unbind_workflow_channel(
     workflow_id: str,
+    request: Request,
     db: DatabaseManager = Depends(get_db_manager)
 ):
     """Remove communication channel binding from a workflow."""
@@ -719,6 +797,8 @@ def unbind_workflow_channel(
     wf = db.get_workflow(workflow_id)
     if not wf:
         raise HTTPException(status_code=404, detail="Workflow not found")
+    scope = get_authorized_scope(request, db)
+    _check_workflow_scope(wf, scope)
 
     try:
         def_dict = json.loads(wf.definition_json or "{}")
@@ -736,12 +816,15 @@ def unbind_workflow_channel(
 @router.delete("/{workflow_id}")
 def delete_workflow(
     workflow_id: str,
+    request: Request,
     db: DatabaseManager = Depends(get_db_manager)
 ):
-    """Delete a workflow."""
+    """Delete a workflow with tenant check."""
     wf = db.get_workflow(workflow_id)
     if not wf:
         raise HTTPException(status_code=404, detail="Workflow not found")
+    scope = get_authorized_scope(request, db)
+    _check_workflow_scope(wf, scope)
     
     # Clean up associated runner agent
     try:
@@ -762,15 +845,24 @@ def delete_workflow(
 @router.post("/{workflow_id}/execute", response_model=WorkflowExecutionResponse)
 def execute_workflow(
     workflow_id: str,
+    request: Request,
     payload: Optional[Dict[str, Any]] = None,
     engine: WorkflowEngine = Depends(get_workflow_engine)
 ):
-    """Manually trigger a workflow execution."""
+    """Manually trigger a workflow execution with scope enforcement."""
+    wf = engine.db_manager.get_workflow(workflow_id)
+    if not wf:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    scope = get_authorized_scope(request, engine.db_manager)
+    _check_workflow_scope(wf, scope)
+
     try:
+        user_ctx = getattr(request.state, "user", None)
         execution = engine.execute_workflow(
             workflow_id=workflow_id,
             trigger_type="MANUAL",
-            trigger_payload=payload
+            trigger_payload=payload,
+            user_context=user_ctx
         )
         return WorkflowExecutionResponse(
             id=execution.id,
@@ -787,6 +879,11 @@ def execute_workflow(
             completed_at=execution.completed_at,
             error_message=execution.error_message,
             created_at=execution.created_at
+        )
+    except UnauthorizedUserDepartmentError as uude:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Department Access Denied: {str(uude)}"
         )
     except MCPGovernanceViolationError as mcp_err:
         raise HTTPException(

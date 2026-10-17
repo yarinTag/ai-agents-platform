@@ -4,6 +4,7 @@ import { ThunderboltOutlined, UserAddOutlined, BranchesOutlined, CheckCircleOutl
 import { Agent, AgentTemplate, TemplateInstantiateDto } from '../../types/agent';
 import { getTemplates, instantiateTemplate } from '../../services/api';
 import FolderPickerModal from '../common/FolderPickerModal';
+import { useAuth } from '../../context/AuthContext';
 
 interface TemplateGalleryProps {
   agents: Agent[];
@@ -14,6 +15,7 @@ export const TemplateGallery: React.FC<TemplateGalleryProps> = ({
   agents,
   onAgentInstantiated,
 }) => {
+  const { departments, activeDepartmentId } = useAuth();
   const [templates, setTemplates] = useState<AgentTemplate[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedTemplate, setSelectedTemplate] = useState<AgentTemplate | null>(null);
@@ -42,9 +44,10 @@ export const TemplateGallery: React.FC<TemplateGalleryProps> = ({
   const handleOpenInstantiate = (template: AgentTemplate) => {
     setSelectedTemplate(template);
     form.resetFields();
+    const activeDept = departments.find((d) => d.id === activeDepartmentId) || departments[0];
     form.setFieldsValue({
       name: `${template.name} (Unit)`,
-      department: template.category || 'Engineering',
+      department: activeDept ? activeDept.name : (template.category || 'Engineering'),
       model_override: template.model || 'default',
     });
     setModalVisible(true);
@@ -203,7 +206,17 @@ export const TemplateGallery: React.FC<TemplateGalleryProps> = ({
           </Form.Item>
 
           <Form.Item name="department" label="Department">
-            <Input placeholder="Engineering, Architecture, QA & Testing, etc." />
+            {departments && departments.length > 0 ? (
+              <Select
+                placeholder="Select Department"
+                options={departments.map((d) => ({
+                  value: d.name,
+                  label: `📁 ${d.name}`,
+                }))}
+              />
+            ) : (
+              <Input placeholder="Engineering, Architecture, QA & Testing, etc." />
+            )}
           </Form.Item>
 
           {selectedTemplate?.role !== 'ROOT_ORCHESTRATOR' && (

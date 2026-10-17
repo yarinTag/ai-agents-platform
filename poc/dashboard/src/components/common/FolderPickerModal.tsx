@@ -165,9 +165,6 @@ export const FolderPickerModal: React.FC<FolderPickerModalProps> = ({
           {selectedFolder ? `Select "${selectedFolder.name}"` : 'Select Current Directory'}
         </Button>,
       ]}
-      styles={{
-        body: { padding: '16px 20px', background: '#0f172a', borderRadius: '8px' },
-      }}
     >
       {/* Top action row: Native Picker CTA */}
       <div

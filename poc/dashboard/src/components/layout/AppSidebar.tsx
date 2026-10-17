@@ -14,6 +14,7 @@ import {
   LeftOutlined,
   RightOutlined,
   ThunderboltOutlined,
+  BankOutlined,
 } from '@ant-design/icons';
 
 interface AppSidebarProps {
@@ -85,7 +86,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ collapsed, onToggleColla
       items: [
         {
           to: '/projects',
-          label: 'Projects & Memory',
+          label: 'Projects',
           icon: <FolderOpenOutlined style={{ fontSize: '15px' }} />,
         },
         {
@@ -97,6 +98,18 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ collapsed, onToggleColla
           to: '/dashboard',
           label: 'System Metrics',
           icon: <BarChartOutlined style={{ fontSize: '15px' }} />,
+        },
+      ],
+    },
+    {
+      title: 'ORGANIZATION & GOVERNANCE',
+      items: [
+        {
+          to: '/organization',
+          label: 'Org & Teams',
+          icon: <BankOutlined style={{ fontSize: '15px' }} />,
+          badge: 'ORG',
+          badgeColor: '#a855f7',
         },
       ],
     },

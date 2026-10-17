@@ -1,7 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { Tooltip, Button } from 'antd';
-import { MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Tooltip, Button, Tag, Popconfirm, Select } from 'antd';
+import {
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
+  LogoutOutlined,
+  BankOutlined,
+  UserOutlined,
+} from '@ant-design/icons';
+import { useAuth } from '../../context/AuthContext';
 
 interface OfficeTopBarProps {
   collapsed?: boolean;
@@ -15,13 +22,16 @@ const routeTitles: Record<string, { title: string; subtitle: string; icon: strin
   '/skills': { title: 'PLUGINS HUB', subtitle: 'Extensible Capabilities & Skills', icon: '🧩' },
   '/mcp': { title: 'MCP HUB', subtitle: 'Model Context Protocol Integrations', icon: '🔌' },
   '/tasks': { title: 'TASKS QUEUE', subtitle: 'Orchestrated Assignments', icon: '📋' },
-  '/projects': { title: 'PROJECTS & MEMORY', subtitle: 'Persistent Knowledge Base', icon: '🗂️' },
+  '/projects': { title: 'PROJECTS', subtitle: 'Enterprise Workspaces & Repositories', icon: '🗂️' },
   '/calendar': { title: 'SCHEDULE & CALENDAR', subtitle: 'Automated Cron Routines', icon: '🗓️' },
+  '/organization': { title: 'ORG & TEAMS', subtitle: 'Departments, Budgets & Access Control', icon: '🏢' },
   '/dashboard': { title: 'SYSTEM METRICS', subtitle: 'Health & Runtime Statistics', icon: '📊' },
 };
 
 export const OfficeTopBar: React.FC<OfficeTopBarProps> = ({ collapsed = false, onToggleCollapse }) => {
   const [timeStr, setTimeStr] = useState('');
+  const navigate = useNavigate();
+  const { organization, user, departments, activeDepartmentId, setActiveDepartmentId, logout } = useAuth();
   const location = useLocation();
 
   useEffect(() => {
@@ -152,19 +162,107 @@ export const OfficeTopBar: React.FC<OfficeTopBarProps> = ({ collapsed = false, o
         </span>
       </div>
 
-      {/* Right: Headless status + Clock */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10px', fontWeight: 700, color: '#8b949e' }}>
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981' }} />
-          <span>RUNS HEADLESS ON</span>
-          <span style={{ fontSize: '12px' }}>⚙️ 🧠</span>
-        </div>
+      {/* Right: Org Info + User & Role + Logout + Clock */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        {organization && (
+          <Tooltip title="View Organization & Teams">
+            <Tag
+              icon={<BankOutlined />}
+              color="blue"
+              onClick={() => navigate('/organization')}
+              style={{
+                margin: 0,
+                padding: '2px 8px',
+                borderRadius: '6px',
+                fontWeight: 600,
+                fontSize: '11px',
+                background: '#161b22',
+                borderColor: '#30363d',
+                color: '#58a6ff',
+                cursor: 'pointer',
+              }}
+            >
+              {organization.name}
+            </Tag>
+          </Tooltip>
+        )}
+
+        {/* Compact Department Selector Dropdown */}
+        {departments && departments.length > 0 && (
+          <Select
+            size="small"
+            value={activeDepartmentId || (user?.role === 'ORG_ADMIN' ? 'all' : departments[0]?.id)}
+            onChange={(val) => {
+              setActiveDepartmentId(val === 'all' ? null : val);
+            }}
+            options={[
+              ...(user?.role === 'ORG_ADMIN' ? [{ label: '🌐 All Departments', value: 'all' }] : []),
+              ...departments.map((d) => ({
+                label: `📁 ${d.name}`,
+                value: d.id,
+              })),
+            ]}
+            style={{ minWidth: 150 }}
+            popupMatchSelectWidth={false}
+          />
+        )}
+
+        {user && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              background: '#161b22',
+              padding: '2px 8px',
+              borderRadius: '6px',
+              border: '1px solid #30363d',
+            }}
+          >
+            <UserOutlined style={{ color: '#8b949e', fontSize: '11px' }} />
+            <span style={{ fontSize: '11px', fontWeight: 600, color: '#f0f6fc' }}>
+              {user.full_name}
+            </span>
+            <Tag
+              color={user.role === 'ORG_ADMIN' ? 'gold' : 'cyan'}
+              style={{ margin: 0, fontSize: '10px', padding: '0 4px', lineHeight: '16px' }}
+            >
+              {user.role}
+            </Tag>
+          </div>
+        )}
+
+        <Popconfirm
+          title="Are you sure you want to log out?"
+          onConfirm={logout}
+          okText="Log out"
+          cancelText="Cancel"
+          placement="bottomRight"
+        >
+          <Tooltip title="Log out">
+            <Button
+              type="text"
+              size="small"
+              icon={<LogoutOutlined style={{ color: '#ef4444' }} />}
+              style={{
+                width: 28,
+                height: 28,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: '6px',
+                border: '1px solid #30363d',
+                background: '#161b22',
+              }}
+            />
+          </Tooltip>
+        </Popconfirm>
 
         {/* Live Digital Clock */}
         <div
           style={{
             fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-            fontSize: '13px',
+            fontSize: '12px',
             fontWeight: 700,
             color: '#f0f6fc',
             letterSpacing: '0.5px',
@@ -182,4 +280,3 @@ export const OfficeTopBar: React.FC<OfficeTopBarProps> = ({ collapsed = false, o
 };
 
 export default OfficeTopBar;
-
