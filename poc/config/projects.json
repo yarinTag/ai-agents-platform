@@ -26,18 +26,5 @@
       "grep",
       "glob"
     ]
-  },
-  "front-budget-management": {
-    "id": "front-budget-management",
-    "name": "front-budget-management",
-    "description": "Local project at /Users/yarintag/Desktop/Projects/front-budget-management",
-    "working_directory": "/Users/yarintag/Desktop/Projects/front-budget-management",
-    "instructions": null,
-    "skills": [],
-    "allowed_tools": [
-      "read",
-      "grep",
-      "glob"
-    ]
   }
 }

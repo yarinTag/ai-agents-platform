@@ -35,6 +35,8 @@ class TaskDelegateRequest(BaseModel):
     subtask_prompt: str = Field(..., min_length=1)
     timeout_seconds: Optional[int] = Field(default=300, ge=10, le=3600)
     project_id: Optional[str] = None
+    dependencies: Optional[List[str]] = None
+    acceptance_criteria: Optional[str] = None
 
 
 class TaskResponse(BaseModel):
@@ -56,6 +58,17 @@ class TaskResponse(BaseModel):
     root_task_id: Optional[str] = None
     assigned_by: Optional[str] = None
     events: Optional[List[Dict[str, Any]]] = None
+    dependencies: Optional[List[str]] = None
+    structured_result: Optional[Dict[str, Any]] = None
+    acceptance_criteria: Optional[str] = None
+    retry_count: Optional[int] = 0
+    input_tokens: Optional[int] = 0
+    output_tokens: Optional[int] = 0
+    cache_read_tokens: Optional[int] = 0
+    cache_write_tokens: Optional[int] = 0
+    cost_usd: Optional[float] = 0.0
+    cost_source: Optional[str] = "UNKNOWN"
+    model: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -100,7 +113,19 @@ def task_run_to_response(run: AgentRun) -> dict:
         "root_task_id": getattr(run, "root_task_id", None),
         "assigned_by": getattr(run, "assigned_by", None),
         "events": getattr(run, "events", None) or [],
+        "dependencies": getattr(run, "dependencies", None) or [],
+        "structured_result": getattr(run, "structured_result", None),
+        "acceptance_criteria": getattr(run, "acceptance_criteria", None),
+        "retry_count": getattr(run, "retry_count", 0),
+        "input_tokens": getattr(run, "input_tokens", 0) or 0,
+        "output_tokens": getattr(run, "output_tokens", 0) or 0,
+        "cache_read_tokens": getattr(run, "cache_read_tokens", 0) or 0,
+        "cache_write_tokens": getattr(run, "cache_write_tokens", 0) or 0,
+        "cost_usd": float(getattr(run, "cost_usd", 0.0) or 0.0),
+        "cost_source": getattr(run, "cost_source", "UNKNOWN"),
+        "model": getattr(run, "model", None),
     }
+
 
 
 @router.post("/", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
@@ -498,7 +523,9 @@ async def delegate_task(
             target_agent_id=delegate_req.target_agent_id,
             subtask_prompt=delegate_req.subtask_prompt,
             timeout_seconds=delegate_req.timeout_seconds or 300,
-            project_id=delegate_req.project_id
+            project_id=delegate_req.project_id,
+            dependencies=delegate_req.dependencies,
+            acceptance_criteria=delegate_req.acceptance_criteria
         )
 
         try:

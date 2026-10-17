@@ -61,6 +61,8 @@ class AgentBase(BaseModel):
     mcp_permissions: List[str] = Field(default_factory=list)
     # None = inherit the platform-default runtime provider
     runtime_provider: Optional[str] = None
+    is_workflow_agent: bool = Field(default=False)
+    workflow_id: Optional[str] = None
 
     _validate_provider = field_validator('runtime_provider')(_check_runtime_provider)
 
@@ -95,6 +97,8 @@ class AgentUpdate(BaseModel):
     allowed_peer_ids: Optional[List[str]] = None
     mcp_permissions: Optional[List[str]] = None
     runtime_provider: Optional[str] = None
+    is_workflow_agent: Optional[bool] = False
+    workflow_id: Optional[str] = None
 
     _validate_provider = field_validator('runtime_provider')(_check_runtime_provider)
 
@@ -137,7 +141,9 @@ def agent_to_response(agent: AgentConfig) -> dict:
         "allow_sibling_communication": getattr(agent, "allow_sibling_communication", True),
         "allowed_peer_ids": getattr(agent, "allowed_peer_ids", []) or [],
         "mcp_permissions": getattr(agent, "mcp_permissions", []) or [],
-        "runtime_provider": getattr(agent, "runtime_provider", None)
+        "runtime_provider": getattr(agent, "runtime_provider", None),
+        "is_workflow_agent": getattr(agent, "is_workflow_agent", False) or False,
+        "workflow_id": getattr(agent, "workflow_id", None)
     }
 
 

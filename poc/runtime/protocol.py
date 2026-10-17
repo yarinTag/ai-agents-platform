@@ -1,13 +1,14 @@
 """
 RuntimeAdapter Protocol and capability abstractions for the AI Agents Platform.
 
-Claude Code is a runtime, not the Agent OS. All runtime backends must implement
-this protocol to be used by the platform orchestration layer.
+Claude Code is a runtime implementation, not the Agent OS itself. All runtime backends
+must implement this protocol to be plugged into the platform orchestration layer.
 """
 
 from typing import Protocol, Optional, Callable, Dict, Any, List, runtime_checkable
 from dataclasses import dataclass
 from config import AgentConfig, ProjectConfig
+from .models import AgentRun
 
 
 @dataclass
@@ -26,6 +27,47 @@ class RuntimeCapabilities:
 class RuntimeAdapter(Protocol):
     """Protocol defining the contract for any AI runtime backend."""
 
+    def start_task(
+        self,
+        agent_id: str,
+        project_id: Optional[str] = None,
+        prompt: Optional[str] = None,
+        session_id: Optional[str] = None,
+        fork_session: bool = False,
+        task_id: Optional[str] = None,
+    ) -> str:
+        """
+        Start a task execution by agent ID or task ID.
+        Returns run_id (unique string identifier for this execution).
+        """
+        ...
+
+    def get_run_status(
+        self,
+        run_id: str
+    ) -> Optional[AgentRun]:
+        """Get the current status/run record for a task."""
+        ...
+
+    def cancel_run(
+        self,
+        run_id: str
+    ) -> bool:
+        """Cancel an in-flight run."""
+        ...
+
+    def resume_task(
+        self,
+        run_id: str,
+        answer: str
+    ) -> str:
+        """Resume a suspended/waiting task run with an operator or supervisor response."""
+        ...
+
+    def list_runs(self) -> List[AgentRun]:
+        """List all tracked runs."""
+        ...
+
     def start_execution(
         self,
         agent_config: AgentConfig,
@@ -36,7 +78,7 @@ class RuntimeAdapter(Protocol):
         task_id: Optional[str] = None,
     ) -> str:
         """
-        Start an execution attempt.
+        Start an execution attempt using full config objects.
         Returns execution_id (unique string identifier for this execution).
         """
         ...

@@ -21,6 +21,16 @@ export const OfficeViewPage: React.FC = () => {
   const [memoryVisible, setMemoryVisible] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<string>('pixel');
 
+  // Filter out workflow automation agents: they run background pipelines and are detached from the physical office floor
+  const officeAgents = React.useMemo(() => {
+    return agents.filter(
+      (a) =>
+        a.role_type !== 'WORKFLOW_AUTOMATION' &&
+        !a.is_workflow_agent &&
+        a.department !== 'Workflow Automations'
+    );
+  }, [agents]);
+
   const handleSelectAgent = (agent: Agent) => {
     setSelectedAgent(agent);
     setChatVisible(true);
@@ -169,7 +179,7 @@ export const OfficeViewPage: React.FC = () => {
           </div>
         ) : viewMode === 'pixel' ? (
           <PixelOfficeCanvas
-            agents={agents}
+            agents={officeAgents}
             tasks={tasks}
             connectionStatus={connectionStatus}
             onSelectAgent={handleSelectAgent}
@@ -177,7 +187,7 @@ export const OfficeViewPage: React.FC = () => {
           />
         ) : (
           <AgentsOfficeV3Canvas
-            agents={agents}
+            agents={officeAgents}
             tasks={tasks}
             onSelectAgent={handleSelectAgent}
             onTaskCreated={refresh}
@@ -187,7 +197,7 @@ export const OfficeViewPage: React.FC = () => {
 
       {/* Right: Office Task Status Panel */}
       <OfficeRightSidebar
-        agents={agents}
+        agents={officeAgents}
         tasks={tasks}
         onTaskCreated={refresh}
         onSelectAgent={handleSelectAgent}

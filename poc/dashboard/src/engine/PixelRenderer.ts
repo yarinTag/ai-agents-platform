@@ -259,7 +259,13 @@ export class PixelRenderer {
   }
 
   public updateData(agents: Agent[], tasks: Task[], connections?: VisualConnection[]): void {
-    this.agents = agents;
+    // Strictly isolate office desks: Workflow automation agents are background runners detached from office floor
+    this.agents = (agents || []).filter(
+      (a) =>
+        a.role_type !== 'WORKFLOW_AUTOMATION' &&
+        !a.is_workflow_agent &&
+        a.department !== 'Workflow Automations'
+    );
     this.tasks = tasks;
     if (connections) {
       this.connections = connections;

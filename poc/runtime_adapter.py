@@ -10,7 +10,7 @@ import json
 import time
 import threading
 import queue
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from typing import Dict, List, Optional, Callable, Any
 from enum import Enum
 from datetime import datetime
@@ -29,79 +29,13 @@ RUNTIME_SETUP_COMPLETED_KEY = providers.SETTING_SETUP_COMPLETED
 
 logger = logging.getLogger(__name__)
 
-
-class TaskStatus(Enum):
-    QUEUED = "queued"
-    PENDING = "pending"
-    RUNNING = "running"
-    SCHEDULED = "scheduled"
-    WAITING_INPUT = "waiting_input"
-    PENDING_APPROVAL = "pending_approval"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    CANCELLED = "cancelled"
+# Import runtime-agnostic domain models and re-export for backward compatibility
+try:
+    from runtime.models import TaskStatus, AgentRun
+except ImportError:
+    from poc.runtime.models import TaskStatus, AgentRun
 
 
-
-@dataclass
-class AgentRun:
-    """Represents a running agent task."""
-    run_id: str
-    agent_id: str
-    project_id: Optional[str]
-    prompt: str
-    status: TaskStatus
-    created_at: datetime
-    started_at: Optional[datetime] = None
-    ended_at: Optional[datetime] = None
-    result: Optional[str] = None
-    error: Optional[str] = None
-    exit_code: Optional[int] = None
-    events: List[Dict[str, Any]] = None
-    parent_task_id: Optional[str] = None
-    root_task_id: Optional[str] = None
-    assigned_by: Optional[str] = None
-    session_id: Optional[str] = None
-    dangerously_skip_permissions: bool = False
-
-    def __post_init__(self):
-        if self.events is None:
-            self.events = []
-
-    def to_dict(self) -> Dict[str, Any]:
-        data = asdict(self)
-        # Convert datetime objects to ISO strings
-        data['created_at'] = self.created_at.isoformat() if self.created_at else None
-        if self.started_at:
-            data['started_at'] = self.started_at.isoformat()
-        if self.ended_at:
-            data['ended_at'] = self.ended_at.isoformat()
-        data['status'] = self.status.value
-        data['parent_task_id'] = self.parent_task_id
-        data['root_task_id'] = self.root_task_id
-        data['assigned_by'] = self.assigned_by
-        data['dangerously_skip_permissions'] = self.dangerously_skip_permissions
-        return data
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'AgentRun':
-        data_copy = dict(data)
-        # Convert ISO strings back to datetime objects
-        if data_copy.get('created_at') and isinstance(data_copy['created_at'], str):
-            data_copy['created_at'] = datetime.fromisoformat(data_copy['created_at'])
-        if data_copy.get('started_at') and isinstance(data_copy['started_at'], str):
-            data_copy['started_at'] = datetime.fromisoformat(data_copy['started_at'])
-        if data_copy.get('ended_at') and isinstance(data_copy['ended_at'], str):
-            data_copy['ended_at'] = datetime.fromisoformat(data_copy['ended_at'])
-        if isinstance(data_copy.get('status'), str):
-            data_copy['status'] = TaskStatus(data_copy['status'])
-        data_copy.setdefault('project_id', None)
-        data_copy.setdefault('parent_task_id', None)
-        data_copy.setdefault('root_task_id', None)
-        data_copy.setdefault('assigned_by', None)
-        data_copy.setdefault('session_id', None)
-        data_copy.setdefault('dangerously_skip_permissions', False)
-        return cls(**data_copy)
 
 
 def extract_supervisor_question(data: Any) -> Optional[Dict[str, Any]]:
@@ -329,6 +263,7 @@ class ClaudeCodeRuntimeAdapter:
         self._event_queues: Dict[str, queue.Queue] = {}
         self._reader_threads: Dict[str, threading.Thread] = {}
         self._stop_events: Dict[str, threading.Event] = {}
+        self.on_task_completed: Optional[Callable[[AgentRun], None]] = None
 
     def _emit_task_event(self, run: AgentRun, event_type: str, extra: Optional[Dict[str, Any]] = None) -> None:
         """Publish task lifecycle/progress events to the platform EventService."""
@@ -457,6 +392,33 @@ class ClaudeCodeRuntimeAdapter:
             env["PLATFORM_PROJECT_ID"] = project_id
         return env
 
+    def _resolve_working_directory(
+        self,
+        project_config: Optional[ProjectConfig],
+        agent_config: Optional[AgentConfig]
+    ) -> str:
+        """Resolve a robust, cross-platform working directory, avoiding invalid macOS paths."""
+        candidate = None
+        if project_config and getattr(project_config, "working_directory", None) and project_config.working_directory.strip():
+            candidate = project_config.working_directory.strip()
+        elif agent_config and getattr(agent_config, "repo_path", None) and agent_config.repo_path.strip():
+            candidate = agent_config.repo_path.strip()
+
+        if candidate:
+            # Detect invalid macOS/Unix paths on Windows
+            if os.name == "nt" and (candidate.startswith("/Users/") or candidate.startswith("/home/")):
+                local_poc_lms = os.path.abspath(os.path.join(os.path.dirname(__file__), "lms"))
+                if os.path.exists(local_poc_lms):
+                    return local_poc_lms
+                return os.getcwd()
+            try:
+                abs_path = os.path.abspath(candidate)
+                os.makedirs(abs_path, exist_ok=True)
+                return abs_path
+            except Exception:
+                pass
+        return os.getcwd()
+
     def _build_claude_command(
         self,
         agent_config: AgentConfig,
@@ -481,8 +443,16 @@ class ClaudeCodeRuntimeAdapter:
             List of command arguments
         """
         cmd = ["claude"]
-        if agent_config.model and agent_config.model.lower() != "default":
-            cmd.extend(["--model", agent_config.model.lower()])
+        # Resolve logical model tier (e.g. tier:architect, tier:worker) to runtime model
+        resolved_model = agent_config.model
+        try:
+            from runtime.model_policy import model_policy_resolver
+            resolved_model = model_policy_resolver.resolve(agent_config.model, runtime_type="claude_code").resolved_model
+        except Exception:
+            pass
+
+        if resolved_model and resolved_model.lower() != "default":
+            cmd.extend(["--model", resolved_model.lower()])
 
         if session_id and not session_id.startswith("pending_") and not session_id.startswith("sess_"):
             cmd.extend(["--resume", session_id])
@@ -505,16 +475,7 @@ class ClaudeCodeRuntimeAdapter:
             cmd.append("--dangerously-skip-permissions")
 
         # Add working directory restriction if specified
-        target_dir = None
-        if project_config and getattr(project_config, "working_directory", None) and project_config.working_directory.strip():
-            target_dir = os.path.abspath(project_config.working_directory.strip())
-            os.makedirs(target_dir, exist_ok=True)
-        elif getattr(agent_config, "repo_path", None) and agent_config.repo_path.strip():
-            target_dir = os.path.abspath(agent_config.repo_path.strip())
-            os.makedirs(target_dir, exist_ok=True)
-        else:
-            target_dir = os.getcwd()
-
+        target_dir = self._resolve_working_directory(project_config, agent_config)
         cmd.extend(["--add-dir", target_dir])
 
         # Pass agent system prompt with supervisor context, workspace, and equipped skills
@@ -570,7 +531,7 @@ class ClaudeCodeRuntimeAdapter:
                 f"{subordinates_text}\n\n"
                 f"HOW TO DELEGATE IN THIS PLATFORM:\n"
                 f"To dispatch a task to a subordinate agent, run this command using the Bash tool:\n"
-                f"python3 -m orchestration.delegate --target-agent <agent_id> --prompt \"<detailed requirements, deliverables, and acceptance criteria>\"\n"
+                f"python -m orchestration.delegate --target-agent <agent_id> --prompt \"<detailed requirements, deliverables, and acceptance criteria>\"\n\n"
                 f"CRITICAL TIMEOUT REQUIREMENT:\n"
                 f"Always pass `timeout: 600000` (10 minutes) in your Bash tool call when running delegate commands so the system does not prematurely background your task while waiting for subordinates!\n"
                 f"NOTE: The delegate command automatically WAITS for the subordinate agent to finish and outputs their completed deliverables to your terminal, allowing you to seamlessly verify their work and proceed to the next milestone in your turn!\n\n"
@@ -578,7 +539,7 @@ class ClaudeCodeRuntimeAdapter:
                 f"- You interact with this platform EXCLUSIVELY via standard tool calls (Write, Read, Edit, Bash, Grep, Glob).\n"
                 f"- NEVER output XML pseudo-tags such as `<assistant to=...>` or simulated responses in markdown.\n"
                 f"- When initiating a new project charter, first write PROJECT_PLAN.md using the Write tool.\n"
-                f"- Then immediately dispatch your subordinate manager (e.g. `product-manager`) using the Bash tool with `python3 -m orchestration.delegate`.\n"
+                f"- Then immediately dispatch your subordinate manager (e.g. `product-manager`) using the Bash tool with `python -m orchestration.delegate`.\n"
                 f"- Inspect the output returned by the delegate command and proceed to coordinate subsequent steps."
             )
 
@@ -898,6 +859,24 @@ class ClaudeCodeRuntimeAdapter:
             except Exception:
                 pass
 
+            # Determine model and cost source
+            resolved_model = getattr(agent_config, "model", None)
+            try:
+                from runtime.model_policy import model_policy_resolver
+                resolved_model = model_policy_resolver.resolve(agent_config.model, runtime_type="claude_code").resolved_model
+            except Exception:
+                pass
+            run.model = resolved_model
+
+            # Determine provider cost source
+            chosen_prov_id = self.resolve_runtime_provider(agent_config)
+            if chosen_prov_id in (providers.PROVIDER_ANTHROPIC_API, providers.PROVIDER_CUSTOM_GATEWAY):
+                run.cost_source = "API_KEY"
+            elif chosen_prov_id in (providers.PROVIDER_CLAUDE_CODE_NATIVE, providers.PROVIDER_FREE_CLAUDE_CODE):
+                run.cost_source = "SUBSCRIPTION_CLI"
+            else:
+                run.cost_source = "ESTIMATED"
+
             # Build command and environment
             skip_perm = dangerously_skip_permissions or getattr(run, "dangerously_skip_permissions", False)
             cmd = self._build_claude_command(
@@ -911,14 +890,7 @@ class ClaudeCodeRuntimeAdapter:
             )
 
             # Determine working directory
-            if project_config and getattr(project_config, "working_directory", None) and project_config.working_directory.strip():
-                work_dir = os.path.abspath(project_config.working_directory.strip())
-                os.makedirs(work_dir, exist_ok=True)
-            elif getattr(agent_config, "repo_path", None) and agent_config.repo_path.strip():
-                work_dir = os.path.abspath(agent_config.repo_path.strip())
-                os.makedirs(work_dir, exist_ok=True)
-            else:
-                work_dir = os.getcwd()
+            work_dir = self._resolve_working_directory(project_config, agent_config)
 
             # Launch Claude Code process
             process = subprocess.Popen(
@@ -973,9 +945,9 @@ class ClaudeCodeRuntimeAdapter:
                             with db_manager._get_connection() as conn:
                                 conn.execute("""
                                     UPDATE agent_conversations
-                                    SET claude_session_id = ?, updated_at = ?
+                                    SET claude_session_id = ?, runtime_session_id = ?, updated_at = ?
                                     WHERE agent_id = ? AND (task_id = ? OR status = 'ACTIVE')
-                                """, (captured_sid, datetime.now().isoformat(), run.agent_id, run.run_id))
+                                """, (captured_sid, captured_sid, datetime.now().isoformat(), run.agent_id, run.run_id))
                                 conn.commit()
                         except Exception:
                             pass
@@ -1004,6 +976,26 @@ class ClaudeCodeRuntimeAdapter:
                     # Handle special events
                     if event.get("type") == "result":
                         res_val = event.get("result", "")
+
+                        # Extract token usage and cost metrics emitted by Claude Code
+                        usage_dict = event.get("usage") or event.get("data", {}).get("usage") or {}
+                        if isinstance(usage_dict, dict):
+                            run.input_tokens = usage_dict.get("input_tokens", 0) or run.input_tokens
+                            run.output_tokens = usage_dict.get("output_tokens", 0) or run.output_tokens
+                            run.cache_read_tokens = usage_dict.get("cache_read_input_tokens", 0) or usage_dict.get("cache_read_tokens", 0) or run.cache_read_tokens
+                            run.cache_write_tokens = usage_dict.get("cache_creation_input_tokens", 0) or usage_dict.get("cache_write_tokens", 0) or run.cache_write_tokens
+
+                        reported_cost = event.get("total_cost_usd") or event.get("cost_usd") or event.get("data", {}).get("total_cost_usd")
+                        if reported_cost is not None:
+                            try:
+                                run.cost_usd = float(reported_cost)
+                            except Exception:
+                                pass
+
+                        model_reported = event.get("model") or event.get("data", {}).get("model")
+                        if model_reported:
+                            run.model = str(model_reported)
+
                         q_data = extract_supervisor_question(event) or extract_supervisor_question(res_val)
                         if q_data:
                             from orchestration.supervisor_resolver import SupervisorResolver
@@ -1058,8 +1050,6 @@ class ClaudeCodeRuntimeAdapter:
 
         except Exception as e:
             # Report the real error — do not fabricate fake success results
-            import logging
-            logger = logging.getLogger(__name__)
             logger.error(f"Runtime execution failed for run {run_id}: {e}", exc_info=True)
             run.status = TaskStatus.FAILED
             run.error = f"Runtime execution failed: {str(e)}"
@@ -1125,9 +1115,25 @@ class ClaudeCodeRuntimeAdapter:
                             except Exception:
                                 pass
                     except Exception as chat_err:
-                        logging.getLogger(__name__).warning(f"Failed to record task response to chat: {chat_err}")
+                        logger.warning(f"Failed to record task response to chat: {chat_err}")
             except Exception as dbe:
-                logging.getLogger(__name__).warning(f"Failed to save task run to DB: {dbe}")
+                logger.warning(f"Failed to save task run to DB: {dbe}")
+
+            # Notify Orchestration Engine of task completion or failure
+            if run.status in (TaskStatus.COMPLETED, TaskStatus.FAILED):
+                if getattr(self, "on_task_completed", None):
+                    try:
+                        self.on_task_completed(run)
+                    except Exception as cb_err:
+                        logger.error(f"Error in on_task_completed for {run.run_id}: {cb_err}")
+                else:
+                    try:
+                        import backend.dependencies as bdep
+                        engine = bdep.get_orchestration_engine()
+                        if engine:
+                            engine.handle_task_completion(run)
+                    except Exception:
+                        pass
 
             # Signal output reader to stop
             if run_id in self._stop_events:

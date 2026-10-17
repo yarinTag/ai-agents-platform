@@ -27,6 +27,10 @@ class EventType(str, Enum):
     TASK_DELETED = "task.deleted"
     TASK_PROGRESS = "task.progress"
     TASK_WAITING_INPUT = "task.waiting_input"
+    TASK_WAITING_CHILDREN = "task.waiting_children"
+    TASK_WAITING_MANAGER = "task.waiting_manager"
+    TASK_RESUMED = "task.resumed"
+    TASK_RETRIED = "task.retried"
 
     # Execution events
     EXECUTION_STARTED = "execution.started"
@@ -43,6 +47,9 @@ class EventType(str, Enum):
     # Result flow
     RESULT_SUBMITTED = "result.submitted"
     RESULT_FORWARDED = "result.forwarded"
+    RESULT_PROPAGATED = "result.propagated"
+    RESULT_ACCEPTED = "result.accepted"
+    RESULT_REJECTED = "result.rejected"
 
     # Agent-to-Agent Messaging
     AGENT_MESSAGE_SENT = "agent.message.sent"

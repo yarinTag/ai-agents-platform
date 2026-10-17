@@ -2,7 +2,7 @@ export type AgentStatus = 'idle' | 'running' | 'thinking' | 'reviewing' | 'error
 
 export type Department = 'Engineering' | 'Architecture' | 'QA & Testing' | 'Research & Ops';
 
-export type AgentRole = 'ROOT_ORCHESTRATOR' | 'MANAGER' | 'WORKER' | 'SPECIALIST';
+export type AgentRole = 'ROOT_ORCHESTRATOR' | 'MANAGER' | 'WORKER' | 'SPECIALIST' | 'WORKFLOW_AUTOMATION';
 
 export interface Agent {
   id: string;
@@ -33,6 +33,10 @@ export interface Agent {
   allowed_tools?: string[];
   template_id?: string | null;
   children?: Agent[];
+
+  // Workflow automation fields (detached from office floor)
+  is_workflow_agent?: boolean;
+  workflow_id?: string | null;
 }
 
 export interface AgentCreateDto {

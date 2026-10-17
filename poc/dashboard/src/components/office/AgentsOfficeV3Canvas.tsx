@@ -74,6 +74,7 @@ export const AgentsOfficeV3Canvas: React.FC<AgentsOfficeV3CanvasProps> = ({
   const DEPARTMENTS: DepartmentDef[] = React.useMemo(() => {
     const set = new Set<string>();
     agents.forEach((a) => {
+      if (a.role_type === 'WORKFLOW_AUTOMATION' || (a as any).is_workflow_agent || a.department === 'Workflow Automations') return;
       const d = (a.department || '').trim();
       if (d) set.add(d);
     });

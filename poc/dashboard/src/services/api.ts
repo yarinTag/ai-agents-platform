@@ -159,8 +159,17 @@ export const sendWarRoomMessage = (sessionId: string, data: WarRoomMessageCreate
 export const synthesizeWarRoomPlan = (sessionId: string, synthesized_plan: string) =>
   api.post<WarRoomSession>(`/api/v1/war-room/${sessionId}/synthesize`, { synthesized_plan });
 
-// Agent Messaging & Teams
-import { AgentMessage, AgentTeam } from '../types/mcp';
+// Agent Messaging, Teams & MCP
+import {
+  AgentMessage,
+  AgentTeam,
+  MCPConnector,
+  MCPTool,
+  MCPCatalogItem,
+  AgentMCPPermission,
+  PlatformWorkflow,
+  WorkflowChannelBinding,
+} from '../types/mcp';
 
 export const getAgentMessages = (agentId?: string, limit: number = 50) =>
   api.get<AgentMessage[]>('/api/v1/messages', { params: agentId ? { agent_id: agentId, limit } : { limit } });
@@ -221,6 +230,111 @@ export const browseDirectory = (path?: string) =>
 
 export const pickFolderNative = (initialPath?: string) =>
   api.post<PickFolderResponse>('/api/v1/fs/pick-folder', { initial_path: initialPath }, { timeout: 180000 });
+
+// Model Context Protocol (MCP) Hub
+export const getMCPCatalog = () =>
+  api.get<{ catalog: MCPCatalogItem[] }>('/api/v1/mcp/catalog');
+
+export const getMCPConnectors = () =>
+  api.get<{ connectors: MCPConnector[] }>('/api/v1/mcp/connectors');
+
+export const getMCPConnector = (id: string) =>
+  api.get<MCPConnector & { tools: MCPTool[] }>(`/api/v1/mcp/connectors/${id}`);
+
+export const installMCPConnector = (data: {
+  id?: string;
+  name: string;
+  provider: string;
+  configuration: Record<string, any>;
+  capabilities?: string[];
+  custom_command?: string;
+}) => api.post<MCPConnector>('/api/v1/mcp/connectors', data);
+
+export const updateMCPConnector = (id: string, data: Partial<MCPConnector>) =>
+  api.put<MCPConnector>(`/api/v1/mcp/connectors/${id}`, data);
+
+export const deleteMCPConnector = (id: string) =>
+  api.delete<{ status: string; message: string }>(`/api/v1/mcp/connectors/${id}`);
+
+export const testMCPConnector = (id: string) =>
+  api.post<{ status: string; connector_id: string; message: string; tools_discovered: number; timestamp: string }>(
+    `/api/v1/mcp/connectors/${id}/test`
+  );
+
+export const getMCPTools = (connectorId: string) =>
+  api.get<{ tools: MCPTool[] }>(`/api/v1/mcp/connectors/${connectorId}/tools`);
+
+export const getMCPPermissions = (agentId?: string) =>
+  api.get<{ permissions: AgentMCPPermission[] }>('/api/v1/mcp/permissions', { params: agentId ? { agent_id: agentId } : {} });
+
+export const grantMCPPermission = (data: { agent_id: string; connector_id: string; tool_id?: string | null }) =>
+  api.post('/api/v1/mcp/permissions/grant', data);
+
+export const revokeMCPPermission = (data: { agent_id: string; connector_id: string; tool_id?: string | null }) =>
+  api.post('/api/v1/mcp/permissions/revoke', data);
+
+export const discoverMCPResources = (provider: string, token?: string, configuration?: any) =>
+  api.post<{ provider: string; repositories?: any[]; channels?: any[]; chats?: any[] }>('/api/v1/mcp/discover-resources', {
+    provider,
+    token,
+    configuration,
+  });
+
+export const testChannelMessage = (data: { provider: string; channel_id: string; message: string }) =>
+  api.post<{ status: string; channel_id: string; message: string; timestamp: string }>('/api/v1/mcp/test-channel-message', data);
+
+// Workflows & Channel Bindings
+export const getWorkflows = () =>
+  api.get<PlatformWorkflow[]>('/api/v1/workflows/');
+
+export const getWorkflow = (id: string) =>
+  api.get<PlatformWorkflow>(`/api/v1/workflows/${id}`);
+
+export const updateWorkflow = (id: string, data: Partial<PlatformWorkflow>) =>
+  api.put<PlatformWorkflow>(`/api/v1/workflows/${id}`, data);
+
+export const bindWorkflowChannel = (workflowId: string, data: WorkflowChannelBinding) =>
+  api.post<PlatformWorkflow>(`/api/v1/workflows/${workflowId}/channel-binding`, data);
+
+export const unbindWorkflowChannel = (workflowId: string) =>
+  api.delete<PlatformWorkflow>(`/api/v1/workflows/${workflowId}/channel-binding`);
+
+export const deleteWorkflow = (workflowId: string) =>
+  api.delete<{ status: string; message: string }>(`/api/v1/workflows/${workflowId}`);
+
+export const executeWorkflow = (workflowId: string, payload?: Record<string, any>) =>
+  api.post<{ id: string; status: string; workflow_id: string }>(`/api/v1/workflows/${workflowId}/execute`, payload || {});
+
+export const createWorkflow = (data: {
+  name: string;
+  description?: string;
+  definition_yaml?: string;
+  definition_json?: string;
+  cron_expression?: string;
+  webhook_enabled?: boolean;
+}) => api.post<PlatformWorkflow>('/api/v1/workflows/', data);
+
+export const generateWorkflowDefinition = (params: {
+  prompt?: string;
+  template_type?: string;
+  name?: string;
+  channel_provider?: string;
+  channel_id?: string;
+  allowed_mcps?: string[];
+  skills?: any[];
+  target_repo?: string;
+}) =>
+  api.post<{
+    id: string;
+    name: string;
+    description: string;
+    definition_json: string;
+    definition_yaml: string;
+    steps_count: number;
+  }>('/api/v1/workflows/generate', params);
+
+export const convertWorkflowFormat = (data: { yaml_content?: string; json_content?: string }) =>
+  api.post<{ yaml_content: string; json_content: string }>('/api/v1/workflows/convert-format', data);
 
 export default api;
 

@@ -14,7 +14,8 @@ import logging
 
 from ..dependencies import get_db_manager, get_runtime_adapter, get_event_bus
 from persistence import DatabaseManager, AgentMessage
-from runtime_adapter import ClaudeCodeRuntimeAdapter, TaskStatus
+from runtime.protocol import RuntimeAdapter
+from runtime_adapter import TaskStatus
 from events import EventBus, PlatformEvent, EventType
 
 logger = logging.getLogger(__name__)
@@ -92,7 +93,7 @@ async def get_messages(
     conversation_id: Optional[str] = None,
     limit: int = 100,
     db: DatabaseManager = Depends(get_db_manager),
-    runtime: ClaudeCodeRuntimeAdapter = Depends(get_runtime_adapter)
+    runtime: RuntimeAdapter = Depends(get_runtime_adapter)
 ):
     """
     Retrieve chat history, thoughts, and task execution responses for an agent and session.
@@ -197,7 +198,7 @@ async def send_message(
     agent_id: str,
     payload: SendMessageRequest,
     db: DatabaseManager = Depends(get_db_manager),
-    runtime: ClaudeCodeRuntimeAdapter = Depends(get_runtime_adapter),
+    runtime: RuntimeAdapter = Depends(get_runtime_adapter),
     event_bus: EventBus = Depends(get_event_bus)
 ):
     """

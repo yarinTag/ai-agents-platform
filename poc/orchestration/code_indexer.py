@@ -27,6 +27,23 @@ DEFAULT_COLLECTION_NAME = "project_intelligence"
 DEFAULT_DENSE_MODEL = "BAAI/bge-small-en-v1.5"
 DEFAULT_SPARSE_MODEL = "Qdrant/bm25"
 
+_SHARED_DENSE_MODEL: Optional[Any] = None
+_SHARED_SPARSE_MODEL: Optional[Any] = None
+
+
+def get_shared_dense_model():
+    global _SHARED_DENSE_MODEL
+    if _SHARED_DENSE_MODEL is None and QDRANT_AVAILABLE:
+        _SHARED_DENSE_MODEL = TextEmbedding(model_name=DEFAULT_DENSE_MODEL)
+    return _SHARED_DENSE_MODEL
+
+
+def get_shared_sparse_model():
+    global _SHARED_SPARSE_MODEL
+    if _SHARED_SPARSE_MODEL is None and QDRANT_AVAILABLE:
+        _SHARED_SPARSE_MODEL = SparseTextEmbedding(model_name=DEFAULT_SPARSE_MODEL)
+    return _SHARED_SPARSE_MODEL
+
 
 class CodeIndexer:
     """
@@ -62,6 +79,25 @@ class CodeIndexer:
             ".gif", ".ico", ".svg", ".zip", ".tar", ".gz", ".lock"
         }
 
+    def close(self):
+        """Close Qdrant client connection and release file locks."""
+        if self._client:
+            try:
+                self._client.close()
+            except Exception:
+                pass
+            self._client = None
+            self._initialized = False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
+    def __del__(self):
+        self.close()
+
     def _get_cache_path(self, project_id: str) -> Path:
         p = Path(self.storage_path)
         p.mkdir(parents=True, exist_ok=True)
@@ -95,8 +131,8 @@ class CodeIndexer:
                 Path(self.storage_path).mkdir(parents=True, exist_ok=True)
                 self._client = QdrantClient(path=self.storage_path)
 
-            self._dense_model = TextEmbedding(model_name=DEFAULT_DENSE_MODEL)
-            self._sparse_model = SparseTextEmbedding(model_name=DEFAULT_SPARSE_MODEL)
+            self._dense_model = get_shared_dense_model()
+            self._sparse_model = get_shared_sparse_model()
 
             # Ensure collection exists with dense + sparse vector configuration
             existing_colls = [c.name for c in self._client.get_collections().collections]

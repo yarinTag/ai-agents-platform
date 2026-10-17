@@ -31,6 +31,7 @@ class SendAgentMessageRequest(BaseModel):
     run_id: Optional[str] = None
     parent_message_id: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
+    channel_key: Optional[str] = None
 
 
 class ReplyAgentMessageRequest(BaseModel):
@@ -48,6 +49,7 @@ class AgentMessageResponse(BaseModel):
     task_id: Optional[str] = None
     run_id: Optional[str] = None
     parent_message_id: Optional[str] = None
+    channel_key: Optional[str] = None
     message_type: str
     status: str
     metadata: Optional[Dict[str, Any]] = None
@@ -108,6 +110,7 @@ async def send_agent_message(
         message_type=req.message_type.upper(),
         status="SENT",
         metadata=req.metadata,
+        channel_key=req.channel_key,
         created_at=now
     )
     saved_msg = db.save_agent_message(agent_msg)
@@ -189,6 +192,7 @@ async def reply_agent_message(
         task_id=parent_msg.task_id,
         run_id=parent_msg.run_id,
         parent_message_id=message_id,
+        channel_key=parent_msg.channel_key,
         message_type=req.message_type.upper(),
         status="SENT",
         metadata=req.metadata,
@@ -225,6 +229,7 @@ async def list_agent_messages(
     agent_id: Optional[str] = None,
     task_id: Optional[str] = None,
     parent_message_id: Optional[str] = None,
+    channel_key: Optional[str] = None,
     limit: int = Query(default=100, ge=1, le=500),
     db: DatabaseManager = Depends(get_db_manager)
 ):
@@ -235,6 +240,7 @@ async def list_agent_messages(
         agent_id=agent_id,
         task_id=task_id,
         parent_message_id=parent_message_id,
+        channel_key=channel_key,
         limit=limit
     )
     return [AgentMessageResponse(**m.to_dict()) for m in messages]

@@ -415,7 +415,8 @@ export const TasksPage: React.FC = () => {
         rowKey="id"
         loading={loading}
         pagination={{ pageSize: 10 }}
-        style={{ background: '#161b22', borderRadius: '12px', overflow: 'hidden' }}
+        scroll={{ x: 1000 }}
+        style={{ background: '#161b22', borderRadius: '12px' }}
       />
 
       {/* Dispatch New Task Modal */}

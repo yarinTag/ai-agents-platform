@@ -28,7 +28,7 @@ This document provides developer instructions, operational invariants, and codin
 ```
 poc/
 ├── backend/
-│   ├── api/             # REST Routers (agents, tasks, schedules, approvals, chat, memories, war_room, events, fs)
+│   ├── api/             # REST Routers (agents, tasks, schedules, approvals, chat, memories, war_room, events, fs, workflows)
 │   ├── security/        # Auth, RateLimiter, CorrelationId, Error Handlers (see security/AGENTS.md)
 │   ├── teams/           # Multi-Agent Teams router & coordination (see teams/AGENTS.md)
 │   ├── messages/        # Agent-to-Agent (A2A) messaging router (see messages/AGENTS.md)
@@ -36,10 +36,12 @@ poc/
 │   ├── dependencies.py  # Centralized dependency injection bridge
 │   └── main.py          # FastAPI application entrypoint & lifespan
 ├── orchestration/       # HierarchyValidator, OrchestrationEngine, SupervisorResolver
-├── runtime/             # ClaudeCodeAdapter, RuntimeProtocol
-├── persistence.py       # DatabaseManager (SQLite schema, migrations, CRUD)
-├── runtime_adapter.py   # ClaudeCodeRuntimeAdapter (Subprocess CLI, streaming, session resume)
-└── tests/               # 12 Core automated test suites (40 tests)
+├── workflows/           # WorkflowParser (YAML/JSON), SandboxManager (Docker/ephemeral), WorkflowEngine (DAG + Budgets)
+├── runtime/             # RuntimeAdapter protocol, RuntimeRegistry, ModelPolicyResolver, ClaudeCodeAdapter
+├── persistence.py       # DatabaseManager (SQLite schema, migrations, CRUD, workflows, departments)
+├── runtime_adapter.py   # ClaudeCodeRuntimeAdapter (Subprocess CLI, streaming, session resume, cost tracking)
+├── runtime_providers.py # Provider Registry (Native, Anthropic API, Custom Gateway / LiteLLM)
+└── tests/               # 14 Automated test suites (105 tests, zero mocks)
 ```
 
 ---
