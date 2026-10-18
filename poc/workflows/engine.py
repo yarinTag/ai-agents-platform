@@ -267,6 +267,10 @@ class WorkflowEngine:
         failure_error: Optional[str] = None
 
         try:
+            from shared.notifications import dispatch_workflow_start_notification
+            dispatch_workflow_start_notification(
+                self.db, workflow_id, execution_id, trigger_type, len(wf_def.steps)
+            )
             stages = self._group_steps_into_stages(wf_def.steps)
             for stage in stages:
                 # Check mid-run budget cap before launching next stage
@@ -290,6 +294,7 @@ class WorkflowEngine:
                     total_input_tokens += res.input_tokens
                     total_output_tokens += res.output_tokens
                     total_cost_usd += res.cost_usd
+                    self._notify_step(workflow_id, execution_id, stage[0], res)
                     if res.status != "COMPLETED":
                         final_status = res.status
                         failure_error = res.error
@@ -313,6 +318,7 @@ class WorkflowEngine:
                             total_input_tokens += res.input_tokens
                             total_output_tokens += res.output_tokens
                             total_cost_usd += res.cost_usd
+                            self._notify_step(workflow_id, execution_id, future_map[fut], res)
                             if res.status != "COMPLETED" and final_status == "COMPLETED":
                                 final_status = res.status
                                 failure_error = res.error
@@ -367,6 +373,22 @@ class WorkflowEngine:
         )
 
         return self.db.get_workflow_execution(execution_id)
+
+    def _notify_step(
+        self, workflow_id: str, execution_id: str, step: WorkflowStepDefinition, res: "WorkflowStepResult"
+    ) -> None:
+        """Dispatch a per-step notification per channel_binding notify_policy (best-effort)."""
+        try:
+            from shared.notifications import dispatch_workflow_step_notification
+            override = bool((getattr(step, "params", None) or {}).get("notify_on_complete", False))
+            dispatch_workflow_step_notification(
+                db=self.db, workflow_id=workflow_id, execution_id=execution_id,
+                step_key=res.step_key, step_name=step.name, status=res.status,
+                step_output=res.output or "", tokens=res.input_tokens + res.output_tokens,
+                cost_usd=res.cost_usd, step_notify_override=override,
+            )
+        except Exception as notify_err:
+            logger.warning(f"Step notification failed for '{res.step_key}': {notify_err}")
 
     def _execute_single_step(
         self,

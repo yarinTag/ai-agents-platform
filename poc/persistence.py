@@ -47,6 +47,7 @@ from persistence_modules import (
     UsersRepositoryMixin,
     WorkflowsRepositoryMixin,
     AppendOnlyAuditRepositoryMixin,
+    LLMKeysRepositoryMixin,
 )
 
 
@@ -60,6 +61,7 @@ class DatabaseManager(
     UsersRepositoryMixin,
     WorkflowsRepositoryMixin,
     AppendOnlyAuditRepositoryMixin,
+    LLMKeysRepositoryMixin,
 ):
     """Manages SQLite database for persistence via modular domain repository mixins."""
 
@@ -1278,8 +1280,12 @@ class DatabaseManager(
 
     def clean_database(self, seed_baseline: bool = True):
         """Clean all tables from database and optionally reseed default templates and baseline agents."""
+        if os.getenv("ENV", os.getenv("PLATFORM_ENV", "dev")).lower() in ("prod", "production"):
+            raise PermissionError("Fail-closed: clean_database() is disabled in production (audit_logs is append-only)")
         with self._get_connection() as conn:
             conn.execute("PRAGMA foreign_keys = OFF")
+            conn.execute("DROP TRIGGER IF EXISTS trg_audit_logs_no_delete")
+            conn.execute("DROP TRIGGER IF EXISTS trg_audit_logs_no_update")
             tables = [
                 "war_room_messages", "war_room_sessions",
                 "chat_messages", "agent_conversations",
@@ -1292,6 +1298,7 @@ class DatabaseManager(
             ]
             for t in tables:
                 conn.execute(f"DELETE FROM {t}")
+            self.install_append_only_triggers_on_connection(conn)
             conn.execute("PRAGMA foreign_keys = ON")
             conn.commit()
 

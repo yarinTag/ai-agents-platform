@@ -30,6 +30,7 @@ from .postgres_rls import (
     generate_postgres_rls_migrations,
     record_security_audit_event,
 )
+from .llm_keys_repo import LLMKeysRepositoryMixin, OrgLLMCredential
 
 __all__ = [
     "AgentMessage",
@@ -56,4 +57,6 @@ __all__ = [
     "compute_params_hash",
     "generate_postgres_rls_migrations",
     "record_security_audit_event",
+    "LLMKeysRepositoryMixin",
+    "OrgLLMCredential",
 ]

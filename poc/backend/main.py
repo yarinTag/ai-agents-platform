@@ -68,6 +68,7 @@ PLATFORM_SERVICES = [
     ServiceSpec("teams", "backend.teams.router", "/api/v1/teams", ["teams"]),
     ServiceSpec("filesystem", "backend.api.filesystem", "/api/v1/fs", ["filesystem"]),
     ServiceSpec("workflows", "backend.api.workflows", "/api/v1/workflows", ["workflows"]),
+    ServiceSpec("workflow_step_logs", "backend.api.workflow_step_logs", "/api/v1/workflows", ["workflows", "step-logs"]),
     ServiceSpec("mcp", "backend.api.mcp", "/api/v1/mcp", ["mcp"]),
     ServiceSpec("organizations", "backend.api.organizations", "/api/v1", ["organizations", "departments", "mcp-governance"]),
     ServiceSpec("gateways", "gateways.router", "/api/v1/gateways", ["gateways"]),
