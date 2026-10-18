@@ -337,89 +337,17 @@ class WorkflowEngine:
         )
 
         # Dispatch outgoing notification to bound communication channel (Slack / Telegram)
-        try:
-            import json
-            wf_record = self.db.get_workflow(workflow_id)
-            if wf_record and wf_record.definition_json:
-                dj = json.loads(wf_record.definition_json)
-                channel_binding = dj.get("metadata", {}).get("channel_binding")
-                if channel_binding:
-                    notify_mode = channel_binding.get("notify_mode", "ON_COMPLETE")
-                    should_notify = (
-                        notify_mode == "ALWAYS" or
-                        (notify_mode == "ON_COMPLETE" and final_status == "COMPLETED") or
-                        (notify_mode == "ON_FAILURE" and final_status == "FAILED")
-                    )
-                    if should_notify:
-                        provider = channel_binding.get("provider", "slack")
-                        channel_id = channel_binding.get("channel_id", "")
-                        custom_tmpl = channel_binding.get("message_template")
-
-                        final_output = list(step_outputs.values())[-1] if step_outputs else ""
-                        if len(final_output) > 2500:
-                            final_output = final_output[:2450] + "...\n(truncated)"
-
-                        if custom_tmpl:
-                            msg_body = custom_tmpl.replace("{{workflow_name}}", wf_record.name).replace("{{status}}", final_status)
-                            if "{{output}}" in custom_tmpl:
-                                msg_body = msg_body.replace("{{output}}", final_output)
-                            elif final_output and final_output not in msg_body:
-                                msg_body += f"\n\n📋 *Workflow Summary / Report:*\n{final_output}"
-                        else:
-                            msg_body = (
-                                f"🤖 *Workflow Run Notification*\n"
-                                f"• Workflow: *{wf_record.name}* (`{wf_record.id}`)\n"
-                                f"• Status: *{final_status}*\n"
-                                f"• Trigger: `{trigger_type}`\n"
-                                f"• Tokens: {total_input_tokens + total_output_tokens} (Cost: ${total_cost_usd:.4f})"
-                            )
-                            if final_output:
-                                msg_body += f"\n\n📋 *Result:*\n{final_output}"
-                            if failure_error:
-                                msg_body += f"\n• Error: {failure_error}"
-
-                        if provider.lower() == "telegram":
-                            try:
-                                conn = self.db.get_mcp_connector("telegram")
-                                if conn and conn.configuration:
-                                    bot_token = conn.configuration.get("bot_token")
-                                    configured_chat_id = conn.configuration.get("chat_id")
-                                    target_chat = channel_id
-                                    if target_chat in ("@agents_office_alerts", "@hermesganbot", "hermesganbot", "Hermes_test") and configured_chat_id:
-                                        target_chat = configured_chat_id
-                                    elif target_chat.lower().endswith("bot") and configured_chat_id:
-                                        target_chat = configured_chat_id
-
-                                    if bot_token and target_chat:
-                                        import urllib.request
-                                        payload = json.dumps({"chat_id": target_chat, "text": msg_body}).encode("utf-8")
-                                        telegram_req = urllib.request.Request(
-                                            f"https://api.telegram.org/bot{bot_token}/sendMessage",
-                                             data=payload,
-                                             headers={"Content-Type": "application/json"}
-                                        )
-                                        with urllib.request.urlopen(telegram_req, timeout=5) as t_resp:
-                                            if t_resp.status == 200:
-                                                logger.info(f"Successfully delivered live Telegram notification to {target_chat}")
-                            except Exception as t_err:
-                                logger.warning(f"Failed to post live notification to Telegram API: {t_err}")
-
-                        now_dt = datetime.now().isoformat()
-                        self.db.save_mcp_tool_call({
-                            "id": f"call_notify_{uuid.uuid4().hex[:8]}",
-                            "connector_id": channel_binding.get("connector_id", provider),
-                            "tool_id": f"tool_{provider}_send_message",
-                            "agent_id": "ceo-orchestrator",
-                            "task_id": None,
-                            "arguments": {"channel": channel_id, "text": msg_body},
-                            "status": "COMPLETED",
-                            "result": f"Notification posted to {channel_id}",
-                            "started_at": now_dt,
-                            "completed_at": now_dt
-                        })
-                        logger.info(f"Successfully posted workflow notification to {provider}:{channel_id}")
-        except Exception as notify_err:
-            logger.warning(f"Failed to dispatch channel binding notification: {notify_err}")
+        from shared.notifications import dispatch_workflow_completion_notification
+        dispatch_workflow_completion_notification(
+            db=self.db,
+            workflow_id=workflow_id,
+            final_status=final_status,
+            trigger_type=trigger_type,
+            step_outputs=step_outputs,
+            total_tokens=total_input_tokens + total_output_tokens,
+            total_cost_usd=total_cost_usd,
+            failure_error=failure_error
+        )
 
         return self.db.get_workflow_execution(execution_id)
 

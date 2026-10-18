@@ -58,6 +58,14 @@ import {
 import { CreateWorkflowModal } from '../components/workflows/CreateWorkflowModal';
 import { WorkflowCanvasGraph } from '../components/workflows/WorkflowCanvasGraph';
 import {
+  WorkflowChannelBindingModal,
+  CustomMcpServerModal,
+  McpToolsDrawer,
+  AgentMcpPermissionsModal,
+  WorkflowCanvasGraphModal,
+} from '../components/mcp';
+import { tokens } from '../shared/ui';
+import {
   getMCPCatalog,
   getMCPConnectors,
   installMCPConnector,
@@ -1948,372 +1956,53 @@ export const McpHubPage: React.FC = () => {
       </Modal>
 
       {/* Workflow Channel Binding Modal */}
-      <Modal
-        title={
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <LinkOutlined style={{ color: '#10b981' }} />
-            <span>Bind Channel to Workflow: {bindingWorkflow?.name}</span>
-          </div>
-        }
+      <WorkflowChannelBindingModal
         open={bindingModalVisible}
+        workflow={bindingWorkflow}
+        form={bindingForm}
+        submitting={bindingSubmitting}
+        availableTelegramChats={availableTelegramChats}
+        availableSlackChannels={availableSlackChannels}
         onCancel={() => setBindingModalVisible(false)}
-        footer={[
-          bindingWorkflow?.channel_binding ? (
-            <Popconfirm
-              key="unbind"
-              title="Unbind this channel from the workflow?"
-              description="This will disconnect the channel without deleting the workflow."
-              onConfirm={async () => {
-                if (bindingWorkflow) {
-                  await handleUnbindChannel(bindingWorkflow.id);
-                  setBindingModalVisible(false);
-                }
-              }}
-              okText="Unbind"
-              cancelText="Cancel"
-            >
-              <Button danger icon={<DisconnectOutlined />} style={{ float: 'left' }}>
-                Unbind Channel (נתק ערוץ)
-              </Button>
-            </Popconfirm>
-          ) : null,
-          <Button key="cancel" onClick={() => setBindingModalVisible(false)}>
-            Cancel
-          </Button>,
-          <Button key="submit" type="primary" loading={bindingSubmitting} onClick={handleSaveBinding}>
-            Save Channel Binding
-          </Button>,
-        ]}
-        width={540}
-        styles={{
-          body: { background: '#161b22', color: '#f0f6fc' },
-          header: { background: '#161b22', borderBottom: '1px solid #21262d' },
-        }}
-      >
-        <div style={{ padding: '10px 0' }}>
-          <p style={{ color: '#8b949e', fontSize: '13px', marginBottom: '16px' }}>
-            Choose an authorized Slack or Telegram channel to connect to this workflow. You can enable incoming command triggers and configure automatic reporting.
-          </p>
-
-          <Form form={bindingForm} layout="vertical">
-            <Form.Item
-              name="provider"
-              label={<span style={{ color: '#f0f6fc' }}>Communication Provider</span>}
-              rules={[{ required: true }]}
-            >
-              <Radio.Group style={{ width: '100%' }}>
-                <Row gutter={12}>
-                  <Col span={12}>
-                    <Radio.Button value="slack" style={{ width: '100%', textAlign: 'center', height: '42px', lineHeight: '40px' }}>
-                      <SlackOutlined style={{ color: '#ECB22E', marginRight: '8px' }} /> Slack
-                    </Radio.Button>
-                  </Col>
-                  <Col span={12}>
-                    <Radio.Button value="telegram" style={{ width: '100%', textAlign: 'center', height: '42px', lineHeight: '40px' }}>
-                      <SendOutlined style={{ color: '#229ED9', marginRight: '8px' }} /> Telegram
-                    </Radio.Button>
-                  </Col>
-                </Row>
-              </Radio.Group>
-            </Form.Item>
-
-            <Form.Item noStyle shouldUpdate={(prev, curr) => prev.provider !== curr.provider}>
-              {({ getFieldValue }) => {
-                const prov = getFieldValue('provider');
-                const channels = prov === 'telegram' ? availableTelegramChats : availableSlackChannels;
-
-                return (
-                  <Form.Item
-                    name="channel_id"
-                    label={<span style={{ color: '#f0f6fc' }}>Target Channel / Chat</span>}
-                    rules={[{ required: true, message: 'Please select a channel' }]}
-                  >
-                    <Select
-                      style={{ width: '100%' }}
-                      placeholder="Select authorized channel"
-                      options={channels.map((ch) => ({ label: ch, value: ch }))}
-                    />
-                  </Form.Item>
-                );
-              }}
-            </Form.Item>
-
-            <Divider style={{ borderColor: '#21262d' }} />
-
-            <Form.Item
-              name="trigger_enabled"
-              valuePropName="checked"
-            >
-              <Checkbox style={{ color: '#f0f6fc' }}>
-                <span style={{ fontWeight: 600 }}>⚡ Allow incoming messages in this channel to trigger this workflow</span>
-              </Checkbox>
-            </Form.Item>
-
-            <Form.Item
-              name="notify_mode"
-              label={<span style={{ color: '#f0f6fc' }}>Outgoing Notification Mode (כתיבת תוצאות לערוץ)</span>}
-              rules={[{ required: true }]}
-            >
-              <Select
-                style={{ width: '100%' }}
-                options={[
-                  { label: '✓ Post on Complete only (הודעה בסיום מוצלח)', value: 'ON_COMPLETE' },
-                  { label: '⚠️ Post on Failure only (התראה רק בכשלון)', value: 'ON_FAILURE' },
-                  { label: '📢 Always (הודעה בהתחלה ובסיום)', value: 'ALWAYS' },
-                  { label: '🔒 Read-only (ללא שליחת הודעות חזרה)', value: 'NONE' },
-                ]}
-              />
-            </Form.Item>
-
-            <Form.Item
-              name="message_template"
-              label={<span style={{ color: '#f0f6fc' }}>Custom Message Template (Optional)</span>}
-            >
-              <Input.TextArea
-                rows={2}
-                placeholder="e.g. 🚀 Workflow {{workflow_name}} finished with status: {{status}}"
-                style={{ background: '#0d1117', borderColor: '#30363d', color: '#f0f6fc' }}
-              />
-            </Form.Item>
-          </Form>
-        </div>
-      </Modal>
+        onSave={handleSaveBinding}
+        onUnbind={handleUnbindChannel}
+      />
 
       {/* Custom MCP Modal */}
-      <Modal
-        title={
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <ApiOutlined style={{ color: '#10b981' }} />
-            <span>Register Custom MCP Server</span>
-          </div>
-        }
+      <CustomMcpServerModal
         open={customModalVisible}
+        form={customForm}
+        submitting={submitting}
         onCancel={() => setCustomModalVisible(false)}
-        onOk={handleSaveCustom}
-        confirmLoading={submitting}
-        okText="Register Server"
-        width={560}
-        styles={{
-          body: { background: '#161b22', color: '#f0f6fc' },
-          header: { background: '#161b22', borderBottom: '1px solid #21262d' },
-        }}
-      >
-        <div style={{ padding: '10px 0' }}>
-          <p style={{ color: '#8b949e', fontSize: '13px', marginBottom: '16px' }}>
-            Register any local or external MCP stdio server command (e.g. <code>npx -y @modelcontextprotocol/server-...</code> or <code>python mcp_server.py</code>).
-          </p>
-
-          <Form form={customForm} layout="vertical">
-            <Form.Item
-              name="name"
-              label={<span style={{ color: '#f0f6fc' }}>Connector Name</span>}
-              rules={[{ required: true, message: 'Please enter a name' }]}
-            >
-              <Input placeholder="e.g. My Custom Weather MCP" style={{ background: '#0d1117', borderColor: '#30363d', color: '#f0f6fc' }} />
-            </Form.Item>
-
-            <Form.Item
-              name="command"
-              label={<span style={{ color: '#f0f6fc' }}>Execution Command</span>}
-              rules={[{ required: true, message: 'Command is required' }]}
-            >
-              <Input placeholder="e.g. npx -y @modelcontextprotocol/server-postgres" style={{ background: '#0d1117', borderColor: '#30363d', color: '#f0f6fc' }} />
-            </Form.Item>
-
-            <Form.Item
-              name="args"
-              label={<span style={{ color: '#f0f6fc' }}>CLI Arguments (Space Separated)</span>}
-            >
-              <Input placeholder="e.g. --port 5000 /path/to/db" style={{ background: '#0d1117', borderColor: '#30363d', color: '#f0f6fc' }} />
-            </Form.Item>
-
-            <Form.Item
-              name="env"
-              label={<span style={{ color: '#f0f6fc' }}>Environment Variables (JSON)</span>}
-            >
-              <Input.TextArea
-                rows={3}
-                placeholder='{"API_KEY": "secret_123"}'
-                style={{ background: '#0d1117', borderColor: '#30363d', color: '#f0f6fc', fontFamily: 'monospace' }}
-              />
-            </Form.Item>
-          </Form>
-        </div>
-      </Modal>
+        onSave={handleSaveCustom}
+      />
 
       {/* Tools Drawer */}
-      <Drawer
-        title={
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <ToolOutlined style={{ color: '#10b981' }} />
-            <span>Tools exposed by {drawerConnector?.name}</span>
-          </div>
-        }
-        placement="right"
-        width={480}
-        onClose={() => setToolsDrawerVisible(false)}
+      <McpToolsDrawer
         open={toolsDrawerVisible}
-        styles={{
-          body: { background: '#0a0d12', color: '#f0f6fc', padding: '16px' },
-          header: { background: '#161b22', borderBottom: '1px solid #21262d', color: '#f0f6fc' },
-        }}
-      >
-        {loadingTools ? (
-          <div style={{ textAlign: 'center', padding: '40px 0' }}>
-            <Spin />
-          </div>
-        ) : connectorTools.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '40px 0', color: '#8b949e' }}>
-            No tools registered under this connector.
-          </div>
-        ) : (
-          <List
-            dataSource={connectorTools}
-            renderItem={(tool) => (
-              <List.Item
-                style={{
-                  border: '1px solid #21262d',
-                  borderRadius: '8px',
-                  background: '#161b22',
-                  marginBottom: '10px',
-                  padding: '12px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'flex-start',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
-                  <code style={{ fontSize: '13px', fontWeight: 700, color: '#34d399' }}>
-                    {tool.name}
-                  </code>
-                  <Tag style={{ background: '#0d1117', borderColor: '#30363d', color: '#8b949e', fontSize: '10px' }}>
-                    MCP Tool
-                  </Tag>
-                </div>
-                <p style={{ margin: '6px 0 0 0', color: '#8b949e', fontSize: '12px' }}>
-                  {tool.description || 'No description provided.'}
-                </p>
-              </List.Item>
-            )}
-          />
-        )}
-      </Drawer>
+        connector={drawerConnector}
+        loading={loadingTools}
+        tools={connectorTools}
+        onClose={() => setToolsDrawerVisible(false)}
+      />
 
       {/* Agent Permissions Modal */}
-      <Modal
-        title={
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <SafetyCertificateOutlined style={{ color: '#c084fc' }} />
-            <span>Agent Access Control — {permConnector?.name}</span>
-          </div>
-        }
+      <AgentMcpPermissionsModal
         open={permModalVisible}
+        connector={permConnector}
+        agents={agents}
+        permissions={permissions}
+        updating={updatingPerms}
         onCancel={() => setPermModalVisible(false)}
-        footer={null}
-        width={500}
-        styles={{
-          body: { background: '#161b22', color: '#f0f6fc' },
-          header: { background: '#161b22', borderBottom: '1px solid #21262d' },
-        }}
-      >
-        <div style={{ padding: '10px 0' }}>
-          <p style={{ color: '#8b949e', fontSize: '13px', marginBottom: '16px' }}>
-            Control which agents are authorized to invoke tools from this MCP connector.
-          </p>
-
-          <List
-            dataSource={agents}
-            renderItem={(agent) => {
-              const isAllowed = permissions.some(
-                (p) => p.agent_id === agent.id && p.connector_id === permConnector?.id
-              );
-
-              return (
-                <List.Item
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: '10px 14px',
-                    background: '#0d1117',
-                    borderRadius: '8px',
-                    border: '1px solid #21262d',
-                    marginBottom: '8px',
-                  }}
-                >
-                  <div>
-                    <div style={{ color: '#f0f6fc', fontWeight: 600, fontSize: '14px' }}>
-                      {agent.name}
-                    </div>
-                    <div style={{ color: '#8b949e', fontSize: '11px' }}>
-                      {(agent as any).role || agent.name} &bull; {agent.department || 'General'}
-                    </div>
-                  </div>
-
-                  <Button
-                    size="small"
-                    loading={updatingPerms}
-                    onClick={() => handleToggleAgentPerm(agent.id, isAllowed)}
-                    style={{
-                      background: isAllowed ? 'rgba(16, 185, 129, 0.2)' : '#161b22',
-                      borderColor: isAllowed ? '#10b981' : '#30363d',
-                      color: isAllowed ? '#34d399' : '#8b949e',
-                      fontWeight: 600,
-                    }}
-                  >
-                    {isAllowed ? '✓ Granted' : '+ Grant Access'}
-                  </Button>
-                </List.Item>
-              );
-            }}
-          />
-        </div>
-      </Modal>
+        onTogglePermission={handleToggleAgentPerm}
+      />
 
       {/* Workflow Canvas Graph Modal */}
-      <Modal
-        title={
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <ApartmentOutlined style={{ color: '#38bdf8' }} />
-            <span>Workflow Execution Canvas Graph: {canvasWorkflow?.name}</span>
-          </div>
-        }
+      <WorkflowCanvasGraphModal
         open={canvasModalVisible}
-        onCancel={() => setCanvasModalVisible(false)}
-        footer={[
-          <Button key="close" onClick={() => setCanvasModalVisible(false)} style={{ background: '#21262d', color: '#f0f6fc' }}>
-            Close
-          </Button>,
-        ]}
-        width={1000}
-        styles={{
-          body: { background: '#0d1117', color: '#f0f6fc' },
-          header: { background: '#0d1117', borderBottom: '1px solid #21262d' },
-        }}
-      >
-        {canvasWorkflow && (() => {
-          let parsedSteps: any[] = [];
-          let parsedSkills: any[] = [];
-          let parsedMcps: any[] = [];
-          try {
-            const def = JSON.parse(canvasWorkflow.definition_json);
-            parsedSteps = def.steps || [];
-            parsedSkills = def.skills || [];
-            parsedMcps = def.mcp_servers || [];
-          } catch (e) {}
-
-          return (
-            <WorkflowCanvasGraph
-              workflowName={canvasWorkflow.name}
-              steps={parsedSteps}
-              channelBinding={canvasWorkflow.channel_binding}
-              skills={parsedSkills}
-              allowedMcps={parsedMcps}
-              height={480}
-            />
-          );
-        })()}
-      </Modal>
+        workflow={canvasWorkflow}
+        onClose={() => setCanvasModalVisible(false)}
+      />
 
       {/* Create Workflow & Auto YAML Modal */}
       <CreateWorkflowModal

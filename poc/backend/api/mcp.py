@@ -472,75 +472,17 @@ def discover_resources(req: ResourceDiscoveryRequest):
 
 @router.post("/test-channel-message")
 def test_channel_message(req: ChannelTestMessageRequest, db: DatabaseManager = Depends(get_db_manager)):
-    """Simulate or post a test notification to a channel."""
-    call_id = f"call_test_{uuid.uuid4().hex[:8]}"
-    now = datetime.now().isoformat()
-    
-    # Record MCP tool call in database if connector and agent exist
-    delivery_status = "simulated"
+    """Simulate or post a test notification to a channel via shared notification dispatcher."""
+    from shared.notifications import dispatch_channel_message
     try:
-        conn = db.get_mcp_connector(req.provider)
-        agents = db.list_agents()
-        agent_id = agents[0].id if agents else "admin"
-
-        # If Telegram connector has bot_token, send real message via Telegram API
-        if conn and conn.provider.lower() == "telegram" and conn.configuration:
-            bot_token = conn.configuration.get("bot_token")
-            target_chat = req.channel_id
-            configured_chat_id = conn.configuration.get("chat_id")
-
-            # If user targeted bot username, Hermes_test or default placeholder, resolve to real configured chat_id
-            if target_chat in ("@agents_office_alerts", "@hermesganbot", "hermesganbot", "Hermes_test") and configured_chat_id:
-                target_chat = configured_chat_id
-            elif target_chat.lower().endswith("bot") and configured_chat_id:
-                target_chat = configured_chat_id
-
-            if bot_token and target_chat:
-                import urllib.request
-                import urllib.error
-                import json
-                try:
-                    payload = json.dumps({"chat_id": target_chat, "text": req.message}).encode("utf-8")
-                    telegram_req = urllib.request.Request(
-                        f"https://api.telegram.org/bot{bot_token}/sendMessage",
-                        data=payload,
-                        headers={"Content-Type": "application/json"}
-                    )
-                    with urllib.request.urlopen(telegram_req, timeout=5) as response:
-                        if response.status == 200:
-                            delivery_status = "delivered"
-                except urllib.error.HTTPError as h_ex:
-                    err_body = h_ex.read().decode("utf-8", errors="ignore")
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Telegram API Error ({h_ex.code}): {err_body}. Tip: Telegram bots cannot message themselves. Use your personal Chat ID (e.g. {configured_chat_id or '1176967752'}) or an authorized channel."
-                    )
-                except Exception as ex:
-                    raise HTTPException(status_code=400, detail=f"Telegram dispatch failed: {ex}")
-
-        if conn and agents:
-            db.save_mcp_tool_call({
-                "id": call_id,
-                "connector_id": conn.id,
-                "tool_id": f"tool_{req.provider}_send_message",
-                "agent_id": agent_id,
-                "task_id": None,
-                "arguments": {"channel": req.channel_id, "text": req.message},
-                "status": "COMPLETED",
-                "result": f"Status: {delivery_status} to {req.channel_id}",
-                "started_at": now,
-                "completed_at": now
-            })
-    except Exception:
-        pass
-
-    return {
-        "status": "success",
-        "delivery": delivery_status,
-        "provider": req.provider,
-        "channel_id": req.channel_id,
-        "message": req.message,
-        "call_id": call_id,
-        "timestamp": now
-    }
+        result = dispatch_channel_message(
+            db=db,
+            provider=req.provider,
+            channel_id=req.channel_id,
+            message=req.message,
+            raise_on_http_error=True,
+        )
+        return result
+    except RuntimeError as ex:
+        raise HTTPException(status_code=400, detail=str(ex))
 

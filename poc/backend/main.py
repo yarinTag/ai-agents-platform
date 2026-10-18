@@ -1,34 +1,14 @@
 """
 Main FastAPI application for the AI Agents Platform Dashboard API.
+Mounts all domain services via the fault-tolerant ServiceRegistry so that
+if any individual service is disconnected or disabled, the platform continues
+to operate normally.
 """
 
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-# Import API routers - using relative imports within the backend package
-from .api.agents import router as agents_router
-from .api.projects import router as projects_router
-from .api.skills import router as skills_router
-from .api.tasks import router as tasks_router
-from .events.router import router as events_router
-from .api.templates import router as templates_router
-from .api.models import router as models_router
-from .api.runtimes import router as runtimes_router
-from .api.audit import router as audit_router
-from .scheduler.router import router as schedules_router
-from .approvals.router import router as approvals_router
-from .chat.router import router as chat_router
-from .memory.router import router as memories_router
-from .war_room.router import router as war_room_router
-from .messages.router import router as messages_router
-from .teams.router import router as teams_router
-from .api.filesystem import router as filesystem_router
-from .api.workflows import router as workflows_router
-from .api.mcp import router as mcp_router
-from .api.organizations import router as organizations_router
-
-# Import security layer
 from .security import (
     CorrelationIdMiddleware,
     RateLimiterMiddleware,
@@ -36,37 +16,31 @@ from .security import (
     http_exception_handler,
     generic_exception_handler,
 )
-
-# Import dependencies for startup/shutdown
 from .dependencies import init_services, shutdown_services
+from shared.service_registry import ServiceSpec, service_registry
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager."""
-    # Startup
     await init_services()
     yield
-    # Shutdown
     await shutdown_services()
 
 
-# Create FastAPI app
 app = FastAPI(
     title="AI Agents Platform API",
-    description="REST API for managing AI agents, projects, skills, and tasks",
+    description="REST API for managing AI agents, projects, skills, workflows, and enterprise governance",
     version="0.1.0",
     lifespan=lifespan
 )
 
-# Exception handlers for uniform error structures
 app.add_exception_handler(HTTPException, http_exception_handler)
 app.add_exception_handler(Exception, generic_exception_handler)
 
-# Configure Middlewares (Order: Correlation -> RateLimiter -> CORS)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with specific origins
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -74,32 +48,33 @@ app.add_middleware(
 app.add_middleware(RateLimiterMiddleware)
 app.add_middleware(CorrelationIdMiddleware)
 
-# Auth dependencies for protected routes
 auth_deps = [Depends(authenticate_request)]
 
-# Include API routers
-app.include_router(agents_router, prefix="/api/v1/agents", tags=["agents"], dependencies=auth_deps)
-app.include_router(projects_router, prefix="/api/v1/projects", tags=["projects"], dependencies=auth_deps)
-app.include_router(skills_router, prefix="/api/v1/skills", tags=["skills"], dependencies=auth_deps)
-app.include_router(tasks_router, prefix="/api/v1/tasks", tags=["tasks"], dependencies=auth_deps)
-app.include_router(events_router, prefix="/api/v1/events", tags=["events"], dependencies=auth_deps)
-app.include_router(templates_router, prefix="/api/v1/templates", tags=["templates"], dependencies=auth_deps)
-app.include_router(models_router, prefix="/api/v1/models", tags=["models"], dependencies=auth_deps)
-app.include_router(runtimes_router, prefix="/api/v1/runtimes", tags=["runtimes"], dependencies=auth_deps)
-app.include_router(schedules_router, prefix="/api/v1/schedules", tags=["schedules"], dependencies=auth_deps)
-app.include_router(approvals_router, prefix="/api/v1/approvals", tags=["approvals"], dependencies=auth_deps)
-app.include_router(chat_router, prefix="/api/v1/chat", tags=["chat"], dependencies=auth_deps)
-app.include_router(memories_router, prefix="/api/v1/projects", tags=["memories"], dependencies=auth_deps)
-app.include_router(war_room_router, prefix="/api/v1/war-room", tags=["war-room"], dependencies=auth_deps)
-app.include_router(messages_router, prefix="/api/v1/messages", tags=["messages"], dependencies=auth_deps)
-app.include_router(teams_router, prefix="/api/v1/teams", tags=["teams"], dependencies=auth_deps)
-app.include_router(filesystem_router, prefix="/api/v1/fs", tags=["filesystem"], dependencies=auth_deps)
-app.include_router(workflows_router, prefix="/api/v1/workflows", tags=["workflows"], dependencies=auth_deps)
-app.include_router(mcp_router, prefix="/api/v1/mcp", tags=["mcp"], dependencies=auth_deps)
-app.include_router(organizations_router, prefix="/api/v1", tags=["organizations", "departments", "mcp-governance"], dependencies=auth_deps)
-app.include_router(audit_router, prefix="/api/v1/audit", tags=["audit"])
+PLATFORM_SERVICES = [
+    ServiceSpec("agents", "backend.api.agents", "/api/v1/agents", ["agents"]),
+    ServiceSpec("projects", "backend.api.projects", "/api/v1/projects", ["projects"]),
+    ServiceSpec("skills", "backend.api.skills", "/api/v1/skills", ["skills"]),
+    ServiceSpec("tasks", "backend.api.tasks", "/api/v1/tasks", ["tasks"]),
+    ServiceSpec("events", "backend.events.router", "/api/v1/events", ["events"]),
+    ServiceSpec("templates", "backend.api.templates", "/api/v1/templates", ["templates"]),
+    ServiceSpec("models", "backend.api.models", "/api/v1/models", ["models"]),
+    ServiceSpec("runtimes", "backend.api.runtimes", "/api/v1/runtimes", ["runtimes"]),
+    ServiceSpec("schedules", "backend.scheduler.router", "/api/v1/schedules", ["schedules"]),
+    ServiceSpec("approvals", "backend.approvals.router", "/api/v1/approvals", ["approvals"]),
+    ServiceSpec("chat", "backend.chat.router", "/api/v1/chat", ["chat"]),
+    ServiceSpec("memories", "backend.memory.router", "/api/v1/projects", ["memories"]),
+    ServiceSpec("war_room", "backend.war_room.router", "/api/v1/war-room", ["war-room"]),
+    ServiceSpec("messages", "backend.messages.router", "/api/v1/messages", ["messages"]),
+    ServiceSpec("teams", "backend.teams.router", "/api/v1/teams", ["teams"]),
+    ServiceSpec("filesystem", "backend.api.filesystem", "/api/v1/fs", ["filesystem"]),
+    ServiceSpec("workflows", "backend.api.workflows", "/api/v1/workflows", ["workflows"]),
+    ServiceSpec("mcp", "backend.api.mcp", "/api/v1/mcp", ["mcp"]),
+    ServiceSpec("organizations", "backend.api.organizations", "/api/v1", ["organizations", "departments", "mcp-governance"]),
+    ServiceSpec("audit", "backend.api.audit", "/api/v1/audit", ["audit"], requires_auth=False),
+    ServiceSpec("auth_audit", "backend.api.audit", "/api/v1/auth", ["auth"], requires_auth=False),
+]
 
-app.include_router(audit_router, prefix="/api/v1/auth", tags=["auth"])
+service_registry.mount_all(app, PLATFORM_SERVICES, auth_dependencies=auth_deps)
 
 
 @app.get("/")
@@ -116,3 +91,16 @@ async def root():
 async def health_check():
     """Health check endpoint."""
     return {"status": "healthy"}
+
+
+@app.get("/api/v1/services/status", tags=["services"])
+async def list_services_status():
+    """Inspect pluggable service modules and their isolation/mount status."""
+    statuses = service_registry.get_status_list()
+    return {
+        "total": len(statuses),
+        "mounted": sum(1 for s in statuses if s["status"] == "MOUNTED"),
+        "disabled": sum(1 for s in statuses if s["status"] == "DISABLED"),
+        "degraded": sum(1 for s in statuses if s["status"] == "DEGRADED"),
+        "services": statuses,
+    }
