@@ -24,6 +24,28 @@ def get_current_user_claims(request: Request) -> Optional[Dict[str, Any]]:
     return getattr(request.state, "user", None)
 
 
+def get_current_user_optional(request: Request) -> Optional[Dict[str, Any]]:
+    """Extract validated JWT claims from request state if present."""
+    return getattr(request.state, "user", None)
+
+
+def require_org_admin(request: Request) -> Dict[str, Any]:
+    """Dependency enforcing that the authenticated user possesses the ORG_ADMIN role."""
+    user = getattr(request.state, "user", None)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required. Please provide a valid JWT bearer token."
+        )
+    role = user.get("role", "MEMBER")
+    if role != "ORG_ADMIN":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access forbidden: ORG_ADMIN privileges required."
+        )
+    return user
+
+
 def get_current_org_id(request: Request) -> Optional[str]:
     """Extract organization ID from current user claims in request state."""
     user = get_current_user_claims(request)
@@ -88,6 +110,14 @@ def get_authorized_scope(request: Request, db_manager=None) -> Dict[str, Any]:
                         department_ids.append(default_department_id)
         except Exception:
             pass
+
+    # Check X-Department-ID header override if caller specified an active department
+    header_dept = request.headers.get("X-Department-ID", "").strip()
+    if header_dept:
+        if is_org_admin or header_dept in department_ids:
+            default_department_id = header_dept
+            if header_dept not in department_ids and is_org_admin:
+                department_ids.append(header_dept)
 
     return {
         "org_id": org_id,

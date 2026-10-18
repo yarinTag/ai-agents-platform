@@ -38,3 +38,10 @@ The **Multi-Agent War Room & Deliberation Council Service** (`poc/backend/war_ro
 1. **Minimum Quorum**: Every War Room session must have at least 1 moderator agent and at least 1 participant agent.
 2. **Immutability of Transcripts**: Once submitted, debate messages cannot be edited or erased, guaranteeing an auditable trail of decision-making.
 3. **Consensus Requirement**: No session can transition to `CONSENSUS_REACHED` without a non-empty `synthesized_plan`.
+
+---
+
+## 🔄 Mandatory `AGENTS.md` Synchronization Rule
+
+> [!IMPORTANT]
+> Whenever any war room deliberation protocol, session state machine, transcript schema, or endpoint in `poc/backend/war_room/` is modified, the developer or agent **MUST** update this `AGENTS.md` file within the **SAME commit**.

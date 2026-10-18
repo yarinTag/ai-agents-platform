@@ -1,6 +1,6 @@
 # CLAUDE.md - Frontend Guidelines (Dashboard)
 
-This document provides developer instructions and architectural invariants for Claude Code working on the `poc/dashboard` React application.
+This document provides developer instructions, architectural invariants, and component standards for Claude Code working on the `poc/dashboard` React application.
 
 ---
 
@@ -10,6 +10,7 @@ This document provides developer instructions and architectural invariants for C
 * **Development Server**: `npm run dev` (starts on `http://localhost:5173`)
 * **Production Build**: `npm run build` (runs `vite build`, verifies TypeScript types & bundles)
 * **Preview Production**: `npm run preview`
+* **Type Checking**: `npx tsc --noEmit` (run ONLY if explicitly requested)
 
 ---
 
@@ -17,35 +18,138 @@ This document provides developer instructions and architectural invariants for C
 
 * **Framework**: React 18 with TypeScript (`strict: true`)
 * **Bundler & Tooling**: Vite + Rolldown
-* **UI Component Library**: Ant Design (`antd` v5)
+* **UI Component Library**: Ant Design (`antd` v5) with dark algorithm theme:
+  * Base Background: `#0a0d12`
+  * Container Background: `#161b22`
+  * Elevated Background: `#1c2128`
+  * Primary Accent: Emerald `#10b981`
+  * Borders: `#30363d` / `#21262d`
 * **Icons**: `@ant-design/icons`
-* **Styling**: Inline style objects with strict Tailwind-inspired palette (Slate, Amber, Emerald, Indigo)
-* **Routing**: `react-router-dom` v6 (`AppLayout` wrapper, routes in `src/App.tsx`)
-* **State Management**:
-  * Local component state via React hooks (`useState`, `useEffect`, `useCallback`, `useRef`).
-  * Real-time events hook: `useOfficeEvents` (`src/hooks/useOfficeEvents.ts`) subscribing to Server-Sent Events (SSE) `/api/v1/events/stream`.
-* **Graphics & Simulation Engine**: Pure HTML5 Canvas Pixel Renderer (`src/engine/PixelRenderer.ts`) rendering an isometric/top-down pixel art office with sprite animations and real-time state bubbles.
+* **Routing**: `react-router-dom` v6 (`AppLayout` shell, route definitions in `src/App.tsx`)
+* **Multi-Tenant Authentication & Department Context**:
+  * `src/context/AuthContext.tsx`: Manages JWT tokens, authenticated `user`, current `organization`, department roster, and `activeDepartmentId`.
+  * Auto-injects bearer token into Axios headers and handles 401 session expiry.
+* **Internationalization (i18n)**:
+  * `src/i18n/I18nContext.tsx`, `src/i18n/locales/en.ts`, `src/i18n/locales/he.ts`.
+  * English default UI (`'en'`) with zero hardcoded Hebrew strings in components.
+  * Instant future Hebrew RTL toggle support via typed `TranslationDictionary`.
+* **Sidebar Navigation (`src/components/layout/AppSidebar.tsx`)**:
+  * 4 structured navigation sections:
+    1. `OPERATIONS`: Office Canvas (`/`), Live Flow (`/flow`), Agents Roster (`/agents`).
+    2. `TOOLS & PLUGINS`: Plugins Hub (`/skills`), MCP Hub (`/mcp`), Tasks Queue (`/tasks`).
+    3. `WORKSPACE & DATA`: Projects (`/projects`), Schedule & Calendar (`/calendar`), System Metrics (`/dashboard`).
+    4. `ORGANIZATION & GOVERNANCE`: Org & Teams (`/organization`).
+* **Top Bar (`src/components/layout/OfficeTopBar.tsx`)**:
+  * Live status indicator with route titles.
+  * Clickable organization badge (triggers `OrgHierarchyModal`).
+  * Department switcher dropdown (`Select`) bound to `AuthContext`.
+  * User identity & role badge (`admin`, `lead`, `member`).
+  * Live digital clock.
+* **Modular UI Components**:
+  * Robotic UI (`src/components/robotic/`): `ModelSelector.tsx`, `DepartmentSelect.tsx`, `CollapsiblePluginCard.tsx`.
+  * Organization Governance (`src/components/org/`): `DepartmentsBudgetTab.tsx`, `TeamInvitationsTab.tsx`, `OrgUsersTab.tsx`.
+  * Authentication Forms (`src/components/auth/`): `SignInForm.tsx`, `RegisterOrgForm.tsx`, `AcceptInviteForm.tsx`.
+  * Workflows & DAG (`src/components/workflows/`): `CreateWorkflowModal.tsx`, `WorkflowCanvasGraph.tsx`.
+* **Curated LLM Model Catalog (`src/constants/models.ts`)**:
+  * Tier classification (`executive`, `architect`, `developer`, `worker`, `default`).
+  * Providers: Anthropic Claude (3.7 Sonnet, 3.5 Sonnet, 3.5 Haiku, 3 Opus) and NVIDIA NIM (Nemotron 3 Super 120B, Llama 3.3 70B Instruct).
+  * Enriched dynamically with discovered backend models via `getAvailableModels()`.
+* **Graphics & Simulation Engine**:
+  * HTML5 Canvas Pixel Renderer (`src/engine/PixelRenderer.ts` & `src/components/office/PixelOfficeCanvas.tsx`).
+  * High-fidelity Isometric Office Workspace (`src/components/office/AgentsOfficeV3Canvas.tsx`) with zoom/pan and live agent workstations.
+* **Real-time Event Streaming**:
+  * Global SSE client (`src/services/eventStream.ts`) streaming from `/api/v1/events/stream`.
+  * React hook: `useOfficeEvents` (`src/hooks/useOfficeEvents.ts`) with zero polling loops.
 
 ---
 
 ## 📁 Directory Structure
 
 ```
-poc/dashboard/src/
-├── components/
-│   ├── approval/        # ApprovalModal.tsx (HITL & Question resolution)
-│   ├── chat/            # AgentMiniChatDrawer.tsx (Interactive live mini-chat)
-│   ├── layout/          # AppLayout.tsx, OfficeTopBar.tsx (Navigation & headers)
-│   ├── memory/          # ProjectSharedMemoryModal.tsx (Knowledge base & ADRs)
-│   ├── office/          # PixelOfficeCanvas.tsx, OfficeRightSidebar.tsx, AgentDeskDrawer.tsx
-│   ├── scheduler/       # CronBuilderModal.tsx (Cron generator & validator)
-│   └── warroom/         # WarRoomModal.tsx (Multi-agent council deliberation)
-├── engine/              # PixelRenderer.ts (Canvas tile/sprite engine)
-├── hooks/               # useOfficeEvents.ts (SSE connection & state sync)
-├── pages/               # OfficeView.tsx, CalendarView.tsx, Agents.tsx, Projects.tsx, Tasks.tsx
-├── services/            # api.ts (Central Axios instance and typed API calls)
-└── types/               # agent.ts, chat.ts, collab.ts, scheduler.ts, task.ts
+poc/dashboard/
+├── AGENTS.md                    # Master UI agents guide & architectural map
+├── CLAUDE.md                    # Developer guidelines and commands
+├── index.html                   # HTML entry point
+├── package.json                 # Dependencies and scripts
+├── src/
+│   ├── App.tsx                  # Root routes and Ant Design ConfigProvider
+│   ├── components/
+│   │   ├── AGENTS.md            # Components documentation & catalog
+│   │   ├── agents/              # CharacterSelector, HierarchyEditor, TemplateGallery
+│   │   ├── approval/            # ApprovalModal (HITL decisions)
+│   │   ├── auth/                # SignInForm, RegisterOrgForm, AcceptInviteForm
+│   │   ├── chat/                # AgentMiniChatDrawer (interactive agent mini-chat)
+│   │   ├── common/              # FolderPickerModal, OrgHierarchyModal, RuntimeSetupModal
+│   │   ├── flow/                # AgentFlowDiagram (live visual pipeline)
+│   │   ├── layout/              # AppLayout, AppSidebar, OfficeTopBar
+│   │   ├── memory/              # ProjectSharedMemoryModal
+│   │   ├── office/              # AgentsOfficeV3Canvas, PixelOfficeCanvas, OfficeRightSidebar, AgentDeskDrawer
+│   │   ├── org/                 # DepartmentsBudgetTab, TeamInvitationsTab, OrgUsersTab
+│   │   ├── robotic/             # ModelSelector, DepartmentSelect, CollapsiblePluginCard
+│   │   ├── scheduler/           # CronBuilderModal
+│   │   ├── warroom/             # WarRoomModal (multi-agent deliberation)
+│   │   └── workflows/           # CreateWorkflowModal, WorkflowCanvasGraph
+│   ├── constants/
+│   │   └── models.ts            # Curated LLM catalog, tiers, context windows, colors
+│   ├── context/
+│   │   ├── AGENTS.md            # State & AuthContext documentation
+│   │   └── AuthContext.tsx      # Multi-tenant auth, session, and department state
+│   ├── engine/
+│   │   ├── AGENTS.md            # Spatial rendering engine documentation
+│   │   └── PixelRenderer.ts     # Procedural pixel art canvas engine
+│   ├── hooks/
+│   │   └── useOfficeEvents.ts   # SSE live hook for agents and tasks
+│   ├── i18n/
+│   │   ├── AGENTS.md            # i18n & localization documentation
+│   │   ├── I18nContext.tsx      # Translation context & useTranslation hook
+│   │   ├── index.ts             # Barrel exports
+│   │   └── locales/             # en.ts (default), he.ts (RTL support)
+│   ├── pages/
+│   │   ├── AGENTS.md            # Pages documentation & route catalog
+│   │   ├── AgentFlow.tsx        # Live delegation flow (/flow)
+│   │   ├── Agents.tsx           # Fleet roster & agent management (/agents)
+│   │   ├── AuthPage.tsx         # Sign-in, org register, invite accept
+│   │   ├── CalendarView.tsx     # Cron routines & schedules (/calendar)
+│   │   ├── Dashboard.tsx        # System metrics & node health (/dashboard)
+│   │   ├── McpHub.tsx           # MCP integrations & workflows (/mcp)
+│   │   ├── OfficeView.tsx       # Live interactive workstation canvas (/)
+│   │   ├── OrganizationPage.tsx # Org & Teams governance (/organization)
+│   │   ├── Projects.tsx         # Workspace directory projects (/projects)
+│   │   ├── Skills.tsx           # Plugins Hub (/skills)
+│   │   └── Tasks.tsx            # Orchestrated tasks queue (/tasks)
+│   ├── services/
+│   │   ├── AGENTS.md            # API client & SSE stream documentation
+│   │   ├── api.ts               # Central Axios client with interceptors
+│   │   └── eventStream.ts       # SSE event bus client
+│   └── types/                   # TypeScript interfaces (agent, task, mcp, auth, etc.)
 ```
+
+---
+
+## 📚 Complete Index of UI AGENTS.md Files
+
+* [**`poc/dashboard/AGENTS.md`**](file:///Users/yarintag/Desktop/Projects/ai-agents-platform/poc/dashboard/AGENTS.md): Master Frontend architecture and coordination guide.
+* [**`src/pages/AGENTS.md`**](file:///Users/yarintag/Desktop/Projects/ai-agents-platform/poc/dashboard/src/pages/AGENTS.md): Full documentation of all 11 application pages and route views.
+* [**`src/components/AGENTS.md`**](file:///Users/yarintag/Desktop/Projects/ai-agents-platform/poc/dashboard/src/components/AGENTS.md): Component library catalog across layout, robotic, org, auth, workflows, office, and modals.
+* [**`src/context/AGENTS.md`**](file:///Users/yarintag/Desktop/Projects/ai-agents-platform/poc/dashboard/src/context/AGENTS.md): AuthContext, multi-tenant session isolation, and department switching.
+* [**`src/i18n/AGENTS.md`**](file:///Users/yarintag/Desktop/Projects/ai-agents-platform/poc/dashboard/src/i18n/AGENTS.md): Translation engine, English-default UI rules, and locale dictionary contracts.
+* [**`src/services/AGENTS.md`**](file:///Users/yarintag/Desktop/Projects/ai-agents-platform/poc/dashboard/src/services/AGENTS.md): Axios client methods, request/response interceptors, and real-time SSE stream.
+* [**`src/engine/AGENTS.md`**](file:///Users/yarintag/Desktop/Projects/ai-agents-platform/poc/dashboard/src/engine/AGENTS.md): Spatial canvas engines (`PixelRenderer.ts` and `AgentsOfficeV3Canvas.tsx`).
+
+---
+
+## 🔄 Mandatory UI `AGENTS.md` Synchronization Rule
+
+> [!IMPORTANT]
+> **Every time any UI page, component, modal, hook, context state, API client method, or i18n dictionary is added, modified, or refactored, the developer/agent MUST update the corresponding `AGENTS.md` file in `poc/dashboard/` as part of the same task.**
+>
+> 1. When modifying a page in `src/pages/`, update [`src/pages/AGENTS.md`](file:///Users/yarintag/Desktop/Projects/ai-agents-platform/poc/dashboard/src/pages/AGENTS.md).
+> 2. When creating or altering a component in `src/components/`, update [`src/components/AGENTS.md`](file:///Users/yarintag/Desktop/Projects/ai-agents-platform/poc/dashboard/src/components/AGENTS.md).
+> 3. When altering authentication, tenancy, or context state in `src/context/`, update [`src/context/AGENTS.md`](file:///Users/yarintag/Desktop/Projects/ai-agents-platform/poc/dashboard/src/context/AGENTS.md).
+> 4. When adding translation strings or modifying i18n mechanics in `src/i18n/`, update [`src/i18n/AGENTS.md`](file:///Users/yarintag/Desktop/Projects/ai-agents-platform/poc/dashboard/src/i18n/AGENTS.md).
+> 5. When adding or updating API endpoints or SSE streaming in `src/services/`, update [`src/services/AGENTS.md`](file:///Users/yarintag/Desktop/Projects/ai-agents-platform/poc/dashboard/src/services/AGENTS.md).
+> 6. When modifying canvas rendering or simulation logic in `src/engine/` or office canvas components, update [`src/engine/AGENTS.md`](file:///Users/yarintag/Desktop/Projects/ai-agents-platform/poc/dashboard/src/engine/AGENTS.md).
+> 7. If routing, top-level layout, or high-level architecture changes, update [`poc/dashboard/AGENTS.md`](file:///Users/yarintag/Desktop/Projects/ai-agents-platform/poc/dashboard/AGENTS.md) and [`poc/dashboard/CLAUDE.md`](file:///Users/yarintag/Desktop/Projects/ai-agents-platform/poc/dashboard/CLAUDE.md).
 
 ---
 
@@ -53,17 +157,20 @@ poc/dashboard/src/
 
 1. **TypeScript Strictness**:
    * Always define typed DTOs and interfaces in `src/types/`. Do NOT use `any` unless absolutely necessary for third-party interop.
-   * Verify every change compiles cleanly using `npm run build`.
+   * Verify every change compiles cleanly using `npm run build` or `npx tsc --noEmit` if instructed.
 2. **Component Structure**:
    * Functional components with explicit `React.FC<Props>` typing.
    * Destructure props and provide sensible defaults.
-   * Clean up event listeners, timers, and SSE streams in `useEffect` cleanup return functions.
+   * Clean up event listeners, timers, and SSE streams in `useEffect` cleanup functions.
 3. **API Integration**:
    * All API calls MUST go through `src/services/api.ts`.
-   * Standard Axios response pattern: `const res = await apiMethod(); setThing(res.data)`.
+   * Standard Axios response pattern: `const res = await apiMethod(); setState(res.data)`.
    * Handle errors gracefully with Ant Design's `message.error(...)`.
-4. **Ant Design Conventions**:
-   * Use theme tokens and Ant Design primitives (`Button`, `Modal`, `Drawer`, `Card`, `Tag`, `Typography`).
+4. **Ant Design & Dark Theme Conventions**:
+   * Use theme tokens and Ant Design primitives (`Button`, `Modal`, `Drawer`, `Card`, `Tag`, `Typography`, `Table`, `Tabs`, `Segmented`).
    * When wrapping multiple adjacent elements in table column `render` functions, always wrap them in a `<div style={{ display: 'flex', gap: '8px' }}>` container to prevent JSX syntax errors.
 5. **Real-Time Responsiveness**:
    * Avoid polling loops where possible. Rely on `useOfficeEvents` SSE push for live updates.
+6. **Localization Hygiene**:
+   * All user-facing copy in components must be in English. Never hardcode Hebrew strings in JSX.
+   * Use `const { t } = useTranslation();` for internationalized copy.

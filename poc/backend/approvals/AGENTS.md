@@ -32,3 +32,10 @@ The **Supervisor & Human-In-The-Loop Approval Service** (`poc/backend/approvals/
 1. **Target Approver Fallback**: Requests without an explicit `target_approver_id` must default to the agent's `parent_id`, and if None, to `HUMAN_OPERATOR`.
 2. **Immutable Audit Log**: Every resolution records `resolved_by`, `resolution_response`, and `decision` in SQLite interactions table.
 3. **Fail-Closed on Rejection**: Denied requests immediately mark the associated `task_run` as `FAILED` with an explicit reason.
+
+---
+
+## 🔄 Mandatory `AGENTS.md` Synchronization Rule
+
+> [!IMPORTANT]
+> Whenever any approval routing logic, escalation rule, interaction state model, or endpoint in `poc/backend/approvals/` is modified, the developer or agent **MUST** update this `AGENTS.md` file within the **SAME commit**.

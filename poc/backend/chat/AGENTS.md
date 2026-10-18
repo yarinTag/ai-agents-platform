@@ -32,3 +32,10 @@ The **Interactive Agent Mini-Chat Service** (`poc/backend/chat/router.py`) provi
 1. **Agent Existence**: Messages can only be directed to valid agents registered in SQLite (`agents` table).
 2. **Atomic Resolution**: Resolving blocked interactions via chat must atomically transition the interaction status and the task status.
 3. **Event Stream Synchronization**: Every user message and interaction resolution must publish an event through `EventBus` to guarantee UI coherence.
+
+---
+
+## 🔄 Mandatory `AGENTS.md` Synchronization Rule
+
+> [!IMPORTANT]
+> Whenever any chat drawer logic, message persistence model, blocker resolution flow, or endpoint in `poc/backend/chat/` is modified, the developer or agent **MUST** update this `AGENTS.md` file within the **SAME commit**.

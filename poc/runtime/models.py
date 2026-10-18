@@ -155,3 +155,94 @@ class AgentRun:
             model=data.get('model'),
             organization_id=data.get('organization_id')
         )
+
+
+# Curated catalog of enterprise AI models across supported provider runtimes
+MODEL_CATALOG: List[Dict[str, Any]] = [
+    # Anthropic Claude 4 & 4.5
+    {
+        "id": "claude-sonnet-4-5",
+        "name": "Claude 4.5 Sonnet",
+        "provider": "Anthropic",
+        "tier": "executive",
+        "context_window": 200000,
+        "description": "Next-generation flagship reasoning & coding model",
+        "is_default": False
+    },
+    {
+        "id": "claude-sonnet-4",
+        "name": "Claude 4 Sonnet",
+        "provider": "Anthropic",
+        "tier": "developer",
+        "context_window": 200000,
+        "description": "High-intelligence model optimized for software engineering",
+        "is_default": True
+    },
+    {
+        "id": "claude-haiku-4",
+        "name": "Claude 4 Haiku",
+        "provider": "Anthropic",
+        "tier": "worker",
+        "context_window": 200000,
+        "description": "Ultra-fast, cost-efficient model for lightweight subtasks",
+        "is_default": False
+    },
+    # OpenAI GPT-4o & o3
+    {
+        "id": "gpt-4o",
+        "name": "GPT-4o",
+        "provider": "OpenAI",
+        "tier": "developer",
+        "context_window": 128000,
+        "description": "Omni-modal flagship model with strong coding and instruction following",
+        "is_default": False
+    },
+    {
+        "id": "o3-mini",
+        "name": "o3-mini",
+        "provider": "OpenAI",
+        "tier": "architect",
+        "context_window": 200000,
+        "description": "Deep STEM reasoning and complex algorithmic problem solving",
+        "is_default": False
+    },
+    # Google Gemini 2.5
+    {
+        "id": "gemini-2.5-pro",
+        "name": "Gemini 2.5 Pro",
+        "provider": "Google",
+        "tier": "executive",
+        "context_window": 1000000,
+        "description": "Extreme long-context multi-modal synthesis and reasoning",
+        "is_default": False
+    },
+    {
+        "id": "gemini-2.5-flash",
+        "name": "Gemini 2.5 Flash",
+        "provider": "Google",
+        "tier": "worker",
+        "context_window": 1000000,
+        "description": "High-speed, long-context throughput model",
+        "is_default": False
+    },
+    # Local Ollama
+    {
+        "id": "ollama/llama3.3",
+        "name": "Llama 3.3 70B (Local)",
+        "provider": "Local Ollama",
+        "tier": "developer",
+        "context_window": 128000,
+        "description": "On-premise zero-data-leakage open weights model",
+        "is_default": False
+    },
+    {
+        "id": "ollama/deepseek-r1",
+        "name": "DeepSeek R1 (Local)",
+        "provider": "Local Ollama",
+        "tier": "architect",
+        "context_window": 128000,
+        "description": "Locally hosted open reasoning model",
+        "is_default": False
+    }
+]
+

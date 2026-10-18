@@ -49,3 +49,10 @@ event_bus.publish(PlatformEvent(
 1. **Strict Monotonic Sequencing**: Every persisted event must have a strictly increasing `sequence_number` to guarantee total ordering.
 2. **Non-Blocking Publishers**: Publishing an event must NEVER block or fail an agent's core execution loop.
 3. **Structured Payload Integrity**: Every event must include a valid timestamp, event_id, event_type, and source identifier.
+
+---
+
+## 🔄 Mandatory `AGENTS.md` Synchronization Rule
+
+> [!IMPORTANT]
+> Whenever any event type, pub/sub queue logic, SSE streaming protocol, or event persistence schema in `poc/backend/events/` is modified, the developer or agent **MUST** update this `AGENTS.md` file within the **SAME commit**.

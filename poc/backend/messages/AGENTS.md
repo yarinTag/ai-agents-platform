@@ -60,3 +60,10 @@ reply_payload = {
 2. **Authorization Enforcement**: Unauthorized peer messages are rejected with HTTP 403 (`CommunicationAuthorizationError`).
 3. **Session Linkage**: When answering an unresolved task question, the message MUST include the associated `task_id` so the runtime can resume the suspended session.
 4. **Immutability of Audit Log**: Message content cannot be deleted or overwritten once delivered.
+
+---
+
+## 🔄 Mandatory `AGENTS.md` Synchronization Rule
+
+> [!IMPORTANT]
+> Whenever any messaging logic, route, communication authorization rule, or schema in `poc/backend/messages/` is modified, the developer or agent **MUST** update this `AGENTS.md` file within the **SAME commit**.

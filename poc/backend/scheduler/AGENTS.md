@@ -36,3 +36,10 @@ The **Scheduler & Cron Engine Service** (`poc/backend/scheduler/engine.py` & `po
 1. **Clock Drift Protection**: `next_run_at` must always be calculated from the current execution reference point, preventing backward time loops.
 2. **Graceful Shutdown**: On FastAPI shutdown, `_cron_engine.stop()` must cancel the polling task and allow in-flight dispatches to complete gracefully.
 3. **Database Consistency**: Every triggered job must atomically update `last_run_at`, `last_run_id`, and `next_run_at` in a single transaction.
+
+---
+
+## 🔄 Mandatory `AGENTS.md` Synchronization Rule
+
+> [!IMPORTANT]
+> Whenever any scheduler logic, polling frequency, cron calculation, or scheduling endpoint in `poc/backend/scheduler/` is modified, the developer or agent **MUST** update this `AGENTS.md` file within the **SAME commit**.

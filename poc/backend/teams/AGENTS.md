@@ -34,7 +34,7 @@ The **Multi-Agent Teams Service** (`poc/backend/teams/` & `poc/orchestration/tea
 team_payload = {
     "name": "Feature Ship Squad",
     "manager_agent_id": "delivery-lead",
-    "member_agent_ids": ["lead-engineer", "secuirty"],
+    "member_agent_ids": ["lead-engineer", "security"],
     "project_id": "core-platform"
 }
 # Dispatch shared mission
@@ -42,7 +42,7 @@ dispatch_payload = {
     "shared_goal": "Implement and audit the file explorer component",
     "member_prompts": {
         "lead-engineer": "Build the frontend folder tree",
-        "secuirty": "Review path traversal protections"
+        "security": "Review path traversal protections"
     }
 }
 ```
@@ -54,3 +54,10 @@ dispatch_payload = {
 2. **Member Verification**: All `member_agent_ids` must correspond to active agents in `DatabaseManager`.
 3. **No Phantom Tasks**: All member subtasks dispatched through a team must record `assigned_by=manager_agent_id`.
 4. **Lifecycle Progression**: Teams begin in `ACTIVE` state and transition explicitly to `COMPLETED` or `DISBANDED`.
+
+---
+
+## 🔄 Mandatory `AGENTS.md` Synchronization Rule
+
+> [!IMPORTANT]
+> Whenever any multi-agent team coordination logic, membership model, dispatch flow, or endpoint in `poc/backend/teams/` is modified, the developer or agent **MUST** update this `AGENTS.md` file within the **SAME commit**.

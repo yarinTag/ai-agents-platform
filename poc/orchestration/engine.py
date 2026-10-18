@@ -653,3 +653,24 @@ class OrchestrationEngine:
     def get_task_tree(self, root_task_id: str) -> Dict[str, Any]:
         """Retrieve recursive task tree for a root task."""
         return self.db_manager.get_task_tree(root_task_id)
+
+    def check_department_mcp_access(
+        self,
+        department_id: Optional[str],
+        connector_id: str,
+        tool_name: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Verify that an agent's department possesses permission to execute an MCP connector or tool.
+        Returns access check evaluation from DatabaseManager.
+        """
+        if not department_id:
+            return {"allowed": True, "reason": "No department scoping restriction"}
+        if hasattr(self.db_manager, "check_department_mcp_permission"):
+            return self.db_manager.check_department_mcp_permission(
+                department_id=department_id,
+                connector_id=connector_id,
+                tool_name=tool_name
+            )
+        return {"allowed": True, "reason": "MCP permission check not enabled on database manager"}
+

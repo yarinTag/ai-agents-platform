@@ -10,6 +10,12 @@ The **Runtime & Execution Service** (`poc/runtime/`, `poc/runtime_adapter.py`, a
 * **Provider-Agnostic Runtime Abstraction (`protocol.py` & `registry.py`)**:
   * Formal `@runtime_checkable` `RuntimeAdapter` protocol standardizing task execution lifecycle (`start_task`, `get_run_status`, `resume_task`, `cancel_run`, `list_runs`).
   * `RuntimeRegistry` manages registered engines (`claude_code` default), allowing alternative future runtimes (e.g. OpenAI, local LLM engines) without modifying orchestration or hierarchy logic.
+* **Curated Enterprise Model Catalog (`poc/runtime/models.py`)**:
+  * Exposes `MODEL_CATALOG` covering top-tier models across multiple providers:
+    * **Anthropic**: Claude 4.5 Sonnet, Claude 4 Sonnet, Claude 4 Haiku.
+    * **OpenAI**: GPT-4o, o3-mini.
+    * **Google Gemini**: Gemini 2.5 Pro, Gemini 2.5 Flash.
+    * **Local Ollama**: Llama 3.3 70B (Local), DeepSeek R1 (Local).
 * **Model Policy & Intelligence Tiers (`model_policy.py`)**:
   * Decouples agent definitions from vendor-specific model identifiers.
   * Exposes canonical `ModelTier` categories (`tier:architect`, `tier:worker`, `tier:developer`, `tier:executive`, `tier:fast`).
@@ -35,6 +41,7 @@ The **Runtime & Execution Service** (`poc/runtime/`, `poc/runtime_adapter.py`, a
 ```python
 from backend.dependencies import get_runtime_adapter, get_model_policy_resolver
 from runtime.model_policy import ModelTier
+from runtime.models import MODEL_CATALOG
 
 # 1. Obtain runtime adapter via DI bridge (returns RuntimeAdapter protocol)
 adapter = get_runtime_adapter()
@@ -69,3 +76,10 @@ run = adapter.get_run_status(run_id)
 3. **Deterministic Cleanup**: Subprocesses must be terminated cleanly on stop events or process failure (`terminate` followed by `kill` after 5s timeout).
 4. **Session Preservation**: Every execution must record its `runtime_session_id` to guarantee zero-loss restart capability.
 5. **Non-Blocking Execution**: `start_task` and `resume_task` must return immediately with a `run_id` and execute actual inference inside background threads.
+
+---
+
+## 🔄 Mandatory `AGENTS.md` Synchronization Rule
+
+> [!IMPORTANT]
+> Whenever any runtime adapter logic, model catalog entry, capability tier mapping, or subprocess lifecycle code in `poc/runtime/` is modified, the developer or agent **MUST** update this `AGENTS.md` file within the **SAME commit**.

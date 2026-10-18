@@ -39,3 +39,10 @@ The **Project Shared Memory & Knowledge Base Service** (`poc/backend/memory/`) i
 1. **Category Enforcement**: Category must strictly be one of `ADR`, `CONVENTION`, `INSIGHT`, or `LESSON`.
 2. **Project Scoping**: Memories must always be scoped to a valid `project_id`. Deleting a project cascades deletion to its associated memory pool.
 3. **Prompt Injection Freshness**: Prompt compilation must be fast (<10ms) and dynamic, reflecting the latest state of memories upon every invocation.
+
+---
+
+## 🔄 Mandatory `AGENTS.md` Synchronization Rule
+
+> [!IMPORTANT]
+> Whenever any shared memory categorization, endpoint, prompt injection format, or storage logic in `poc/backend/memory/` is modified, the developer or agent **MUST** update this `AGENTS.md` file within the **SAME commit**.
