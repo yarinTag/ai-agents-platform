@@ -184,6 +184,11 @@ class WorkflowEngine:
 
         execution_id = f"wf_exec_{uuid.uuid4().hex[:12]}"
 
+        # 1b. Sanitize external trigger payload (size ceiling + control char stripping)
+        if trigger_payload is not None:
+            from shared.payload_sanitizer import sanitize_trigger_payload
+            trigger_payload = sanitize_trigger_payload(trigger_payload)
+
         # 2. Setup sandbox session
         sandbox = self.sandbox_manager.create_sandbox(
             execution_id=execution_id,
@@ -218,13 +223,13 @@ class WorkflowEngine:
                 sandbox.cleanup()
                 return self.db.get_workflow_execution(execution_id)
 
-        # 4b. Pre-flight MCP Governance check
-        if dept_id:
-            all_mcp_servers = set(getattr(wf_def, "mcp_servers", []) or [])
-            for s in wf_def.steps:
-                for sm in (getattr(s, "mcp_servers", []) or []):
-                    all_mcp_servers.add(sm)
+        # 4b. Pre-flight MCP Governance check & Short-Lived ScopedRunToken Issuance
+        all_mcp_servers = set(getattr(wf_def, "mcp_servers", []) or [])
+        for s in wf_def.steps:
+            for sm in (getattr(s, "mcp_servers", []) or []):
+                all_mcp_servers.add(sm)
 
+        if dept_id:
             for conn_id in sorted(all_mcp_servers):
                 perm = self.db.check_department_mcp_permission(dept_id, conn_id)
                 if not perm.get("allowed", False):
@@ -241,6 +246,17 @@ class WorkflowEngine:
                         connector_id=conn_id,
                         reason=err_msg
                     )
+
+        from gateways.secrets_broker import secrets_broker
+        org_id_for_run = (user_context or {}).get("org_id") or "org_default"
+        user_id_for_run = (user_context or {}).get("sub")
+        scoped_run_token = secrets_broker.issue_run_token(
+            org_id=org_id_for_run,
+            department_id=dept_id or "dept_default",
+            run_id=execution_id,
+            user_id=user_id_for_run,
+            allowed_mcps=sorted(all_mcp_servers) if all_mcp_servers else ["*"],
+        )
 
         # 5. Execute steps in DAG dependency stages (multi-agent parallel execution)
         step_outputs: Dict[str, str] = {}
@@ -323,6 +339,7 @@ class WorkflowEngine:
             failure_error = str(e)
             logger.error(f"Workflow execution {execution_id} failed: {e}", exc_info=True)
         finally:
+            secrets_broker.revoke_run_token(scoped_run_token.token, reason="Workflow execution finished")
             sandbox.cleanup()
 
         # Update final execution record

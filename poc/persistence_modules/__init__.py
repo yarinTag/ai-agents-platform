@@ -23,6 +23,13 @@ from .organizations_repo import OrganizationsRepositoryMixin
 from .governance_repo import GovernanceRepositoryMixin
 from .users_repo import UsersRepositoryMixin
 from .workflows_repo import WorkflowsRepositoryMixin
+from .postgres_rls import (
+    AppendOnlyAuditRepositoryMixin,
+    RLS_MANAGED_TABLES,
+    compute_params_hash,
+    generate_postgres_rls_migrations,
+    record_security_audit_event,
+)
 
 __all__ = [
     "AgentMessage",
@@ -44,4 +51,9 @@ __all__ = [
     "GovernanceRepositoryMixin",
     "UsersRepositoryMixin",
     "WorkflowsRepositoryMixin",
+    "AppendOnlyAuditRepositoryMixin",
+    "RLS_MANAGED_TABLES",
+    "compute_params_hash",
+    "generate_postgres_rls_migrations",
+    "record_security_audit_event",
 ]

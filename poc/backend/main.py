@@ -70,6 +70,7 @@ PLATFORM_SERVICES = [
     ServiceSpec("workflows", "backend.api.workflows", "/api/v1/workflows", ["workflows"]),
     ServiceSpec("mcp", "backend.api.mcp", "/api/v1/mcp", ["mcp"]),
     ServiceSpec("organizations", "backend.api.organizations", "/api/v1", ["organizations", "departments", "mcp-governance"]),
+    ServiceSpec("gateways", "gateways.router", "/api/v1/gateways", ["gateways"]),
     ServiceSpec("audit", "backend.api.audit", "/api/v1/audit", ["audit"], requires_auth=False),
     ServiceSpec("auth_audit", "backend.api.audit", "/api/v1/auth", ["auth"], requires_auth=False),
 ]

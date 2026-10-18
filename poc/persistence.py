@@ -46,6 +46,7 @@ from persistence_modules import (
     GovernanceRepositoryMixin,
     UsersRepositoryMixin,
     WorkflowsRepositoryMixin,
+    AppendOnlyAuditRepositoryMixin,
 )
 
 
@@ -58,6 +59,7 @@ class DatabaseManager(
     GovernanceRepositoryMixin,
     UsersRepositoryMixin,
     WorkflowsRepositoryMixin,
+    AppendOnlyAuditRepositoryMixin,
 ):
     """Manages SQLite database for persistence via modular domain repository mixins."""
 
@@ -298,6 +300,7 @@ class DatabaseManager(
             conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_logs(entity_type, entity_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_time ON audit_logs(timestamp)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_correlation ON audit_logs(correlation_id)")
+            self.install_append_only_triggers_on_connection(conn)
 
             # Cron jobs table for scheduled recurring workflows
             conn.execute("""

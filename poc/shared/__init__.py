@@ -20,6 +20,17 @@ from .service_registry import (
     ServiceStatusRecord,
     service_registry,
 )
+from .envelope_crypto import (
+    EnvelopeCryptoManager,
+    encrypt_secret_config,
+    decrypt_secret_config,
+    hash_invite_token,
+)
+from .payload_sanitizer import (
+    sanitize_trigger_payload,
+    wrap_untrusted_content,
+    verify_webhook_hmac,
+)
 
 __all__ = [
     "normalize_email",
@@ -33,4 +44,11 @@ __all__ = [
     "ServiceSpec",
     "ServiceStatusRecord",
     "service_registry",
+    "EnvelopeCryptoManager",
+    "encrypt_secret_config",
+    "decrypt_secret_config",
+    "hash_invite_token",
+    "sanitize_trigger_payload",
+    "wrap_untrusted_content",
+    "verify_webhook_hmac",
 ]
