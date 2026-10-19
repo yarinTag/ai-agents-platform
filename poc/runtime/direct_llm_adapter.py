@@ -6,6 +6,7 @@ Enforces zero-trust control plane guarantees on every inference and tool step:
 2. Tenant-isolated BYOK API key resolution via `LLMKeysRepositoryMixin` (with env var fallback).
 3. Real-time interception of every model-requested tool call via `RuntimeToolGateway` before execution.
 4. Provider endpoint validation (https / no internal hosts in production) before the API key is sent.
+5. Mid-run budget re-check using the *actual* per-model token cost before every follow-up round.
 """
 
 from __future__ import annotations
@@ -13,38 +14,28 @@ from __future__ import annotations
 import json
 import urllib.error
 import urllib.request
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional
 
 try:
     from gateways.llm_proxy import LLMProxy, llm_proxy
     from gateways.tool_gateway import RuntimeToolGateway, tool_gateway
     from persistence_modules.llm_keys_repo import (
-        DEFAULT_PROVIDER_BASE_URLS,
-        DEFAULT_PROVIDER_MODELS,
-        LLMKeysRepositoryMixin,
-        SUPPORTED_LLM_PROVIDERS,
-        validate_provider_base_url,
+        DEFAULT_PROVIDER_BASE_URLS, DEFAULT_PROVIDER_MODELS, LLMKeysRepositoryMixin,
+        SUPPORTED_LLM_PROVIDERS, validate_provider_base_url,
     )
+    from runtime.llm_wire import compute_cost_usd, format_tools, parse_tool_arguments, parse_tool_identity
 except ImportError:
     from poc.gateways.llm_proxy import LLMProxy, llm_proxy
     from poc.gateways.tool_gateway import RuntimeToolGateway, tool_gateway
     from poc.persistence_modules.llm_keys_repo import (
-        DEFAULT_PROVIDER_BASE_URLS,
-        DEFAULT_PROVIDER_MODELS,
-        LLMKeysRepositoryMixin,
-        SUPPORTED_LLM_PROVIDERS,
-        validate_provider_base_url,
+        DEFAULT_PROVIDER_BASE_URLS, DEFAULT_PROVIDER_MODELS, LLMKeysRepositoryMixin,
+        SUPPORTED_LLM_PROVIDERS, validate_provider_base_url,
     )
+    from poc.runtime.llm_wire import compute_cost_usd, format_tools, parse_tool_arguments, parse_tool_identity
 
 HttpTransportFn = Callable[[str, str, Dict[str, str], Dict[str, Any]], Dict[str, Any]]
 ToolExecutorFn = Callable[[str, str, Dict[str, Any]], Any]
-
-KNOWN_PROVIDER_MODELS: tuple[str, ...] = (
-    "claude-3-5-sonnet-latest", "claude-3-5-sonnet-20241022", "claude-3-5-haiku-latest",
-    "claude-3-7-sonnet-latest", "claude-sonnet-4-20250514", "gpt-4o", "gpt-4o-mini",
-    "gpt-4.1", "gpt-4.1-mini", "meta/llama-3.1-70b-instruct", "meta/llama-3.1-8b-instruct",
-    "meta/llama-3.3-70b-instruct", "nvidia/llama-3.1-nemotron-70b-instruct",
-)
+DEFAULT_MAX_TOKENS = 1024
 
 
 def default_http_transport(
@@ -76,8 +67,6 @@ class DirectHTTPLLMRuntimeAdapter:
         self.tool_executor: Optional[ToolExecutorFn] = tool_executor
         self.llm_proxy: LLMProxy = llm_proxy_instance or llm_proxy
         self.tool_gateway: RuntimeToolGateway = tool_gateway_instance or tool_gateway
-        for m in KNOWN_PROVIDER_MODELS:
-            self.llm_proxy.allowed_models.add(m.lower())
 
     @staticmethod
     def _resolve_credentials(db: Any, org_id: str, provider: str, department_id: Optional[str]) -> Dict[str, Any]:
@@ -88,70 +77,33 @@ class DirectHTTPLLMRuntimeAdapter:
             return LLMKeysRepositoryMixin.resolve_org_llm_api_key(db, org_id, provider, department_id)
         raise PermissionError("Fail-closed: Database instance does not support LLM key resolution")
 
-    @staticmethod
-    def _format_tools(
-        provider: str, tools: Optional[List[Dict[str, Any]]]
-    ) -> Tuple[List[Dict[str, Any]], Dict[str, Tuple[str, str]]]:
-        """Format tool definitions for Anthropic vs OpenAI/NVIDIA and build lookup map."""
-        if not tools:
-            return [], {}
-        formatted: List[Dict[str, Any]] = []
-        tool_map: Dict[str, Tuple[str, str]] = {}
-        for t in tools:
-            fn = t.get("function", t)
-            raw_name = str(fn.get("name") or t.get("tool_name") or "").strip()
-            conn_id = str(t.get("connector_id") or fn.get("connector_id") or "").strip().lower()
-            if not conn_id and "." in raw_name:
-                conn_id, short_name = raw_name.split(".", 1)
-            elif not conn_id and "__" in raw_name:
-                conn_id, short_name = raw_name.split("__", 1)
-            else:
-                short_name, conn_id = raw_name, (conn_id or "default")
-            api_name = (
-                f"{conn_id}__{short_name}"
-                if "." not in raw_name and "__" not in raw_name and t.get("connector_id")
-                else raw_name
-            )
-            for key in (api_name, raw_name, short_name, f"{conn_id}.{short_name}"):
-                tool_map[key] = (conn_id, short_name)
-            desc = str(fn.get("description") or f"Execute {conn_id}.{short_name}")
-            schema = fn.get("parameters") or fn.get("input_schema") or {"type": "object", "properties": {}}
-            if provider == "anthropic":
-                formatted.append({"name": api_name, "description": desc, "input_schema": schema})
-            else:
-                formatted.append({"type": "function", "function": {"name": api_name, "description": desc, "parameters": schema}})
-        return formatted, tool_map
-
-    @staticmethod
-    def _parse_tool_identity(
-        call_item: Dict[str, Any], raw_name: str, tool_map: Dict[str, Tuple[str, str]]
-    ) -> Tuple[str, str]:
-        """Resolve `(connector_id, tool_name)` from a model tool invocation."""
-        explicit_conn = str(call_item.get("connector_id") or "").strip().lower()
-        if explicit_conn:
-            return explicit_conn, raw_name.split(".", 1)[-1].split("__", 1)[-1]
-        if raw_name in tool_map:
-            return tool_map[raw_name]
-        for sep in (".", "__"):
-            if sep in raw_name:
-                c, n = raw_name.split(sep, 1)
-                return c.strip().lower(), n.strip()
-        return "default", raw_name.strip()
-
     def _intercept_and_run_tool(
-        self, db: Any, run_token: str, call_id: str, conn_id: str,
-        tool_name: str, raw_args: Dict[str, Any], executed_calls: List[Dict[str, Any]],
+        self, db: Any, run_token: str, call_id: str, conn_id: str, tool_name: str,
+        raw_args: Dict[str, Any], args_error: Optional[str], executed_calls: List[Dict[str, Any]],
     ) -> str:
-        """Intercept a tool call via `RuntimeToolGateway`, execute via `tool_executor`, and serialize result."""
+        """Gate a tool call via `RuntimeToolGateway`; recoverable problems become an error result for the model.
+
+        Gateway denials (`PermissionError`) always propagate: policy violations must stop the run.
+        """
+        if args_error:
+            return json.dumps({"error": args_error})
         gate = self.tool_gateway.intercept_tool_call(
             db=db, run_token=run_token, connector_id=conn_id, tool_name=tool_name, arguments=raw_args
         )
+        if self.tool_executor is None:  # never fabricate a success the platform did not perform
+            return json.dumps({"error": f"tool '{conn_id}.{tool_name}' cannot be executed in this runtime"})
         clean_args = gate["sanitized_arguments"]
-        out = self.tool_executor(conn_id, tool_name, clean_args) if self.tool_executor else {"status": "ok"}
+        out = self.tool_executor(conn_id, tool_name, clean_args)
         executed_calls.append(
             {"id": call_id, "connector_id": conn_id, "tool_name": tool_name, "arguments": clean_args, "output": out}
         )
         return out if isinstance(out, str) else json.dumps(out)
+
+    def _enforce_midrun_budget(self, db: Any, department_id: str, spent_usd: float) -> None:
+        """Fail closed if the department cannot afford the actual spend accumulated so far."""
+        status = db.check_department_budget(department_id, requested_cost=float(spent_usd))
+        if not status.get("allowed", False):
+            raise PermissionError(f"Fail-closed: department budget exhausted mid-run ({status.get('message', '')})")
 
     def execute_with_tools(
         self, db: Any, run_token: str, provider: str, model: str, system_prompt: str,
@@ -174,7 +126,7 @@ class DirectHTTPLLMRuntimeAdapter:
         cred = self._resolve_credentials(db, auth_res["org_id"], norm_provider, auth_res["department_id"])
         api_key = cred["api_key"]
         url = validate_provider_base_url(cred.get("base_url") or DEFAULT_PROVIDER_BASE_URLS[norm_provider])
-        formatted_tools, tool_map = self._format_tools(norm_provider, tools)
+        formatted_tools, tool_map = format_tools(norm_provider, tools)
 
         executed_calls: List[Dict[str, Any]] = []
         in_tok, out_tok, final_text = 0, 0, ""
@@ -188,7 +140,9 @@ class DirectHTTPLLMRuntimeAdapter:
             messages.append({"role": "user", "content": sanitized_user})
 
         for _round in range(max(1, max_tool_rounds + 1)):
-            payload: Dict[str, Any] = {"model": effective_model, "max_tokens": 1024, "messages": messages}
+            if _round > 0:
+                self._enforce_midrun_budget(db, auth_res["department_id"], compute_cost_usd(effective_model, in_tok, out_tok))
+            payload: Dict[str, Any] = {"model": effective_model, "max_tokens": DEFAULT_MAX_TOKENS, "messages": messages}
             if norm_provider == "anthropic":
                 payload["system"] = sanitized_system
             if formatted_tools:
@@ -211,9 +165,9 @@ class DirectHTTPLLMRuntimeAdapter:
                 tool_results: List[Dict[str, Any]] = []
                 for tu in tool_uses:
                     call_id = str(tu.get("id") or f"toolu_{len(executed_calls) + 1}")
-                    conn_id, t_name = self._parse_tool_identity(tu, str(tu.get("name") or ""), tool_map)
-                    raw_args = tu.get("input") if isinstance(tu.get("input"), dict) else {}
-                    serialized = self._intercept_and_run_tool(db, run_token, call_id, conn_id, t_name, raw_args, executed_calls)
+                    conn_id, t_name = parse_tool_identity(tu, str(tu.get("name") or ""), tool_map)
+                    raw_args, args_err = parse_tool_arguments(tu.get("input"))
+                    serialized = self._intercept_and_run_tool(db, run_token, call_id, conn_id, t_name, raw_args, args_err, executed_calls)
                     tool_results.append({"type": "tool_result", "tool_use_id": call_id, "content": serialized})
                 messages.append({"role": "user", "content": tool_results})
             else:
@@ -228,13 +182,13 @@ class DirectHTTPLLMRuntimeAdapter:
                 for tc in t_calls:
                     call_id = str(tc.get("id") or f"call_{len(executed_calls) + 1}")
                     fn_obj = tc.get("function") or {}
-                    conn_id, t_name = self._parse_tool_identity(tc, str(fn_obj.get("name") or ""), tool_map)
-                    raw_val = fn_obj.get("arguments", {})
-                    raw_args = json.loads(raw_val) if isinstance(raw_val, str) and raw_val.strip() else (raw_val if isinstance(raw_val, dict) else {})
-                    serialized = self._intercept_and_run_tool(db, run_token, call_id, conn_id, t_name, raw_args, executed_calls)
+                    conn_id, t_name = parse_tool_identity(tc, str(fn_obj.get("name") or ""), tool_map)
+                    raw_args, args_err = parse_tool_arguments(fn_obj.get("arguments"))
+                    serialized = self._intercept_and_run_tool(db, run_token, call_id, conn_id, t_name, raw_args, args_err, executed_calls)
                     messages.append({"role": "tool", "tool_call_id": call_id, "content": serialized})
 
-        cost_usd = round(max(float(estimated_cost_usd), (in_tok * 0.000003) + (out_tok * 0.000015)), 6)
+        actual_cost = compute_cost_usd(effective_model, in_tok, out_tok)
+        cost_usd = actual_cost if (in_tok or out_tok) else round(float(estimated_cost_usd), 6)
         return {
             "provider": norm_provider, "model": effective_model, "output_text": final_text,
             "tool_calls_executed": executed_calls, "input_tokens": in_tok, "output_tokens": out_tok, "cost_usd": cost_usd,

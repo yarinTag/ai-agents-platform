@@ -12,10 +12,11 @@ import json
 import logging
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
 from ..dependencies import DatabaseManager, get_db_manager
+from ..security.tenant_access import authorize_execution, authorize_workflow
 from shared.notifications import VALID_NOTIFY_POLICIES
 from workflows.step_logs_service import get_execution_step_logs
 
@@ -44,26 +45,23 @@ class NotificationPolicyUpdateRequest(BaseModel):
 @router.get("/executions/{execution_id}/steps")
 def list_execution_steps_with_logs(
     execution_id: str,
+    request: Request,
     db: DatabaseManager = Depends(get_db_manager),
 ) -> Dict[str, Any]:
     """Return all steps and correlated observability/security logs for a workflow execution."""
-    exec_record = db.get_workflow_execution(execution_id)
-    correlated = get_execution_step_logs(db=db, execution_id=execution_id)
-    if not exec_record and correlated["total_steps"] == 0:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Workflow execution '{execution_id}' not found",
-        )
-    return correlated
+    authorize_execution(request, db, execution_id)
+    return get_execution_step_logs(db=db, execution_id=execution_id)
 
 
 @router.get("/executions/{execution_id}/steps/{step_key}/logs")
 def get_single_step_correlated_logs(
     execution_id: str,
     step_key: str,
+    request: Request,
     db: DatabaseManager = Depends(get_db_manager),
 ) -> Dict[str, Any]:
     """Return detailed correlated events, MCP tool calls, and security audit logs for a single step."""
+    authorize_execution(request, db, execution_id)
     correlated = get_execution_step_logs(db=db, execution_id=execution_id, step_key=step_key)
     if not correlated["steps"]:
         raise HTTPException(
@@ -81,6 +79,7 @@ def get_single_step_correlated_logs(
 def update_workflow_notification_policy(
     workflow_id: str,
     req: NotificationPolicyUpdateRequest,
+    request: Request,
     db: DatabaseManager = Depends(get_db_manager),
 ) -> Dict[str, Any]:
     """
@@ -94,12 +93,7 @@ def update_workflow_notification_policy(
             detail=f"Invalid notify_policy '{req.notify_policy}'. Must be one of {VALID_NOTIFY_POLICIES}",
         )
 
-    wf = db.get_workflow(workflow_id)
-    if not wf:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Workflow '{workflow_id}' not found",
-        )
+    wf = authorize_workflow(request, db, workflow_id, admin=True)
 
     try:
         def_dict = json.loads(wf.definition_json or "{}")

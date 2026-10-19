@@ -39,6 +39,10 @@ DEFAULT_ALLOWED_MODELS: Set[str] = {
     "tier:executive",
     "tier:architect",
     "tier:worker",
+    # BYOK direct-runtime provider models (Anthropic / OpenAI / NVIDIA NIM)
+    "claude-3-5-sonnet-20241022", "claude-3-5-haiku-latest", "claude-3-7-sonnet-latest",
+    "claude-sonnet-4-20250514", "gpt-4.1", "gpt-4.1-mini", "meta/llama-3.1-70b-instruct",
+    "meta/llama-3.1-8b-instruct", "meta/llama-3.3-70b-instruct", "nvidia/llama-3.1-nemotron-70b-instruct",
 }
 
 EMAIL_PATTERN = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
