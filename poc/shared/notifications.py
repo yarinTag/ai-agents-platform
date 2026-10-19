@@ -15,10 +15,10 @@ from typing import Any, Dict, Optional, Tuple
 
 try:
     from shared.notification_policy import VALID_NOTIFY_POLICIES, should_send_notification
-    from shared.notification_text import render_template, sanitize_notification_text
+    from shared.notification_text import format_glanceable_summary, render_template, sanitize_notification_text
 except ImportError:
     from poc.shared.notification_policy import VALID_NOTIFY_POLICIES, should_send_notification
-    from poc.shared.notification_text import render_template, sanitize_notification_text
+    from poc.shared.notification_text import format_glanceable_summary, render_template, sanitize_notification_text
 
 __all__ = [
     "VALID_NOTIFY_POLICIES", "should_send_notification", "resolve_telegram_target_chat",
@@ -220,15 +220,16 @@ def dispatch_workflow_completion_notification(
             if "{{output}}" not in custom_tmpl and final_output and final_output not in msg:
                 msg += f"\n\n📋 *Workflow Summary / Report:*\n{final_output}"
         else:
-            msg = (
-                f"🤖 *Workflow Run Notification*\n• Workflow: *{wf_name}* (`{wf_record.id}`)\n"
-                f"• Status: *{final_status}* | Trigger: `{sanitize_notification_text(trigger_type, 40)}` | "
-                f"Tokens: {total_tokens} (Cost: ${total_cost_usd:.4f})"
+            msg = format_glanceable_summary(
+                workflow_name=wf_name,
+                execution_id=str(wf_record.id),
+                status=final_status,
+                trigger_type=trigger_type,
+                total_tokens=total_tokens,
+                total_cost_usd=total_cost_usd,
+                step_outputs=step_outputs,
+                failure_error=failure_error,
             )
-            if final_output:
-                msg += f"\n\n📋 *Result:*\n{final_output}"
-            if failure_error:
-                msg += f"\n• Error: {sanitize_notification_text(failure_error, 500)}"
 
         return _send_bound_message(db, binding, msg)
     except Exception as notify_err:

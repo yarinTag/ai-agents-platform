@@ -144,13 +144,15 @@ class DirectHTTPLLMRuntimeAdapter:
                 self._enforce_midrun_budget(db, auth_res["department_id"], compute_cost_usd(effective_model, in_tok, out_tok))
             payload: Dict[str, Any] = {"model": effective_model, "max_tokens": DEFAULT_MAX_TOKENS, "messages": messages}
             if norm_provider == "anthropic":
-                payload["system"] = sanitized_system
+                if sanitized_system:
+                    payload["system"] = [{"type": "text", "text": sanitized_system, "cache_control": {"type": "ephemeral"}}]
             if formatted_tools:
                 payload["tools"] = formatted_tools
 
             resp = self.http_transport("POST", url, headers, payload)
             usage = resp.get("usage") or {}
             in_tok += int(usage.get("input_tokens") or usage.get("prompt_tokens") or 0)
+            in_tok += int(usage.get("cache_creation_input_tokens") or 0) + int(usage.get("cache_read_input_tokens") or 0)
             out_tok += int(usage.get("output_tokens") or usage.get("completion_tokens") or 0)
 
             if norm_provider == "anthropic":

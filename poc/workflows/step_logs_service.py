@@ -120,11 +120,24 @@ def get_execution_step_logs(
         mcp_calls = _fetch_mcp_calls(conn, execution_id, all_task_ids) if step_rows else []
         audits = _fetch_security_audits(conn, execution_id) if step_rows else []
 
+    try:
+        from workflows.prompt_contracts import parse_structured_output
+    except ImportError:
+        try:
+            from poc.workflows.prompt_contracts import parse_structured_output
+        except ImportError:
+            parse_structured_output = None
+
     steps: List[Dict[str, Any]] = []
     for row in step_rows:
         d = dict(row)
         s_key = str(d.get("step_key") or "")
         t_id = d.get("task_run_id")
+        out_raw = d.get("output_data") or ""
+        clean_summary, parsed_struct = "", None
+        if parse_structured_output and out_raw:
+            clean_summary, parsed_struct = parse_structured_output(out_raw)
+
         steps.append({
             "id": d.get("id"),
             "step_key": s_key,
@@ -133,6 +146,8 @@ def get_execution_step_logs(
             "task_run_id": t_id,
             "input_data": d.get("input_data"),
             "output_data": d.get("output_data"),
+            "output_summary": clean_summary or (out_raw[:300] if out_raw else ""),
+            "structured_output": parsed_struct,
             "input_tokens": int(d.get("input_tokens") or 0),
             "output_tokens": int(d.get("output_tokens") or 0),
             "cost_usd": float(d.get("cost_usd") or 0.0),

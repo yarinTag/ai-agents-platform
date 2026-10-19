@@ -399,15 +399,21 @@ class WorkflowEngine:
         dept_id: Optional[str]
     ) -> WorkflowStepResult:
         """Execute a single workflow step with dynamic substitutions, skill injection, and agent reuse."""
-        formatted_prompt = step.prompt_template
-        for prev_key, prev_out in step_outputs.items():
-            formatted_prompt = formatted_prompt.replace(f"{{{{{prev_key}.output}}}}", prev_out or "")
-            formatted_prompt = formatted_prompt.replace(f"${{{prev_key}.output}}", prev_out or "")
+        try:
+            from workflows.prompt_contracts import render_step_prompt
+        except ImportError:
+            from poc.workflows.prompt_contracts import render_step_prompt
 
-        if trigger_payload:
-            for k, v in trigger_payload.items():
-                formatted_prompt = formatted_prompt.replace(f"{{{{{k}}}}}", str(v))
-                formatted_prompt = formatted_prompt.replace(f"${{{k}}}", str(v))
+        step_params = getattr(step, "params", None) if isinstance(getattr(step, "params", None), dict) else {}
+        step_schema = getattr(step, "output_schema", None) or step_params.get("output_schema")
+        step_fmt = step_params.get("output_format")
+        formatted_prompt = render_step_prompt(
+            prompt_template=step.prompt_template,
+            step_outputs=step_outputs,
+            trigger_payload=trigger_payload,
+            output_schema=step_schema,
+            output_format=step_fmt,
+        )
 
         # Step-level MCP Governance check & Tool filtering (Least Privilege & Hard Block)
         if dept_id and getattr(step, "mcp_servers", None):
