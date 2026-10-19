@@ -13,10 +13,22 @@ import uuid
 from datetime import datetime
 from typing import Any, Dict, Optional, Tuple
 
+try:
+    from shared.notification_policy import VALID_NOTIFY_POLICIES, should_send_notification
+    from shared.notification_text import render_template, sanitize_notification_text
+except ImportError:
+    from poc.shared.notification_policy import VALID_NOTIFY_POLICIES, should_send_notification
+    from poc.shared.notification_text import render_template, sanitize_notification_text
+
+__all__ = [
+    "VALID_NOTIFY_POLICIES", "should_send_notification", "resolve_telegram_target_chat",
+    "dispatch_channel_message", "dispatch_workflow_start_notification",
+    "dispatch_workflow_step_notification", "dispatch_workflow_completion_notification",
+]
+
 logger = logging.getLogger(__name__)
 
 BOT_PLACEHOLDER_TARGETS = ("@agents_office_alerts", "@hermesganbot", "hermesganbot", "Hermes_test")
-VALID_NOTIFY_POLICIES = ("FINAL_ONLY", "START_AND_END", "EVERY_STEP", "ON_FAILURE_ONLY")
 
 
 def resolve_telegram_target_chat(requested_channel: str, configured_chat_id: Optional[str]) -> str:
@@ -28,42 +40,6 @@ def resolve_telegram_target_chat(requested_channel: str, configured_chat_id: Opt
     ):
         return configured_chat_id
     return requested_channel
-
-
-def should_send_notification(
-    channel_binding: Dict[str, Any],
-    event_type: str,
-    final_status: str = "COMPLETED",
-    step_notify_override: bool = False,
-) -> bool:
-    """Evaluate whether a workflow lifecycle event should trigger a channel notification."""
-    if not channel_binding or not isinstance(channel_binding, dict):
-        return False
-
-    policy = str(channel_binding.get("notify_policy") or "FINAL_ONLY").upper()
-    event_upper = str(event_type or "").upper()
-    status_upper = str(final_status or "COMPLETED").upper()
-
-    if policy == "ON_FAILURE_ONLY":
-        return status_upper == "FAILED"
-    if policy == "EVERY_STEP":
-        return event_upper in ("WORKFLOW_START", "STEP_COMPLETE", "WORKFLOW_END")
-    if policy == "START_AND_END":
-        return event_upper in ("WORKFLOW_START", "WORKFLOW_END") or (
-            event_upper == "STEP_COMPLETE" and bool(step_notify_override)
-        )
-
-    # Default policy: FINAL_ONLY (with backward-compatible notify_mode support)
-    if event_upper == "STEP_COMPLETE":
-        return bool(step_notify_override)
-    if event_upper == "WORKFLOW_END":
-        notify_mode = str(channel_binding.get("notify_mode") or "ON_COMPLETE").upper()
-        return (
-            notify_mode == "ALWAYS"
-            or (notify_mode == "ON_COMPLETE" and status_upper == "COMPLETED")
-            or (notify_mode == "ON_FAILURE" and status_upper == "FAILED")
-        )
-    return False
 
 
 def dispatch_channel_message(
@@ -118,17 +94,29 @@ def dispatch_channel_message(
     try:
         effective_connector_id = connector_id or (conn.id if conn else provider_clean)
         if not conn and connector_id:
-            with db._get_connection() as raw_conn:
-                raw_conn.execute(
-                    "INSERT OR IGNORE INTO mcp_connectors (id, name, provider, status) VALUES (?, ?, ?, 'CONNECTED')",
-                    (effective_connector_id, effective_connector_id.title(), provider_clean),
-                )
-                raw_conn.commit()
+            if hasattr(db, "save_mcp_connector"):
+                try:
+                    db.save_mcp_connector({
+                        "id": effective_connector_id,
+                        "name": effective_connector_id.title(),
+                        "provider": provider_clean,
+                        "status": "CONNECTED",
+                    })
+                except Exception:
+                    pass
+            elif hasattr(db, "_get_connection"):
+                with db._get_connection() as raw_conn:
+                    raw_conn.execute(
+                        "INSERT OR IGNORE INTO mcp_connectors (id, name, provider, status) VALUES (?, ?, ?, 'CONNECTED')",
+                        (effective_connector_id, effective_connector_id.title(), provider_clean),
+                    )
+                    raw_conn.commit()
         if conn or connector_id:
+            sanitized_log_msg = sanitize_notification_text(message, 500)
             db.save_mcp_tool_call({
                 "id": call_id, "connector_id": effective_connector_id,
                 "tool_id": f"tool_{provider_clean}_send_message", "agent_id": resolved_agent_id,
-                "task_id": None, "arguments": {"channel": channel_id, "text": message},
+                "task_id": None, "arguments": {"channel": channel_id, "text": sanitized_log_msg},
                 "status": "COMPLETED", "result": f"Status: {delivery_status} to {channel_id}",
                 "started_at": now, "completed_at": now,
             })
@@ -142,12 +130,17 @@ def dispatch_channel_message(
 
 
 def _load_workflow_channel_binding(db: Any, workflow_id: str) -> Tuple[Optional[Any], Optional[Dict[str, Any]]]:
-    """Load workflow record and its metadata.channel_binding dictionary if present."""
+    """Load workflow record and its metadata.channel_binding dictionary if present (None on malformed JSON)."""
     wf_record = db.get_workflow(workflow_id)
     if not wf_record or not wf_record.definition_json:
         return None, None
-    dj = json.loads(wf_record.definition_json)
-    binding = dj.get("metadata", {}).get("channel_binding")
+    try:
+        dj = json.loads(wf_record.definition_json)
+    except (ValueError, TypeError):
+        logger.warning(f"Workflow '{workflow_id}' has malformed definition_json; notification skipped")
+        return None, None
+    metadata = dj.get("metadata") if isinstance(dj, dict) else None
+    binding = metadata.get("channel_binding") if isinstance(metadata, dict) else None
     return wf_record, (binding if isinstance(binding, dict) else None)
 
 
@@ -170,8 +163,8 @@ def dispatch_workflow_start_notification(
         if not wf_record or not binding or not should_send_notification(binding, "WORKFLOW_START", "RUNNING"):
             return None
         msg = (
-            f"🚀 *Workflow Started*\n• Workflow: *{wf_record.name}* (`{wf_record.id}`)\n"
-            f"• Execution: `{execution_id}` | Trigger: `{trigger_type}` | Steps: {total_steps}"
+            f"🚀 *Workflow Started*\n• Workflow: *{sanitize_notification_text(wf_record.name, 200)}* (`{wf_record.id}`)\n"
+            f"• Execution: `{execution_id}` | Trigger: `{sanitize_notification_text(trigger_type, 40)}` | Steps: {total_steps}"
         )
         return _send_bound_message(db, binding, msg)
     except Exception as notify_err:
@@ -193,10 +186,11 @@ def dispatch_workflow_step_notification(
         override = bool(step_notify_override or step_map.get(step_key, False))
         if not should_send_notification(binding, "STEP_COMPLETE", final_status=status, step_notify_override=override):
             return None
-        summary = (step_output or "")[:1200]
+        summary = sanitize_notification_text(step_output, 1200)
         msg = (
-            f"🔹 *Workflow Step Completed*\n• Workflow: *{wf_record.name}* (`{execution_id}`)\n"
-            f"• Step: *{step_name or step_key}* (`{step_key}`) | Status: *{status}* | Tokens: {tokens} (${cost_usd:.4f})"
+            f"🔹 *Workflow Step Completed*\n• Workflow: *{sanitize_notification_text(wf_record.name, 200)}* (`{execution_id}`)\n"
+            f"• Step: *{sanitize_notification_text(step_name or step_key, 200)}* (`{step_key}`) | "
+            f"Status: *{status}* | Tokens: {tokens} (${cost_usd:.4f})"
         )
         if summary:
             msg += f"\n\n📄 *Step Output:*\n{summary}"
@@ -218,25 +212,23 @@ def dispatch_workflow_completion_notification(
             return None
 
         custom_tmpl = binding.get("message_template")
-        final_output = list(step_outputs.values())[-1] if step_outputs else ""
-        if len(final_output) > 2500:
-            final_output = final_output[:2450] + "...\n(truncated)"
+        wf_name = sanitize_notification_text(wf_record.name, 200)
+        final_output = sanitize_notification_text(list(step_outputs.values())[-1] if step_outputs else "", 2500)
 
         if custom_tmpl:
-            msg = custom_tmpl.replace("{{workflow_name}}", wf_record.name).replace("{{status}}", final_status)
-            if "{{output}}" in custom_tmpl:
-                msg = msg.replace("{{output}}", final_output)
-            elif final_output and final_output not in msg:
+            msg = render_template(custom_tmpl, {"workflow_name": wf_name, "status": final_status, "output": final_output})
+            if "{{output}}" not in custom_tmpl and final_output and final_output not in msg:
                 msg += f"\n\n📋 *Workflow Summary / Report:*\n{final_output}"
         else:
             msg = (
-                f"🤖 *Workflow Run Notification*\n• Workflow: *{wf_record.name}* (`{wf_record.id}`)\n"
-                f"• Status: *{final_status}* | Trigger: `{trigger_type}` | Tokens: {total_tokens} (Cost: ${total_cost_usd:.4f})"
+                f"🤖 *Workflow Run Notification*\n• Workflow: *{wf_name}* (`{wf_record.id}`)\n"
+                f"• Status: *{final_status}* | Trigger: `{sanitize_notification_text(trigger_type, 40)}` | "
+                f"Tokens: {total_tokens} (Cost: ${total_cost_usd:.4f})"
             )
             if final_output:
                 msg += f"\n\n📋 *Result:*\n{final_output}"
             if failure_error:
-                msg += f"\n• Error: {failure_error}"
+                msg += f"\n• Error: {sanitize_notification_text(failure_error, 500)}"
 
         return _send_bound_message(db, binding, msg)
     except Exception as notify_err:

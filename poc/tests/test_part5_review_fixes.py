@@ -161,3 +161,31 @@ def test_audit_correlation_is_exact_and_wildcard_safe(db):
     audit(ex.id[:-1] + "%")                                                  # wildcard probe must not match
     ids = [a["id"] for a in get_execution_step_logs(db, ex.id)["steps"][0]["security_audit_logs"]]
     assert ids == [mine["id"]]
+
+
+# ---------------------------------------------------------------- notification sanitization & safe dispatch
+def test_notification_sanitization_and_templating(db):
+    from shared.notification_text import render_template, sanitize_notification_text
+    from shared.notifications import dispatch_channel_message
+
+    raw = "Alert @channel <!here> user admin@corp.com with secret sk-0123456789abcdef\x00\x08"
+    cleaned = sanitize_notification_text(raw, limit=200)
+    assert "@\u200bchannel" in cleaned and "<\u200b!here>" in cleaned
+    assert "admin@corp.com" not in cleaned and "sk-0123456789abcdef" not in cleaned
+    assert "\x00" not in cleaned and "\x08" not in cleaned
+
+    # Safe templating does not re-expand substituted placeholders
+    tmpl = "Report: {{output}}"
+    nested = render_template(tmpl, {"output": "{{status}} and done"})
+    assert nested == "Report: {{status}} and done"  # not re-expanded
+
+    # dispatch_channel_message creates connector via save_mcp_connector and logs sanitized args
+    res = dispatch_channel_message(db, "telegram", "chat_123", raw, connector_id="telegram_conn")
+    assert res["status"] == "success"
+    with db._get_connection() as conn:
+        call_row = conn.execute("SELECT arguments FROM mcp_tool_calls WHERE connector_id = 'telegram_conn'").fetchone()
+        assert call_row is not None
+        args = json.loads(call_row[0])
+        assert "admin@corp.com" not in args["text"]
+        assert "sk-0123456789abcdef" not in args["text"]
+

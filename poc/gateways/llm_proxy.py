@@ -11,15 +11,16 @@ Enforces:
 
 from __future__ import annotations
 
-import re
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 try:
     from gateways.secrets_broker import SecretsBroker, ScopedRunToken, secrets_broker
     from persistence_modules.postgres_rls import compute_params_hash, record_security_audit_event
+    from shared.redaction import redact_pii_and_secrets as _redact
 except ImportError:
     from poc.gateways.secrets_broker import SecretsBroker, ScopedRunToken, secrets_broker
     from poc.persistence_modules.postgres_rls import compute_params_hash, record_security_audit_event
+    from poc.shared.redaction import redact_pii_and_secrets as _redact
 
 DEFAULT_MAX_PROMPT_CHARS: int = 100_000
 
@@ -45,11 +46,6 @@ DEFAULT_ALLOWED_MODELS: Set[str] = {
     "meta/llama-3.1-8b-instruct", "meta/llama-3.3-70b-instruct", "nvidia/llama-3.1-nemotron-70b-instruct",
 }
 
-EMAIL_PATTERN = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
-SECRET_TOKEN_PATTERN = re.compile(
-    r"\b(?:ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{16,}|xox[baprs]-[A-Za-z0-9-]{10,}|rtk_[A-Za-z0-9_-]{16,})\b"
-)
-
 
 class LLMProxy:
     """
@@ -73,27 +69,8 @@ class LLMProxy:
 
     @staticmethod
     def redact_pii_and_secrets(text: str) -> Tuple[str, int]:
-        """
-        Redact email addresses and credential tokens from `text`.
-        Returns `(sanitized_text, total_redactions)`.
-        """
-        if not text:
-            return "", 0
-        redactions = 0
-
-        def _replace_email(_match: re.Match[str]) -> str:
-            nonlocal redactions
-            redactions += 1
-            return "[REDACTED_EMAIL]"
-
-        def _replace_token(_match: re.Match[str]) -> str:
-            nonlocal redactions
-            redactions += 1
-            return "[REDACTED_TOKEN]"
-
-        sanitized = EMAIL_PATTERN.sub(_replace_email, text)
-        sanitized = SECRET_TOKEN_PATTERN.sub(_replace_token, sanitized)
-        return sanitized, redactions
+        """Redact emails and credential tokens (delegates to `shared.redaction`)."""
+        return _redact(text)
 
     def _audit(
         self,
