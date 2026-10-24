@@ -109,6 +109,7 @@ export interface WorkflowChannelBinding {
 }
 
 export interface PlatformWorkflow {
+  revision?: number;
   id: string;
   name: string;
   description?: string;
@@ -158,4 +159,15 @@ export interface WorkflowExecution {
   payload_hash?: string;
   is_deduplicated?: boolean;
   message?: string;
+}
+
+export interface WorkflowRevision {
+  workflow_id: string;
+  revision: number;
+  snapshot: Record<string, unknown>;
+  changed_fields: string[];
+  actor_id?: string | null;
+  actor_label: string;
+  change_summary?: string | null;
+  created_at: string;
 }

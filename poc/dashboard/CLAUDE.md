@@ -182,3 +182,6 @@ Workflow logs live at `/workflows/:workflowId/logs`, with an optional execution 
 
 ### Navigation, plugins and office scope
 Use bounded client request caching for plugin discovery (60s) and source config (30s); do not persist catalog content or credentials in browser storage. Manual scans must bypass both client results and the Git scan cache. Keep Office/Live Flow office-scoped without hiding workflow executions from Tasks. The outer app shell must stay viewport constrained while Content/sidebar navigation own scrolling. Verify the cache with `node --test tests/requestCache.test.mjs`, then build with `npm run build`.
+
+### Workflow editor compatibility
+Editing must retain workflow identity and unknown YAML/JSON extension fields. Do not apply connector catalog defaults over saved edit state. Save expected_revision and retain the draft on 409. Configuration history belongs in History; execution diagnostics remain in Logs. Validate the bundle with npm run build and backend revision tests with isolated SQLite/FastAPI.

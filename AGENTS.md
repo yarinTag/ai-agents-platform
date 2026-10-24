@@ -121,3 +121,6 @@ Per-workflow run diagnostics are available at `/workflows/:workflowId/logs?execu
 
 ## Workflow/office execution visibility and catalog caching
 Workflow task origin is resolved through workflow_step_runs and task parent/root lineage, without changing shared agent definitions or adding schema columns. Office and Live Flow request office-scoped task/activity snapshots and ignore workflow-tagged SSE events; the global Tasks view still shows all runs. See backend API/events and dashboard guides. Plugins use a bounded session-memory client cache with explicit invalidation and manual refresh; the application shell uses independent navigation/content scrolling.
+
+## Workflow editing and revision history
+Existing workflows can be edited in the shared visual/YAML builder and inspected through History. SQLite workflows.revision starts at 1; workflow_revisions stores full configuration snapshots and actor/change metadata. Each effective update appends a revision in the same BEGIN IMMEDIATE transaction; expected_revision provides optimistic concurrency. Existing records receive one Legacy baseline; earlier edits cannot be reconstructed. See backend API and workflow guides. Execution deduplication includes the saved revision so edits cannot reuse outputs from an older definition.

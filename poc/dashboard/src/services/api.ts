@@ -385,8 +385,15 @@ export const getWorkflows = () =>
 export const getWorkflow = (id: string) =>
   api.get<PlatformWorkflow>(`/api/v1/workflows/${id}`);
 
-export const updateWorkflow = (id: string, data: Partial<PlatformWorkflow>) =>
+export const updateWorkflow = (id: string, data: Partial<PlatformWorkflow> & {
+  expected_revision?: number; change_summary?: string;
+}) =>
   api.put<PlatformWorkflow>(`/api/v1/workflows/${id}`, data);
+
+export const getWorkflowRevisions = (id: string, beforeRevision?: number) =>
+  api.get<import('../types/mcp').WorkflowRevision[]>(`/api/v1/workflows/${id}/revisions`, {
+    params: { limit: 50, before_revision: beforeRevision },
+  });
 
 export const bindWorkflowChannel = (workflowId: string, data: WorkflowChannelBinding) =>
   api.post<PlatformWorkflow>(`/api/v1/workflows/${workflowId}/channel-binding`, data);

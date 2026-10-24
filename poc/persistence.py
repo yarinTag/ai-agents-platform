@@ -225,6 +225,10 @@ class DepartmentMCPAccess:
         return asdict(self)
 
 
+class WorkflowRevisionConflict(ValueError):
+    """A workflow was edited after the caller loaded its base revision."""
+
+
 @dataclass
 class Workflow:
     """Autonomous agentic workflow definition."""
@@ -240,6 +244,8 @@ class Workflow:
     organization_id: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+
+    revision: int = 1
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -1083,6 +1089,31 @@ class DatabaseManager:
             except Exception:
                 pass
             conn.execute("CREATE INDEX IF NOT EXISTS idx_workflows_org ON workflows(organization_id)")
+
+            try:
+                conn.execute("ALTER TABLE workflows ADD COLUMN revision INTEGER NOT NULL DEFAULT 1")
+            except sqlite3.OperationalError as exc:
+                if "duplicate column" not in str(exc).lower():
+                    raise
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS workflow_revisions (
+                    workflow_id TEXT NOT NULL,
+                    revision INTEGER NOT NULL,
+                    snapshot_json TEXT NOT NULL,
+                    changed_fields_json TEXT NOT NULL,
+                    actor_id TEXT,
+                    actor_label TEXT NOT NULL,
+                    change_summary TEXT,
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY (workflow_id, revision),
+                    FOREIGN KEY (workflow_id) REFERENCES workflows(id) ON DELETE CASCADE
+                )
+            """)
+            # Existing workflows get a baseline of their current saved state only.
+            for row in conn.execute("""SELECT w.* FROM workflows w WHERE NOT EXISTS
+                (SELECT 1 FROM workflow_revisions r WHERE r.workflow_id = w.id)""").fetchall():
+                self._insert_workflow_revision(conn, dict(row), [], None, "Legacy baseline",
+                    "State captured when revision history was introduced", row["updated_at"] or row["created_at"])
 
             # 3. Workflow executions table
             conn.execute("""
@@ -4659,7 +4690,9 @@ class DatabaseManager:
         description: Optional[str] = None,
         cron_expression: Optional[str] = None,
         webhook_enabled: bool = True,
-        organization_id: Optional[str] = None
+        organization_id: Optional[str] = None,
+        actor_id: Optional[str] = None,
+        actor_label: str = "System"
     ) -> Workflow:
         """Create a workflow definition."""
         now = datetime.now().isoformat()
@@ -4669,6 +4702,9 @@ class DatabaseManager:
                 INSERT INTO workflows (id, name, description, department_id, definition_json, webhook_enabled, webhook_token, cron_expression, is_active, created_at, updated_at, organization_id)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
             """, (id, name, description, department_id, definition_json, 1 if webhook_enabled else 0, webhook_token, cron_expression, now, now, organization_id))
+            row = dict(conn.execute("SELECT * FROM workflows WHERE id = ?", (id,)).fetchone())
+            self._insert_workflow_revision(conn, row, list(self._WORKFLOW_VERSION_FIELDS),
+                actor_id, actor_label, "Workflow created", now)
             conn.commit()
         return self.get_workflow(id)
 
@@ -4691,29 +4727,71 @@ class DatabaseManager:
                 is_active=bool(d.get('is_active', 1)),
                 organization_id=d.get('organization_id'),
                 created_at=d.get('created_at'),
-                updated_at=d.get('updated_at')
+                updated_at=d.get('updated_at'),
+                revision=d.get('revision', 1)
             )
 
-    def update_workflow(self, id: str, **kwargs) -> Optional[Workflow]:
-        """Update workflow configuration, definition, and channel bindings."""
-        fields = []
-        params = []
+    _WORKFLOW_VERSION_FIELDS = ("name", "description", "department_id", "definition_json",
+        "webhook_enabled", "cron_expression", "is_active", "organization_id")
+
+    def _insert_workflow_revision(self, conn, row, changed_fields, actor_id, actor_label, summary, created_at):
+        snapshot = {key: row.get(key) for key in self._WORKFLOW_VERSION_FIELDS}
+        conn.execute("""INSERT INTO workflow_revisions
+            (workflow_id, revision, snapshot_json, changed_fields_json, actor_id, actor_label, change_summary, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""", (row["id"], row.get("revision", 1),
+            json.dumps(snapshot, ensure_ascii=False), json.dumps(changed_fields), actor_id,
+            actor_label or "System", summary, created_at or datetime.now().isoformat()))
+
+    def list_workflow_revisions(self, workflow_id: str, limit: int = 50,
+                                before_revision: Optional[int] = None) -> List[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            query = "SELECT * FROM workflow_revisions WHERE workflow_id = ?"
+            params = [workflow_id]
+            if before_revision is not None:
+                query += " AND revision < ?"
+                params.append(before_revision)
+            rows = conn.execute(query + " ORDER BY revision DESC LIMIT ?", (*params, limit)).fetchall()
+        return [{"workflow_id": row["workflow_id"], "revision": row["revision"],
+            "snapshot": json.loads(row["snapshot_json"]), "changed_fields": json.loads(row["changed_fields_json"]),
+            "actor_id": row["actor_id"], "actor_label": row["actor_label"],
+            "change_summary": row["change_summary"], "created_at": row["created_at"]} for row in rows]
+
+    def update_workflow(self, id: str, *, actor_id: Optional[str] = None,
+                        actor_label: str = "System", change_summary: Optional[str] = None,
+                        expected_revision: Optional[int] = None, **kwargs) -> Optional[Workflow]:
+        """Atomically update the current configuration and append an immutable snapshot."""
+        nullable = {"description", "department_id", "cron_expression"}
+        values = {key: value for key, value in kwargs.items() if key in self._WORKFLOW_VERSION_FIELDS
+                  and (value is not None or key in nullable)}
         now = datetime.now().isoformat()
-        allowed_keys = ("name", "description", "department_id", "definition_json", "webhook_enabled", "cron_expression", "is_active", "organization_id")
-        for k in allowed_keys:
-            if k in kwargs and kwargs[k] is not None:
-                fields.append(f"{k} = ?")
-                if k in ("webhook_enabled", "is_active"):
-                    params.append(1 if kwargs[k] else 0)
-                else:
-                    params.append(kwargs[k])
-        if fields:
-            fields.append("updated_at = ?")
-            params.append(now)
-            params.append(id)
-            with self._get_connection() as conn:
-                conn.execute(f"UPDATE workflows SET {', '.join(fields)} WHERE id = ?", params)
-                conn.commit()
+        with self._get_connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            current = conn.execute("SELECT * FROM workflows WHERE id = ?", (id,)).fetchone()
+            if current is None:
+                conn.rollback()
+                return None
+            current = dict(current)
+            if expected_revision is not None and current["revision"] != expected_revision:
+                raise WorkflowRevisionConflict("Workflow changed since you opened it. Reload the latest revision before saving.")
+            changed = []
+            for key, value in values.items():
+                old = current.get(key)
+                if key == "definition_json":
+                    try:
+                        if json.loads(old or "{}") == json.loads(value):
+                            continue
+                    except (ValueError, TypeError):
+                        pass
+                if old != value:
+                    changed.append(key)
+            if changed:
+                values = {key: values[key] for key in changed}
+                values.update(revision=current["revision"] + 1, updated_at=now)
+                conn.execute("UPDATE workflows SET " + ", ".join(f"{key} = ?" for key in values) + " WHERE id = ?",
+                    (*values.values(), id))
+                current.update(values)
+                self._insert_workflow_revision(conn, current, changed, actor_id, actor_label, change_summary, now)
+            conn.commit()
         return self.get_workflow(id)
 
     def get_workflow_by_webhook_token(self, webhook_token: str) -> Optional[Workflow]:
@@ -4735,7 +4813,8 @@ class DatabaseManager:
                 is_active=bool(d.get('is_active', 1)),
                 organization_id=d.get('organization_id'),
                 created_at=d.get('created_at'),
-                updated_at=d.get('updated_at')
+                updated_at=d.get('updated_at'),
+                revision=d.get('revision', 1)
             )
 
     def list_workflows(

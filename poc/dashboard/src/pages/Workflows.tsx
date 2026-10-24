@@ -39,11 +39,12 @@ import {
   SendOutlined,
   BranchesOutlined,
   CopyOutlined,
+  EditOutlined,
+  HistoryOutlined,
 } from '@ant-design/icons';
 import {
   getWorkflows,
   updateWorkflow,
-  convertWorkflowFormat,
   deleteWorkflow,
   executeWorkflow,
   executeWorkflowPlayground,
@@ -52,6 +53,7 @@ import {
   getMCPConnectors,
 } from '../services/api';
 import { PlatformWorkflow, WorkflowExecution, MCPConnector } from '../types/mcp';
+import { WorkflowHistoryDrawer } from '../components/workflows/WorkflowHistoryDrawer';
 import { CreateWorkflowModal } from '../components/workflows/CreateWorkflowModal';
 import {
   WorkflowCanvasGraph,
@@ -68,6 +70,8 @@ export const WorkflowsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>('workflows');
 
   // Modals & Drawers state
+  const [editingWorkflow, setEditingWorkflow] = useState<PlatformWorkflow | null>(null);
+  const [historyWorkflow, setHistoryWorkflow] = useState<PlatformWorkflow | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState<boolean>(false);
   const [canvasModalOpen, setCanvasModalOpen] = useState<boolean>(false);
   const [selectedWorkflow, setSelectedWorkflow] = useState<PlatformWorkflow | null>(null);
@@ -271,26 +275,19 @@ export const WorkflowsPage: React.FC = () => {
           return { ...s, depends_on: nextDeps };
         });
 
-      const updatedDef = { ...def, steps: updatedSteps };
+      const remainingKeys = new Set(updatedSteps.map(step => step.key || step.id));
+      const updatedDef = { ...def, steps: updatedSteps,
+        ...(def.flow ? { flow: def.flow.filter((edge: { from: string; to: string }) =>
+          remainingKeys.has(edge.to) && (!edge.from || remainingKeys.has(edge.from))) } : {}) };
       const newJson = JSON.stringify(updatedDef, null, 2);
-      let newYaml = selectedWorkflow.definition_yaml;
-      try {
-        const convRes = await convertWorkflowFormat(newJson, 'yaml');
-        if (convRes.data?.converted) {
-          newYaml = convRes.data.converted;
-        }
-      } catch (e) {
-        // Keep existing yaml if conversion endpoint fails
-      }
-
       const res = await updateWorkflow(selectedWorkflow.id, {
         definition_json: newJson,
-        definition_yaml: newYaml,
+        expected_revision: selectedWorkflow.revision || 1,
+        change_summary: `Removed step ${stepKey}`,
       });
       const updatedWf = res.data || {
         ...selectedWorkflow,
         definition_json: newJson,
-        definition_yaml: newYaml,
       };
       setSelectedWorkflow(updatedWf);
       setWorkflows((prev) => prev.map((w) => (w.id === updatedWf.id ? updatedWf : w)));
@@ -414,7 +411,11 @@ export const WorkflowsPage: React.FC = () => {
       title: 'Actions',
       key: 'actions',
       render: (_: any, record: PlatformWorkflow) => (
-        <Space size={6}>
+        <Space size={6} wrap>
+          <Button size="small" icon={<EditOutlined />} onClick={() => {
+            setEditingWorkflow(record); setCreateModalOpen(true);
+          }}>Edit</Button>
+          <Button size="small" icon={<HistoryOutlined />} onClick={() => setHistoryWorkflow(record)}>History</Button>
           <Tooltip title="Execute Workflow">
             <Button
               type="primary"
@@ -620,7 +621,7 @@ export const WorkflowsPage: React.FC = () => {
           <Button
             type="primary"
             icon={<PlusOutlined />}
-            onClick={() => setCreateModalOpen(true)}
+            onClick={() => { setEditingWorkflow(null); setCreateModalOpen(true); }}
             style={{
               background: '#8b5cf6',
               borderColor: '#8b5cf6',
@@ -986,11 +987,16 @@ export const WorkflowsPage: React.FC = () => {
       </Drawer>
 
       {/* Create Workflow Modal */}
-      <CreateWorkflowModal
+      {historyWorkflow && <WorkflowHistoryDrawer key={historyWorkflow.id} workflow={historyWorkflow}
+        onClose={() => setHistoryWorkflow(null)} />}
+      {createModalOpen && <CreateWorkflowModal
+        key={editingWorkflow?.id || 'new'}
+        workflow={editingWorkflow}
         open={createModalOpen}
-        onClose={() => setCreateModalOpen(false)}
+        onClose={() => { setCreateModalOpen(false); setEditingWorkflow(null); }}
         onSuccess={() => {
           setCreateModalOpen(false);
+          setEditingWorkflow(null);
           loadData();
         }}
         defaultChannelProvider={telegramConnector ? 'telegram' : 'slack'}
@@ -999,7 +1005,7 @@ export const WorkflowsPage: React.FC = () => {
           telegramConnector?.configuration?.chat_id ||
           'Hermes_test'
         }
-      />
+      />}
     </div>
   );
 };

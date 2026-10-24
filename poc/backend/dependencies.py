@@ -18,7 +18,7 @@ if _poc_root not in sys.path:
     sys.path.insert(0, _poc_root)
 
 from config import config_manager, ConfigManager, AgentConfig, AgentRole, AgentTemplate, ProjectConfig, Skill
-from persistence import db_manager, DatabaseManager
+from persistence import db_manager, DatabaseManager, WorkflowRevisionConflict
 from runtime_adapter import runtime_adapter, ClaudeCodeRuntimeAdapter, AgentRun, TaskStatus
 import runtime_providers
 from runtime.protocol import RuntimeAdapter, RuntimeCapabilities

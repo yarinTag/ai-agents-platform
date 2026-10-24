@@ -25,13 +25,14 @@ from .sandbox import SandboxManager, SandboxSession
 logger = logging.getLogger(__name__)
 
 
-def compute_execution_hash(workflow_id: str, payload: Any) -> str:
+def compute_execution_hash(workflow_id: str, payload: Any, revision: Optional[int] = None) -> str:
     """Compute deterministic short hash for workflow payload deduplication and idempotency."""
     try:
         payload_str = json.dumps(payload, sort_keys=True) if payload else ""
     except Exception:
         payload_str = str(payload) if payload else ""
-    return hashlib.sha256(f"{workflow_id}:{payload_str}".encode("utf-8")).hexdigest()[:16]
+    namespace = f"{workflow_id}:v{revision}" if revision is not None else workflow_id
+    return hashlib.sha256(f"{namespace}:{payload_str}".encode("utf-8")).hexdigest()[:16]
 
 
 class BudgetExceededError(Exception):
@@ -205,7 +206,7 @@ class WorkflowEngine:
             execution_id = f"{'pg_exec_' if playground else 'wf_exec_'}{uuid.uuid4().hex[:12]}"
 
         if not payload_hash:
-            payload_hash = compute_execution_hash(f"playground:{workflow_id}" if playground else workflow_id, trigger_payload)
+            payload_hash = compute_execution_hash(f"playground:{workflow_id}" if playground else workflow_id, trigger_payload, revision=workflow.revision)
 
         # 2. Setup sandbox session
         sandbox = self.sandbox_manager.create_sandbox(

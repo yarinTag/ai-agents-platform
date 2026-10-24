@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Modal,
   Tabs,
@@ -41,6 +41,7 @@ import {
 } from '@ant-design/icons';
 import {
   createWorkflow,
+  updateWorkflow,
   generateWorkflowDefinition,
   convertWorkflowFormat,
   getMCPConnectors,
@@ -84,6 +85,7 @@ interface CreateWorkflowModalProps {
   defaultChannelProvider?: string;
   defaultChannelId?: string;
   departmentId?: string;
+  workflow?: PlatformWorkflow | null;
 }
 
 const AVAILABLE_AGENTS = [
@@ -105,9 +107,16 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = ({
   defaultChannelProvider = 'telegram',
   defaultChannelId = 'Hermes_test',
   departmentId,
+  workflow,
 }) => {
   const { departments, activeDepartmentId } = useAuth();
-  const effectiveDepartmentId = departmentId || activeDepartmentId || departments[0]?.id;
+  const effectiveDepartmentId = workflow ? workflow.department_id : departmentId || activeDepartmentId || departments[0]?.id;
+  const baseDefinition = useRef<Record<string, any>>({});
+  const conversionSequence = useRef(0);
+  const draftId = useRef(`wf_${Math.random().toString(36).substring(2, 10)}`);
+  const [formatting, setFormatting] = useState(false);
+  const [definitionError, setDefinitionError] = useState(false);
+  const [changeSummary, setChangeSummary] = useState('');
 
   const [activeTab, setActiveTab] = useState<string>('ai');
   const [generating, setGenerating] = useState<boolean>(false);
@@ -199,7 +208,7 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = ({
           if (conns.length > 0) {
             const ids = conns.map((c: any) => c.id || c.provider);
             setInstalledMcps(Array.from(new Set(ids)));
-            setAllowedMcps(Array.from(new Set(ids)));
+            if (!workflow) setAllowedMcps(Array.from(new Set(ids)));
 
             // Extract all configured Telegram channels
             const tgConnectors = conns.filter((c: any) => c.provider === 'telegram' || c.id === 'telegram');
@@ -215,7 +224,7 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = ({
             const tgChans = Array.from(new Set(tgList.filter(Boolean)));
             if (tgChans.length > 0) {
               setTelegramChannels(tgChans);
-              if (channelProvider === 'telegram' && !tgChans.includes(channelId)) {
+              if (!workflow && channelProvider === 'telegram' && !tgChans.includes(channelId)) {
                 setChannelId(tgChans[0]);
               }
             }
@@ -296,7 +305,7 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = ({
               const uniqueRepos = Array.from(new Set(discovered.filter(Boolean)));
               if (uniqueRepos.length > 0) {
                 setGithubRepos(uniqueRepos);
-                setTargetRepo((prev) => (prev && uniqueRepos.includes(prev) ? prev : uniqueRepos[0]));
+                if (!workflow) setTargetRepo((prev) => (prev && uniqueRepos.includes(prev) ? prev : uniqueRepos[0]));
               }
             });
           }
@@ -332,46 +341,92 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = ({
     curMcps = allowedMcps,
     curSkills = workflowSkills
   ) => {
-    const metadata: Record<string, any> = {};
+    const metadata: Record<string, any> = { ...(baseDefinition.current.metadata || {}) };
     if (curProv && curChan) {
       metadata.channel_binding = {
+        ...(metadata.channel_binding || {}),
         provider: curProv,
         connector_id: curProv,
         channel_id: curChan,
         channel_name: curChan,
         trigger_enabled: curTrig,
         notify_mode: curNotif,
-        message_template: `🚀 Workflow ${curName} finished step execution with status: {{status}}`,
+        message_template: metadata.channel_binding?.message_template || `🚀 Workflow ${curName} finished step execution with status: {{status}}`,
       };
     }
 
+    if (!curProv || !curChan) delete metadata.channel_binding;
     const payload = {
-      id: `wf_${Math.random().toString(36).substring(2, 10)}`,
+      ...baseDefinition.current,
+      id: workflow?.id || draftId.current,
       name: curName,
       description: curDesc,
-      department_id: null,
+      department_id: effectiveDepartmentId || null,
       mcp_servers: curMcps,
       skills: curSkills,
       steps: curSteps,
+      ...(baseDefinition.current.flow ? { flow: baseDefinition.current.flow.filter((edge: { from: string; to: string }) =>
+        curSteps.some(step => step.key === edge.to && (!edge.from || step.depends_on.includes(edge.from)))) } : {}),
       cron_expression: curCron || null,
       webhook_enabled: curWebhook,
       metadata,
     };
 
+    const sequence = ++conversionSequence.current;
+    setFormatting(true);
     try {
       const res = await convertWorkflowFormat({ json_content: JSON.stringify(payload, null, 2) });
-      setYamlContent(res.data.yaml_content);
-      setYamlDirty(false);
+      if (sequence === conversionSequence.current) {
+        setYamlContent(res.data.yaml_content);
+        setYamlDirty(false);
+        setDefinitionError(false);
+      }
     } catch (err) {
+      if (sequence === conversionSequence.current) setDefinitionError(true);
       console.error('Failed to format YAML', err);
-    }
+      message.error('Could not update YAML. Check step dependencies before saving.');
+    } finally { if (sequence === conversionSequence.current) setFormatting(false); }
   };
 
   useEffect(() => {
-    if (open) {
-      syncToYaml();
-    }
-  }, [open]);
+    if (!open) return;
+    if (!workflow) { syncToYaml(); return; }
+    let disposed = false;
+    const sequence = ++conversionSequence.current;
+    try {
+      const data = JSON.parse(workflow.definition_json);
+      baseDefinition.current = data;
+      setWorkflowName(workflow.name);
+      setDescription(workflow.description || '');
+      setCronExpression(workflow.cron_expression || '');
+      setWebhookEnabled(workflow.webhook_enabled);
+      setSteps((data.steps || []).map((step: WorkflowStep & {
+        id?: string; prompt?: string; instructions?: string; action?: string;
+        agent?: string; params?: { agentId?: string };
+      }, index: number) => {
+        const key = step.key || step.id || step.name?.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || `step_${index + 1}`;
+        return { ...step, key,
+          agent_id: step.agent_id || step.params?.agentId || step.agent || 'default-agent',
+          prompt_template: step.prompt_template || step.instructions || step.prompt || step.action || '',
+          depends_on: Array.from(new Set([...(step.depends_on || []),
+            ...(data.flow || []).filter((edge: { from: string; to: string }) => edge.to === key && edge.from).map((edge: { from: string }) => edge.from)])),
+        };
+      }));
+      setAllowedMcps(data.mcp_servers || []);
+      setWorkflowSkills((data.skills || []).map((skill: AttachedSkill | string) =>
+        typeof skill === 'string' ? { id: skill, name: skill, source: 'builtin' } : skill));
+      const binding = data.metadata?.channel_binding;
+      setChannelProvider(binding?.provider || ''); setChannelId(binding?.channel_id || '');
+      setTriggerEnabled(binding?.trigger_enabled ?? false); setNotifyMode(binding?.notify_mode || 'NONE');
+      setChangeSummary(''); setYamlDirty(false); setDefinitionError(false); setActiveTab('builder');
+      setFormatting(true);
+      convertWorkflowFormat({ json_content: workflow.definition_json }).then(response => {
+        if (!disposed && sequence === conversionSequence.current) setYamlContent(response.data.yaml_content);
+      }).catch(() => { if (!disposed) { setDefinitionError(true); message.error('Unable to load workflow definition'); } })
+        .finally(() => { if (!disposed && sequence === conversionSequence.current) setFormatting(false); });
+    } catch { message.error('Invalid saved workflow definition'); }
+    return () => { disposed = true; };
+  }, [open, workflow?.id]);
 
   // Trigger AI/Template generator
   const handleGenerateTemplate = async (tmplType?: string) => {
@@ -568,17 +623,21 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = ({
     try {
       const res = await convertWorkflowFormat({ yaml_content: yamlContent });
       const parsed = JSON.parse(res.data.json_content);
+      baseDefinition.current = parsed;
       if (parsed.name) setWorkflowName(parsed.name);
-      if (parsed.description) setDescription(parsed.description);
+      if (parsed.description !== undefined) setDescription(parsed.description || '');
       if (parsed.steps) setSteps(parsed.steps);
       if (parsed.mcp_servers) setAllowedMcps(parsed.mcp_servers);
       if (parsed.skills) setWorkflowSkills(parsed.skills);
-      if (parsed.cron_expression) setCronExpression(parsed.cron_expression);
+      setCronExpression(parsed.cron_expression || '');
       if (parsed.webhook_enabled !== undefined) setWebhookEnabled(parsed.webhook_enabled);
       if (parsed.metadata?.channel_binding) {
         setChannelProvider(parsed.metadata.channel_binding.provider);
         setChannelId(parsed.metadata.channel_binding.channel_id);
-      }
+        setTriggerEnabled(parsed.metadata.channel_binding.trigger_enabled ?? false);
+        setNotifyMode(parsed.metadata.channel_binding.notify_mode || 'NONE');
+      } else { setChannelProvider(''); setChannelId(''); }
+      setDefinitionError(false);
       setYamlDirty(false);
       message.success('YAML synchronized with visual builder & canvas!');
     } catch (err: any) {
@@ -590,16 +649,21 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = ({
   const handleSaveWorkflow = async () => {
     setSaving(true);
     try {
-      const res = await createWorkflow({
-        name: workflowName,
-        description,
-        department_id: effectiveDepartmentId,
-        definition_yaml: yamlContent,
-        cron_expression: cronExpression || undefined,
-        webhook_enabled: webhookEnabled,
-      });
-
-      message.success(`Workflow "${workflowName}" created and active!`);
+      const converted = await convertWorkflowFormat({ yaml_content: yamlContent });
+      const data = JSON.parse(converted.data.json_content);
+      const payload = {
+        name: data.name || workflowName,
+        description: data.description !== undefined ? data.description : description,
+        department_id: data.department_id !== undefined ? data.department_id : effectiveDepartmentId,
+        definition_json: converted.data.json_content,
+        cron_expression: data.cron_expression || '',
+        webhook_enabled: data.webhook_enabled ?? webhookEnabled,
+      };
+      const res = workflow
+        ? await updateWorkflow(workflow.id, { ...payload, expected_revision: workflow.revision || 1,
+            change_summary: changeSummary || undefined })
+        : await createWorkflow(payload);
+      message.success(workflow ? `Workflow saved as revision ${res.data.revision}` : `Workflow "${workflowName}" created and active!`);
       onSuccess(res.data);
       onClose();
     } catch (err: any) {
@@ -616,7 +680,7 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = ({
           <RocketOutlined style={{ color: '#38bdf8', fontSize: '20px' }} />
           <div>
             <span style={{ fontSize: '16px', fontWeight: 800, color: '#f0f6fc' }}>
-              Create Workflow, Canvas DAG & Auto YAML Playbook
+              {workflow ? `Edit Workflow · revision ${workflow.revision || 1}` : 'Create Workflow, Canvas DAG & Auto YAML Playbook'}
             </span>
             <div style={{ fontSize: '12px', color: '#8b949e', fontWeight: 400 }}>
               Design multi-agent DAG pipelines restricted strictly to configured MCPs with attached skills
@@ -646,16 +710,22 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = ({
           type="primary"
           icon={<ThunderboltOutlined />}
           loading={saving}
+          disabled={formatting || (definitionError && !yamlDirty) || !yamlContent.trim()}
           onClick={handleSaveWorkflow}
           style={{ background: '#059669', borderColor: '#059669', fontWeight: 700 }}
         >
-          Deploy & Save Workflow
+          {workflow ? 'Save Changes' : 'Deploy & Save Workflow'}
         </Button>,
       ]}
     >
+      {workflow && <Input style={{ marginBottom: 16 }} placeholder="Change note (optional)" maxLength={500}
+        value={changeSummary} onChange={event => setChangeSummary(event.target.value)} />}
       <Tabs
         activeKey={activeTab}
-        onChange={setActiveTab}
+        onChange={key => {
+          if (yamlDirty && key !== activeTab) { message.warning('Apply YAML changes to the visual builder before switching tabs.'); return; }
+          setActiveTab(key);
+        }}
         items={[
           {
             key: 'ai',

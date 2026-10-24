@@ -132,7 +132,8 @@ class WorkflowParser:
         for s in steps_raw:
             name = s.get("name", "")
             raw_key = s.get("key") or s.get("id") or _slugify(name) or f"step_{len(parsed_steps)+1}"
-            step_key = _slugify(raw_key) or raw_key
+            # Explicit keys are stable identifiers used by dependencies and prompt references.
+            step_key = str(raw_key)
 
             # Determine agent_id from step or params
             params = s.get("params", {})

@@ -132,3 +132,6 @@ The Workflows page now launches fresh tool-free exercises through `POST /api/v1/
 
 ### Office origin filtering, plugin cache and shell layout
 useOfficeEvents accepts an optional execution scope: all by default, office for OfficeView/AgentFlow. Workflow origin is tracked per run/lineage rather than inferred from shared agent identity. Task DTOs include optional workflow_execution_id/workflow_id. Plugin API response caching is bounded, in memory and invalidated on auth/source changes, with explicit manual refresh. The app shell is viewport constrained and navigation/content scroll independently. `tests/requestCache.test.mjs` verifies request sharing, expiry, failure eviction and invalidation races using Node's test runner.
+
+### Workflow edit/history
+The Workflows hub now exposes Edit and History. The shared builder supports editing an existing PlatformWorkflow and optional change notes, with revision checks that prevent stale saves. WorkflowHistoryDrawer shows saved configuration snapshots and before/after differences with pagination. This history is distinct from per-run Logs. WorkflowRevision and PlatformWorkflow.revision define typed frontend contracts.

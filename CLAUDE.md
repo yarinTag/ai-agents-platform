@@ -146,3 +146,6 @@ Workflow debugging: use the per-workflow Logs page for run/step errors and stdou
 
 ### Office isolation and plugin cache verification
 Run `.venv/bin/python -m pytest --noconftest poc/tests/test_workflow_origin.py poc/tests/test_workflow_playground.py -q` for real SQLite/FastAPI origin and playground contracts. In `poc/dashboard`, run `node --test tests/requestCache.test.mjs` (Node with TypeScript stripping) and `npm run build`. Office scoping is presentation separation, not a new permission boundary; normal task authorization remains required.
+
+### Workflow editing verification
+Run `.venv/bin/python -m pytest --noconftest poc/tests/test_workflow_revisions.py poc/tests/test_workflow_origin.py poc/tests/test_workflow_playground.py -q`, then `npm run build` in poc/dashboard. Revision tests use real SQLite and FastAPI, including concurrent writers, migration, pagination, actor attribution, extension-field preservation and tenant isolation.
