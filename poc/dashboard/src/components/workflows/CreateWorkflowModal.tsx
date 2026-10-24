@@ -44,6 +44,7 @@ import {
   generateWorkflowDefinition,
   convertWorkflowFormat,
   getMCPConnectors,
+  discoverMCPResources,
   getSkills,
   scanPlugins,
   createSkill,
@@ -235,23 +236,69 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = ({
               setSlackChannels(slChans);
             }
 
-            // Extract all configured GitHub repos
+            // Extract all configured & discovered Git repos
             const gitConnectors = conns.filter(
-              (c: any) => c.provider === 'github' || c.provider === 'git' || c.id === 'github' || c.id === 'git'
+              (c: any) =>
+                c.provider === 'github' ||
+                c.provider === 'git' ||
+                c.provider === 'gitlab' ||
+                c.provider === 'local_git' ||
+                c.id === 'github' ||
+                c.id === 'git' ||
+                c.id === 'gitlab'
             );
             const gitList: string[] = [];
             gitConnectors.forEach((c: any) => {
               if (Array.isArray(c.configuration?.allowed_repos)) {
                 gitList.push(...c.configuration.allowed_repos);
               }
+              if (Array.isArray(c.configuration?.repositories)) {
+                gitList.push(...c.configuration.repositories);
+              }
               if (typeof c.configuration?.default_repo === 'string' && c.configuration.default_repo.trim()) {
                 gitList.push(c.configuration.default_repo.trim());
               }
+              if (typeof c.configuration?.repo === 'string' && c.configuration.repo.trim()) {
+                gitList.push(c.configuration.repo.trim());
+              }
             });
-            const gitRepos = Array.from(new Set(gitList.filter(Boolean)));
-            if (gitRepos.length > 0) {
-              setGithubRepos(gitRepos);
+            const initialGitRepos = Array.from(new Set(gitList.filter(Boolean)));
+            if (initialGitRepos.length > 0) {
+              setGithubRepos(initialGitRepos);
             }
+
+            // Live-discover accessible repositories from connected Git providers
+            const gitProviders = Array.from(
+              new Set(
+                gitConnectors.map((c: any) =>
+                  (c.provider === 'git' ? 'github' : c.provider || 'github').toLowerCase()
+                )
+              )
+            );
+            if (gitProviders.length === 0) {
+              gitProviders.push('github');
+            }
+            Promise.all(
+              gitProviders.map((prov) =>
+                discoverMCPResources(prov as string).catch(() => ({ data: { repositories: [] } }))
+              )
+            ).then((results) => {
+              const discovered: string[] = [...initialGitRepos];
+              results.forEach((r: any) => {
+                const repos = r?.data?.repositories || [];
+                repos.forEach((repo: any) => {
+                  const fullName = repo.full_name || repo.name;
+                  if (fullName) {
+                    discovered.push(fullName);
+                  }
+                });
+              });
+              const uniqueRepos = Array.from(new Set(discovered.filter(Boolean)));
+              if (uniqueRepos.length > 0) {
+                setGithubRepos(uniqueRepos);
+                setTargetRepo((prev) => (prev && uniqueRepos.includes(prev) ? prev : uniqueRepos[0]));
+              }
+            });
           }
         })
         .catch(() => {});
@@ -405,10 +452,31 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = ({
     syncToYaml(workflowName, description, updated);
   };
 
-  const handleDeleteStep = (index: number) => {
-    const updated = steps.filter((_, i) => i !== index);
+  const handleDeleteStepByKey = (stepKey: string) => {
+    const deletedStep = steps.find((s) => s.key === stepKey);
+    const parentKeys = deletedStep?.depends_on || [];
+    const updated = steps
+      .filter((s) => s.key !== stepKey)
+      .map((s) => {
+        if (!s.depends_on?.includes(stepKey)) return s;
+        const nextDeps = Array.from(
+          new Set([
+            ...s.depends_on.filter((d) => d !== stepKey),
+            ...parentKeys.filter((p) => p !== s.key),
+          ])
+        );
+        return { ...s, depends_on: nextDeps };
+      });
     setSteps(updated);
     syncToYaml(workflowName, description, updated);
+    message.info(`Removed step "${deletedStep?.name || stepKey}"`);
+  };
+
+  const handleDeleteStep = (index: number) => {
+    const target = steps[index];
+    if (target) {
+      handleDeleteStepByKey(target.key);
+    }
   };
 
   // Skill management
@@ -892,6 +960,7 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = ({
                   }}
                   skills={workflowSkills}
                   allowedMcps={allowedMcps}
+                  onDeleteStep={handleDeleteStepByKey}
                   height={460}
                 />
               </div>

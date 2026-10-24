@@ -92,3 +92,12 @@ poc/
 
 > [!IMPORTANT]
 > Whenever any backend logic, API router endpoint, database model, security rule, or workflow behavior is modified, the developer or agent **MUST** update the corresponding `AGENTS.md` (and `CLAUDE.md`) in the same commit. Keeping documentation in absolute parity with the codebase is a mandatory system invariant.
+
+### Workflow playground contracts
+The tool-free playground endpoint returns 202 and runs locally via BackgroundTasks, not RabbitMQ. Keep its fresh IDs/hash namespace and capability check; never fall back to ordinary unrestricted execution. Execution detail includes step_runs and enforces workflow scope. Run isolated contract tests with `.venv/bin/python -m pytest --noconftest poc/tests/test_workflow_playground.py -q`; the shared conftest resets the default application database and is intentionally not loaded for this suite. Real model inference is a separate smoke check, not covered by these tests.
+
+Tool-free playgrounds skip connector-grant prechecks for declared MCP dependencies, while ordinary runs still reject ungranted connectors. Do not grant production connector access to make a tool-free exercise runnable. The playground contract suite covers workflow and step declarations for both modes.
+
+Execution detail now exposes persisted runtime diagnostics per step (last 500 events), under the same workflow tenant/department scope. Step log rows are created before runtime launch and finalized in place. Runtime stdout/stderr regression checks use real local subprocesses and require no provider calls. The standalone logs route is `/workflows/:workflowId/logs`.
+
+Workflow origin is computed from workflow_step_runs plus recursive task lineage. Do not mark a shared agent as workflow-only to isolate a particular run. Task snapshot scope and SSE payload origin must agree. Origin tests run against isolated real SQLite/FastAPI with --noconftest. Plugin scan refresh=true explicitly bypasses the Git tree scan cache; source edits and manual refresh must invalidate client cache.

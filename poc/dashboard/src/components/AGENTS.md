@@ -65,11 +65,12 @@ The `src/components/` directory provides modular, reusable, and typed React comp
     2. **MCP Scope & Channel Bindings**:
        * Selectable MCP connectors and tools.
        * Searchable multi-channel `<Select />` filtering across configured `allowed_channels` arrays (Slack channels, Telegram chats).
-       * Searchable GitHub repository `<Select />` populated from authenticated Git tokens.
-    3. **Visual DAG Builder**: Step builder with agent assignment, skill execution, and dependency linking.
+       * Searchable GitHub/GitLab repository `<Select />` populated both from connector configuration (`allowed_repos`, `default_repo`) and live repository discovery (`discoverMCPResources`).
+    3. **Visual DAG Builder**: Step builder with agent assignment, skill execution, and dependency linking. Deleting a step (`handleDeleteStepByKey`) automatically cleans up and bridges `depends_on` references in downstream steps.
     4. **Live YAML Playbook**: Bidirectional synchronization between visual DAG state and raw YAML definition (`definition_yaml`).
 * **[`WorkflowCanvasGraph.tsx`](file:///Users/yarintag/Desktop/Projects/ai-agents-platform/poc/dashboard/src/components/workflows/WorkflowCanvasGraph.tsx)**:
-  * Interactive SVG workflow diagram showing execution nodes, triggers, channel connectors, and directed dependency edges.
+  * Interactive DAG workflow diagram showing execution nodes, triggers, channel connectors, and directed dependency edges.
+  * Supports `onDeleteStep?: (stepKey: string) => void` allowing users to delete a step directly from its node card on the canvas or from the Step Details inspector modal.
 
 ### 2.6 `office/` - Spatial Simulation & Workstations
 * **[`AgentsOfficeV3Canvas.tsx`](file:///Users/yarintag/Desktop/Projects/ai-agents-platform/poc/dashboard/src/components/office/AgentsOfficeV3Canvas.tsx)**:
@@ -120,3 +121,6 @@ The `src/components/` directory provides modular, reusable, and typed React comp
 > 2. Detail any new subcomponents or exported utilities.
 > 3. Verify dark theme token adherence (`#0a0d12`, `#161b22`, `#10b981`).
 > 4. Ensure no hardcoded Hebrew strings are present (use i18n keys).
+
+## Viewport shell scrolling
+AppLayout constrains the outer shell to 100dvh with overflow hidden. The 52px top bar cannot shrink; the remaining body flexes with minHeight=0. Sidebar and Content fill that body. Navigation and right-hand content scroll independently, so long pages cannot scroll the menu off screen. Content uses minWidth=0/minHeight=0 to prevent flex overflow; office content keeps its existing hidden-overflow canvas behavior. Sidebar parent routes remain highlighted for nested routes such as workflow logs.

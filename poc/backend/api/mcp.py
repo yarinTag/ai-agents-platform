@@ -508,15 +508,21 @@ def discover_resources(
     if not token and req.configuration and isinstance(req.configuration, dict):
         token = req.configuration.get("token") or req.configuration.get("personal_access_token") or req.configuration.get("api_key")
 
+    # Ignore masked placeholder tokens so we fall back to the stored unmasked token
+    if token and ("..." in str(token) or "****" in str(token)):
+        token = None
+
     org_id = get_current_org_id(request)
-    if not token and org_id and provider in ("github", "gitlab", "git"):
+    if not token and provider in ("github", "gitlab", "git"):
         connectors = db.list_mcp_connectors(organization_id=org_id)
+        if org_id and not connectors:
+            connectors = db.list_mcp_connectors()
         for conn in connectors:
             c_prov = conn.provider.lower()
             if c_prov == provider or (provider in ("github", "git") and c_prov in ("github", "git")):
                 cfg = conn.configuration or {}
                 cand = cfg.get("token") or cfg.get("personal_access_token") or cfg.get("api_key")
-                if cand:
+                if cand and "..." not in str(cand) and "****" not in str(cand):
                     token = cand
                     break
 
@@ -803,6 +809,10 @@ def discover_resources(
 @router.post("/test-channel-message")
 def test_channel_message(req: ChannelTestMessageRequest, db: DatabaseManager = Depends(get_db_manager)):
     """Simulate or post a test notification to a channel."""
+    # AI Security Firewall pre-flight check
+    from ..security.firewall import get_prompt_firewall
+    get_prompt_firewall().assert_clean_prompt(text=req.message, source="mcp_test_channel")
+
     call_id = f"call_test_{uuid.uuid4().hex[:8]}"
     now = datetime.now().isoformat()
     

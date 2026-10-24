@@ -89,8 +89,9 @@ Mounted at `/api/v1/workflows`:
 | `DELETE` | `/{workflow_id}` | Delete workflow and unbind associated runner agents. |
 | `POST` | `/{workflow_id}/channel-binding` | Bind workflow execution updates to Telegram or Slack notification channels. |
 | `DELETE` | `/{workflow_id}/channel-binding` | Remove channel binding. |
-| `POST` | `/{workflow_id}/execute` | Trigger execution of workflow steps following topological DAG ordering. |
-| `POST` | `/webhook/{webhook_token}` | Unauthenticated webhook endpoint triggering workflow runs via external webhooks. |
+| `POST` | `/{workflow_id}/execute` | Trigger execution of workflow steps with transparent background queue dispatching (`use_queue=True`), `force_rerun`, and SHA-256 deduplication. |
+| `POST` | `/webhook/{webhook_token}` | Unauthenticated webhook endpoint triggering workflow runs via background queue with deduplication. |
+| `GET` | `/executions` | List recent workflow executions with filtering by `workflow_id`, `department_id`, `status`, and `limit`. |
 | `GET` | `/executions/{execution_id}` | Retrieve execution state, step progress, token counts, and cost breakdown. |
 | `POST` | `/executions/{execution_id}/evaluate` | Maker-checker evaluation allowing humans/managers to approve, rate, and review runs. |
 
@@ -98,7 +99,8 @@ Mounted at `/api/v1/workflows`:
 
 ### 5. Agents, Tasks, Projects & Filesystem
 * **Agents (`agents.py` mounted at `/api/v1/agents`)**: Scoped by `organization_id` and `department_id`. Endpoints: `GET /`, `POST /`, `GET /hierarchy`, `GET /{id}`, `PUT /{id}`, `DELETE /{id}`.
-* **Tasks (`tasks.py` mounted at `/api/v1/tasks`)**: Manages agent execution lifecycle. Endpoints: `GET /`, `POST /`, `GET /{run_id}`, `DELETE /{run_id}`, `POST /{run_id}/resume`, `GET /{run_id}/subtasks`, `GET /{run_id}/tree`.
+* **Tasks (`tasks.py` mounted at `/api/v1/tasks`)**: Manages agent execution lifecycle. Supports `use_queue: bool` and `priority: int` (1-10) for RabbitMQ distributed dispatching. Endpoints: `GET /`, `POST /`, `GET /{run_id}`, `DELETE /{run_id}`, `POST /{run_id}/resume`, `GET /{run_id}/subtasks`, `GET /{run_id}/tree`.
+* **Distributed Queue & Broker (`poc/backend/queue/router.py` mounted at `/api/v1/queue`)**: Manages distributed task queues, health metrics, and DLQ. Endpoints: `GET /status`, `GET /dlq`, `POST /retry/{message_id}`, `POST /publish-test`.
 * **Projects (`projects.py` mounted at `/api/v1/projects`)**: Scoped to organizations. Endpoints: `GET /`, `POST /`, `GET /{id}`, `PUT /{id}`, `DELETE /{id}`.
 * **Filesystem (`filesystem.py` mounted at `/api/v1/fs`)**: Local directory navigation and project type detection. Endpoints: `GET /browse`, `POST /pick-folder`.
 
@@ -117,3 +119,15 @@ Mounted at `/api/v1/workflows`:
 
 > [!IMPORTANT]
 > Whenever any route, request model, response schema, or business rule in `poc/backend/api/` is modified, added, or removed, the developer or agent **MUST** update this `AGENTS.md` file within the **SAME commit**.
+
+## Playground API and scoped execution inspection
+* `POST /api/v1/workflows/{workflow_id}/playground`: required JSON object body (workflow variables); returns HTTP 202 with WorkflowExecutionResponse and QUEUED status. Checks workflow scope, runtime tool-free capability (409 when unavailable), definition and configured agents (422), and agent organization (403). Missing workflows return 404. Always creates a fresh `PLAYGROUND` run with `pg_exec_` ID; no cache lookup. Hashes are namespaced separately from production. Executes via FastAPI BackgroundTasks on the same engine; exceptions persist FAILED with an error and completion time. This initial path is process-local and not durable across API restarts.
+* `GET /api/v1/workflows/executions/{execution_id}` now checks workflow tenant/department scope and includes `step_runs` (persisted step IDs, status, input/output, tokens/cost, timestamps). WorkflowExecutionResponse defaults step_runs to an empty list for list/launch responses.
+* `GET /api/v1/workflows/executions` filters records by authorized workflow scope. A non-admin with no authorized departments cannot inspect department workflows; inspection returns 403, foreign organizations return 404.
+
+### Runtime diagnostics in execution detail
+`GET /api/v1/workflows/executions/{execution_id}` enriches each step_runs entry with `events` (last 500 persisted task events), `error` (task error or null), and `task_status` (runtime enum value or null), joined through task_run_id after workflow scope checks. Missing/legacy task records return empty events/null metadata. The existing workflow_id list filter powers the per-workflow logs page; no new logs API route is introduced.
+
+## Task origin and plugin refresh contracts
+* `GET /api/v1/tasks/` accepts `execution_scope=all|office|workflow` (default all; invalid values return 422). Database filtering occurs before LIMIT, and merged live runtime records use the same origin classification. List responses include nullable workflow_execution_id and workflow_id. Origin includes direct step task IDs and recursive parent/root descendants; configured agent identity is unchanged.
+* `GET /api/v1/skills/plugins/scan` accepts `refresh: bool=false`; true bypasses the existing Git tree scan-result cache. `_scan_git_repo_via_api(..., force_refresh=False)` retains the current tree-SHA lookup behavior unless refresh is requested. Empty source behavior remains unchanged.

@@ -62,6 +62,7 @@ export const OfficeTopBar: React.FC<OfficeTopBarProps> = ({ collapsed = false, o
     <header
       style={{
         height: '52px',
+        flexShrink: 0,
         background: '#0d1117',
         borderBottom: '1px solid #21262d',
         padding: '0 20px',

@@ -17,6 +17,7 @@ import {
   ApartmentOutlined,
   CodeOutlined,
   CheckOutlined,
+  DeleteOutlined,
 } from '@ant-design/icons';
 
 const { Text, Paragraph } = Typography;
@@ -52,6 +53,7 @@ interface WorkflowCanvasGraphProps {
   skills?: WorkflowCanvasSkill[];
   allowedMcps?: string[];
   onSelectStep?: (step: WorkflowCanvasStep) => void;
+  onDeleteStep?: (stepKey: string) => void;
   height?: number | string;
 }
 
@@ -72,6 +74,7 @@ export const WorkflowCanvasGraph: React.FC<WorkflowCanvasGraphProps> = ({
   skills = [],
   allowedMcps = [],
   onSelectStep,
+  onDeleteStep,
   height = 540,
 }) => {
   const [zoom, setZoom] = useState<number>(1);
@@ -170,6 +173,10 @@ export const WorkflowCanvasGraph: React.FC<WorkflowCanvasGraphProps> = ({
               <ToolOutlined /> {allowedMcps.join(', ')}
             </Tag>
           )}
+
+          <Tag color="purple" style={{ borderRadius: '8px', padding: '3px 8px', fontWeight: 600 }}>
+            ⚡ Dual HITL (Slack & Telegram)
+          </Tag>
 
           {/* Zoom controls */}
           <Space size="small">
@@ -338,9 +345,26 @@ export const WorkflowCanvasGraph: React.FC<WorkflowCanvasGraphProps> = ({
                       <Tag color="cyan" style={{ borderRadius: '6px', fontSize: '10px', margin: 0, fontWeight: 700 }}>
                         {step.key}
                       </Tag>
-                      <Tag style={{ background: '#21262d', color: '#8b949e', border: 'none', fontSize: '10px', margin: 0 }}>
-                        <ClockCircleOutlined /> {step.timeout_seconds || 300}s
-                      </Tag>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Tag style={{ background: '#21262d', color: '#8b949e', border: 'none', fontSize: '10px', margin: 0 }}>
+                          <ClockCircleOutlined /> {step.timeout_seconds || 300}s
+                        </Tag>
+                        {onDeleteStep && (
+                          <Tooltip title="Delete Step from Workflow">
+                            <Button
+                              type="text"
+                              size="small"
+                              danger
+                              icon={<DeleteOutlined style={{ fontSize: '12px' }} />}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onDeleteStep(step.key);
+                              }}
+                              style={{ padding: '0 4px', height: '20px', minWidth: '20px' }}
+                            />
+                          </Tooltip>
+                        )}
+                      </div>
                     </div>
 
                     {/* Step Title */}
@@ -491,6 +515,21 @@ export const WorkflowCanvasGraph: React.FC<WorkflowCanvasGraphProps> = ({
         open={detailModalVisible}
         onCancel={() => setDetailModalVisible(false)}
         footer={[
+          ...(onDeleteStep && selectedStep
+            ? [
+                <Button
+                  key="delete"
+                  danger
+                  icon={<DeleteOutlined />}
+                  onClick={() => {
+                    onDeleteStep(selectedStep.key);
+                    setDetailModalVisible(false);
+                  }}
+                >
+                  Delete Step
+                </Button>,
+              ]
+            : []),
           <Button key="close" onClick={() => setDetailModalVisible(false)} style={{ background: '#21262d', color: '#f0f6fc' }}>
             Close
           </Button>,

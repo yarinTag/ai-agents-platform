@@ -138,3 +138,11 @@ cd poc/dashboard && npm run build
 > 1. **Zero Out-of-Sync Code**: Code changes without matching `AGENTS.md` updates are strictly unacceptable.
 > 2. **Surgical Accuracy**: Document exact endpoint paths, HTTP verbs, payload models, parameters, state machines, and invariants.
 > 3. **Index Maintenance**: If a new submodule or directory with an `AGENTS.md` is added, register it in the root table of contents immediately.
+
+### Playground verification
+Run `.venv/bin/python -m pytest --noconftest poc/tests/test_workflow_playground.py -q` for isolated SQLite/FastAPI contract checks without resetting the application's default database. These tests do not perform paid model inference. Playground is an internal tool-free workflow exercise; it uses the same DAG and configured models but cannot validate live tool effects.
+
+Workflow debugging: use the per-workflow Logs page for run/step errors and stdout/stderr runtime events. Isolated regression tests now exercise actual subprocess output pipes without invoking a model. A short tool-free diagnostic workflow can test the configured provider; passing contract tests alone does not establish provider connectivity.
+
+### Office isolation and plugin cache verification
+Run `.venv/bin/python -m pytest --noconftest poc/tests/test_workflow_origin.py poc/tests/test_workflow_playground.py -q` for real SQLite/FastAPI origin and playground contracts. In `poc/dashboard`, run `node --test tests/requestCache.test.mjs` (Node with TypeScript stripping) and `npm run build`. Office scoping is presentation separation, not a new permission boundary; normal task authorization remains required.

@@ -15,6 +15,7 @@ import {
   RightOutlined,
   ThunderboltOutlined,
   BankOutlined,
+  ApartmentOutlined,
 } from '@ant-design/icons';
 
 interface AppSidebarProps {
@@ -46,6 +47,13 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ collapsed, onToggleColla
           icon: <DesktopOutlined style={{ fontSize: '15px' }} />,
           badge: 'LIVE',
           badgeColor: '#10b981',
+        },
+        {
+          to: '/workflows',
+          label: 'Workflows',
+          icon: <ApartmentOutlined style={{ fontSize: '15px' }} />,
+          badge: 'DAG',
+          badgeColor: '#8b5cf6',
         },
         {
           to: '/flow',
@@ -120,7 +128,9 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ collapsed, onToggleColla
       style={{
         width: collapsed ? '68px' : '230px',
         minWidth: collapsed ? '68px' : '230px',
-        height: 'calc(100vh - 52px)',
+        height: '100%',
+        minHeight: 0,
+        flexShrink: 0,
         background: '#0d1117',
         borderRight: '1px solid #21262d',
         display: 'flex',
@@ -136,6 +146,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ collapsed, onToggleColla
       <div
         style={{
           flex: 1,
+          minHeight: 0,
           overflowY: 'auto',
           overflowX: 'hidden',
           padding: collapsed ? '12px 8px' : '12px 10px',
@@ -175,7 +186,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ collapsed, onToggleColla
             {/* Nav Items */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
               {section.items.map((item) => {
-                const isActive = location.pathname === item.to;
+                const isActive = location.pathname === item.to || (item.to !== '/' && location.pathname.startsWith(`${item.to}/`));
 
                 const linkElement = (
                   <Link

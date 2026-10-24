@@ -154,7 +154,7 @@ export const SkillsPage: React.FC = () => {
             setGitRepo(gRepo);
           }
         } catch (e) {
-          // ignore error if org not yet loaded
+          throw e;
         }
       }
 
@@ -167,7 +167,7 @@ export const SkillsPage: React.FC = () => {
         ...(mode === 'local' ? { local_path: lPath.trim() } : { git_repo: gRepo.trim() }),
       };
 
-      const res = await scanPlugins(scanParams);
+      const res = await scanPlugins(scanParams, isManual);
       if (res.data && Array.isArray(res.data.plugins)) {
         setPlugins(res.data.plugins);
         setMarketplacePath(res.data.marketplace_path || '');

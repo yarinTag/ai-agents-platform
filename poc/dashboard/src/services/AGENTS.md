@@ -155,3 +155,11 @@ eventStream.subscribe('*', (payload) => { ... });
 > 2. Detail any alterations to request or response interceptors.
 > 3. Document any new SSE events or changes to `PlatformEventPayload`.
 > 4. Ensure [`poc/dashboard/AGENTS.md`](file:///Users/yarintag/Desktop/Projects/ai-agents-platform/poc/dashboard/AGENTS.md) is updated if external integration capabilities change.
+
+### Workflow playground
+`executeWorkflowPlayground(workflowId, payload: Record<string, unknown>)` POSTs the JSON variables to `/api/v1/workflows/{workflowId}/playground` and returns WorkflowExecution. `getWorkflowExecution` also returns optional `step_runs` with id, step_key, status, input_data, output_data and cost_usd. Existing auth interceptors apply to both requests.
+
+The per-workflow logs page reuses getWorkflow, getWorkflowExecutions(workflowId, 200), and getWorkflowExecution. WorkflowExecution.step_runs also includes agent_id/task_run_id, timestamps, error, task_status and structured events. Detail responses cap persisted events at 500 per step.
+
+## Bounded plugin request cache
+requestCache.ts shares in-flight requests and caches successful responses for a caller-supplied TTL, with at most 64 entries. Errors are evicted; invalidated in-flight results cannot reinsert stale entries. scanPlugins caches normalized source requests for 60 seconds; getPluginsConfig for 30 seconds; getPluginGitRepos for 60 seconds. Data stays in memory only. Auth-token changes and 401 responses invalidate plugin entries. updatePluginsConfig invalidates before and after saving. scanPlugins(params, forceRefresh=true) bypasses the client cache and sends refresh=true to bypass the server Git tree cache. Different source parameters and manual repository credentials have separate cache keys. getTasks supports execution_scope and task list DTOs include workflow origin IDs; getRecentActivity accepts the same scope.

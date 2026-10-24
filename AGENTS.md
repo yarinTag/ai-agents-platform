@@ -45,7 +45,9 @@ The **AI Agents Platform** is an enterprise multi-tenant autonomous agent orches
 4. **Workflows Execution Engine**:
    * Declarative YAML/JSON playbooks with bidirectional format conversion (`/api/v1/workflows/convert-format`).
    * AI-powered natural language playbook generator (`/api/v1/workflows/generate`).
+   * Dedicated **Workflows Hub** (`/workflows` under `OPERATIONS` in `AppSidebar`).
    * Automated provisioning of dedicated execution runner agents (`wf-agent-{id}`).
+   * RabbitMQ distributed queue dispatching (`platform.workflows.execution`) with SHA-256 payload deduplication, smart caching, and Concurrency group serialization.
    * Topological DAG execution, parallel multi-agent stages, conditional triggers, maker-checker human evaluations, and multi-channel notification bindings.
 5. **Modern Dashboard & UI Toolkit**:
    * `OrganizationPage` (`/organization` under `ORGANIZATION & GOVERNANCE` in `AppSidebar`).
@@ -73,7 +75,9 @@ The **AI Agents Platform** is an enterprise multi-tenant autonomous agent orches
 * [**Interactive Chat**](poc/backend/chat/AGENTS.md): Agent mini-chat drawer, blocker resolution, and streaming output.
 * [**Scheduler & Cron**](poc/backend/scheduler/AGENTS.md): Background cron polling loop, croniter forecasting, and scheduled tasks.
 * [**Events & Streaming Bus**](poc/backend/events/AGENTS.md): In-memory EventBus pub/sub, SQLite event store, and persistent SSE stream.
-* [**Approvals & HITL**](poc/backend/approvals/AGENTS.md): Human-in-the-loop permission requests and supervisor escalation.
+* [**Approvals & HITL**](poc/backend/approvals/AGENTS.md): Human-in-the-loop permission requests, supervisor escalation, and dual-channel Telegram/Slack ChatOps callbacks.
+* [**Distributed Queues**](poc/backend/queue/AGENTS.md): RabbitMQ AMQP message broker, priority task queues (1-10), quorum queues, and dead-letter exchanges (DLX).
+* [**Database & Postgres RLS**](poc/backend/db/AGENTS.md): Enterprise PostgreSQL schema with kernel-level Row-Level Security (RLS) tenant isolation.
 * [**War Room Deliberation**](poc/backend/war_room/AGENTS.md): Multi-agent deliberation councils, debate rounds, consensus synthesis.
 
 ### Frontend & UI Guides
@@ -107,3 +111,13 @@ The **AI Agents Platform** is an enterprise multi-tenant autonomous agent orches
 > * **No Out-of-Sync Code**: Submitting code modifications without corresponding updates to the relevant `AGENTS.md` files is strictly prohibited.
 > * **Precise Technical Contracts**: Document exact routes, request/response models, database columns, enum values, and state transition rules.
 > * **Master Directory Registration**: If a new submodule or directory is created with an `AGENTS.md`, immediately register its link in this root table of contents.
+
+## Internal Workflow Playground (2026-10-24)
+`POST /api/v1/workflows/{workflow_id}/playground` runs the existing DAG with fresh tool-free model inference. Runs use `PLAYGROUND`, `pg_exec_` execution IDs, `pg_task_` task IDs, and a separate deduplication hash namespace. No channel notifications, automatic reviewer tasks, supervisor escalation, or production completion callbacks run. This is a prompt/data exercise, not a full container security boundary or live integration test. See workflows and runtime guides. Contract tests: `poc/tests/test_workflow_playground.py` use real SQLite and FastAPI; run with `--noconftest` to avoid the shared default-database reset fixture.
+
+`DatabaseManager.update_workflow_execution` accepts `sandbox_path` so pre-created QUEUED execution records capture their workspace when execution starts.
+
+Per-workflow run diagnostics are available at `/workflows/:workflowId/logs?execution=<executionId>`, using scoped execution details and persisted runtime events. The Workflows table exposes a Logs link per workflow.
+
+## Workflow/office execution visibility and catalog caching
+Workflow task origin is resolved through workflow_step_runs and task parent/root lineage, without changing shared agent definitions or adding schema columns. Office and Live Flow request office-scoped task/activity snapshots and ignore workflow-tagged SSE events; the global Tasks view still shows all runs. See backend API/events and dashboard guides. Plugins use a bounded session-memory client cache with explicit invalidation and manual refresh; the application shell uses independent navigation/content scrolling.

@@ -21,6 +21,7 @@ class RuntimeCapabilities:
     supports_concurrent: bool
     max_concurrent: Optional[int]
     supported_models: List[str]
+    supports_playground: bool = False
 
 
 @runtime_checkable
@@ -110,4 +111,13 @@ class RuntimeAdapter(Protocol):
 
     def get_capabilities(self) -> RuntimeCapabilities:
         """Return the runtime's declared capabilities."""
+        ...
+
+
+@runtime_checkable
+class PlaygroundRuntimeAdapter(RuntimeAdapter, Protocol):
+    """Optional tool-free extension; ordinary adapters need not implement it."""
+
+    def start_playground_task(self, agent_id: str, task_id: str, prompt: str, workspace: str) -> str:
+        """Optional capability: fresh tool-free inference, no external callbacks or escalation."""
         ...

@@ -328,7 +328,7 @@ def _parse_github_owner_repo(raw_url: str) -> Optional[tuple[str, str]]:
     return None
 
 
-async def _scan_git_repo_via_api(repo_url: str, token: Optional[str]) -> tuple[List[Dict[str, Any]], Optional[str]]:
+async def _scan_git_repo_via_api(repo_url: str, token: Optional[str], force_refresh: bool = False) -> tuple[List[Dict[str, Any]], Optional[str]]:
     """Scan a GitHub repository directly via REST API in-memory without cloning to disk."""
     import asyncio
 
@@ -355,7 +355,7 @@ async def _scan_git_repo_via_api(repo_url: str, token: Optional[str]) -> tuple[L
         tree_json = tree_resp.json()
         tree_sha = tree_json.get("sha") or "HEAD"
         cache_key = (owner.lower(), repo.lower(), tree_sha)
-        if cache_key in _GIT_TREE_SCAN_CACHE:
+        if not force_refresh and cache_key in _GIT_TREE_SCAN_CACHE:
             return _GIT_TREE_SCAN_CACHE[cache_key], f"https://github.com/{owner}/{repo}"
 
         blobs = [
@@ -686,6 +686,7 @@ async def scan_plugins(
     source_mode: Optional[str] = Query(None),
     git_repo: Optional[str] = Query(None),
     local_path: Optional[str] = Query(None),
+    refresh: bool = Query(False),
     db_manager = Depends(get_db_manager)
 ):
     """Scan configured plugin repositories and local folders for available skills."""
@@ -721,7 +722,7 @@ async def scan_plugins(
                 "total_skills": 0
             }
         git_tok, _ = _find_git_token(db_manager, org.id)
-        plugins_data, repo_display = await _scan_git_repo_via_api(effective_git_repo, git_tok)
+        plugins_data, repo_display = await _scan_git_repo_via_api(effective_git_repo, git_tok, force_refresh=refresh)
         return {
             "status": "success",
             "source_mode": "git",

@@ -123,3 +123,39 @@ export interface PlatformWorkflow {
   created_at?: string;
   updated_at?: string;
 }
+
+export interface WorkflowExecution {
+  step_runs?: Array<{
+    id: string;
+    step_key: string;
+    status: string;
+    agent_id?: string;
+    task_run_id?: string;
+    started_at?: string;
+    completed_at?: string;
+    error?: string;
+    task_status?: string;
+    events?: Array<Record<string, unknown>>;
+    input_data?: string;
+    output_data?: string;
+    cost_usd: number;
+  }>;
+
+  id: string;
+  workflow_id: string;
+  trigger_type: string;
+  trigger_payload?: string;
+  status: string;
+  department_id?: string;
+  sandbox_path?: string;
+  total_input_tokens: number;
+  total_output_tokens: number;
+  total_cost_usd: number;
+  started_at?: string;
+  completed_at?: string;
+  error_message?: string;
+  created_at?: string;
+  payload_hash?: string;
+  is_deduplicated?: boolean;
+  message?: string;
+}

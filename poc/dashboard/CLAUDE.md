@@ -174,3 +174,11 @@ poc/dashboard/
 6. **Localization Hygiene**:
    * All user-facing copy in components must be in English. Never hardcode Hebrew strings in JSX.
    * Use `const { t } = useTranslation();` for internationalized copy.
+
+### Playground UI verification
+The Workflows launch modal supports a tool-free Playground mode with JSON-object validation, fresh runs and clear model cost/tool availability text. Verify with `npm run build`; execution inspection uses scoped detail responses rather than list summaries for per-step output.
+
+Workflow logs live at `/workflows/:workflowId/logs`, with an optional execution query parameter. Validate empty history, early failures, live steps, navigation cleanup and authorized JSON export when changing this view. `npm run build` validates the production bundle.
+
+### Navigation, plugins and office scope
+Use bounded client request caching for plugin discovery (60s) and source config (30s); do not persist catalog content or credentials in browser storage. Manual scans must bypass both client results and the Git scan cache. Keep Office/Live Flow office-scoped without hiding workflow executions from Tasks. The outer app shell must stay viewport constrained while Content/sidebar navigation own scrolling. Verify the cache with `node --test tests/requestCache.test.mjs`, then build with `npm run build`.

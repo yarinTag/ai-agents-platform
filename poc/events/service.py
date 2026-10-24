@@ -45,6 +45,11 @@ class EventService:
         """
         event_type_str = event_type.value if hasattr(event_type, "value") else str(event_type)
 
+        payload = dict(payload or {})
+        context_id = task_id or payload.get("run_id") or parent_task_id
+        if context_id:
+            payload.update(self.db_manager.get_task_workflow_context(context_id))
+
         event = PlatformEvent(
             event_type=event_type_str,
             payload=payload if payload is not None else {},

@@ -17,6 +17,7 @@ from datetime import datetime
 import re
 import uuid
 import logging
+from collections import deque
 
 # Import from local modules using absolute imports
 from config import AgentConfig, ProjectConfig
@@ -426,7 +427,8 @@ class ClaudeCodeRuntimeAdapter:
         prompt: str,
         session_id: Optional[str] = None,
         fork_session: bool = False,
-        dangerously_skip_permissions: bool = False
+        dangerously_skip_permissions: bool = False,
+        playground: bool = False
     ) -> List[str]:
         """
         Build Claude Code command with appropriate arguments.
@@ -453,6 +455,25 @@ class ClaudeCodeRuntimeAdapter:
 
         if resolved_model and resolved_model.lower() != "default":
             cmd.extend(["--model", resolved_model.lower()])
+
+        if playground:
+            system_prompt = agent_config.system_prompt or ""
+            if agent_config.skills:
+                from skills_service import build_skills_system_prompt
+                system_prompt += "\n" + (build_skills_system_prompt(agent_config.skills) or "")
+            # Explicit tool inventory and MCP configuration; no inherited customization.
+            cmd.extend([
+                "-p", prompt, "--output-format", "stream-json", "--verbose",
+                "--safe-mode", "--tools", "", "--strict-mcp-config",
+                "--mcp-config", '{"mcpServers":{}}',
+                "--setting-sources", "", "--settings", '{"disableAllHooks":true}',
+                "--permission-mode", "dontAsk", "--no-session-persistence",
+                "--disable-slash-commands", "--no-chrome",
+                "--system-prompt", system_prompt +
+                "\nThis is an internal, tool-free workflow exercise. Use only supplied "
+                "data. Report missing information explicitly; do not claim external actions occurred."
+            ])
+            return cmd
 
         if session_id and not session_id.startswith("pending_") and not session_id.startswith("sess_"):
             cmd.extend(["--resume", session_id])
@@ -607,6 +628,16 @@ class ClaudeCodeRuntimeAdapter:
                 "content": line
             }
 
+    @staticmethod
+    def _stderr_reader(process, tail):
+        """Drain stderr independently so a full pipe cannot block runtime exit."""
+        if process.stderr is None:
+            return
+        for line in process.stderr:
+            text = line.decode("utf-8", errors="replace") if isinstance(line, bytes) else line
+            if text.strip():
+                tail.append(text.strip()[-2000:])
+
     def _output_reader(
         self,
         run_id: str,
@@ -641,7 +672,7 @@ class ClaudeCodeRuntimeAdapter:
             if remaining_output:
                 for line in remaining_output.splitlines():
                     if line.strip():
-                        event = self._parse_claude_output_line(line.decode('utf-8', errors='replace'))
+                        event = self._parse_claude_output_line(line.decode('utf-8', errors='replace') if isinstance(line, bytes) else line)
                         if event:
                             event['_timestamp'] = time.time()
                             event['_run_id'] = run_id
@@ -664,6 +695,29 @@ class ClaudeCodeRuntimeAdapter:
                 "_run_id": run_id
             }
             event_queue.put(end_event)
+
+    def start_playground_task(self, agent_id: str, task_id: str, prompt: str, workspace: str) -> str:
+        """Run fresh inference without tools, external escalation, or completion callbacks."""
+        if not task_id.startswith("pg_task_"):
+            raise ValueError("Playground tasks require a pg_task_ ID")
+        from persistence import db_manager
+        agent = db_manager.get_agent(agent_id)
+        if not agent:
+            raise ValueError(f"Agent not found: {agent_id}")
+        active = sum(1 for process in self._processes.values() if process.poll() is None)
+        if active >= self.max_concurrent_runs:
+            raise RuntimeError("Platform concurrency limit reached")
+        run = db_manager.get_task_run(task_id)
+        if not run:
+            raise ValueError("Playground task record not found")
+        self._runs[task_id] = run
+        thread = threading.Thread(
+            target=self._execute_task,
+            args=(task_id, agent, None, prompt, None, False),
+            kwargs={"playground_workspace": workspace}, daemon=True
+        )
+        thread.start()
+        return task_id
 
     def start_task(
         self,
@@ -688,6 +742,8 @@ class ClaudeCodeRuntimeAdapter:
         Returns:
             Run ID for tracking the task
         """
+        if (task_id and task_id.startswith("pg_task_")) or agent_id.startswith("pg_task_"):
+            raise ValueError("Use a fresh playground run for playground tasks")
         # Import here to avoid circular imports
         from config import config_manager
 
@@ -833,7 +889,8 @@ class ClaudeCodeRuntimeAdapter:
         prompt: str,
         session_id: Optional[str],
         fork_session: bool,
-        dangerously_skip_permissions: bool = False
+        dangerously_skip_permissions: bool = False,
+        playground_workspace: Optional[str] = None
     ):
         """
         Execute a task in a Claude Code subprocess.
@@ -848,6 +905,8 @@ class ClaudeCodeRuntimeAdapter:
             dangerously_skip_permissions: Whether to bypass permission dialogs
         """
         run = self._runs[run_id]
+        stderr_tail = deque(maxlen=30)
+        stderr_thread = None
 
         try:
             # Update status to running
@@ -881,7 +940,8 @@ class ClaudeCodeRuntimeAdapter:
             skip_perm = dangerously_skip_permissions or getattr(run, "dangerously_skip_permissions", False)
             cmd = self._build_claude_command(
                 agent_config, project_config, prompt, session_id, fork_session,
-                dangerously_skip_permissions=skip_perm
+                dangerously_skip_permissions=skip_perm,
+                playground=playground_workspace is not None
             )
             env = self._build_claude_env(
                 run_id=run_id,
@@ -890,7 +950,7 @@ class ClaudeCodeRuntimeAdapter:
             )
 
             # Determine working directory
-            work_dir = self._resolve_working_directory(project_config, agent_config)
+            work_dir = playground_workspace or self._resolve_working_directory(project_config, agent_config)
 
             # Launch Claude Code process
             process = subprocess.Popen(
@@ -905,6 +965,9 @@ class ClaudeCodeRuntimeAdapter:
             )
 
             self._processes[run_id] = process
+            stderr_thread = threading.Thread(target=self._stderr_reader,
+                args=(process, stderr_tail), daemon=True)
+            stderr_thread.start()
 
             # Set up output reading
             event_queue = queue.Queue()
@@ -921,6 +984,7 @@ class ClaudeCodeRuntimeAdapter:
             self._reader_threads[run_id] = reader_thread
 
             # Process events
+            last_checkpoint = time.monotonic()
             while True:
                 try:
                     # Get event with timeout to allow checking for cancellation
@@ -928,6 +992,10 @@ class ClaudeCodeRuntimeAdapter:
 
                     # Add event to run
                     run.events.append(event)
+                    if playground_workspace and time.monotonic() - last_checkpoint >= 1:
+                        from persistence import db_manager
+                        db_manager.save_task_run(run)
+                        last_checkpoint = time.monotonic()
 
                     # Capture Claude session ID if emitted
                     captured_sid = None
@@ -938,7 +1006,7 @@ class ClaudeCodeRuntimeAdapter:
                     elif event.get("type") == "result" and event.get("session_id"):
                         captured_sid = event["session_id"]
 
-                    if captured_sid:
+                    if captured_sid and not playground_workspace:
                         run.session_id = captured_sid
                         try:
                             from persistence import db_manager
@@ -954,7 +1022,11 @@ class ClaudeCodeRuntimeAdapter:
 
                     # Check for explicit tool call for supervisor clarification or permission
                     tool_q = extract_supervisor_question(event)
-                    if tool_q:
+                    if tool_q and playground_workspace and event.get("type") != "result":
+                        run.status = TaskStatus.FAILED
+                        run.error = tool_q["question"]
+                        break
+                    if tool_q and not playground_workspace:
                         from orchestration.supervisor_resolver import SupervisorResolver
                         from persistence import db_manager
                         resolver = SupervisorResolver(db_manager, runtime_adapter=self)
@@ -997,6 +1069,14 @@ class ClaudeCodeRuntimeAdapter:
                             run.model = str(model_reported)
 
                         q_data = extract_supervisor_question(event) or extract_supervisor_question(res_val)
+                        if q_data and playground_workspace:
+                            run.status = TaskStatus.FAILED
+                            run.error = q_data["question"]
+                            break
+                        if event.get("is_error"):
+                            run.status = TaskStatus.FAILED
+                            run.error = str(res_val)
+                            break
                         if q_data:
                             from orchestration.supervisor_resolver import SupervisorResolver
                             from persistence import db_manager
@@ -1030,14 +1110,19 @@ class ClaudeCodeRuntimeAdapter:
                         # Process ended without explicit result/error
                         run.status = TaskStatus.COMPLETED if run.result else TaskStatus.FAILED
                         if not run.error and not run.result:
-                            run.error = "Process ended without result or error"
+                            if stderr_thread:
+                                stderr_thread.join(timeout=0.2)
+                            diagnostic = "\n".join(stderr_tail)
+                            run.error = diagnostic or f"Process ended without result (exit code {process.poll()})"
                         break
 
                 except queue.Empty:
                     # Check if process has ended
                     if process.poll() is not None:
                         # Process ended, check if we got all output
-                        time.sleep(0.1)  # Give a moment for final events
+                        reader_thread.join(timeout=0.1)
+                        if reader_thread.is_alive() or not event_queue.empty():
+                            continue
                         if not self._stop_events[run_id].is_set():
                             # Process ended unexpectedly
                             run.status = TaskStatus.FAILED
@@ -1060,6 +1145,13 @@ class ClaudeCodeRuntimeAdapter:
                 "_run_id": run_id
             })
         finally:
+            if stderr_thread:
+                stderr_thread.join(timeout=0.2)
+            if stderr_tail:
+                run.events.append({"type": "stderr", "content": "\n".join(stderr_tail),
+                                   "_timestamp": time.time(), "_run_id": run_id})
+                if run.status == TaskStatus.FAILED:
+                    run.error = (run.error or "Runtime failed") + "\n" + "\n".join(stderr_tail)
             # Clean up: only mark ended_at for terminal statuses (not paused WAITING_INPUT)
             if run.status in (TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED):
                 run.ended_at = datetime.now()
@@ -1070,7 +1162,7 @@ class ClaudeCodeRuntimeAdapter:
                 db_manager.save_task_run(run)
 
                 # Record task response in chat_messages for the agent
-                if run.status in (TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.WAITING_INPUT) and run.agent_id:
+                if not playground_workspace and run.status in (TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.WAITING_INPUT) and run.agent_id:
                     try:
                         conv = db_manager.get_or_create_conversation(run.agent_id, project_id=run.project_id)
                         status_val = run.status.value if hasattr(run.status, "value") else str(run.status)
@@ -1120,7 +1212,7 @@ class ClaudeCodeRuntimeAdapter:
                 logger.warning(f"Failed to save task run to DB: {dbe}")
 
             # Notify Orchestration Engine of task completion or failure
-            if run.status in (TaskStatus.COMPLETED, TaskStatus.FAILED):
+            if not playground_workspace and run.status in (TaskStatus.COMPLETED, TaskStatus.FAILED):
                 if getattr(self, "on_task_completed", None):
                     try:
                         self.on_task_completed(run)
@@ -1164,6 +1256,9 @@ class ClaudeCodeRuntimeAdapter:
         """
         Resume an existing paused task (WAITING_INPUT) by passing the supervisor/human answer back into the session.
         """
+        if run_id.startswith("pg_task_"):
+            raise ValueError("Playground tasks cannot be resumed; start a fresh playground run")
+
         run = self._runs.get(run_id)
         if not run:
             try:
@@ -1259,7 +1354,7 @@ class ClaudeCodeRuntimeAdapter:
 
         run.status = TaskStatus.CANCELLED
         run.ended_at = datetime.now()
-        run.error = "Task cancelled by user"
+        run.error = "Task cancelled"
 
         return True
 

@@ -9,14 +9,14 @@ import { getRecentActivity } from '../services/api';
 import { useOfficeEvents } from '../hooks/useOfficeEvents';
 
 export const AgentFlowPage: React.FC = () => {
-  const { agents, tasks, loading, connectionStatus, lastEvent, refresh } = useOfficeEvents();
+  const { agents, tasks, loading, connectionStatus, lastEvent, refresh } = useOfficeEvents('office');
   const [activity, setActivity] = useState<ActivityEvent[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [drawerVisible, setDrawerVisible] = useState<boolean>(false);
 
   // Initial load of historical activity
   useEffect(() => {
-    getRecentActivity(20)
+    getRecentActivity(20, 'office')
       .then((res) => {
         setActivity(res.data?.activity || []);
       })

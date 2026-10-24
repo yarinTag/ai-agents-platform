@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   Table,
   Form,
@@ -13,6 +13,10 @@ import {
   Tree,
   Card,
   Tooltip,
+  Checkbox,
+  Slider,
+  Badge,
+  Drawer,
 } from 'antd';
 import {
   PlusOutlined,
@@ -27,6 +31,9 @@ import {
   ClockCircleOutlined,
   CopyOutlined,
   CodeOutlined,
+  ThunderboltOutlined,
+  WarningOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons';
 import { Task, TaskTreeNode } from '../types/task';
 import { Agent } from '../types/agent';
@@ -40,6 +47,10 @@ import {
   getAgents,
   delegateTask,
   getTaskTree,
+  getQueueStatus,
+  getDeadLetterQueue,
+  retryDeadLetter,
+  QueueStatus,
 } from '../services/api';
 import { useOfficeEvents } from '../hooks/useOfficeEvents';
 
@@ -64,8 +75,54 @@ export const TasksPage: React.FC = () => {
   const [treeData, setTreeData] = useState<TaskTreeNode | null>(null);
   const [loadingTree, setLoadingTree] = useState<boolean>(false);
 
+  // RabbitMQ Distributed Queue & DLQ State
+  const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null);
+  const [dlqVisible, setDlqVisible] = useState<boolean>(false);
+  const [dlqItems, setDlqItems] = useState<any[]>([]);
+  const [loadingDlq, setLoadingDlq] = useState<boolean>(false);
+
+  const fetchQueueMetrics = useCallback(async () => {
+    try {
+      const res = await getQueueStatus();
+      setQueueStatus(res.data);
+    } catch {
+      // Backend queue optional in dev
+    }
+  }, []);
+
+  const fetchDlqItems = async () => {
+    setLoadingDlq(true);
+    try {
+      const res = await getDeadLetterQueue();
+      setDlqItems(res.data || []);
+    } catch {
+      message.error('Failed to fetch dead-letter queue');
+    } finally {
+      setLoadingDlq(false);
+    }
+  };
+
+  const handleRetryDlqItem = async (msgId: string) => {
+    try {
+      await retryDeadLetter(msgId);
+      message.success(`Message ${msgId} re-queued successfully!`);
+      fetchDlqItems();
+      fetchQueueMetrics();
+      refresh();
+    } catch {
+      message.error(`Failed to retry message ${msgId}`);
+    }
+  };
+
+  useEffect(() => {
+    fetchQueueMetrics();
+    const iv = setInterval(fetchQueueMetrics, 5000);
+    return () => clearInterval(iv);
+  }, [fetchQueueMetrics]);
+
   const handleCreate = () => {
     form.resetFields();
+    form.setFieldsValue({ use_queue: true, priority: 5 });
     setEditingKey('');
     setVisible(true);
   };
@@ -86,6 +143,8 @@ export const TasksPage: React.FC = () => {
         project_id: values.project_id ? String(values.project_id) : null,
         skill_id: values.skill_id ? String(values.skill_id) : null,
         input_data: parsedInputData,
+        use_queue: true,
+        priority: Number(values.priority) || 5,
       };
 
       if (editingKey) {
@@ -393,10 +452,10 @@ export const TasksPage: React.FC = () => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <div>
           <h2 style={{ margin: 0, color: '#f3f4f6', fontSize: '22px', fontWeight: 700 }}>
-            📋 Task Orchestration & Execution Queue
+            📋 Task Orchestration & Execution
           </h2>
           <span style={{ color: '#9ca3af', fontSize: '13px' }}>
-            Live asynchronous executions, structured subtask delegation, and result lineage.
+            Live asynchronous executions, structured subtask delegation, and multi-agent task coordination.
           </span>
         </div>
         <Button
@@ -449,8 +508,83 @@ export const TasksPage: React.FC = () => {
           >
             <Input.TextArea rows={4} placeholder="Analyze codebase and create report..." />
           </Form.Item>
+
+          <Form.Item
+            name="priority"
+            label="Execution Priority (1: Background, 5: Standard, 10: Urgent Incident)"
+            initialValue={5}
+          >
+            <Slider
+              min={1}
+              max={10}
+              marks={{
+                1: { style: { color: '#64748b' }, label: '1 (Low)' },
+                5: { style: { color: '#38bdf8' }, label: '5 (Std)' },
+                8: { style: { color: '#f59e0b' }, label: '8 (High)' },
+                10: { style: { color: '#ef4444' }, label: '10 (Urgent)' },
+              }}
+            />
+          </Form.Item>
         </Form>
       </Modal>
+
+      {/* Dead-Letter Queue (DLQ) Drawer */}
+      <Drawer
+        title="☠️ Dead-Letter Queue (DLQ) Inspector"
+        open={dlqVisible}
+        onClose={() => setDlqVisible(false)}
+        width={580}
+      >
+        <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ color: '#9ca3af', fontSize: '13px' }}>
+            Messages that failed repeated processing attempts (&gt;3) and were isolated for review.
+          </span>
+          <Button icon={<ReloadOutlined />} onClick={fetchDlqItems} loading={loadingDlq} size="small">
+            Refresh
+          </Button>
+        </div>
+
+        {dlqItems.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '40px', color: '#10b981' }}>
+            <CheckCircleOutlined style={{ fontSize: '32px', marginBottom: '8px' }} />
+            <div>DLQ is Clean! No failed tasks currently isolated.</div>
+          </div>
+        ) : (
+          dlqItems.map((item, idx) => (
+            <Card
+              key={idx}
+              size="small"
+              style={{
+                background: '#161b22',
+                borderColor: '#ef4444',
+                borderRadius: '8px',
+                marginBottom: '12px',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <Tag color="error">FAILED MESSAGE</Tag>
+                <Button
+                  size="small"
+                  type="primary"
+                  onClick={() => handleRetryDlqItem(item.message_id)}
+                  style={{ background: '#0284c7', borderColor: '#0284c7' }}
+                >
+                  Retry Task 🔁
+                </Button>
+              </div>
+              <div style={{ fontSize: '12px', color: '#f87171', fontWeight: 600 }}>
+                Reason: {item.reason || 'Exceeded retry limit'}
+              </div>
+              <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '4px' }}>
+                Task ID: <code>{item.payload?.task_id || item.message_id}</code> | Agent: <code>{item.payload?.agent_id}</code>
+              </div>
+              <div style={{ background: '#0d1117', padding: '8px', borderRadius: '6px', marginTop: '8px', fontSize: '11px', color: '#e5e7eb' }}>
+                {item.payload?.prompt || 'No prompt details'}
+              </div>
+            </Card>
+          ))
+        )}
+      </Drawer>
 
       {/* Delegate Subtask Modal */}
       <Modal

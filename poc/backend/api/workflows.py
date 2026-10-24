@@ -8,7 +8,7 @@ Supports:
 - Human evaluations and lessons learned
 """
 
-from fastapi import APIRouter, HTTPException, Depends, status, BackgroundTasks, Header, Request
+from fastapi import APIRouter, HTTPException, Depends, status, BackgroundTasks, Header, Request, Query
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 import uuid
@@ -18,7 +18,14 @@ import logging
 
 from ..dependencies import get_db_manager, get_workflow_engine, DatabaseManager, AgentConfig, AgentRole
 from workflows.parser import WorkflowParser, WorkflowDefinition
-from workflows.engine import WorkflowEngine, BudgetExceededError, MCPGovernanceViolationError, UnauthorizedUserDepartmentError
+from workflows.engine import (
+    WorkflowEngine,
+    BudgetExceededError,
+    MCPGovernanceViolationError,
+    UnauthorizedUserDepartmentError,
+    compute_execution_hash,
+)
+from ..queue import TaskQueuePublisher
 from ..security import get_current_org_id, get_authorized_scope
 
 logger = logging.getLogger(__name__)
@@ -92,6 +99,10 @@ class WorkflowExecutionResponse(BaseModel):
     completed_at: Optional[str] = None
     error_message: Optional[str] = None
     created_at: Optional[str] = None
+    payload_hash: Optional[str] = None
+    is_deduplicated: Optional[bool] = False
+    message: Optional[str] = None
+    step_runs: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class EvaluationRequest(BaseModel):
@@ -619,7 +630,7 @@ def _check_workflow_scope(wf, scope: Dict[str, Any]):
 
     if org_id and getattr(wf, "organization_id", None) and wf.organization_id != org_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workflow not found")
-    if not is_org_admin and getattr(wf, "department_id", None) and authorized_dept_ids and wf.department_id not in authorized_dept_ids:
+    if not is_org_admin and getattr(wf, "department_id", None) and wf.department_id not in authorized_dept_ids:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to access workflow in this department")
 
 
@@ -688,6 +699,124 @@ def list_workflows(
         department_ids=target_dept_ids
     )
     return [_workflow_to_response(wf) for wf in workflows]
+
+
+@router.get("/executions", response_model=List[WorkflowExecutionResponse])
+def list_executions(
+    request: Request,
+    workflow_id: Optional[str] = Query(None),
+    department_id: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    db: DatabaseManager = Depends(get_db_manager)
+):
+    """List recent workflow executions with filtering."""
+    records = db.list_workflow_executions(
+        workflow_id=workflow_id,
+        department_id=department_id,
+        status=status,
+        limit=limit
+    )
+    scope = get_authorized_scope(request, db)
+    visible = []
+    for record in records:
+        wf = db.get_workflow(record.workflow_id)
+        if not wf:
+            continue
+        try:
+            _check_workflow_scope(wf, scope)
+        except HTTPException:
+            continue
+        visible.append(record)
+    return [
+        WorkflowExecutionResponse(
+            id=r.id,
+            workflow_id=r.workflow_id,
+            trigger_type=r.trigger_type,
+            trigger_payload=r.trigger_payload,
+            status=r.status,
+            department_id=r.department_id,
+            sandbox_path=r.sandbox_path,
+            total_input_tokens=r.total_input_tokens,
+            total_output_tokens=r.total_output_tokens,
+            total_cost_usd=r.total_cost_usd,
+            started_at=r.started_at,
+            completed_at=r.completed_at,
+            error_message=r.error_message,
+            created_at=r.created_at,
+            payload_hash=r.payload_hash,
+            is_deduplicated=False
+        ) for r in visible
+    ]
+
+
+@router.get("/executions/{execution_id}", response_model=WorkflowExecutionResponse)
+def get_execution_status(
+    execution_id: str,
+    request: Request,
+    db: DatabaseManager = Depends(get_db_manager)
+):
+    """Get full status and token/cost metrics of a workflow execution."""
+    exec_record = db.get_workflow_execution(execution_id)
+    if not exec_record:
+        raise HTTPException(status_code=404, detail="Execution not found")
+
+    wf = db.get_workflow(exec_record.workflow_id)
+    if not wf:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    _check_workflow_scope(wf, get_authorized_scope(request, db))
+    with db._get_connection() as conn:
+        step_runs = [dict(row) for row in conn.execute(
+            "SELECT * FROM workflow_step_runs WHERE execution_id = ? ORDER BY started_at, step_key",
+            (execution_id,)
+        ).fetchall()]
+    for step in step_runs:
+        task = db.get_task_run(step["task_run_id"]) if step.get("task_run_id") else None
+        step["events"] = task.events[-500:] if task else []
+        step["error"] = task.error if task else None
+        step["task_status"] = task.status.value if task else None
+    return WorkflowExecutionResponse(
+        step_runs=step_runs,
+        id=exec_record.id,
+        workflow_id=exec_record.workflow_id,
+        trigger_type=exec_record.trigger_type,
+        trigger_payload=exec_record.trigger_payload,
+        status=exec_record.status,
+        department_id=exec_record.department_id,
+        sandbox_path=exec_record.sandbox_path,
+        total_input_tokens=exec_record.total_input_tokens,
+        total_output_tokens=exec_record.total_output_tokens,
+        total_cost_usd=exec_record.total_cost_usd,
+        started_at=exec_record.started_at,
+        completed_at=exec_record.completed_at,
+        error_message=exec_record.error_message,
+        created_at=exec_record.created_at,
+        payload_hash=exec_record.payload_hash,
+        is_deduplicated=False
+    )
+
+
+@router.post("/executions/{execution_id}/evaluate", status_code=status.HTTP_201_CREATED)
+def evaluate_execution(
+    execution_id: str,
+    req: EvaluationRequest,
+    db: DatabaseManager = Depends(get_db_manager)
+):
+    """Submit human review, rating, and lessons learned for self-improvement."""
+    exec_record = db.get_workflow_execution(execution_id)
+    if not exec_record:
+        raise HTTPException(status_code=404, detail="Execution not found")
+
+    eval_id = f"eval_{uuid.uuid4().hex[:10]}"
+    db.save_run_evaluation(
+        id=eval_id,
+        execution_id=execution_id,
+        workflow_id=exec_record.workflow_id,
+        rating=req.rating,
+        feedback_notes=req.feedback_notes,
+        lessons_extracted=req.lessons_extracted
+    )
+    return {"status": "SUCCESS", "evaluation_id": eval_id}
 
 
 @router.get("/{workflow_id}", response_model=WorkflowResponse)
@@ -842,27 +971,185 @@ def delete_workflow(
     return {"status": "success", "message": f"Workflow {workflow_id} deleted"}
 
 
+@router.post("/{workflow_id}/playground", response_model=WorkflowExecutionResponse,
+             status_code=status.HTTP_202_ACCEPTED)
+def execute_playground(
+    workflow_id: str,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    payload: Dict[str, Any],
+    engine: WorkflowEngine = Depends(get_workflow_engine)
+):
+    """Fresh tool-free inference on the existing DAG; no external notifications or cache reuse."""
+    wf = engine.db.get_workflow(workflow_id)
+    if not wf:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    scope = get_authorized_scope(request, engine.db)
+    _check_workflow_scope(wf, scope)
+    if not engine.runtime or not getattr(engine.runtime.get_capabilities(), "supports_playground", False):
+        raise HTTPException(status_code=409, detail="Configured runtime does not support tool-free playground execution")
+    try:
+        try:
+            definition = WorkflowParser.from_json(wf.definition_json)
+        except Exception:
+            definition = WorkflowParser.from_yaml(wf.definition_json)
+        for step in definition.steps:
+            agent = engine.db.get_agent(step.agent_id)
+            if not agent:
+                raise ValueError(f"Configure agent '{step.agent_id}' before running the playground")
+            if scope["org_id"] and getattr(agent, "organization_id", None) != scope["org_id"]:
+                raise HTTPException(status_code=403, detail="Playground agent is outside your organization")
+            _check_workflow_scope(agent, scope)
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    execution_id = f"pg_exec_{uuid.uuid4().hex[:12]}"
+    # Namespace hashes so production deduplication never reuses playground outputs.
+    payload_hash = compute_execution_hash(f"playground:{workflow_id}", payload)
+    record = engine.db.create_workflow_execution(
+        execution_id=execution_id, workflow_id=workflow_id, trigger_type="PLAYGROUND",
+        trigger_payload=json.dumps(payload), department_id=wf.department_id,
+        payload_hash=payload_hash, status="QUEUED"
+    )
+
+    def run():
+        try:
+            engine.execute_workflow(
+                workflow_id=workflow_id, trigger_payload=payload, playground=True,
+                execution_id=execution_id, payload_hash=payload_hash,
+                user_context=getattr(request.state, "user", None)
+            )
+        except Exception as exc:
+            from datetime import datetime
+            logger.exception("Playground execution failed: %s", execution_id)
+            engine.db.update_workflow_execution(
+                execution_id, status="FAILED", error_message=str(exc),
+                completed_at=datetime.now().isoformat()
+            )
+
+    background_tasks.add_task(run)
+    return WorkflowExecutionResponse(
+        id=record.id, workflow_id=workflow_id, trigger_type="PLAYGROUND",
+        trigger_payload=json.dumps(payload), status="QUEUED", department_id=wf.department_id,
+        payload_hash=payload_hash, created_at=record.created_at,
+        message="Tool-free playground run started. External tools and notifications are disabled."
+    )
+
+
 @router.post("/{workflow_id}/execute", response_model=WorkflowExecutionResponse)
-def execute_workflow(
+async def execute_workflow(
     workflow_id: str,
     request: Request,
     payload: Optional[Dict[str, Any]] = None,
+    use_queue: bool = Query(True, description="Whether to dispatch execution through RabbitMQ queue"),
+    force_rerun: bool = Query(False, description="Bypass deduplication and force re-execution"),
     engine: WorkflowEngine = Depends(get_workflow_engine)
 ):
-    """Manually trigger a workflow execution with scope enforcement."""
+    """Trigger a workflow execution with deduplication and RabbitMQ distributed queue support."""
     wf = engine.db_manager.get_workflow(workflow_id)
     if not wf:
         raise HTTPException(status_code=404, detail="Workflow not found")
     scope = get_authorized_scope(request, engine.db_manager)
     _check_workflow_scope(wf, scope)
 
+    user_ctx = getattr(request.state, "user", None)
+    dept_id = wf.department_id
+
+    # 1. Deduplication and Idempotency Check
+    payload_hash = compute_execution_hash(workflow_id, payload)
+    if not force_rerun:
+        match = engine.db_manager.find_matching_workflow_execution(workflow_id, payload_hash)
+        if match:
+            if match.status in ("QUEUED", "RUNNING"):
+                return WorkflowExecutionResponse(
+                    id=match.id,
+                    workflow_id=match.workflow_id,
+                    trigger_type=match.trigger_type,
+                    trigger_payload=match.trigger_payload,
+                    status=match.status,
+                    department_id=match.department_id,
+                    sandbox_path=match.sandbox_path,
+                    total_input_tokens=match.total_input_tokens,
+                    total_output_tokens=match.total_output_tokens,
+                    total_cost_usd=match.total_cost_usd,
+                    started_at=match.started_at,
+                    completed_at=match.completed_at,
+                    error_message=match.error_message,
+                    created_at=match.created_at,
+                    payload_hash=match.payload_hash,
+                    is_deduplicated=True,
+                    message="Identical workflow execution is already active in queue or running. Deduplication applied."
+                )
+            elif match.status == "COMPLETED":
+                return WorkflowExecutionResponse(
+                    id=match.id,
+                    workflow_id=match.workflow_id,
+                    trigger_type=match.trigger_type,
+                    trigger_payload=match.trigger_payload,
+                    status=match.status,
+                    department_id=match.department_id,
+                    sandbox_path=match.sandbox_path,
+                    total_input_tokens=match.total_input_tokens,
+                    total_output_tokens=match.total_output_tokens,
+                    total_cost_usd=match.total_cost_usd,
+                    started_at=match.started_at,
+                    completed_at=match.completed_at,
+                    error_message=match.error_message,
+                    created_at=match.created_at,
+                    payload_hash=match.payload_hash,
+                    is_deduplicated=True,
+                    message="Identical workflow execution completed recently. Returning cached deduplicated result."
+                )
+
+    # 2. Execution path: Asynchronous Queue vs Synchronous
+    if use_queue:
+        exec_id = f"wf_exec_{uuid.uuid4().hex[:12]}"
+        payload_str = json.dumps(payload) if payload else None
+
+        queued_record = engine.db_manager.create_workflow_execution(
+            execution_id=exec_id,
+            workflow_id=workflow_id,
+            trigger_type="MANUAL",
+            trigger_payload=payload_str,
+            department_id=dept_id,
+            payload_hash=payload_hash,
+            status="QUEUED"
+        )
+
+        publisher = TaskQueuePublisher()
+        await publisher.publish_workflow_execution(
+            workflow_id=workflow_id,
+            execution_id=exec_id,
+            trigger_type="MANUAL",
+            trigger_payload=payload,
+            department_id=dept_id,
+            org_id=getattr(wf, "organization_id", None),
+            user_context=user_ctx,
+            priority=5
+        )
+
+        return WorkflowExecutionResponse(
+            id=exec_id,
+            workflow_id=workflow_id,
+            trigger_type="MANUAL",
+            trigger_payload=payload_str,
+            status="QUEUED",
+            department_id=dept_id,
+            created_at=queued_record.created_at,
+            payload_hash=payload_hash,
+            is_deduplicated=False,
+            message="Workflow execution queued for processing."
+        )
+
+    # Synchronous Execution Path
     try:
-        user_ctx = getattr(request.state, "user", None)
         execution = engine.execute_workflow(
             workflow_id=workflow_id,
             trigger_type="MANUAL",
             trigger_payload=payload,
-            user_context=user_ctx
+            user_context=user_ctx,
+            payload_hash=payload_hash
         )
         return WorkflowExecutionResponse(
             id=execution.id,
@@ -878,7 +1165,10 @@ def execute_workflow(
             started_at=execution.started_at,
             completed_at=execution.completed_at,
             error_message=execution.error_message,
-            created_at=execution.created_at
+            created_at=execution.created_at,
+            payload_hash=execution.payload_hash,
+            is_deduplicated=False,
+            message="Workflow execution completed synchronously."
         )
     except UnauthorizedUserDepartmentError as uude:
         raise HTTPException(
@@ -908,7 +1198,8 @@ async def trigger_webhook(
 ):
     """
     Incoming webhook endpoint for a specific workflow.
-    Validates token, extracts JSON body payload, and launches workflow execution.
+    Validates token, extracts JSON body payload, checks deduplication,
+    and enqueues workflow execution via RabbitMQ.
     """
     wf = db.get_workflow_by_webhook_token(webhook_token)
     if not wf:
@@ -920,86 +1211,61 @@ async def trigger_webhook(
     except Exception:
         pass
 
-    try:
-        execution = engine.execute_workflow(
-            workflow_id=wf.id,
-            trigger_type="WEBHOOK",
-            trigger_payload=body_data
-        )
+    payload_hash = compute_execution_hash(wf.id, body_data)
+    match = db.find_matching_workflow_execution(wf.id, payload_hash)
+    if match:
         return WorkflowExecutionResponse(
-            id=execution.id,
-            workflow_id=execution.workflow_id,
-            trigger_type=execution.trigger_type,
-            trigger_payload=execution.trigger_payload,
-            status=execution.status,
-            department_id=execution.department_id,
-            sandbox_path=execution.sandbox_path,
-            total_input_tokens=execution.total_input_tokens,
-            total_output_tokens=execution.total_output_tokens,
-            total_cost_usd=execution.total_cost_usd,
-            started_at=execution.started_at,
-            completed_at=execution.completed_at,
-            error_message=execution.error_message,
-            created_at=execution.created_at
-        )
-    except MCPGovernanceViolationError as mcp_err:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"MCP Governance Violation: {str(mcp_err)}"
-        )
-    except BudgetExceededError as be:
-        raise HTTPException(
-            status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail=f"Department budget exceeded: {str(be)}"
+            id=match.id,
+            workflow_id=match.workflow_id,
+            trigger_type=match.trigger_type,
+            trigger_payload=match.trigger_payload,
+            status=match.status,
+            department_id=match.department_id,
+            sandbox_path=match.sandbox_path,
+            total_input_tokens=match.total_input_tokens,
+            total_output_tokens=match.total_output_tokens,
+            total_cost_usd=match.total_cost_usd,
+            started_at=match.started_at,
+            completed_at=match.completed_at,
+            error_message=match.error_message,
+            created_at=match.created_at,
+            payload_hash=match.payload_hash,
+            is_deduplicated=True,
+            message="Duplicate webhook trigger identified. Reusing existing active/completed run."
         )
 
+    exec_id = f"wf_exec_{uuid.uuid4().hex[:12]}"
+    payload_str = json.dumps(body_data) if body_data else None
+    queued_record = db.create_workflow_execution(
+        execution_id=exec_id,
+        workflow_id=wf.id,
+        trigger_type="WEBHOOK",
+        trigger_payload=payload_str,
+        department_id=wf.department_id,
+        payload_hash=payload_hash,
+        status="QUEUED"
+    )
 
-@router.get("/executions/{execution_id}", response_model=WorkflowExecutionResponse)
-def get_execution_status(
-    execution_id: str,
-    db: DatabaseManager = Depends(get_db_manager)
-):
-    """Get full status and token/cost metrics of a workflow execution."""
-    exec_record = db.get_workflow_execution(execution_id)
-    if not exec_record:
-        raise HTTPException(status_code=404, detail="Execution not found")
+    publisher = TaskQueuePublisher()
+    await publisher.publish_workflow_execution(
+        workflow_id=wf.id,
+        execution_id=exec_id,
+        trigger_type="WEBHOOK",
+        trigger_payload=body_data,
+        department_id=wf.department_id,
+        org_id=getattr(wf, "organization_id", None),
+        priority=5
+    )
 
     return WorkflowExecutionResponse(
-        id=exec_record.id,
-        workflow_id=exec_record.workflow_id,
-        trigger_type=exec_record.trigger_type,
-        trigger_payload=exec_record.trigger_payload,
-        status=exec_record.status,
-        department_id=exec_record.department_id,
-        sandbox_path=exec_record.sandbox_path,
-        total_input_tokens=exec_record.total_input_tokens,
-        total_output_tokens=exec_record.total_output_tokens,
-        total_cost_usd=exec_record.total_cost_usd,
-        started_at=exec_record.started_at,
-        completed_at=exec_record.completed_at,
-        error_message=exec_record.error_message,
-        created_at=exec_record.created_at
+        id=exec_id,
+        workflow_id=wf.id,
+        trigger_type="WEBHOOK",
+        trigger_payload=payload_str,
+        status="QUEUED",
+        department_id=wf.department_id,
+        created_at=queued_record.created_at,
+        payload_hash=payload_hash,
+        is_deduplicated=False,
+        message="Workflow execution queued for processing."
     )
-
-
-@router.post("/executions/{execution_id}/evaluate", status_code=status.HTTP_201_CREATED)
-def evaluate_execution(
-    execution_id: str,
-    req: EvaluationRequest,
-    db: DatabaseManager = Depends(get_db_manager)
-):
-    """Submit human review, rating, and lessons learned for self-improvement."""
-    exec_record = db.get_workflow_execution(execution_id)
-    if not exec_record:
-        raise HTTPException(status_code=404, detail="Execution not found")
-
-    eval_id = f"eval_{uuid.uuid4().hex[:10]}"
-    db.save_run_evaluation(
-        id=eval_id,
-        execution_id=execution_id,
-        workflow_id=exec_record.workflow_id,
-        rating=req.rating,
-        feedback_notes=req.feedback_notes,
-        lessons_extracted=req.lessons_extracted
-    )
-    return {"status": "SUCCESS", "evaluation_id": eval_id}

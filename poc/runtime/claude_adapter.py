@@ -46,6 +46,9 @@ class ClaudeCodeAdapter:
             task_id=task_id
         )
 
+    def start_playground_task(self, agent_id: str, task_id: str, prompt: str, workspace: str) -> str:
+        return self._adapter.start_playground_task(agent_id, task_id, prompt, workspace)
+
     def get_run_status(self, run_id: str) -> Optional[AgentRun]:
         """Retrieve execution run status."""
         return self._adapter.get_run_status(run_id)
@@ -104,6 +107,7 @@ class ClaudeCodeAdapter:
     def get_capabilities(self) -> RuntimeCapabilities:
         """Return Claude Code runtime capabilities."""
         return RuntimeCapabilities(
+            supports_playground=True,
             supports_streaming=True,
             supports_tool_use=True,
             supports_session_resume=True,

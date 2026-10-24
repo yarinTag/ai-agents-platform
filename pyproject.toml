@@ -23,6 +23,7 @@ dependencies = [
     "qdrant-client>=1.19.1",
     "fastembed>=0.8.1",
     "cocoindex>=1.0.24",
+    "aio-pika>=10.1.1",
 ]
 
 [project.optional-dependencies]

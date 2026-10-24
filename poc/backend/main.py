@@ -27,6 +27,7 @@ from .api.filesystem import router as filesystem_router
 from .api.workflows import router as workflows_router
 from .api.mcp import router as mcp_router
 from .api.organizations import router as organizations_router
+from .queue.router import router as queue_router
 
 # Import security layer
 from .security import (
@@ -99,6 +100,7 @@ app.include_router(mcp_router, prefix="/api/v1/mcp", tags=["mcp"], dependencies=
 app.include_router(organizations_router, prefix="/api/v1", tags=["organizations", "departments", "mcp-governance"], dependencies=auth_deps)
 app.include_router(audit_router, prefix="/api/v1/audit", tags=["audit"], dependencies=auth_deps)
 app.include_router(audit_router, prefix="/api/v1/auth", tags=["auth"], dependencies=auth_deps)
+app.include_router(queue_router, prefix="/api/v1/queue", tags=["queue"], dependencies=auth_deps)
 
 
 @app.get("/")
