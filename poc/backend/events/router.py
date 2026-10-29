@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 
 # All PoC imports go through the centralized dependencies module
 from ..dependencies import (
-    get_config_manager, get_db_manager, get_runtime_adapter,
+    get_config_manager, get_db_manager, get_runtime_adapter, get_optional_runtime_adapter,
     get_event_bus, get_event_service,
     TaskStatus, EventBus, EventService, PlatformEvent
 )
@@ -116,7 +116,7 @@ async def stream_events(
 async def get_system_stats(
     config_manager = Depends(get_config_manager),
     db_manager = Depends(get_db_manager),
-    runtime_adapter = Depends(get_runtime_adapter)
+    runtime_adapter = Depends(get_optional_runtime_adapter)
 ):
     """Get overall system statistics."""
     agents = config_manager.list_agents()
@@ -131,7 +131,9 @@ async def get_system_stats(
 
     # Get active runs from runtime adapter
     active_runs = []
-    for run_id, run in runtime_adapter._runs.items():
+    live_runs = runtime_adapter.list_runs() if runtime_adapter else recent_tasks
+    for run in live_runs:
+        run_id = run.run_id
         if run.status in [TaskStatus.QUEUED, TaskStatus.RUNNING]:
             active_runs.append({
                 "run_id": run_id,
@@ -160,6 +162,7 @@ async def get_system_stats(
             "active": len(active_runs),
             "active_runs": active_runs
         },
+        "runtime_available": runtime_adapter is not None,
         "timestamp": datetime.utcnow().isoformat() + "Z"
     }
 
@@ -168,7 +171,7 @@ async def get_system_stats(
 async def get_system_health(
     config_manager = Depends(get_config_manager),
     db_manager = Depends(get_db_manager),
-    runtime_adapter = Depends(get_runtime_adapter)
+    runtime_adapter = Depends(get_optional_runtime_adapter)
 ):
     """Get system health status."""
     health_checks = []
@@ -208,15 +211,17 @@ async def get_system_health(
 
     # Check runtime adapter
     try:
-        # Simple check: can we access the adapter?
+        if runtime_adapter is None:
+            raise RuntimeError("Runtime capability is unavailable")
+        runs = runtime_adapter.list_runs()
         active_count = len([
-            r for r in runtime_adapter._runs.values()
+            r for r in runs
             if r.status in [TaskStatus.QUEUED, TaskStatus.RUNNING]
         ])
         health_checks.append({
             "component": "runtime_adapter",
             "status": "healthy",
-            "message": f"Managing {len(runtime_adapter._runs)} total runs, {active_count} active"
+            "message": f"Managing {len(runs)} total runs, {active_count} active"
         })
     except Exception as e:
         health_checks.append({

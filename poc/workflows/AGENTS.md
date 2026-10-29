@@ -76,3 +76,15 @@ execution = await engine.execute_workflow(
 
 > [!IMPORTANT]
 > Whenever any logic in `poc/workflows/` (`engine.py`, `parser.py`, `sandbox.py`) or its corresponding API router (`poc/backend/api/workflows.py`) is modified, the developer or agent **MUST** update this `AGENTS.md` file in the **SAME commit**.
+
+## Execution component ownership
+engine.py remains WorkflowEngine lifecycle/coordinator and public compatibility exports. execution_models.py owns execution results and policy errors; conditions.py owns pure trigger evaluation; stages.py owns DAG-stage planning; step_runner.py owns step prompt rendering, governance checks, runtime invocation and result capture. WorkflowEngine delegates step execution through a composed WorkflowStepRunner, preserving existing method entry points. No schema or endpoint changes are introduced by this extraction. Source files stay at most 500 physical lines; runtime compatibility is unverified because tests/build/startup are not authorized.
+
+## Truthful states and optional notifications
+WorkflowStepRunner now records actual COMPLETED/FAILED/CANCELLED or pause states; runtime absence/start failure/timeout cannot become COMPLETED. Pause states stop later dependent stages and leave workflow/step completed_at unset. This is not a new automatic whole-workflow resume mechanism; existing task sessions remain resumable. Step SQL is owned by WorkflowsRepository.save_workflow_step_run. Runtime changes assigned to the public engine are passed to its composed step runner. Missing budget authorization defaults to denial. The unused full orchestration dependency is no longer constructed by backend workflow wiring.
+
+WorkflowNotifier is injected by the composition root and receives connector lookup/delivery callbacks. Notifications use shared integrations/channels and audit call_notify_{execution_id} as STARTED then COMPLETED/FAILED. Existing calls are not automatically resent. Missing notification implementation/connector or delivery failure does not change execution outcome, and does not claim successful delivery. No schema/outbox/exactly-once guarantee is introduced. Public engine error/result imports remain compatible; parser imports no longer eagerly load the execution engine.
+
+WorkflowStore/WorkflowNotifications define the narrow injected contracts. Stage planning rejects duplicate keys, unknown dependencies and cycles rather than silently running an invalid graph sequentially. This correction is source-reviewed only.
+
+Step skill context is injected by the composition root; the step runner no longer imports skills_service. An executing step with configured skills and no context provider fails explicitly. A missing runtime still records its own failure without loading optional skill context.

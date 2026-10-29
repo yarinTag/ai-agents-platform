@@ -43,3 +43,9 @@ The **Scheduler & Cron Engine Service** (`poc/backend/scheduler/engine.py` & `po
 
 > [!IMPORTANT]
 > Whenever any scheduler logic, polling frequency, cron calculation, or scheduling endpoint in `poc/backend/scheduler/` is modified, the developer or agent **MUST** update this `AGENTS.md` file within the **SAME commit**.
+
+## Optional worker boundary
+expressions.py owns calculate_next_run/get_upcoming_runs/validate_cron_expression without importing the worker. The package lazily exports CronSchedulerEngine, and router annotations use RuntimeAdapter/canonical models rather than the concrete subprocess adapter. scheduler-worker readiness is separate from scheduler router availability; runtime outage stops worker startup while stored schedule APIs remain usable. Only explicit dispatch requires live runtime. No tests/startup were run.
+
+Worker/manual dispatch share dispatch_scheduled_job. It accepts synchronous or awaitable RuntimeAdapter returns and requires a nonempty run ID before recording dispatch. Worker busy detection uses list_runs; no unavailable get_active_runs concrete method is assumed.
+Final source review also aligned TASK_CREATED.task_id with the normalized dispatch run_id; it no longer references the removed task_run local after dispatch extraction. No scheduler or test was executed.

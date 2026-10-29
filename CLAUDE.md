@@ -138,3 +138,8 @@ cd poc/dashboard && npm run build
 > 1. **Zero Out-of-Sync Code**: Code changes without matching `AGENTS.md` updates are strictly unacceptable.
 > 2. **Surgical Accuracy**: Document exact endpoint paths, HTTP verbs, payload models, parameters, state machines, and invariants.
 > 3. **Index Maintenance**: If a new submodule or directory with an `AGENTS.md` is added, register it in the root table of contents immediately.
+
+## Modular implementation map
+Current refactoring is documented in [the implementation ledger](docs/refactor-implementation.md). SQLite implementation belongs to poc/storage; public persistence methods remain available through DatabaseManager. Runtime, orchestration and workflow engines use composed collaborators and explicit ports. Backend router_registry/dependencies/runtime_wiring connect implementations; optional router/worker failures do not intentionally abort unrelated startup. Frontend api.ts is a public facade over one HTTP client and domain wrappers; views are lazy and errors are contained to features.
+
+PLATFORM_DISABLED_CAPABILITIES selects optional capabilities at startup. GET /health is liveness; GET /health/ready is required-database readiness; authenticated GET /api/v1/capabilities is a sanitized availability report. Readiness does not establish provider connectivity. The user currently prohibits tests/build/lint/type checks/startup; do not infer authorization from historical verification commands above. No automated or live runtime verification has been performed for the combined refactor.

@@ -112,6 +112,25 @@ The `src/components/` directory provides modular, reusable, and typed React comp
 
 ## 3. 🔄 Mandatory UI `AGENTS.md` Synchronization Rule
 
+### Component composition and state ownership (2026-10-29 refactor)
+
+`App.tsx` lazy-loads optional route views through `LazyFeatureRoute`. `FeatureErrorBoundary` contains lazy-import and render errors to a feature subtree; `FeatureUnavailable` provides localized retry/navigation guidance. Explicit retry creates a new lazy component and boundary instance. It cannot guarantee recovery from permanent module errors or browser-cached failed modules; sidebar navigation remains outside this boundary. Event-handler and arbitrary asynchronous request failures still require handling inside their owning feature.
+
+`FeatureCapabilityGate` reads the authenticated capability report only for routes with a declared router key. DISABLED/UNAVAILABLE blocks that route; DEGRADED warns; an unavailable report warns and lets the route try its own API calls. Mixed-resource hubs (Office, Live Flow, Agents/templates, Calendar/approvals and MCP/workflows) have no outer router gate so one missing capability cannot hide independent sections. Their resource owners handle scoped read errors. Runtime service state never blocks task-list/configuration pages. STARTING/STOPPING are informational and the actual endpoint remains authoritative. Requests cancel on route/tenant/department change. The report grants no permission and raw reasons/exceptions are not displayed.
+
+`OptionalRuntimeSetup` loads first-run setup under its own error boundary. Setup can now be deferred using close/Escape/Configure runtime later, preserving access to unrelated routes even with no runnable provider. Execution is still governed by backend runtime availability. `AppLayout` uses a viewport-constrained outer shell and independently scrollable route content/sidebar so failure panels do not remove navigation.
+
+Large components are composed from domain state hooks and presentation panels. Public component names and existing props remain compatible; shared prop contracts live in sibling `*Types.ts` modules. Views import hook symbols as types when they only need `ReturnType<typeof hook>`, avoiding a runtime dependency back into their state owner.
+
+* Workflow builder: `CreateWorkflowModal` composes `useWorkflowBuilder` with `WorkflowGeneratorPanel`, `WorkflowDiagramPanel`, `WorkflowStepsPanel` and `WorkflowYamlPanel`. The hook owns loading, all draft state, YAML conversion, skill creation and save actions. `workflowBuilderTypes.ts` owns `WorkflowStep`, `AttachedSkill` and modal props; the legacy modal continues to re-export its two public types. `workflowBuilderDefaults.ts` owns the existing agent choices. No YAML payload or HTTP contract is intentionally changed.
+* Workflow graph: `WorkflowCanvasGraph` retains zoom, DAG depth calculation and selected-node state. `WorkflowStepInspector` displays selected-step details and calls the parent's visibility setter. Graph props/step/skill types live in `workflowGraphTypes.ts`; legacy graph exports of step/skill types remain available.
+* Agent mini-chat: `useAgentChat` owns session/history loading, polling cleanup, message/task state and approval/send/session actions. `AgentChatContent` renders conversation/task content, while `AgentMiniChatDrawer` renders navigation, session selection and composer. The null-agent guard remains in the public drawer; derived supervisor state tolerates a null agent inside the hook. Prompt presets remain owned by the drawer. Props live in `agentChatTypes.ts`.
+* Desk/sidebar: `useAgentDesk` owns forms, resource loading and dispatch/configuration actions; it always returns a model, derives no agent tasks when selection is null, and guards dispatch/save actions without an agent. `AgentDeskDrawer` owns tab presentation and the null-agent rendering guard. `useOfficeSidebar` owns department choices, task filtering and dispatch/deletion actions; `OfficeRightSidebar` renders their controls. Contracts live in `agentDeskTypes.ts` and `officeSidebarTypes.ts` respectively.
+* Isometric office: `useOfficeCanvas` owns department/desk projection, agent/task lookup, live mission dispatch and viewport handlers. `OfficeDepartmentPlatforms` renders platform/desk/avatar/HUD content; `OfficeConnectionBeams` renders SVG walkways and particles. `AgentsOfficeV3Canvas` retains viewport containment, central dispatch hub and controls. Shared contracts are in `officeCanvasTypes.ts`. Position formulas, transform order, zoom limits and click callbacks are preserved by relocation.
+* War room: `useWarRoom` owns session and detail requests, creation, messages and synthesis state/actions. `WarRoomModal` renders the same session sidebar/forms/detail content; `warRoomTypes.ts` owns its props. Existing endpoint calls and response handling remain unchanged.
+
+These changes were reviewed through source reading only. No tests, build, lint, type checking, startup or live requests were run, so compilation and rendered behavior are not established by this refactor record.
+
 > [!IMPORTANT]
 > **Every time any component in `src/components/` is added, modified, or refactored, the developer/agent MUST update this file (`src/components/AGENTS.md`) as part of the same task.**
 >
@@ -120,3 +139,6 @@ The `src/components/` directory provides modular, reusable, and typed React comp
 > 2. Detail any new subcomponents or exported utilities.
 > 3. Verify dark theme token adherence (`#0a0d12`, `#161b22`, `#10b981`).
 > 4. Ensure no hardcoded Hebrew strings are present (use i18n keys).
+
+## Final review resource behavior
+ResourceWarning shows scoped failed reads with a retry action. Workflow builder resources are loaded by useWorkflowResources, with empty configured-resource defaults and shared configuredResourceValues projection. Required unavailable resources block dependent save/generation and remain visible in a warning. Chat history/session/approval/task reads distinguish failures, ignore obsolete completions and use current selected-session refs during polling; history/session failure blocks sending to an uncertain conversation. These changes were reviewed from source only.

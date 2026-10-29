@@ -29,6 +29,22 @@ The **Orchestration & Hierarchy Service** (`poc/orchestration/`) is the platform
 
 ## 3. Interfaces & Contracts
 
+### Implementation ownership after modular extraction
+
+`engine.py` retains the public `OrchestrationEngine` methods, hierarchy validation, retry/remediation, recovery and queries. `delegation.py` owns task creation/dispatch through a frozen `DelegationContext` containing only the task-store port, runtime, hierarchy validator callback and event callback. `completion.py:CompletionCoordinator` owns structured completion results, queued dependency release and recursive parent propagation. Runtime lookup is a callback so later runtime selection remains visible. `errors.py` is the single owner of DelegationError and ConcurrencyLimitExceededError, re-exported by engine imports.
+
+`ports.py` defines TaskStore, SupervisorStore, HierarchyStore, IntelligenceStore, TeamStore and EventEmitter protocols. These contracts import provider-independent runtime models and do not import persistence or concrete runtime services. Hierarchy validation, project intelligence and team coordination use type-checking-only structural storage imports. Team coordination no longer imports the orchestration implementation merely for its unused collaborator annotation. No module imports the application dependency container.
+
+Completion's atomic parent status update belongs to `TasksRepository.claim_waiting_parent`: only a `waiting_for_children` parent can be claimed as `running`, and a false return prevents duplicate propagation. The conditional predicate, commit/rollback boundary and return decision remain unchanged; completion no longer opens a SQL connection.
+
+`supervisor_resolver.py` retains the public coordinator, resolve/escalate methods and compatibility helper methods. `decision_envelopes.py` owns DecisionQuestionEnvelope/DecisionAnswerEnvelope; they remain importable from supervisor_resolver. `supervisor_decision.py` owns background supervisor inference and worker continuation with explicit storage/event/runtime parameters. `memory_resolution.py` owns memory word/tag scoring. SupervisorResolver accepts an optional `project_intelligence` collaborator; the existing ProjectIntelligence implementation is imported/created only when one is not supplied.
+
+`source_parsers.py` owns Python AST, Markdown section and sliding-window chunk extraction independently of Qdrant/FastEmbed. CodeIndexer delegates its original parser methods and keeps client lifecycle, file cache, indexing and search. The Python parser receives the instance's chunk fallback callback, preserving override behavior. Optional vector-library availability semantics and embedding/storage configuration are unchanged.
+
+Preserved transitions include delegation to QUEUED/RUNNING, parent WAITING_FOR_CHILDREN, compare-and-set parent resumption, child failure propagation, retry and restart recovery, clarification WAITING_INPUT and existing fast/slow resolution paths. Existing optional-runtime handling, permission-check fallback behavior and manager suggested-option fallback are intentionally unchanged; changing those decisions requires a separately documented behavior change. These source moves do not establish process isolation or runtime resilience.
+
+All implementation files in this extraction are below 500 physical lines. No tests, imports, build, lint or live execution were run. Source review does not establish behavior or concurrent recovery correctness.
+
 ### Key Classes & Methods
 ```python
 # Concurrency, Delegation & MCP Checks
@@ -77,3 +93,10 @@ resolution = resolver.resolve_or_escalate_question(
 
 > [!IMPORTANT]
 > Whenever any orchestration logic, delegation rule, hierarchy validation, supervisor resolution, or MCP governance check in `poc/orchestration/` is modified, the developer or agent **MUST** update this `AGENTS.md` file within the **SAME commit**.
+
+## Final parent review corrections
+TasksRepository.claim_waiting_parent owns the atomic parent-resumption claim; SupervisorStore.retarget_interaction owns approver changes. The former updated_at escalation write referenced a nonexistent column and is removed without schema migration. Missing MCP permission implementation now returns allowed=false. Optional intelligence failures leave remaining clarification tiers usable. Supervisor inference timeout/failure never selects the first suggested option as an answer; pending interactions retarget HUMAN_OPERATOR.
+
+TeamCoordinator accepts a lazy dispatch_provider instead of requiring a concrete orchestration engine for team administration. Dispatch persists QUEUED runs, invokes the dispatcher, and records FAILED when dispatch fails; no fabricated RUNNING state is emitted without dispatch. Team synthesis requires nonempty requested IDs and completed results; missing/paused tasks yield IN_PROGRESS and a team.progress event, not team.completed. Stable string statuses/schema remain unchanged apart from these truthful decisions.
+
+Parent completion treats every nonterminal child (including pending approval) as still waiting and treats cancelled children as failure. Project status verification does not infer that external QA/security checks ran merely from task status; non-completed records block GO.

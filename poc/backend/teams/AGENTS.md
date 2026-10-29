@@ -61,3 +61,6 @@ dispatch_payload = {
 
 > [!IMPORTANT]
 > Whenever any multi-agent team coordination logic, membership model, dispatch flow, or endpoint in `poc/backend/teams/` is modified, the developer or agent **MUST** update this `AGENTS.md` file within the **SAME commit**.
+
+## Independent team administration and truthful outcomes
+Router annotations use Any for the injected coordinator rather than eagerly importing its implementation. Backend team-coordinator service availability is separate from the teams HTTP router. Creation/synthesis operate without runtime; dispatch obtains a runtime callable lazily and preserves HTTP 503 availability errors. Dispatch creates queued records and records failed dispatch explicitly. Synthesis returns IN_PROGRESS for missing/paused results and emits team.progress; only all requested completed tasks yield COMPLETED/team.completed. No schema changes or execution verification were performed.

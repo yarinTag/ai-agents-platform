@@ -1,6 +1,16 @@
 import { TranslationDictionary } from './en';
 
 export const he: TranslationDictionary = {
+  featureAvailability: {
+    unavailable: 'היכולת הזו אינה זמינה כרגע.',
+    renderFailure: 'לא ניתן לטעון את התצוגה הזו.',
+    navigationAvailable: 'אפשר לנסות שוב או להמשיך לאזור אחר דרך תפריט הניווט.',
+    retry: 'ניסיון נוסף',
+    configureLater: 'הגדרת סביבת ההרצה מאוחר יותר',
+    checking: 'זמינות היכולת נבדקת...',
+    reportUnavailable: 'לא ניתן לטעון מידע על זמינות. עדיין אפשר לנסות להשתמש בתצוגה.',
+    degraded: 'היכולת הזו פועלת בזמינות חלקית.',
+  },
   common: {
     save: 'שמור',
     cancel: 'ביטול',

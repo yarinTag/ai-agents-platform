@@ -5,17 +5,22 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { I18nProvider } from './i18n';
 import AuthPage from './pages/AuthPage';
 import AppLayout from './components/layout/AppLayout';
-import RuntimeSetupModal from './components/common/RuntimeSetupModal';
-import OfficeViewPage from './pages/OfficeView';
-import AgentFlowPage from './pages/AgentFlow';
-import AgentsPage from './pages/Agents';
-import ProjectsPage from './pages/Projects';
-import SkillsPage from './pages/Skills';
-import TasksPage from './pages/Tasks';
-import DashboardPage from './pages/Dashboard';
-import CalendarViewPage from './pages/CalendarView';
-import McpHubPage from './pages/McpHub';
-import OrganizationPage from './pages/OrganizationPage';
+import { LazyFeatureRoute } from './components/common/LazyFeatureRoute';
+import { OptionalRuntimeSetup } from './components/common/OptionalRuntimeSetup';
+
+// Optional view modules load only when their route is selected.
+const featureRoutes = [
+  { path: '/', load: () => import('./pages/OfficeView') },
+  { path: '/flow', load: () => import('./pages/AgentFlow') },
+  { path: '/agents', load: () => import('./pages/Agents') },
+  { path: '/skills', capability: 'skills', load: () => import('./pages/Skills') },
+  { path: '/tasks', capability: 'tasks', load: () => import('./pages/Tasks') },
+  { path: '/calendar', load: () => import('./pages/CalendarView') },
+  { path: '/mcp', load: () => import('./pages/McpHub') },
+  { path: '/projects', capability: 'projects', load: () => import('./pages/Projects') },
+  { path: '/organization', capability: 'organizations', load: () => import('./pages/OrganizationPage') },
+  { path: '/dashboard', capability: 'events', load: () => import('./pages/Dashboard') },
+];
 
 const AuthenticatedShell: React.FC = () => {
   const { isAuthenticated, isLoading } = useAuth();
@@ -47,20 +52,17 @@ const AuthenticatedShell: React.FC = () => {
 
   return (
     <>
-      <RuntimeSetupModal />
       <BrowserRouter>
         <AppLayout>
+          <OptionalRuntimeSetup />
           <Routes>
-            <Route path="/" element={<OfficeViewPage />} />
-            <Route path="/flow" element={<AgentFlowPage />} />
-            <Route path="/agents" element={<AgentsPage />} />
-            <Route path="/skills" element={<SkillsPage />} />
-            <Route path="/tasks" element={<TasksPage />} />
-            <Route path="/calendar" element={<CalendarViewPage />} />
-            <Route path="/mcp" element={<McpHubPage />} />
-            <Route path="/projects" element={<ProjectsPage />} />
-            <Route path="/organization" element={<OrganizationPage />} />
-            <Route path="/dashboard" element={<DashboardPage />} />
+            {featureRoutes.map(({ path, capability, load }) => (
+              <Route
+                key={path}
+                path={path}
+                element={<LazyFeatureRoute key={path} load={load} capability={capability} />}
+              />
+            ))}
           </Routes>
         </AppLayout>
       </BrowserRouter>

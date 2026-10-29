@@ -1,4 +1,14 @@
 export const en = {
+  featureAvailability: {
+    unavailable: 'This feature is currently unavailable.',
+    renderFailure: 'This view could not be loaded.',
+    navigationAvailable: 'You can retry this feature or use the sidebar to continue elsewhere.',
+    retry: 'Retry feature',
+    configureLater: 'Configure runtime later',
+    checking: 'Checking feature availability...',
+    reportUnavailable: 'Availability information could not be loaded. This view is still available to try.',
+    degraded: 'This feature is operating with limited availability.',
+  },
   common: {
     save: 'Save',
     cancel: 'Cancel',

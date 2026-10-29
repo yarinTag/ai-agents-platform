@@ -39,3 +39,8 @@ The **Interactive Agent Mini-Chat Service** (`poc/backend/chat/router.py`) provi
 
 > [!IMPORTANT]
 > Whenever any chat drawer logic, message persistence model, blocker resolution flow, or endpoint in `poc/backend/chat/` is modified, the developer or agent **MUST** update this `AGENTS.md` file within the **SAME commit**.
+
+## Runtime import boundary
+TaskStatus is imported from runtime.models, not runtime_adapter. Read-only conversation/session APIs can register without the concrete inference implementation. Execution actions continue to resolve RuntimeAdapter through the composition root. No route/schema changes are introduced by this import correction, and no runtime verification was performed.
+
+Stored message history uses get_optional_runtime_adapter; persisted history remains readable when inference is unavailable. Sending/resuming remains a live-runtime operation.

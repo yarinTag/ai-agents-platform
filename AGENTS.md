@@ -107,3 +107,14 @@ The **AI Agents Platform** is an enterprise multi-tenant autonomous agent orches
 > * **No Out-of-Sync Code**: Submitting code modifications without corresponding updates to the relevant `AGENTS.md` files is strictly prohibited.
 > * **Precise Technical Contracts**: Document exact routes, request/response models, database columns, enum values, and state transition rules.
 > * **Master Directory Registration**: If a new submodule or directory is created with an `AGENTS.md`, immediately register its link in this root table of contents.
+
+## Modular refactor source policy
+Owned source files must remain at most 500 physical lines, including comments and blank lines. Split by responsibility and preserve public contracts. Third-party dependencies and generated build outputs are excluded. See [refactor roadmap](docs/refactor-roadmap.md) and [SQLite storage components](poc/storage/AGENTS.md), which owns composed repositories, records, connections and the legacy persistence facade. Runtime verification is not authorized in the current task.
+
+## Refactor implementation index
+* [Plugin discovery](poc/plugins/AGENTS.md): HTTP-independent metadata, local and Git adapters.
+* [External channel adapters](poc/integrations/AGENTS.md): acknowledged Telegram/Slack delivery, no simulated success.
+* [Test source organization](poc/tests/AGENTS.md): existing cases/fixtures split by responsibility; not executed.
+* [Implementation and code review ledger](docs/refactor-implementation.md): ownership, source evidence, intentional corrections and unverified runtime requirements.
+
+Demo registration is implemented once in poc/demo_data.py and imported by both explicit demo/setup entry points. No demo registration was executed during this refactor.

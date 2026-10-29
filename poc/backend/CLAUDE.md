@@ -92,3 +92,6 @@ poc/
 
 > [!IMPORTANT]
 > Whenever any backend logic, API router endpoint, database model, security rule, or workflow behavior is modified, the developer or agent **MUST** update the corresponding `AGENTS.md` (and `CLAUDE.md`) in the same commit. Keeping documentation in absolute parity with the codebase is a mandatory system invariant.
+
+## Refactor boundaries
+`poc/storage/` owns SQL, records and connections; persistence.py is its compatibility facade. Optional routers are registered by router_registry.py, availability belongs to capabilities.py, and service wiring belongs in dependencies.py. Domain/storage modules must not import the global container. Owned source files stay at most 500 physical lines. Under the current user instruction do not run tests, build, lint, type checks, startup or inference. Source review is authorized and is not runtime verification.

@@ -39,3 +39,8 @@ The **Supervisor & Human-In-The-Loop Approval Service** (`poc/backend/approvals/
 
 > [!IMPORTANT]
 > Whenever any approval routing logic, escalation rule, interaction state model, or endpoint in `poc/backend/approvals/` is modified, the developer or agent **MUST** update this `AGENTS.md` file within the **SAME commit**.
+
+## Runtime import boundary
+Approval routes use canonical runtime.models.TaskStatus; importing the approval inbox no longer imports the concrete process implementation. Execution/resumption remains behind the runtime dependency. No endpoint/schema changes or runtime verification were introduced.
+
+Creating a persisted approval/question no longer requires an unused live runtime dependency. Approve/resume operations still resolve the runtime explicitly.

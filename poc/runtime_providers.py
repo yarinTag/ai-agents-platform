@@ -316,3 +316,10 @@ def build_provider_env(
         return env
 
     raise ProviderConfigurationError(f"Unknown runtime provider '{provider_id}'.")
+
+
+def resolve_provider_selection(agent_choice=None, saved_choice=None):
+    """Canonical provider precedence; availability never silently changes selection."""
+    choices = (agent_choice, os.getenv("PLATFORM_RUNTIME_PROVIDER", ""), saved_choice)
+    return next((choice.strip() for choice in choices if choice and choice.strip()),
+                PROVIDER_CLAUDE_CODE_NATIVE)

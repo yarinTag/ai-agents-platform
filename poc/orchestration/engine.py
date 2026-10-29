@@ -14,28 +14,19 @@ from typing import Optional, Dict, Any, List
 
 try:
     from config import AgentRole, AgentConfig
-    from runtime_adapter import AgentRun, TaskStatus
-    from persistence import DatabaseManager
+    from runtime.models import AgentRun, TaskStatus
     from events.models import EventType
-    from events.service import EventService
 except ImportError:
     from poc.config import AgentRole, AgentConfig
-    from poc.runtime_adapter import AgentRun, TaskStatus
-    from poc.persistence import DatabaseManager
+    from poc.runtime.models import AgentRun, TaskStatus
     from poc.events.models import EventType
-    from poc.events.service import EventService
+
+from .ports import TaskStore, EventEmitter
+from .errors import DelegationError, ConcurrencyLimitExceededError
+from .delegation import DelegationContext, delegate_task
+from .completion import CompletionCoordinator
 
 logger = logging.getLogger(__name__)
-
-
-class DelegationError(ValueError):
-    """Raised when task delegation violates hierarchy, permissions, or rules."""
-    pass
-
-
-class ConcurrencyLimitExceededError(DelegationError):
-    """Raised when an agent reaches or exceeds maximum allowed concurrent subtasks."""
-    pass
 
 
 class OrchestrationEngine:
@@ -46,13 +37,16 @@ class OrchestrationEngine:
 
     def __init__(
         self,
-        db_manager: DatabaseManager,
+        db_manager: TaskStore,
         runtime_adapter: Any = None,
-        event_service: Optional[EventService] = None
+        event_service: Optional[EventEmitter] = None
     ):
         self.db_manager = db_manager
         self.runtime_adapter = runtime_adapter
         self.event_service = event_service
+        self._completion = CompletionCoordinator(
+            db_manager, lambda: self.runtime_adapter, self._emit
+        )
 
     def _emit(self, event_type: Any, payload: Dict[str, Any], **kwargs):
         """Helper to safely emit events through event_service if available."""
@@ -120,370 +114,19 @@ class OrchestrationEngine:
         dependencies: Optional[List[str]] = None,
         acceptance_criteria: Optional[str] = None
     ) -> AgentRun:
-        """
-        Delegate a subtask from a parent task to a target agent with dependency tracking.
-        """
-        # 1. Retrieve parent task
-        parent_task = self.db_manager.get_task_run(parent_task_id)
-        if not parent_task:
-            raise DelegationError("Parent task not found")
-
-        # 2. Retrieve parent agent
-        parent_agent = self.db_manager.get_agent(parent_task.agent_id)
-        if not parent_agent:
-            raise DelegationError("Parent agent not found")
-
-        # 3. Retrieve target agent
-        target_agent = self.db_manager.get_agent(target_agent_id)
-        if not target_agent:
-            raise DelegationError(f"Target agent not found: {target_agent_id}")
-
-        # 4. Strict Hierarchy Enforcement
-        self.validate_delegation(parent_agent, target_agent)
-
-        # 5. Concurrency check
-        active_count = self.db_manager.count_active_subtasks_for_parent(parent_agent.id)
-        max_concurrent = getattr(parent_agent, "max_concurrent_children", 5)
-        if max_concurrent is not None and active_count >= max_concurrent:
-            raise ConcurrencyLimitExceededError(
-                f"Agent '{parent_agent.id}' has reached maximum concurrent subtasks limit ({max_concurrent})"
-            )
-
-        # 6. Evaluate initial status based on dependencies
-        deps = list(dependencies) if dependencies else []
-        has_pending_deps = False
-        if deps:
-            for dep_id in deps:
-                dep_task = self.db_manager.get_task_run(dep_id)
-                if not dep_task or dep_task.status != TaskStatus.COMPLETED:
-                    has_pending_deps = True
-                    break
-
-        initial_status = TaskStatus.QUEUED if has_pending_deps else TaskStatus.RUNNING
-
-        # 7. Generate subtask ID and trace identifiers
-        subtask_id = f"subtask-{uuid.uuid4().hex[:10]}"
-        root_task_id = parent_task.root_task_id or parent_task.run_id
-        effective_project_id = project_id or parent_task.project_id
-
-        # 8. Create AgentRun record for subtask
-        now = datetime.now()
-        subtask_run = AgentRun(
-            run_id=subtask_id,
-            agent_id=target_agent_id,
-            project_id=effective_project_id,
-            prompt=subtask_prompt,
-            status=initial_status,
-            created_at=now,
-            started_at=now if initial_status == TaskStatus.RUNNING else None,
-            parent_task_id=parent_task.run_id,
-            root_task_id=root_task_id,
-            assigned_by=parent_agent.id,
-            dependencies=deps,
-            acceptance_criteria=acceptance_criteria,
-            organization_id=getattr(parent_task, "organization_id", None)
+        return delegate_task(
+            DelegationContext(self.db_manager, self.runtime_adapter, self.validate_delegation, self._emit),
+            parent_task_id, target_agent_id, subtask_prompt, timeout_seconds, project_id, dependencies, acceptance_criteria
         )
-        self.db_manager.save_task_run(subtask_run)
-
-        # 9. Update parent task to WAITING_FOR_CHILDREN
-        # The parent task suspends execution and waits for required child results
-        parent_task.status = TaskStatus.WAITING_FOR_CHILDREN
-        parent_task.result = f"Delegated subtask {subtask_id} to {target_agent_id}; awaiting completion."
-        self.db_manager.save_task_run(parent_task)
-
-        # 10. Emit platform events
-        self._emit(
-            event_type=EventType.TASK_WAITING_CHILDREN if hasattr(EventType, "TASK_WAITING_CHILDREN") else "task.waiting_children",
-            payload={"parent_task_id": parent_task.run_id, "child_task_id": subtask_id, "target_agent_id": target_agent_id},
-            agent_id=parent_agent.id,
-            task_id=parent_task.run_id,
-            project_id=effective_project_id
-        )
-        self._emit(
-            event_type=EventType.TASK_DELEGATED,
-            payload={
-                "parent_task_id": parent_task.run_id,
-                "subtask_id": subtask_id,
-                "parent_agent_id": parent_agent.id,
-                "target_agent_id": target_agent.id,
-                "prompt": subtask_prompt,
-                "dependencies": deps,
-                "acceptance_criteria": acceptance_criteria,
-                "status": initial_status.value
-            },
-            agent_id=parent_agent.id,
-            task_id=subtask_id,
-            parent_task_id=parent_task.run_id,
-            project_id=effective_project_id
-        )
-        self._emit(
-            event_type=EventType.TASK_CREATED,
-            payload=subtask_run.to_dict(),
-            agent_id=target_agent.id,
-            task_id=subtask_id,
-            parent_task_id=parent_task.run_id,
-            project_id=effective_project_id
-        )
-
-        # 11. Start child task execution if dependencies are satisfied
-        if initial_status == TaskStatus.RUNNING and self.runtime_adapter:
-            try:
-                if hasattr(self.runtime_adapter, "start_task"):
-                    try:
-                        self.runtime_adapter.start_task(subtask_id)
-                    except TypeError:
-                        self.runtime_adapter.start_task(
-                            agent_id=target_agent_id,
-                            project_id=effective_project_id,
-                            prompt=subtask_prompt
-                        )
-            except Exception as e:
-                logger.warning(f"Could not start runtime execution for subtask {subtask_id}: {e}")
-
-        return subtask_run
 
     def handle_task_completion(self, task_run: AgentRun) -> None:
-        """
-        Core upward propagation handler.
-        1. Formats and persists structured results.
-        2. Dispatches dependent tasks whose prerequisites are now met.
-        3. If all siblings are finished, atomically resumes the suspended parent manager.
-        4. Manager validates child deliverables and produces verified milestone result.
-        5. Propagates verified results recursively up to root CEO.
-        """
-        # Ensure structured result exists
-        if not task_run.structured_result:
-            summary = task_run.result or (
-                "Task completed successfully." if task_run.status == TaskStatus.COMPLETED
-                else (task_run.error or "Task execution failed.")
-            )
-            task_run.structured_result = {
-                "status": task_run.status.value,
-                "summary": summary,
-                "deliverables": [task_run.result] if task_run.result else [],
-                "errors": task_run.error,
-                "verification_evidence": f"Exit code {task_run.exit_code or 0}. Verified by {task_run.agent_id}."
-            }
-            self.db_manager.save_task_run(task_run)
-
-        # Emit completion/failure event
-        event_type = EventType.TASK_COMPLETED if task_run.status == TaskStatus.COMPLETED else EventType.TASK_FAILED
-        self._emit(
-            event_type=event_type,
-            payload={
-                "task_id": task_run.run_id,
-                "agent_id": task_run.agent_id,
-                "status": task_run.status.value,
-                "result": task_run.result,
-                "structured_result": task_run.structured_result,
-                "error": task_run.error
-            },
-            agent_id=task_run.agent_id,
-            task_id=task_run.run_id,
-            parent_task_id=task_run.parent_task_id,
-            project_id=task_run.project_id
-        )
-
-        # Step 2: Unblock or fail dependent tasks
-        self._process_dependent_tasks(task_run)
-
-        # Step 3: Check parent task resumption
-        if task_run.parent_task_id:
-            self._propagate_to_parent(task_run.parent_task_id)
+        return self._completion.handle_task_completion(task_run)
 
     def _process_dependent_tasks(self, completed_task: AgentRun) -> None:
-        """Check all queued tasks to see if dependencies are satisfied or broken."""
-        all_tasks = self.db_manager.list_task_runs(limit=100)
-        for t in all_tasks:
-            if t.status != TaskStatus.QUEUED or not t.dependencies:
-                continue
-
-            if completed_task.run_id in t.dependencies:
-                if completed_task.status == TaskStatus.FAILED:
-                    # Prerequisite failed: dependent task fails
-                    t.status = TaskStatus.FAILED
-                    t.error = f"Prerequisite task '{completed_task.run_id}' failed: {completed_task.error}"
-                    t.ended_at = datetime.now()
-                    self.db_manager.save_task_run(t)
-                    self.handle_task_completion(t)
-                elif completed_task.status == TaskStatus.COMPLETED:
-                    # Check if ALL dependencies are now completed
-                    all_met = True
-                    for dep_id in t.dependencies:
-                        dep_run = self.db_manager.get_task_run(dep_id)
-                        if not dep_run or dep_run.status != TaskStatus.COMPLETED:
-                            all_met = False
-                            break
-                    if all_met:
-                        t.status = TaskStatus.RUNNING
-                        t.started_at = datetime.now()
-                        self.db_manager.save_task_run(t)
-                        self._emit(
-                            event_type=EventType.TASK_STARTED,
-                            payload=t.to_dict(),
-                            agent_id=t.agent_id,
-                            task_id=t.run_id,
-                            project_id=t.project_id
-                        )
-                        if self.runtime_adapter and hasattr(self.runtime_adapter, "start_task"):
-                            try:
-                                self.runtime_adapter.start_task(t.run_id)
-                            except Exception as e:
-                                logger.warning(f"Failed to start unblocked dependent task {t.run_id}: {e}")
+        return self._completion._process_dependent_tasks(completed_task)
 
     def _propagate_to_parent(self, parent_task_id: str) -> None:
-        """
-        Check if all children for parent_task_id are done.
-        If yes, atomically resume parent, validate deliverables, and report upward.
-        """
-        parent_task = self.db_manager.get_task_run(parent_task_id)
-        if not parent_task:
-            return
-
-        children = self.db_manager.get_subtasks(parent_task_id)
-        if not children:
-            return
-
-        # Check if any child is still running or pending
-        still_running = [c for c in children if c.status in (
-            TaskStatus.RUNNING, TaskStatus.QUEUED, TaskStatus.PENDING,
-            TaskStatus.WAITING_FOR_CHILDREN, TaskStatus.WAITING_INPUT,
-            TaskStatus.WAITING_FOR_MANAGER, TaskStatus.WAITING_FOR_HUMAN
-        )]
-        if still_running:
-            return
-
-        # All children are in terminal states!
-        # Atomic lock: only resume if status is WAITING_FOR_CHILDREN
-        with self.db_manager._get_connection() as conn:
-            cursor = conn.execute(
-                "UPDATE task_runs SET status = 'running' WHERE run_id = ? AND status = 'waiting_for_children'",
-                (parent_task_id,)
-            )
-            if cursor.rowcount == 0:
-                # Already resumed or not waiting; prevent duplicate resumption
-                return
-
-        # Reload resumed parent task
-        parent_task = self.db_manager.get_task_run(parent_task_id)
-        self._emit(
-            event_type=EventType.TASK_RESUMED if hasattr(EventType, "TASK_RESUMED") else "task.resumed",
-            payload={"parent_task_id": parent_task.run_id, "agent_id": parent_task.agent_id},
-            agent_id=parent_task.agent_id,
-            task_id=parent_task.run_id,
-            project_id=parent_task.project_id
-        )
-
-        child_summaries = []
-        has_failure = False
-        for c in children:
-            if c.status == TaskStatus.FAILED:
-                has_failure = True
-            child_summaries.append({
-                "task_id": c.run_id,
-                "agent_id": c.agent_id,
-                "status": c.status.value,
-                "summary": (c.structured_result or {}).get("summary", c.result),
-                "deliverables": (c.structured_result or {}).get("deliverables", [c.result] if c.result else []),
-                "errors": c.error,
-                "verification_evidence": (c.structured_result or {}).get("verification_evidence")
-            })
-
-        self._emit(
-            event_type=EventType.RESULT_PROPAGATED if hasattr(EventType, "RESULT_PROPAGATED") else "result.propagated",
-            payload={
-                "parent_task_id": parent_task.run_id,
-                "parent_agent_id": parent_task.agent_id,
-                "children": child_summaries,
-                "has_failure": has_failure
-            },
-            agent_id=parent_task.agent_id,
-            task_id=parent_task.run_id,
-            project_id=parent_task.project_id
-        )
-
-        # Parent manager inspection:
-        if has_failure:
-            # Manager cannot report completion when a mandatory child failed!
-            failed_children = [c["task_id"] for c in child_summaries if c["status"] == "failed"]
-            parent_task.status = TaskStatus.FAILED
-            parent_task.error = f"Mandatory child task(s) failed: {', '.join(failed_children)}"
-            parent_task.ended_at = datetime.now()
-            parent_task.structured_result = {
-                "status": "failed",
-                "summary": f"Milestone incomplete due to child task failures in {parent_task.agent_id}",
-                "deliverables": [],
-                "errors": parent_task.error,
-                "verification_evidence": f"Failed children: {failed_children}"
-            }
-            self.db_manager.save_task_run(parent_task)
-            self._emit(
-                event_type=EventType.TASK_FAILED,
-                payload=parent_task.to_dict(),
-                agent_id=parent_task.agent_id,
-                task_id=parent_task.run_id,
-                project_id=parent_task.project_id
-            )
-            # Propagate failure upward
-            if parent_task.parent_task_id:
-                self.handle_task_completion(parent_task)
-            return
-
-        # All children succeeded: Manager validates deliverables and reports milestone complete
-        all_deliverables = []
-        for c in child_summaries:
-            deliv = c.get("deliverables")
-            if isinstance(deliv, list):
-                all_deliverables.extend(deliv)
-            elif deliv:
-                all_deliverables.append(deliv)
-
-        milestone_result = {
-            "status": "completed",
-            "summary": f"Milestone verified by {parent_task.agent_id}: all {len(children)} child tasks completed successfully.",
-            "deliverables": all_deliverables,
-            "verification_evidence": f"Validated {len(children)} child deliverables against acceptance criteria.",
-            "errors": None
-        }
-
-        parent_task.status = TaskStatus.COMPLETED
-        parent_task.result = json.dumps(milestone_result)
-        parent_task.structured_result = milestone_result
-        parent_task.ended_at = datetime.now()
-        self.db_manager.save_task_run(parent_task)
-
-        self._emit(
-            event_type=EventType.RESULT_ACCEPTED if hasattr(EventType, "RESULT_ACCEPTED") else "result.accepted",
-            payload={"parent_task_id": parent_task.run_id, "milestone_result": milestone_result},
-            agent_id=parent_task.agent_id,
-            task_id=parent_task.run_id,
-            project_id=parent_task.project_id
-        )
-        self._emit(
-            event_type=EventType.TASK_COMPLETED,
-            payload=parent_task.to_dict(),
-            agent_id=parent_task.agent_id,
-            task_id=parent_task.run_id,
-            project_id=parent_task.project_id
-        )
-
-        # Propagate upward recursively (e.g. Manager -> CEO)
-        if parent_task.parent_task_id:
-            self._propagate_to_parent(parent_task.parent_task_id)
-        elif parent_task.agent_id == "ceo-orchestrator" or getattr(parent_task, "root_task_id", None) == parent_task.run_id:
-            # Root CEO task reached completion: emit final human-facing report!
-            self._emit(
-                event_type=EventType.RESULT_FORWARDED,
-                payload={
-                    "root_task_id": parent_task.run_id,
-                    "agent_id": parent_task.agent_id,
-                    "final_report": milestone_result,
-                    "recipient": "HUMAN_OPERATOR"
-                },
-                agent_id=parent_task.agent_id,
-                task_id=parent_task.run_id,
-                project_id=parent_task.project_id
-            )
+        return self._completion._propagate_to_parent(parent_task_id)
 
     def complete_task(
         self,
@@ -618,12 +261,7 @@ class OrchestrationEngine:
 
         all_runs = self.db_manager.list_task_runs(project_id=project_id, limit=200)
         # Check for any active or blocked tasks
-        active_tasks = [
-            r for r in all_runs
-            if r.status in (TaskStatus.RUNNING, TaskStatus.QUEUED, TaskStatus.PENDING,
-                            TaskStatus.WAITING_FOR_CHILDREN, TaskStatus.WAITING_INPUT,
-                            TaskStatus.WAITING_FOR_MANAGER, TaskStatus.WAITING_FOR_HUMAN)
-        ]
+        active_tasks = [r for r in all_runs if r.status != TaskStatus.COMPLETED]
         if active_tasks:
             return {
                 "completed": False,
@@ -643,7 +281,7 @@ class OrchestrationEngine:
         return {
             "completed": True,
             "verdict": "GO",
-            "report": "All project milestones, QA tests, and security reviews verified complete."
+            "report": "Requested task records are completed. External verification is not inferred from status alone."
         }
 
     def get_subtasks(self, parent_task_id: str) -> List[AgentRun]:
@@ -672,5 +310,5 @@ class OrchestrationEngine:
                 connector_id=connector_id,
                 tool_name=tool_name
             )
-        return {"allowed": True, "reason": "MCP permission check not enabled on database manager"}
+        return {"allowed": False, "reason": "MCP permission policy is unavailable"}
 

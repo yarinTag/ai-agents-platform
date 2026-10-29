@@ -137,6 +137,22 @@ The `src/pages/` directory contains top-level page components mounted by React R
 
 ## 3. 🔄 Mandatory UI `AGENTS.md` Synchronization Rule
 
+### Page feature ownership after modular extraction
+
+Routes, endpoint signatures and existing API facade imports are unchanged. The five page shells below own composition and delegate state/effects to page-specific hooks. Presentation helpers receive explicit typed subsets of hook results, rather than creating additional data subscriptions or independent copies of the same state. New helper files are page-local and are not additional router destinations.
+
+| Page | State and application actions | Presentation ownership |
+|---|---|---|
+| Agents.tsx | useAgentsPage.tsx: auth-derived department choices, agent/skill/model loading, editor state, CRUD and agent groups | agentColumns.tsx creates roster columns; AgentEditor.tsx owns the existing create/edit form and folder picker; shell retains tabs and chat composition |
+| Skills.tsx | useSkillsPage.tsx: source configuration, scans, repository discovery, skill CRUD, content loading and collapse state | PluginSourceConfiguration.tsx renders local/Git source selection and token discovery; SkillsCatalogTabs.tsx renders plugin browsing/custom skill registry; shell retains skill/content/folder modals |
+| Tasks.tsx | useTasksPage.tsx: one useOfficeEvents subscription, task CRUD, delegation, tree loading, row actions and tree projection | Tasks.tsx retains table and action/detail dialogs; no new polling or streaming client |
+| CalendarView.tsx | useCalendarViewPage.tsx: schedule/task/approval loading, existing 10-second refresh and cleanup, schedule actions, date-cell rendering and schedule columns | Shell retains calendar/tabs/date inspection and cron/approval modal composition; calendarDates.ts owns the shared Dayjs relative-time configuration |
+| McpHub.tsx | useMcpState.tsx owns auth context, form instances, shared UI state and initial fetch; useMcpConnectorActions.tsx owns connector discovery/configuration/tools/permissions; useMcpWorkflowActions.tsx owns channel bindings and workflow actions; useMcpPage.tsx composes these and derives channels/catalog filtering | McpHubTabs, McpMarketplace, McpInstalledConnectors and McpWorkflowChannels own tab content. McpConnectorModal composes McpRepositorySelection, McpSlackSelection and McpTelegramSelection within the same Form. McpBindingModal, McpCustomConnectorModal, McpToolsDrawer, McpPermissionsModal, McpWorkflowCanvasModal and McpWorkflowBuilder own existing dialogs. mcpProviderIcon.tsx owns provider icon mapping. |
+
+Selected-resource updates, inline editing, notifications, form validation and modal close handlers are preserved by relocation. `resourceLoading.ts` supplies `readResource`, which records read failure independently from successful empty results. `ResourceSection.tsx` renders scoped unavailable/retry states. MCP catalog/connectors/workflows load independently; unavailable permissions disable Access mutations and render an explicit warning. Connector and binding save handlers also guard dialogs left open during a failed refresh. Channel suggestions come only from configured connector arrays, without invented fallback channel names. Calendar schedule/history/approval reads remain independent, with unavailable sections and disabled dependent schedule actions rather than false empty-success states. Skills initial source configuration failure stops scanning and exposes retry; neither manual rescan nor source overrides bypass a missing initial configuration. The custom skills tab remains separate from plugin source/scan availability. Workflow quick-add channel mutation is owned once by `useMcpWorkflowActions.handleQuickAddBindingChannel` and reused by Enter and Add.
+
+Capability readiness and backend service fault isolation are not established by this frontend extraction. No tests, build, lint, type checking or application startup were run for this change under the user's current restriction; source review is the available validation boundary.
+
 > [!IMPORTANT]
 > **Every time any page in `src/pages/` is added, modified, or refactored, the developer/agent MUST update this file (`src/pages/AGENTS.md`) as part of the same task.**
 >
@@ -145,3 +161,6 @@ The `src/pages/` directory contains top-level page components mounted by React R
 > 2. Detail any new modals, drawers, or subcomponents mounted by the page.
 > 3. Document state flow changes (new React Context consumption, SSE listeners, or Axios calls).
 > 4. Ensure master index in [`poc/dashboard/AGENTS.md`](file:///Users/yarintag/Desktop/Projects/ai-agents-platform/poc/dashboard/AGENTS.md) is updated if page routes or responsibilities are altered.
+
+## Final review shared ownership
+MCP channel/repository projections reuse services/mcpResources rather than duplicate provider-specific loops. Scoped ResourceSection errors/retry preserve independent tabs when optional backends are unavailable. Existing routes and component exports remain compatible.

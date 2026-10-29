@@ -3,15 +3,19 @@ Agent Teams Coordination Engine.
 Supports dynamic multi-agent temporary teams for parallel reviews, audits, and collaborative task decomposition.
 """
 
+from __future__ import annotations
+
 import uuid
 import logging
 from datetime import datetime
-from typing import Dict, Any, Optional, List
+from typing import TYPE_CHECKING, Dict, Any, Optional, List
 
-from persistence import DatabaseManager, AgentTeam
-from runtime_adapter import TaskStatus, AgentRun
-from events import EventService, PlatformEvent, EventType
-from .engine import OrchestrationEngine
+from storage.records import AgentTeam
+from runtime.models import TaskStatus, AgentRun
+from events.models import EventType
+
+if TYPE_CHECKING:
+    from .ports import TeamStore, EventEmitter
 
 logger = logging.getLogger(__name__)
 
@@ -21,13 +25,15 @@ class TeamCoordinator:
 
     def __init__(
         self,
-        db_manager: DatabaseManager,
-        orchestration_engine: Optional[OrchestrationEngine] = None,
-        event_service: Optional[EventService] = None
+        db_manager: TeamStore,
+        orchestration_engine: Optional[Any] = None,
+        event_service: Optional[EventEmitter] = None,
+        dispatch_provider=None,
     ):
         self.db = db_manager
         self.orchestration = orchestration_engine
         self.event_service = event_service
+        self.dispatch_provider = dispatch_provider
 
     def create_team(
         self,
@@ -79,6 +85,11 @@ class TeamCoordinator:
         if not team:
             raise ValueError(f"Team '{team_id}' not found")
 
+        if self.dispatch_provider is None:
+            raise RuntimeError("Team execution dispatcher is unavailable")
+        dispatch = self.dispatch_provider()
+        manager = self.db.get_agent(team.manager_agent_id)
+        organization_id = getattr(manager, "organization_id", None)
         member_prompts = member_prompts or {}
         dispatched_tasks = []
 
@@ -93,18 +104,26 @@ class TeamCoordinator:
                 agent_id=agent_id,
                 project_id=team.project_id,
                 prompt=prompt,
-                status=TaskStatus.RUNNING,
+                status=TaskStatus.QUEUED,
+                organization_id=organization_id,
                 created_at=now,
                 parent_task_id=parent_task_id,
                 assigned_by=team.manager_agent_id
             )
             self.db.save_task_run(task_run)
 
+            try:
+                dispatch(task_id=run_id, agent_id=agent_id, project_id=team.project_id, prompt=prompt)
+            except Exception:
+                task_run.status = TaskStatus.FAILED
+                task_run.error = "Team execution dispatch failed"
+                task_run.ended_at = datetime.now()
+                self.db.save_task_run(task_run)
             dispatched_tasks.append({
                 "task_id": run_id,
                 "agent_id": agent_id,
                 "prompt": prompt,
-                "status": "RUNNING"
+                "status": task_run.status.value.upper()
             })
 
             if self.event_service:
@@ -140,7 +159,7 @@ class TeamCoordinator:
 
         return {
             "team_id": team_id,
-            "status": "DISPATCHED",
+            "status": "DISPATCHED" if dispatched_tasks and all(t["status"] != "FAILED" for t in dispatched_tasks) else "DISPATCH_FAILED",
             "shared_goal": shared_goal,
             "tasks": dispatched_tasks
         }
@@ -158,12 +177,12 @@ class TeamCoordinator:
             raise ValueError(f"Team '{team_id}' not found")
 
         results = []
-        all_completed = True
+        all_completed = bool(task_ids)
         for tid in task_ids:
             task = self.db.get_task_run(tid)
             if task:
                 status_str = task.status.value if hasattr(task.status, "value") else str(task.status)
-                if status_str not in ("completed", "waiting_input"):
+                if status_str != "completed":
                     all_completed = False
                 results.append({
                     "task_id": tid,
@@ -171,6 +190,10 @@ class TeamCoordinator:
                     "status": status_str,
                     "result": task.result or "In progress..."
                 })
+
+            else:
+                all_completed = False
+                results.append({"task_id": tid, "agent_id": "unknown", "status": "missing", "result": "Task is unavailable"})
 
         # Synthesize executive summary
         synthesis_lines = [
@@ -185,7 +208,7 @@ class TeamCoordinator:
 
         synthesis_lines.append("")
         synthesis_lines.append("## Conclusion:")
-        synthesis_lines.append("All team members successfully submitted evaluations. Consensus reached.")
+        synthesis_lines.append("All requested tasks completed." if all_completed else "Results remain incomplete; waiting for task completion.")
 
         final_synthesis = "\n".join(synthesis_lines)
 
@@ -195,7 +218,7 @@ class TeamCoordinator:
         if self.event_service:
             try:
                 self.event_service.emit(
-                    event_type="team.completed",
+                    event_type="team.completed" if all_completed else "team.progress",
                     payload={
                         "team_id": team_id,
                         "all_completed": all_completed,

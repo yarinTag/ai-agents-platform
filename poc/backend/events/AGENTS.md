@@ -56,3 +56,6 @@ event_bus.publish(PlatformEvent(
 
 > [!IMPORTANT]
 > Whenever any event type, pub/sub queue logic, SSE streaming protocol, or event persistence schema in `poc/backend/events/` is modified, the developer or agent **MUST** update this `AGENTS.md` file within the **SAME commit**.
+# Optional runtime monitoring
+
+System statistics and health use an optional runtime dependency. When inference is unavailable they still return stored information; stats includes runtime_available=false and recorded recent active tasks, while health reports the unavailable runtime component. Monitoring uses the RuntimeAdapter.list_runs contract rather than the private _runs dictionary. This is separate from /health liveness and /health/ready required-core database readiness. No monitoring endpoint was executed during this refactor.

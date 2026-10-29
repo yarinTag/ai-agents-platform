@@ -7,37 +7,21 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
-from croniter import croniter
+from .dispatch import dispatch_scheduled_job
+from .expressions import calculate_next_run, get_upcoming_runs, validate_cron_expression
 
 from persistence import DatabaseManager
 from runtime.protocol import RuntimeAdapter
-from runtime_adapter import TaskStatus
+from runtime.models import TaskStatus
 from events import EventBus, PlatformEvent, EventType
 
 logger = logging.getLogger(__name__)
 
 
-def calculate_next_run(cron_expr: str, base_time: Optional[datetime] = None) -> str:
-    """Calculate the next execution timestamp as an ISO-8601 string."""
-    base = base_time or datetime.now()
-    iter_cron = croniter(cron_expr, base)
-    next_dt = iter_cron.get_next(datetime)
-    return next_dt.isoformat()
 
 
-def get_upcoming_runs(cron_expr: str, count: int = 5, base_time: Optional[datetime] = None) -> List[str]:
-    """Calculate the upcoming N execution timestamps as ISO-8601 strings."""
-    base = base_time or datetime.now()
-    iter_cron = croniter(cron_expr, base)
-    upcoming = []
-    for _ in range(count):
-        upcoming.append(iter_cron.get_next(datetime).isoformat())
-    return upcoming
 
 
-def validate_cron_expression(cron_expr: str) -> bool:
-    """Validate whether a cron expression is valid."""
-    return croniter.is_valid(cron_expr)
 
 
 class CronSchedulerEngine:
@@ -121,7 +105,7 @@ class CronSchedulerEngine:
         policy = job.get('concurrency_policy', 'SKIP').upper()
 
         # Check if agent is currently busy
-        active_runs = self.runtime.get_active_runs()
+        active_runs = self.runtime.list_runs()
         agent_busy = any(
             r.agent_id == agent_id and r.status in [TaskStatus.RUNNING, TaskStatus.PENDING, TaskStatus.WAITING_INPUT, TaskStatus.PENDING_APPROVAL]
             for r in active_runs
@@ -150,18 +134,14 @@ class CronSchedulerEngine:
 
         # Start task execution
         logger.info(f"Triggering scheduled cron job {job_id} ('{job['name']}') on agent {agent_id}...")
-        task_run = await self.runtime.start_task(
-            prompt=prompt,
-            agent_id=agent_id,
-            project_id=project_id
-        )
+        run_id = await dispatch_scheduled_job(self.runtime, job)
 
         # Compute next run time
         next_run = calculate_next_run(job['cron_expression'], trigger_time)
 
         # Update job state in DB
         self.db.update_cron_job(job_id, {
-            'last_run_id': task_run.run_id,
+            'last_run_id': run_id,
             'last_run_at': trigger_time.isoformat(),
             'last_status': 'RUNNING',
             'next_run_at': next_run
@@ -173,7 +153,7 @@ class CronSchedulerEngine:
                 sequence_number=0,
                 event_type=EventType.TASK_CREATED,
                 agent_id=agent_id,
-                task_id=task_run.run_id,
+                task_id=run_id,
                 project_id=project_id,
                 payload={
                     "job_id": job_id,
@@ -191,17 +171,13 @@ class CronSchedulerEngine:
             return None
 
         now_dt = datetime.now()
-        task_run = await self.runtime.start_task(
-            prompt=job['prompt'],
-            agent_id=job['agent_id'],
-            project_id=job.get('project_id')
-        )
+        run_id = await dispatch_scheduled_job(self.runtime, job)
 
         # Update last run state without resetting regular schedule
         self.db.update_cron_job(job_id, {
-            'last_run_id': task_run.run_id,
+            'last_run_id': run_id,
             'last_run_at': now_dt.isoformat(),
             'last_status': 'RUNNING'
         })
 
-        return task_run.run_id
+        return run_id

@@ -10,7 +10,7 @@ import logging
 
 from ..dependencies import (
     get_db_manager, get_event_service, get_team_coordinator,
-    DatabaseManager, EventService, TeamCoordinator
+    DatabaseManager, EventService
 )
 from persistence import AgentTeam
 
@@ -59,7 +59,7 @@ class TeamResponse(BaseModel):
 async def create_team(
     request: CreateTeamRequest,
     db: DatabaseManager = Depends(get_db_manager),
-    coordinator: TeamCoordinator = Depends(get_team_coordinator)
+    coordinator: Any = Depends(get_team_coordinator)
 ):
     """Create a new temporary agent team."""
     # Validate manager agent exists
@@ -123,7 +123,7 @@ async def get_team(
 async def dispatch_team(
     team_id: str,
     request: DispatchTeamRequest,
-    coordinator: TeamCoordinator = Depends(get_team_coordinator)
+    coordinator: Any = Depends(get_team_coordinator)
 ):
     """Dispatch parallel tasks to all members of the team."""
     try:
@@ -134,6 +134,8 @@ async def dispatch_team(
             parent_task_id=request.parent_task_id
         )
         return result
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
@@ -145,7 +147,7 @@ async def dispatch_team(
 async def synthesize_team(
     team_id: str,
     request: SynthesizeTeamRequest,
-    coordinator: TeamCoordinator = Depends(get_team_coordinator)
+    coordinator: Any = Depends(get_team_coordinator)
 ):
     """Synthesize results from completed team subtasks into an executive summary."""
     try:
@@ -154,6 +156,8 @@ async def synthesize_team(
             task_ids=request.task_ids
         )
         return result
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:

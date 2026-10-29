@@ -5,7 +5,37 @@ The `src/services/` directory is the single source of truth for all network comm
 
 ---
 
-## 2. Central HTTP Client (`src/services/api.ts`)
+## 2. Public API facade and shared HTTP transport
+
+`api.ts` is the compatibility entry point used by existing consumers. It re-exports the named/default Axios instance, auth constants, endpoint functions and public types; it contains no endpoint implementations. `httpClient.ts` alone creates Axios and registers interceptors. Domain clients import `httpClient.ts` directly, never the facade or another domain client. This prevents circular dependencies and duplicate interceptor registration.
+
+Implementation ownership (all filenames are under `src/services/`):
+
+| Module | Existing endpoint ownership |
+|---|---|
+| runtimeApi.ts | Runtime setup, detection and selection |
+| agentsApi.ts | Agent CRUD, hierarchy and templates |
+| projectsApi.ts | Project CRUD |
+| skillsApi.ts | Skill CRUD and plugin scan/config/repositories/content |
+| tasksApi.ts | Task CRUD, cancellation, delegation, tree and logs |
+| monitoringApi.ts | System statistics, health and recent activity |
+| modelsApi.ts | Available model discovery |
+| schedulesApi.ts | Schedule CRUD, toggle, trigger and cron validation |
+| approvalsApi.ts | Pending approvals, creation and response |
+| chatApi.ts | Agent sessions, activation, history, send and clear |
+| memoryApi.ts | Project memories and context prompt |
+| warRoomApi.ts | Sessions, details, messages and synthesis |
+| messagesApi.ts | Agent messages, sending and replies |
+| teamsApi.ts | Team listing, creation, dispatch and synthesis |
+| filesystemApi.ts | Directory browsing and native folder selection |
+| mcpApi.ts | Catalog, connector CRUD/test/tools, permissions, discovery and channel messages |
+| workflowsApi.ts | Workflow CRUD, execution, bindings, generation and format conversion |
+| organizationApi.ts | Login, registration, invitation acceptance, profile, departments and members |
+| capabilitiesApi.ts | Authenticated optional capability report |
+
+`DiscoveredModel` is owned by `src/types/model.ts`; filesystem response types are owned by `src/types/filesystem.ts`. All remain re-exported from `api.ts`. Existing signatures, URLs, payloads, Axios response promises and timeout overrides are retained. This extraction introduces no capability fallback, cache, backend isolation or new routes. The native picker retains its 180,000ms timeout. Endpoint contracts below remain applicable.
+
+`getPlatformCapabilities(signal?: AbortSignal)` GETs `/api/v1/capabilities`, returning `CapabilityReport` from `src/types/capabilities.ts`: `{capabilities: Record<string,{state: CapabilityState, reason: string|null}>}`. States are DISABLED, STARTING, READY, DEGRADED, UNAVAILABLE, STOPPING. It uses the same authenticated transport, supports request cancellation, and is not cached. It supplies availability information, never authorization or provider-connectivity proof. Route gates inspect only their own router key; runtime UNAVAILABLE must not hide persisted task reads. Failure of this report does not block trying a route. Existing 401 handling stays unchanged; network errors and 5xx responses do not cause logout.
 
 ### 2.1 Configuration & Interceptors
 * **Base URL**: `http://localhost:8000` (timeout: 10,000ms).
@@ -123,6 +153,10 @@ The `src/services/` directory is the single source of truth for all network comm
 
 ## 3. Real-Time Event Stream (`src/services/eventStream.ts`)
 
+### Scoped resource reads
+
+`resourceLoading.ts:readResource(request, apply, label)` awaits an existing typed request, applies only successful responses and returns `null` on success or a sanitized section-specific unavailable message on failure. It does not create HTTP clients, swallow failures as empty data, cache results or retry writes. Pages and optional component panels can load independent resources concurrently and expose scoped retry states. `pages/resourceLoading.ts` is a compatibility re-export of this one implementation.
+
 ### 3.1 Architecture & SSE Invariants
 * Connects directly to `/api/v1/events/stream` via the browser's native `EventSource`.
 * **Zero Mocking**: Consumes raw platform events emitted by the backend event bus.
@@ -155,3 +189,6 @@ eventStream.subscribe('*', (payload) => { ... });
 > 2. Detail any alterations to request or response interceptors.
 > 3. Document any new SSE events or changes to `PlatformEventPayload`.
 > 4. Ensure [`poc/dashboard/AGENTS.md`](file:///Users/yarintag/Desktop/Projects/ai-agents-platform/poc/dashboard/AGENTS.md) is updated if external integration capabilities change.
+
+## Shared resource projections
+mcpResources.configuredResourceValues is the single configured-channel/repository projection used by MCP and workflow resource loading. It never invents fallback destinations. resourceLoading.readResource returns an explicit failure separately from an empty success. Existing HTTP wrappers remain the sole endpoint implementations; no tests/build/lint or live request was run.

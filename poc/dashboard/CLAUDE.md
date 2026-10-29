@@ -163,7 +163,7 @@ poc/dashboard/
    * Destructure props and provide sensible defaults.
    * Clean up event listeners, timers, and SSE streams in `useEffect` cleanup functions.
 3. **API Integration**:
-   * All API calls MUST go through `src/services/api.ts`.
+   * UI consumers use the public `src/services/api.ts` facade. Endpoint implementations belong to domain `src/services/*Api.ts` modules and import the shared Axios instance from `httpClient.ts`; never import the facade inside a domain client. Only `httpClient.ts` registers HTTP interceptors. Place reusable DTOs in `src/types/` and re-export legacy public types through the facade.
    * Standard Axios response pattern: `const res = await apiMethod(); setState(res.data)`.
    * Handle errors gracefully with Ant Design's `message.error(...)`.
 4. **Ant Design & Dark Theme Conventions**:
@@ -174,3 +174,6 @@ poc/dashboard/
 6. **Localization Hygiene**:
    * All user-facing copy in components must be in English. Never hardcode Hebrew strings in JSX.
    * Use `const { t } = useTranslation();` for internationalized copy.
+
+## Optional feature conventions
+Keep route imports lazy and errors within FeatureErrorBoundary; shell navigation must remain usable. Gate only the exact unavailable capability, not a composite page's independent resources. Use shared resourceLoading/mcpResources rather than repeated fallback state or fabricated connector/channel defaults. ResourceWarning displays scoped failures/retry while independent content remains. Runtime setup can be deferred; backend execution gates remain authoritative. Current user restriction prohibits execution verification.

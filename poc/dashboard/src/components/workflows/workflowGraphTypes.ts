@@ -1,0 +1,34 @@
+export interface WorkflowCanvasStep {
+  key: string;
+  name: string;
+  agent_id: string;
+  prompt_template: string;
+  depends_on: string[];
+  timeout_seconds?: number;
+  mcp_servers?: string[];
+  skills?: string[];
+}
+
+export interface WorkflowCanvasSkill {
+  id: string;
+  name: string;
+  source?: string;
+  location?: string;
+  description?: string;
+}
+
+export interface WorkflowCanvasGraphProps {
+  workflowName?: string;
+  steps: WorkflowCanvasStep[];
+  channelBinding?: {
+    provider?: string;
+    channel_id?: string;
+    trigger_enabled?: boolean;
+    notify_mode?: string;
+  };
+  skills?: WorkflowCanvasSkill[];
+  allowedMcps?: string[];
+  onSelectStep?: (step: WorkflowCanvasStep) => void;
+  height?: number | string;
+}
+

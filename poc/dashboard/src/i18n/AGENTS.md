@@ -75,6 +75,10 @@ export const MyComponent: React.FC = () => {
 
 ## 5. 🔄 Mandatory UI `AGENTS.md` Synchronization Rule
 
+### Feature availability copy
+
+Both dictionaries define `featureAvailability`: unavailable, renderFailure, navigationAvailable, retry, checking, reportUnavailable, degraded, configureLater. Route error/capability panels and optional runtime setup use these keys. The availability-report warning explains that its failure does not prevent trying the view; no raw exception text is rendered. `configureLater` allows dismissing first-run runtime selection so unavailable providers do not prevent unrelated administration. No change to locale persistence, fallback lookup or document RTL handling is introduced.
+
 > [!IMPORTANT]
 > **Every time any file in `src/i18n/` is added, modified, or refactored, the developer/agent MUST update this file (`src/i18n/AGENTS.md`) as part of the same task.**
 >
