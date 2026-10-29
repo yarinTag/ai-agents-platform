@@ -18,7 +18,7 @@ if _poc_root not in sys.path:
     sys.path.insert(0, _poc_root)
 
 from config import config_manager, ConfigManager, AgentConfig, AgentRole, AgentTemplate, ProjectConfig, Skill
-from persistence import db_manager, DatabaseManager
+from persistence import db_manager, DatabaseManager, WorkflowRevisionConflict
 from runtime_adapter import runtime_adapter, ClaudeCodeRuntimeAdapter, AgentRun, TaskStatus
 import runtime_providers
 from runtime.protocol import RuntimeAdapter, RuntimeCapabilities
@@ -33,6 +33,7 @@ from orchestration import (
     ProjectIntelligence, TeamCoordinator
 )
 from .cron_engine import CronSchedulerEngine
+from .queue import get_message_broker, get_queue_worker, TaskQueuePublisher, MessageBroker, QueueWorkerDaemon
 
 logger = logging.getLogger(__name__)
 
@@ -95,9 +96,19 @@ async def init_services():
                 event_service=_event_service
             )
 
+        # Initialize Message Broker and Worker Daemon
+        broker = get_message_broker()
+        await broker.connect()
+        worker = get_queue_worker()
+        worker.runtime_adapter = get_runtime_adapter()
+        worker.event_bus = _event_bus
+        worker.db_manager = db_manager
+        worker.workflow_engine = get_workflow_engine()
+        await worker.start()
+
         _services_initialized = True
         logger.info(
-            "Backend services initialized: %d config agents, %d DB agents, %d projects, cron engine, event bus ready",
+            "Backend services initialized: %d config agents, %d DB agents, %d projects, cron engine, event bus, rabbitmq/worker ready",
             len(agents), len(db_agents), len(db_projects)
         )
 
@@ -112,6 +123,14 @@ async def shutdown_services():
 
     if _cron_engine:
         await _cron_engine.stop()
+
+    worker = get_queue_worker()
+    if worker:
+        await worker.stop()
+
+    broker = get_message_broker()
+    if broker:
+        await broker.disconnect()
 
     for task in _background_tasks:
         if not task.done():
@@ -222,3 +241,15 @@ def get_workflow_engine():
             sandbox_manager=SandboxManager()
         )
     return _workflow_engine
+
+
+_task_queue_publisher: Optional[TaskQueuePublisher] = None
+
+
+def get_task_queue_publisher() -> TaskQueuePublisher:
+    """Get the global TaskQueuePublisher singleton instance."""
+    global _task_queue_publisher
+    if _task_queue_publisher is None:
+        _task_queue_publisher = TaskQueuePublisher(get_message_broker())
+    return _task_queue_publisher
+

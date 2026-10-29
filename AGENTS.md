@@ -45,7 +45,9 @@ The **AI Agents Platform** is an enterprise multi-tenant autonomous agent orches
 4. **Workflows Execution Engine**:
    * Declarative YAML/JSON playbooks with bidirectional format conversion (`/api/v1/workflows/convert-format`).
    * AI-powered natural language playbook generator (`/api/v1/workflows/generate`).
+   * Dedicated **Workflows Hub** (`/workflows` under `OPERATIONS` in `AppSidebar`).
    * Automated provisioning of dedicated execution runner agents (`wf-agent-{id}`).
+   * RabbitMQ distributed queue dispatching (`platform.workflows.execution`) with SHA-256 payload deduplication, smart caching, and Concurrency group serialization.
    * Topological DAG execution, parallel multi-agent stages, conditional triggers, maker-checker human evaluations, and multi-channel notification bindings.
 5. **Modern Dashboard & UI Toolkit**:
    * `OrganizationPage` (`/organization` under `ORGANIZATION & GOVERNANCE` in `AppSidebar`).
@@ -65,6 +67,7 @@ The **AI Agents Platform** is an enterprise multi-tenant autonomous agent orches
 * [**REST API Routers**](poc/backend/api/AGENTS.md): Complete guide to all backend REST API routes, models, and endpoints.
 * [**Security & Hardening**](poc/backend/security/AGENTS.md): HS256 JWT, PBKDF2 hashing, RateLimiterMiddleware (2000 req/min), tenant scoping.
 * [**Workflows Engine**](poc/workflows/AGENTS.md): WorkflowEngine, WorkflowParser, SandboxManager, DAG execution, and budgets.
+* [**Workflow Assistant Authoring**](poc/backend/workflow_assistant/AGENTS.md): Shared permission-aware catalog, proposal validation, non-executable drafts and revision history for future chat/MCP clients.
 * [**Runtime Abstraction**](poc/runtime/AGENTS.md): RuntimeAdapter protocol, model tiers, and curated `MODEL_CATALOG`.
 * [**Orchestration & Hierarchy**](poc/orchestration/AGENTS.md): Multi-agent task trees, supervisor chain resolution, and department MCP checks.
 * [**Agent-to-Agent Messaging**](poc/backend/messages/AGENTS.md): Peer communication, structured message types, and thread tracking.
@@ -73,7 +76,9 @@ The **AI Agents Platform** is an enterprise multi-tenant autonomous agent orches
 * [**Interactive Chat**](poc/backend/chat/AGENTS.md): Agent mini-chat drawer, blocker resolution, and streaming output.
 * [**Scheduler & Cron**](poc/backend/scheduler/AGENTS.md): Background cron polling loop, croniter forecasting, and scheduled tasks.
 * [**Events & Streaming Bus**](poc/backend/events/AGENTS.md): In-memory EventBus pub/sub, SQLite event store, and persistent SSE stream.
-* [**Approvals & HITL**](poc/backend/approvals/AGENTS.md): Human-in-the-loop permission requests and supervisor escalation.
+* [**Approvals & HITL**](poc/backend/approvals/AGENTS.md): Human-in-the-loop permission requests, supervisor escalation, and dual-channel Telegram/Slack ChatOps callbacks.
+* [**Distributed Queues**](poc/backend/queue/AGENTS.md): RabbitMQ AMQP message broker, priority task queues (1-10), quorum queues, and dead-letter exchanges (DLX).
+* [**Database & Postgres RLS**](poc/backend/db/AGENTS.md): Enterprise PostgreSQL schema with kernel-level Row-Level Security (RLS) tenant isolation.
 * [**War Room Deliberation**](poc/backend/war_room/AGENTS.md): Multi-agent deliberation councils, debate rounds, consensus synthesis.
 
 ### Frontend & UI Guides
@@ -107,3 +112,27 @@ The **AI Agents Platform** is an enterprise multi-tenant autonomous agent orches
 > * **No Out-of-Sync Code**: Submitting code modifications without corresponding updates to the relevant `AGENTS.md` files is strictly prohibited.
 > * **Precise Technical Contracts**: Document exact routes, request/response models, database columns, enum values, and state transition rules.
 > * **Master Directory Registration**: If a new submodule or directory is created with an `AGENTS.md`, immediately register its link in this root table of contents.
+
+## Internal Workflow Playground (2026-10-24)
+`POST /api/v1/workflows/{workflow_id}/playground` runs the existing DAG with fresh tool-free model inference. Runs use `PLAYGROUND`, `pg_exec_` execution IDs, `pg_task_` task IDs, and a separate deduplication hash namespace. No channel notifications, automatic reviewer tasks, supervisor escalation, or production completion callbacks run. This is a prompt/data exercise, not a full container security boundary or live integration test. See workflows and runtime guides. Contract tests: `poc/tests/test_workflow_playground.py` use real SQLite and FastAPI; run with `--noconftest` to avoid the shared default-database reset fixture.
+
+`DatabaseManager.update_workflow_execution` accepts `sandbox_path` so pre-created QUEUED execution records capture their workspace when execution starts.
+
+Per-workflow run diagnostics are available at `/workflows/:workflowId/logs?execution=<executionId>`, using scoped execution details and persisted runtime events. The Workflows table exposes a Logs link per workflow.
+
+## Workflow/office execution visibility and catalog caching
+Workflow task origin is resolved through workflow_step_runs and task parent/root lineage, without changing shared agent definitions or adding schema columns. Office and Live Flow request office-scoped task/activity snapshots and ignore workflow-tagged SSE events; the global Tasks view still shows all runs. See backend API/events and dashboard guides. Plugins use a bounded session-memory client cache with explicit invalidation and manual refresh; the application shell uses independent navigation/content scrolling.
+
+## Workflow editing and revision history
+Existing workflows can be edited in the shared visual/YAML builder and inspected through History. SQLite workflows.revision starts at 1; workflow_revisions stores full configuration snapshots and actor/change metadata. Each effective update appends a revision in the same BEGIN IMMEDIATE transaction; expected_revision provides optimistic concurrency. Existing records receive one Legacy baseline; earlier edits cannot be reconstructed. See backend API and workflow guides. Execution deduplication includes the saved revision so edits cannot reuse outputs from an older definition.
+
+## Shared workflow authoring foundation
+The protected `/api/v1/workflow-assistant` service reads current database user/membership/role policy, returns a sanitized organization/department resource catalog, validates strict proposals and stores non-executable drafts separately from workflows. Invalid proposals return structured errors; explicitly opted-in blocked proposals remain authoring records, never active workflows. Draft revisions/idempotency and current-policy revalidation are transactional. Chat generation and internal MCP authoring are implemented; external OAuth/MCP installation, publication and activation remain future work. Details and schema are in the module guide.
+
+## Workflow Assistant model generation
+Workflow Assistant phase two adds /workflow-assistant chat and isolated asynchronous model generation; its backend contract is documented in poc/backend/workflow_assistant/AGENTS.md. Configured runtime model/provider routing is reused without agent tasks or Office events; the internal MCP tool inventory is limited to catalog/schema/YAML validation. Draft save remains explicit and versioned; External MCP login/transport and workflow activation remain future work.
+
+## Model-only YAML authoring and internal MCP
+The Workflow Assistant now selects model_id/provider_id directly, uses an internal process-bound MCP server (catalog/schema/YAML validation only), and emits inactive native workflow YAML. Canonical governed schema: [Workflow authoring schema](poc/workflows/workflow-authoring.schema.yaml), generated from workflows.authoring_schema.WorkflowDocument. Execution agents remain per-step assignments; no planning agent is selected or persisted. The external installable OAuth MCP server remains future work.
+
+The model returns a generation-scoped validation_id for a server-stored YAML candidate instead of regenerating the document after validation; current permissions and candidate integrity are rechecked before presenting/saving.

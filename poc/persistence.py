@@ -225,6 +225,10 @@ class DepartmentMCPAccess:
         return asdict(self)
 
 
+class WorkflowRevisionConflict(ValueError):
+    """A workflow was edited after the caller loaded its base revision."""
+
+
 @dataclass
 class Workflow:
     """Autonomous agentic workflow definition."""
@@ -240,6 +244,8 @@ class Workflow:
     organization_id: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+
+    revision: int = 1
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -262,6 +268,7 @@ class WorkflowExecution:
     completed_at: Optional[str] = None
     error_message: Optional[str] = None
     created_at: Optional[str] = None
+    payload_hash: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -1083,6 +1090,137 @@ class DatabaseManager:
                 pass
             conn.execute("CREATE INDEX IF NOT EXISTS idx_workflows_org ON workflows(organization_id)")
 
+            try:
+                conn.execute("ALTER TABLE workflows ADD COLUMN revision INTEGER NOT NULL DEFAULT 1")
+            except sqlite3.OperationalError as exc:
+                if "duplicate column" not in str(exc).lower():
+                    raise
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS workflow_revisions (
+                    workflow_id TEXT NOT NULL,
+                    revision INTEGER NOT NULL,
+                    snapshot_json TEXT NOT NULL,
+                    changed_fields_json TEXT NOT NULL,
+                    actor_id TEXT,
+                    actor_label TEXT NOT NULL,
+                    change_summary TEXT,
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY (workflow_id, revision),
+                    FOREIGN KEY (workflow_id) REFERENCES workflows(id) ON DELETE CASCADE
+                )
+            """)
+            # Existing workflows get a baseline of their current saved state only.
+            for row in conn.execute("""SELECT w.* FROM workflows w WHERE NOT EXISTS
+                (SELECT 1 FROM workflow_revisions r WHERE r.workflow_id = w.id)""").fetchall():
+                self._insert_workflow_revision(conn, dict(row), [], None, "Legacy baseline",
+                    "State captured when revision history was introduced", row["updated_at"] or row["created_at"])
+
+            # Authoring proposals are intentionally separate from executable workflows.
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS workflow_assistant_drafts (
+                    id TEXT PRIMARY KEY,
+                    organization_id TEXT NOT NULL,
+                    department_id TEXT NOT NULL,
+                    created_by TEXT NOT NULL,
+                    intent_text TEXT NOT NULL DEFAULT '',
+                    proposal_json TEXT NOT NULL,
+                    validation_json TEXT NOT NULL,
+                    status TEXT NOT NULL CHECK(status IN ('READY_FOR_REVIEW', 'BLOCKED', 'NEEDS_CLARIFICATION')),
+                    revision INTEGER NOT NULL CHECK(revision >= 1),
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    idempotency_key TEXT,
+                    request_hash TEXT NOT NULL,
+                    UNIQUE(organization_id, created_by, idempotency_key),
+                    FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+                    FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE CASCADE
+                )
+            """)
+            conn.execute("""CREATE INDEX IF NOT EXISTS idx_assistant_drafts_scope
+                ON workflow_assistant_drafts(organization_id, department_id, updated_at)""")
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS workflow_assistant_draft_revisions (
+                    draft_id TEXT NOT NULL,
+                    revision INTEGER NOT NULL,
+                    snapshot_json TEXT NOT NULL,
+                    actor_id TEXT NOT NULL,
+                    actor_label TEXT NOT NULL,
+                    source TEXT NOT NULL,
+                    client_id TEXT,
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY(draft_id, revision),
+                    FOREIGN KEY (draft_id) REFERENCES workflow_assistant_drafts(id) ON DELETE CASCADE
+                )
+            """)
+
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS workflow_assistant_generations (
+                    id TEXT PRIMARY KEY,
+                    organization_id TEXT NOT NULL,
+                    department_id TEXT NOT NULL,
+                    created_by TEXT NOT NULL,
+                    planner_agent_id TEXT NOT NULL,
+                    request_json TEXT NOT NULL,
+                    request_hash TEXT NOT NULL,
+                    idempotency_key TEXT,
+                    status TEXT NOT NULL CHECK(status IN ('QUEUED', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED')),
+                    result_json TEXT,
+                    saved_draft_id TEXT REFERENCES workflow_assistant_drafts(id) ON DELETE SET NULL,
+                    saved_draft_revision INTEGER,
+                    error_code TEXT,
+                    error_message TEXT,
+                    input_tokens INTEGER NOT NULL DEFAULT 0,
+                    output_tokens INTEGER NOT NULL DEFAULT 0,
+                    cost_usd REAL,
+                    cost_source TEXT,
+                    model TEXT,
+                    created_at TEXT NOT NULL,
+                    started_at TEXT,
+                    completed_at TEXT,
+                    deadline_at TEXT NOT NULL,
+                    UNIQUE(organization_id, created_by, idempotency_key),
+                    FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+                    FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE CASCADE
+                )
+            """)
+            try:
+                conn.execute("ALTER TABLE workflow_assistant_generations ADD COLUMN saved_draft_id TEXT REFERENCES workflow_assistant_drafts(id) ON DELETE SET NULL")
+            except sqlite3.OperationalError as exc:
+                if "duplicate column" not in str(exc).lower():
+                    raise
+            try:
+                conn.execute("ALTER TABLE workflow_assistant_generations ADD COLUMN saved_draft_revision INTEGER")
+            except sqlite3.OperationalError as exc:
+                if "duplicate column" not in str(exc).lower():
+                    raise
+            conn.execute("""CREATE INDEX IF NOT EXISTS idx_assistant_generations_scope
+                ON workflow_assistant_generations(organization_id, department_id, status)""")
+
+            conn.execute("""CREATE TABLE IF NOT EXISTS workflow_assistant_tool_calls (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                generation_id TEXT NOT NULL REFERENCES workflow_assistant_generations(id) ON DELETE CASCADE,
+                tool_name TEXT NOT NULL CHECK(tool_name IN ('workflow_catalog','workflow_schema','validate_workflow_yaml')),
+                proposal_hash TEXT,
+                validation_id TEXT UNIQUE,
+                proposal_json TEXT,
+                created_at TEXT NOT NULL
+            )""")
+            try:
+                conn.execute("ALTER TABLE workflow_assistant_tool_calls ADD COLUMN proposal_hash TEXT")
+            except sqlite3.OperationalError as exc:
+                if "duplicate column" not in str(exc).lower():
+                    raise
+            for column in ('validation_id', 'proposal_json'):
+                try:
+                    conn.execute(f"ALTER TABLE workflow_assistant_tool_calls ADD COLUMN {column} TEXT")
+                except sqlite3.OperationalError as exc:
+                    if "duplicate column" not in str(exc).lower():
+                        raise
+            conn.execute("""CREATE UNIQUE INDEX IF NOT EXISTS idx_assistant_validation_id
+                ON workflow_assistant_tool_calls(validation_id)""")
+            conn.execute("""CREATE INDEX IF NOT EXISTS idx_assistant_tool_calls_generation
+                ON workflow_assistant_tool_calls(generation_id, id)""")
+
             # 3. Workflow executions table
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS workflow_executions (
@@ -1107,6 +1245,11 @@ class DatabaseManager:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_wf_exec_wf ON workflow_executions(workflow_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_wf_exec_status ON workflow_executions(status)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_wf_exec_dept ON workflow_executions(department_id)")
+            try:
+                conn.execute("ALTER TABLE workflow_executions ADD COLUMN payload_hash TEXT")
+            except Exception:
+                pass
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_wf_exec_hash ON workflow_executions(workflow_id, payload_hash, status)")
 
             # 4. Workflow step runs table
             conn.execute("""
@@ -2010,17 +2153,57 @@ class DatabaseManager:
 
 
 
+    def get_workflow_task_contexts(self) -> Dict[str, Dict[str, str]]:
+        """Resolve direct workflow steps and descendants without changing agent identities."""
+        with self._get_connection() as conn:
+            rows = conn.execute(self._WORKFLOW_CONTEXT_CTE +
+                " SELECT run_id, execution_id, workflow_id FROM workflow_context").fetchall()
+        return {row["run_id"]: {"workflow_execution_id": row["execution_id"],
+                                 "workflow_id": row["workflow_id"]} for row in rows}
+
+    _WORKFLOW_CONTEXT_CTE = """
+        WITH RECURSIVE workflow_context(run_id, execution_id, workflow_id) AS (
+            SELECT s.task_run_id, e.id, e.workflow_id FROM workflow_step_runs s
+            JOIN workflow_executions e ON e.id = s.execution_id WHERE s.task_run_id IS NOT NULL
+            UNION
+            SELECT t.run_id, w.execution_id, w.workflow_id FROM task_runs t
+            JOIN workflow_context w ON t.parent_task_id = w.run_id OR t.root_task_id = w.run_id
+        )
+    """
+
+    def get_task_workflow_context(self, run_id: str) -> Dict[str, str]:
+        with self._get_connection() as conn:
+            row = conn.execute("""
+                WITH RECURSIVE lineage(run_id) AS (
+                    VALUES (?)
+                    UNION SELECT t.parent_task_id FROM task_runs t JOIN lineage l ON t.run_id = l.run_id
+                        WHERE t.parent_task_id IS NOT NULL
+                    UNION SELECT t.root_task_id FROM task_runs t JOIN lineage l ON t.run_id = l.run_id
+                        WHERE t.root_task_id IS NOT NULL
+                )
+                SELECT e.id, e.workflow_id FROM lineage l
+                JOIN workflow_step_runs s ON s.task_run_id = l.run_id
+                JOIN workflow_executions e ON e.id = s.execution_id LIMIT 1
+            """, (run_id,)).fetchone()
+        return {"workflow_execution_id": row["id"], "workflow_id": row["workflow_id"]} if row else {}
+
     def list_task_runs(
         self,
         agent_id: Optional[str] = None,
         project_id: Optional[str] = None,
         status: Optional[TaskStatus] = None,
         limit: int = 100,
-        organization_id: Optional[str] = None
+        organization_id: Optional[str] = None,
+        execution_scope: str = "all"
     ) -> List[AgentRun]:
         """List task runs with optional filtering, scoped by organization if provided."""
         with self._get_connection() as conn:
-            query = "SELECT * FROM task_runs WHERE 1=1"
+            if execution_scope not in ("all", "office", "workflow"):
+                raise ValueError("Invalid execution scope")
+            query = (self._WORKFLOW_CONTEXT_CTE if execution_scope != "all" else "") + "SELECT * FROM task_runs WHERE 1=1"
+            if execution_scope != "all":
+                operator = "NOT IN" if execution_scope == "office" else "IN"
+                query += f" AND run_id {operator} (SELECT run_id FROM workflow_context)"
             params = []
 
             if organization_id:
@@ -2428,7 +2611,7 @@ class DatabaseManager:
         """Find enabled cron jobs that are due for execution (next_run_at <= current_time)."""
         with self._get_connection() as conn:
             rows = conn.execute("""
-                SELECT * FROM cron_jobs 
+                SELECT * FROM cron_jobs
                 WHERE enabled = 1 AND next_run_at <= ?
                 ORDER BY next_run_at ASC
             """, (current_time_iso,)).fetchall()
@@ -2902,7 +3085,7 @@ class DatabaseManager:
             if content:
                 row = conn.execute("""
                     SELECT 1 FROM chat_messages
-                    WHERE agent_id = ? 
+                    WHERE agent_id = ?
                       AND (task_id = ? OR json_extract(metadata, '$.task_id') = ?)
                       AND content = ?
                       AND sender_type = ?
@@ -2911,7 +3094,7 @@ class DatabaseManager:
             else:
                 row = conn.execute("""
                     SELECT 1 FROM chat_messages
-                    WHERE agent_id = ? 
+                    WHERE agent_id = ?
                       AND (task_id = ? OR json_extract(metadata, '$.task_id') = ?)
                       AND sender_type = ?
                     LIMIT 1
@@ -3873,7 +4056,7 @@ class DatabaseManager:
                 id=d['id'],
                 name=d['name'],
                 description=d.get('description'),
-                monthly_budget_usd=float(d.get('monthly_budget_usd') or 100.0),
+                monthly_budget_usd=float(d['monthly_budget_usd']) if d.get('monthly_budget_usd') is not None else 100.0,
                 current_spend_usd=self.get_department_monthly_spend(id),
                 budget_action=d.get('budget_action') or 'HARD_STOP',
                 alert_threshold_pct=float(d.get('alert_threshold_pct') or 80.0),
@@ -3931,7 +4114,11 @@ class DatabaseManager:
                   AND created_at LIKE ?
             """, (department_id, month_prefix))
             row = cursor.fetchone()
-            return float(row['total']) if row else 0.0
+            workflow_spend = float(row['total']) if row else 0.0
+            authoring = conn.execute("""SELECT COALESCE(SUM(cost_usd), 0.0) AS total
+                FROM workflow_assistant_generations WHERE department_id = ? AND created_at LIKE ?
+                AND cost_source = 'API_KEY'""", (department_id, month_prefix)).fetchone()
+            return workflow_spend + float(authoring['total'])
 
     def check_department_budget(self, department_id: str, requested_cost: float = 0.0) -> Dict[str, Any]:
         """
@@ -4613,7 +4800,9 @@ class DatabaseManager:
         description: Optional[str] = None,
         cron_expression: Optional[str] = None,
         webhook_enabled: bool = True,
-        organization_id: Optional[str] = None
+        organization_id: Optional[str] = None,
+        actor_id: Optional[str] = None,
+        actor_label: str = "System"
     ) -> Workflow:
         """Create a workflow definition."""
         now = datetime.now().isoformat()
@@ -4623,6 +4812,9 @@ class DatabaseManager:
                 INSERT INTO workflows (id, name, description, department_id, definition_json, webhook_enabled, webhook_token, cron_expression, is_active, created_at, updated_at, organization_id)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
             """, (id, name, description, department_id, definition_json, 1 if webhook_enabled else 0, webhook_token, cron_expression, now, now, organization_id))
+            row = dict(conn.execute("SELECT * FROM workflows WHERE id = ?", (id,)).fetchone())
+            self._insert_workflow_revision(conn, row, list(self._WORKFLOW_VERSION_FIELDS),
+                actor_id, actor_label, "Workflow created", now)
             conn.commit()
         return self.get_workflow(id)
 
@@ -4645,29 +4837,71 @@ class DatabaseManager:
                 is_active=bool(d.get('is_active', 1)),
                 organization_id=d.get('organization_id'),
                 created_at=d.get('created_at'),
-                updated_at=d.get('updated_at')
+                updated_at=d.get('updated_at'),
+                revision=d.get('revision', 1)
             )
 
-    def update_workflow(self, id: str, **kwargs) -> Optional[Workflow]:
-        """Update workflow configuration, definition, and channel bindings."""
-        fields = []
-        params = []
+    _WORKFLOW_VERSION_FIELDS = ("name", "description", "department_id", "definition_json",
+        "webhook_enabled", "cron_expression", "is_active", "organization_id")
+
+    def _insert_workflow_revision(self, conn, row, changed_fields, actor_id, actor_label, summary, created_at):
+        snapshot = {key: row.get(key) for key in self._WORKFLOW_VERSION_FIELDS}
+        conn.execute("""INSERT INTO workflow_revisions
+            (workflow_id, revision, snapshot_json, changed_fields_json, actor_id, actor_label, change_summary, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""", (row["id"], row.get("revision", 1),
+            json.dumps(snapshot, ensure_ascii=False), json.dumps(changed_fields), actor_id,
+            actor_label or "System", summary, created_at or datetime.now().isoformat()))
+
+    def list_workflow_revisions(self, workflow_id: str, limit: int = 50,
+                                before_revision: Optional[int] = None) -> List[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            query = "SELECT * FROM workflow_revisions WHERE workflow_id = ?"
+            params = [workflow_id]
+            if before_revision is not None:
+                query += " AND revision < ?"
+                params.append(before_revision)
+            rows = conn.execute(query + " ORDER BY revision DESC LIMIT ?", (*params, limit)).fetchall()
+        return [{"workflow_id": row["workflow_id"], "revision": row["revision"],
+            "snapshot": json.loads(row["snapshot_json"]), "changed_fields": json.loads(row["changed_fields_json"]),
+            "actor_id": row["actor_id"], "actor_label": row["actor_label"],
+            "change_summary": row["change_summary"], "created_at": row["created_at"]} for row in rows]
+
+    def update_workflow(self, id: str, *, actor_id: Optional[str] = None,
+                        actor_label: str = "System", change_summary: Optional[str] = None,
+                        expected_revision: Optional[int] = None, **kwargs) -> Optional[Workflow]:
+        """Atomically update the current configuration and append an immutable snapshot."""
+        nullable = {"description", "department_id", "cron_expression"}
+        values = {key: value for key, value in kwargs.items() if key in self._WORKFLOW_VERSION_FIELDS
+                  and (value is not None or key in nullable)}
         now = datetime.now().isoformat()
-        allowed_keys = ("name", "description", "department_id", "definition_json", "webhook_enabled", "cron_expression", "is_active", "organization_id")
-        for k in allowed_keys:
-            if k in kwargs and kwargs[k] is not None:
-                fields.append(f"{k} = ?")
-                if k in ("webhook_enabled", "is_active"):
-                    params.append(1 if kwargs[k] else 0)
-                else:
-                    params.append(kwargs[k])
-        if fields:
-            fields.append("updated_at = ?")
-            params.append(now)
-            params.append(id)
-            with self._get_connection() as conn:
-                conn.execute(f"UPDATE workflows SET {', '.join(fields)} WHERE id = ?", params)
-                conn.commit()
+        with self._get_connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            current = conn.execute("SELECT * FROM workflows WHERE id = ?", (id,)).fetchone()
+            if current is None:
+                conn.rollback()
+                return None
+            current = dict(current)
+            if expected_revision is not None and current["revision"] != expected_revision:
+                raise WorkflowRevisionConflict("Workflow changed since you opened it. Reload the latest revision before saving.")
+            changed = []
+            for key, value in values.items():
+                old = current.get(key)
+                if key == "definition_json":
+                    try:
+                        if json.loads(old or "{}") == json.loads(value):
+                            continue
+                    except (ValueError, TypeError):
+                        pass
+                if old != value:
+                    changed.append(key)
+            if changed:
+                values = {key: values[key] for key in changed}
+                values.update(revision=current["revision"] + 1, updated_at=now)
+                conn.execute("UPDATE workflows SET " + ", ".join(f"{key} = ?" for key in values) + " WHERE id = ?",
+                    (*values.values(), id))
+                current.update(values)
+                self._insert_workflow_revision(conn, current, changed, actor_id, actor_label, change_summary, now)
+            conn.commit()
         return self.get_workflow(id)
 
     def get_workflow_by_webhook_token(self, webhook_token: str) -> Optional[Workflow]:
@@ -4689,7 +4923,8 @@ class DatabaseManager:
                 is_active=bool(d.get('is_active', 1)),
                 organization_id=d.get('organization_id'),
                 created_at=d.get('created_at'),
-                updated_at=d.get('updated_at')
+                updated_at=d.get('updated_at'),
+                revision=d.get('revision', 1)
             )
 
     def list_workflows(
@@ -4729,6 +4964,25 @@ class DatabaseManager:
             conn.commit()
             return cursor.rowcount > 0
 
+    def _row_to_workflow_execution(self, d: Dict[str, Any]) -> WorkflowExecution:
+        return WorkflowExecution(
+            id=d['id'],
+            workflow_id=d['workflow_id'],
+            trigger_type=d['trigger_type'],
+            trigger_payload=d.get('trigger_payload'),
+            status=d.get('status') or 'PENDING',
+            department_id=d.get('department_id'),
+            sandbox_path=d.get('sandbox_path'),
+            total_input_tokens=int(d.get('total_input_tokens') or 0),
+            total_output_tokens=int(d.get('total_output_tokens') or 0),
+            total_cost_usd=float(d.get('total_cost_usd') or 0.0),
+            started_at=d.get('started_at'),
+            completed_at=d.get('completed_at'),
+            error_message=d.get('error_message'),
+            created_at=d.get('created_at'),
+            payload_hash=d.get('payload_hash')
+        )
+
     def create_workflow_execution(
         self,
         execution_id: str,
@@ -4736,17 +4990,20 @@ class DatabaseManager:
         trigger_type: str,
         trigger_payload: Optional[str] = None,
         department_id: Optional[str] = None,
-        sandbox_path: Optional[str] = None
+        sandbox_path: Optional[str] = None,
+        payload_hash: Optional[str] = None,
+        status: str = "RUNNING"
     ) -> WorkflowExecution:
         """Create a new workflow execution instance."""
         now = datetime.now().isoformat()
+        started_at = now if status == "RUNNING" else None
         with self._get_connection() as conn:
             conn.execute("""
                 INSERT INTO workflow_executions (
                     id, workflow_id, trigger_type, trigger_payload, status,
-                    department_id, sandbox_path, started_at, created_at
-                ) VALUES (?, ?, ?, ?, 'RUNNING', ?, ?, ?, ?)
-            """, (execution_id, workflow_id, trigger_type, trigger_payload, department_id, sandbox_path, now, now))
+                    department_id, sandbox_path, started_at, created_at, payload_hash
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (execution_id, workflow_id, trigger_type, trigger_payload, status, department_id, sandbox_path, started_at, now, payload_hash))
             conn.commit()
         return self.get_workflow_execution(execution_id)
 
@@ -4756,29 +5013,81 @@ class DatabaseManager:
             row = conn.execute("SELECT * FROM workflow_executions WHERE id = ?", (execution_id,)).fetchone()
             if not row:
                 return None
-            d = dict(row)
-            return WorkflowExecution(
-                id=d['id'],
-                workflow_id=d['workflow_id'],
-                trigger_type=d['trigger_type'],
-                trigger_payload=d.get('trigger_payload'),
-                status=d.get('status') or 'PENDING',
-                department_id=d.get('department_id'),
-                sandbox_path=d.get('sandbox_path'),
-                total_input_tokens=int(d.get('total_input_tokens') or 0),
-                total_output_tokens=int(d.get('total_output_tokens') or 0),
-                total_cost_usd=float(d.get('total_cost_usd') or 0.0),
-                started_at=d.get('started_at'),
-                completed_at=d.get('completed_at'),
-                error_message=d.get('error_message'),
-                created_at=d.get('created_at')
-            )
+            return self._row_to_workflow_execution(dict(row))
+
+    def list_workflow_executions(
+        self,
+        workflow_id: Optional[str] = None,
+        department_id: Optional[str] = None,
+        status: Optional[str] = None,
+        limit: int = 50
+    ) -> List[WorkflowExecution]:
+        """List recent workflow executions with optional filtering."""
+        query = "SELECT * FROM workflow_executions WHERE 1=1"
+        params: List[Any] = []
+        if workflow_id:
+            query += " AND workflow_id = ?"
+            params.append(workflow_id)
+        if department_id:
+            query += " AND department_id = ?"
+            params.append(department_id)
+        if status:
+            query += " AND status = ?"
+            params.append(status)
+        query += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
+
+        with self._get_connection() as conn:
+            rows = conn.execute(query, params).fetchall()
+            return [self._row_to_workflow_execution(dict(r)) for r in rows]
+
+    def find_matching_workflow_execution(
+        self,
+        workflow_id: str,
+        payload_hash: str,
+        max_cache_age_seconds: int = 300
+    ) -> Optional[WorkflowExecution]:
+        """
+        Deduplication checker:
+        1. Returns currently active (QUEUED or RUNNING) execution if present.
+        2. Returns recently completed execution with identical payload_hash within cache window.
+        """
+        if not payload_hash:
+            return None
+
+        with self._get_connection() as conn:
+            # Active check
+            row = conn.execute("""
+                SELECT * FROM workflow_executions
+                WHERE workflow_id = ? AND payload_hash = ? AND status IN ('QUEUED', 'RUNNING')
+                ORDER BY created_at DESC LIMIT 1
+            """, (workflow_id, payload_hash)).fetchone()
+            if row:
+                return self._row_to_workflow_execution(dict(row))
+
+            # Completed cache check
+            row = conn.execute("""
+                SELECT * FROM workflow_executions
+                WHERE workflow_id = ? AND payload_hash = ? AND status = 'COMPLETED'
+                ORDER BY completed_at DESC LIMIT 1
+            """, (workflow_id, payload_hash)).fetchone()
+            if row:
+                d = dict(row)
+                completed_at_str = d.get('completed_at')
+                if completed_at_str:
+                    try:
+                        completed_dt = datetime.fromisoformat(completed_at_str)
+                        if (datetime.now() - completed_dt).total_seconds() <= max_cache_age_seconds:
+                            return self._row_to_workflow_execution(d)
+                    except Exception:
+                        pass
+        return None
 
     def update_workflow_execution(self, execution_id: str, **kwargs) -> Optional[WorkflowExecution]:
         """Update status, token counts, or error for an execution."""
         fields = []
         params = []
-        for k in ("status", "total_input_tokens", "total_output_tokens", "total_cost_usd", "completed_at", "error_message"):
+        for k in ("status", "total_input_tokens", "total_output_tokens", "total_cost_usd", "started_at", "completed_at", "error_message", "payload_hash", "sandbox_path"):
             if k in kwargs and kwargs[k] is not None:
                 fields.append(f"{k} = ?")
                 params.append(kwargs[k])
@@ -4818,4 +5127,4 @@ class DatabaseManager:
 
 
 # Global database instance
-db_manager = DatabaseManager()
+db_manager = DatabaseManager()

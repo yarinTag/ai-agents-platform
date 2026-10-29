@@ -8,6 +8,8 @@ maker-checker reviews, and captures run evaluations.
 
 import re
 import uuid
+import json
+import hashlib
 import logging
 import concurrent.futures
 from datetime import datetime
@@ -21,6 +23,16 @@ from .parser import WorkflowParser, WorkflowDefinition, WorkflowStepDefinition
 from .sandbox import SandboxManager, SandboxSession
 
 logger = logging.getLogger(__name__)
+
+
+def compute_execution_hash(workflow_id: str, payload: Any, revision: Optional[int] = None) -> str:
+    """Compute deterministic short hash for workflow payload deduplication and idempotency."""
+    try:
+        payload_str = json.dumps(payload, sort_keys=True) if payload else ""
+    except Exception:
+        payload_str = str(payload) if payload else ""
+    namespace = f"{workflow_id}:v{revision}" if revision is not None else workflow_id
+    return hashlib.sha256(f"{namespace}:{payload_str}".encode("utf-8")).hexdigest()[:16]
 
 
 class BudgetExceededError(Exception):
@@ -140,7 +152,10 @@ class WorkflowEngine:
         trigger_payload: Optional[Dict[str, Any]] = None,
         source_workspace: Optional[str] = None,
         runtime_provider: Optional[str] = None,
-        user_context: Optional[Dict[str, Any]] = None
+        user_context: Optional[Dict[str, Any]] = None,
+        execution_id: Optional[str] = None,
+        payload_hash: Optional[str] = None,
+        playground: bool = False
     ) -> WorkflowExecution:
         """
         Execute an entire workflow instance.
@@ -153,6 +168,11 @@ class WorkflowEngine:
         workflow = self.db.get_workflow(workflow_id)
         if not workflow:
             raise ValueError(f"Workflow '{workflow_id}' not found")
+
+        if playground:
+            if not self.runtime or not getattr(self.runtime.get_capabilities(), "supports_playground", False):
+                raise ValueError("The configured runtime does not support tool-free playground execution")
+            trigger_type = "PLAYGROUND"
 
         # 1. Budget and Department Access Authorization pre-check
         dept_id = workflow.department_id
@@ -182,24 +202,41 @@ class WorkflowEngine:
                     budget=budget_status.get("monthly_budget_usd", 0.0)
                 )
 
-        execution_id = f"wf_exec_{uuid.uuid4().hex[:12]}"
+        if not execution_id:
+            execution_id = f"{'pg_exec_' if playground else 'wf_exec_'}{uuid.uuid4().hex[:12]}"
+
+        if not payload_hash:
+            payload_hash = compute_execution_hash(f"playground:{workflow_id}" if playground else workflow_id, trigger_payload, revision=workflow.revision)
 
         # 2. Setup sandbox session
         sandbox = self.sandbox_manager.create_sandbox(
             execution_id=execution_id,
-            source_workspace=source_workspace
+            source_workspace=None if playground else source_workspace,
+            force_type="EPHEMERAL_DIR" if playground else None
         )
 
-        # 3. Create execution record in database
-        payload_str = str(trigger_payload) if trigger_payload else None
-        wf_exec = self.db.create_workflow_execution(
-            execution_id=execution_id,
-            workflow_id=workflow_id,
-            trigger_type=trigger_type,
-            trigger_payload=payload_str,
-            department_id=dept_id,
-            sandbox_path=sandbox.path
-        )
+        # 3. Create or update execution record in database
+        payload_str = json.dumps(trigger_payload) if trigger_payload is not None else None
+        existing_exec = self.db.get_workflow_execution(execution_id)
+        if existing_exec:
+            wf_exec = self.db.update_workflow_execution(
+                execution_id=execution_id,
+                status="RUNNING",
+                started_at=datetime.now().isoformat(),
+                sandbox_path=sandbox.path,
+                payload_hash=payload_hash
+            )
+        else:
+            wf_exec = self.db.create_workflow_execution(
+                execution_id=execution_id,
+                workflow_id=workflow_id,
+                trigger_type=trigger_type,
+                trigger_payload=payload_str,
+                department_id=dept_id,
+                sandbox_path=sandbox.path,
+                payload_hash=payload_hash,
+                status="RUNNING"
+            )
 
         # 4. Parse workflow definition
         wf_def: WorkflowDefinition
@@ -218,8 +255,10 @@ class WorkflowEngine:
                 sandbox.cleanup()
                 return self.db.get_workflow_execution(execution_id)
 
+        # Tool-free exercises never connect to declared MCP servers.
+        # Live executions still require department connector grants.
         # 4b. Pre-flight MCP Governance check
-        if dept_id:
+        if dept_id and not playground:
             all_mcp_servers = set(getattr(wf_def, "mcp_servers", []) or [])
             for s in wf_def.steps:
                 for sm in (getattr(s, "mcp_servers", []) or []):
@@ -268,7 +307,8 @@ class WorkflowEngine:
                         execution_id=execution_id,
                         step_outputs=step_outputs,
                         trigger_payload=trigger_payload,
-                        dept_id=dept_id
+                        dept_id=dept_id,
+                        playground_workspace=sandbox.path if playground else None
                     )
                     step_outputs[res.step_key] = res.output or ""
                     total_input_tokens += res.input_tokens
@@ -288,7 +328,8 @@ class WorkflowEngine:
                                 execution_id,
                                 dict(step_outputs),
                                 trigger_payload,
-                                dept_id
+                                dept_id,
+                                sandbox.path if playground else None
                             ): s for s in stage
                         }
                         for fut in concurrent.futures.as_completed(future_map):
@@ -336,9 +377,11 @@ class WorkflowEngine:
             error_message=failure_error
         )
 
+        if playground:
+            return self.db.get_workflow_execution(execution_id)
+
         # Dispatch outgoing notification to bound communication channel (Slack / Telegram)
         try:
-            import json
             wf_record = self.db.get_workflow(workflow_id)
             if wf_record and wf_record.definition_json:
                 dj = json.loads(wf_record.definition_json)
@@ -429,7 +472,8 @@ class WorkflowEngine:
         execution_id: str,
         step_outputs: Dict[str, str],
         trigger_payload: Optional[Dict[str, Any]],
-        dept_id: Optional[str]
+        dept_id: Optional[str],
+        playground_workspace: Optional[str] = None
     ) -> WorkflowStepResult:
         """Execute a single workflow step with dynamic substitutions, skill injection, and agent reuse."""
         formatted_prompt = step.prompt_template
@@ -442,8 +486,18 @@ class WorkflowEngine:
                 formatted_prompt = formatted_prompt.replace(f"{{{{{k}}}}}", str(v))
                 formatted_prompt = formatted_prompt.replace(f"${{{k}}}", str(v))
 
+        # AI Security Firewall: Scan formatted step prompt for prompt injection & destructive payloads
+        from backend.security.firewall import get_prompt_firewall
+        firewall = get_prompt_firewall()
+        firewall.assert_clean_prompt(
+            text=formatted_prompt,
+            source=f"workflow_step:{step.key}",
+            db_manager=self.db,
+            actor=f"workflow_execution:{execution_id}"
+        )
+
         # Step-level MCP Governance check & Tool filtering (Least Privilege & Hard Block)
-        if dept_id and getattr(step, "mcp_servers", None):
+        if dept_id and not playground_workspace and getattr(step, "mcp_servers", None):
             for conn_id in step.mcp_servers:
                 perm = self.db.check_department_mcp_permission(dept_id, conn_id)
                 if not perm.get("allowed", False):
@@ -494,6 +548,8 @@ class WorkflowEngine:
         # Ensure agent exists in database (reuse or auto-provision)
         agent = self.db.get_agent(step.agent_id)
         actual_agent_id = step.agent_id
+        if not agent and playground_workspace:
+            raise ValueError(f"Playground requires a configured agent: {step.agent_id}")
         if not agent:
             try:
                 from config import AgentConfig
@@ -514,7 +570,7 @@ class WorkflowEngine:
                     raise
 
         # Create task run for this step
-        task_id = f"task_{uuid.uuid4().hex[:12]}"
+        task_id = f"{'pg_task_' if playground_workspace else 'wf_task_'}{uuid.uuid4().hex[:12]}"
         now_dt = datetime.now()
         step_run = AgentRun(
             run_id=task_id,
@@ -525,23 +581,40 @@ class WorkflowEngine:
             created_at=now_dt,
             started_at=now_dt,
             acceptance_criteria=step.acceptance_criteria,
-            retry_count=step.retry_count
+            retry_count=step.retry_count,
+            organization_id=getattr(agent, "organization_id", None)
         )
         self.db.save_task_run(step_run)
+        step_record_id = f"step_run_{uuid.uuid4().hex[:8]}"
+        with self.db._get_connection() as conn:
+            conn.execute("""
+                INSERT INTO workflow_step_runs
+                (id, execution_id, step_key, agent_id, status, task_run_id, input_data, started_at)
+                VALUES (?, ?, ?, ?, 'RUNNING', ?, ?, ?)
+            """, (step_record_id, execution_id, step.key, actual_agent_id, task_id,
+                  formatted_prompt, now_dt.isoformat()))
+            conn.commit()
 
         # Execute step via runtime adapter if available
         if self.runtime:
             try:
-                self.runtime.start_task(
-                    task_id=task_id,
-                    agent_id=actual_agent_id,
-                    prompt=formatted_prompt
-                )
+                if playground_workspace:
+                    self.runtime.start_playground_task(
+                        agent_id=actual_agent_id, task_id=task_id,
+                        prompt=formatted_prompt, workspace=playground_workspace
+                    )
+                else:
+                    self.runtime.start_task(
+                        task_id=task_id, agent_id=actual_agent_id, prompt=formatted_prompt
+                    )
                 import time
                 max_wait = min(step.timeout_seconds or 180, 300)
                 start_wait = time.time()
                 while time.time() - start_wait < max_wait:
                     updated_run = self.db.get_task_run(task_id)
+                    if playground_workspace and updated_run and updated_run.status in (TaskStatus.WAITING_INPUT, TaskStatus.PENDING_APPROVAL):
+                        self.runtime.cancel_run(task_id)
+                        raise RuntimeError("Playground requires additional input; start a new run with that input")
                     if updated_run and str(updated_run.status).lower() in (
                         "completed", "failed", "cancelled",
                         str(TaskStatus.COMPLETED).lower(),
@@ -549,13 +622,72 @@ class WorkflowEngine:
                         str(TaskStatus.CANCELLED).lower()
                     ):
                         break
+
+                    # Active HITL Gate handling: Auto-dispatch interactive prompt to bound Telegram / Slack channels
+                    if updated_run and str(updated_run.status).lower() in (
+                        "waiting_input", "pending_approval",
+                        str(TaskStatus.WAITING_INPUT).lower(),
+                        str(TaskStatus.PENDING_APPROVAL).lower()
+                    ):
+                        if not getattr(step, "_chatops_dispatched", False):
+                            setattr(step, "_chatops_dispatched", True)
+                            try:
+                                interactions = self.db.list_interactions(task_id=task_id, status="PENDING")
+                                if interactions:
+                                    intr = interactions[0]
+                                    # 1. Telegram Dispatch
+                                    t_conn = self.db.get_mcp_connector("telegram")
+                                    if t_conn and t_conn.configuration:
+                                        t_token = t_conn.configuration.get("bot_token")
+                                        t_chat = t_conn.configuration.get("chat_id")
+                                        if t_token and t_chat:
+                                            from backend.approvals.chatops import send_telegram_interactive_approval
+                                            import asyncio
+                                            try:
+                                                loop = asyncio.get_event_loop()
+                                                if loop.is_running():
+                                                    loop.create_task(send_telegram_interactive_approval(t_token, str(t_chat), intr))
+                                                else:
+                                                    loop.run_until_complete(send_telegram_interactive_approval(t_token, str(t_chat), intr))
+                                            except RuntimeError:
+                                                asyncio.run(send_telegram_interactive_approval(t_token, str(t_chat), intr))
+                                            logger.info(f"Auto-dispatched Telegram interactive HITL gate for step '{step.key}'")
+
+                                    # 2. Slack Dispatch
+                                    s_conn = self.db.get_mcp_connector("slack")
+                                    if s_conn and s_conn.configuration:
+                                        s_webhook = s_conn.configuration.get("webhook_url")
+                                        if s_webhook:
+                                            from backend.approvals.chatops import send_slack_interactive_approval
+                                            import asyncio
+                                            try:
+                                                loop = asyncio.get_event_loop()
+                                                if loop.is_running():
+                                                    loop.create_task(send_slack_interactive_approval(s_webhook, intr))
+                                                else:
+                                                    loop.run_until_complete(send_slack_interactive_approval(s_webhook, intr))
+                                            except RuntimeError:
+                                                asyncio.run(send_slack_interactive_approval(s_webhook, intr))
+                                            logger.info(f"Auto-dispatched Slack interactive HITL gate for step '{step.key}'")
+                            except Exception as d_err:
+                                logger.debug(f"ChatOps auto-dispatch notification: {d_err}")
+
+                        # Keep extending wait time buffer while waiting for human sign-off (up to 30 mins)
+                        start_wait = max(start_wait, time.time() - 30.0)
+
                     time.sleep(1.0)
             except Exception as ex:
+                if playground_workspace:
+                    self.runtime.cancel_run(task_id)
+                    failed_run = self.db.get_task_run(task_id) or step_run
+                    failed_run.status = TaskStatus.FAILED
+                    failed_run.error = str(ex)
+                    self.db.save_task_run(failed_run)
                 logger.warning(f"Runtime execution warning for step '{step.key}': {ex}")
 
         # Optional Maker-Checker review
         reviewer_id = step.params.get("reviewerAgentId") if getattr(step, "params", None) else None
-        if reviewer_id and self.runtime:
+        if reviewer_id and self.runtime and not playground_workspace:
             try:
                 reviewer_agent = self.db.get_agent(reviewer_id)
                 if reviewer_agent:
@@ -566,13 +698,35 @@ class WorkflowEngine:
                         f"Acceptance criteria: {step.acceptance_criteria or 'Ensure high quality'}\n"
                         f"Deliverable:\n{updated_run.result or 'No output'}"
                     )
+                    self.db.save_task_run(AgentRun(
+                        run_id=review_task_id, agent_id=reviewer_id, project_id=None,
+                        prompt=rev_prompt, status=TaskStatus.QUEUED, created_at=datetime.now(),
+                        parent_task_id=task_id, root_task_id=task_id,
+                        organization_id=getattr(reviewer_agent, "organization_id", None)
+                    ))
                     self.runtime.start_task(task_id=review_task_id, agent_id=reviewer_id, prompt=rev_prompt)
             except Exception as r_err:
                 logger.warning(f"Maker-checker review note for step '{step.key}': {r_err}")
 
         # Refresh task run to capture output, tokens, and cost
         updated_run = self.db.get_task_run(task_id) or step_run
-        step_output = updated_run.result or getattr(updated_run, "error", None) or f"Step {step.name} completed"
+        result_status = "COMPLETED"
+        result_error = None
+        if playground_workspace and updated_run.status != TaskStatus.COMPLETED:
+            self.runtime.cancel_run(task_id)
+            result_status = "FAILED"
+            result_error = updated_run.error or (
+                f"Playground timed out after {min(step.timeout_seconds or 180, 300)} seconds waiting for the model. "
+                "Check the runtime events and model provider connection in workflow logs."
+            )
+        step_output = updated_run.result or result_error or getattr(updated_run, "error", None) or f"Step {step.name} completed"
+
+        # AI Security Firewall: Sanitize MCP / external tool output against indirect prompt injections
+        try:
+            step_output = firewall.sanitize_mcp_output(tool_name=step.key, raw_output=step_output)
+        except Exception as sec_ex:
+            logger.error(f"Security Alert: Step '{step.key}' output contained indirect prompt injection: {sec_ex}")
+            step_output = f"[SANITIZED_BY_SECURITY_FIREWALL: Potential indirect prompt injection neutralized]"
         step_in_tok = getattr(updated_run, "input_tokens", 0) or 0
         step_out_tok = getattr(updated_run, "output_tokens", 0) or 0
         step_cost = getattr(updated_run, "cost_usd", 0.0) or 0.0
@@ -580,31 +734,16 @@ class WorkflowEngine:
         now_iso = datetime.now().isoformat()
         with self.db._get_connection() as conn:
             conn.execute("""
-                INSERT INTO workflow_step_runs (
-                    id, execution_id, step_key, agent_id, status, task_run_id,
-                    input_data, output_data, input_tokens, output_tokens, cost_usd,
-                    started_at, completed_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                f"step_run_{uuid.uuid4().hex[:8]}",
-                execution_id,
-                step.key,
-                actual_agent_id,
-                "COMPLETED",
-                task_id,
-                formatted_prompt,
-                step_output,
-                step_in_tok,
-                step_out_tok,
-                step_cost,
-                now_iso,
-                now_iso
-            ))
+                UPDATE workflow_step_runs SET status = ?, output_data = ?, input_tokens = ?,
+                    output_tokens = ?, cost_usd = ?, completed_at = ? WHERE id = ?
+            """, (result_status, step_output, step_in_tok, step_out_tok, step_cost,
+                  now_iso, step_record_id))
             conn.commit()
 
         return WorkflowStepResult(
             step_key=step.key,
-            status="COMPLETED",
+            status=result_status,
+            error=result_error,
             task_run_id=task_id,
             output=step_output,
             input_tokens=step_in_tok,

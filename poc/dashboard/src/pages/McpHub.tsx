@@ -76,6 +76,8 @@ import {
   discoverMCPResources,
   testChannelMessage,
   getWorkflows,
+  updateWorkflow,
+  convertWorkflowFormat,
   bindWorkflowChannel,
   unbindWorkflowChannel,
   deleteWorkflow,
@@ -2620,6 +2622,48 @@ export const McpHubPage: React.FC = () => {
               channelBinding={canvasWorkflow.channel_binding}
               skills={parsedSkills}
               allowedMcps={parsedMcps}
+              onDeleteStep={async (stepKey: string) => {
+                try {
+                  const def = JSON.parse(canvasWorkflow.definition_json);
+                  const existingSteps: any[] = def.steps || [];
+                  const deletedStep = existingSteps.find((s: any) => (s.key || s.id) === stepKey);
+                  const parentKeys: string[] = deletedStep?.depends_on || [];
+                  const updatedSteps = existingSteps
+                    .filter((s: any) => (s.key || s.id) !== stepKey)
+                    .map((s: any) => {
+                      const deps: string[] = s.depends_on || [];
+                      if (!deps.includes(stepKey)) return s;
+                      const nextDeps = Array.from(
+                        new Set([
+                          ...deps.filter((d) => d !== stepKey),
+                          ...parentKeys.filter((p) => p !== (s.key || s.id)),
+                        ])
+                      );
+                      return { ...s, depends_on: nextDeps };
+                    });
+                  const updatedDef = { ...def, steps: updatedSteps };
+                  const newJson = JSON.stringify(updatedDef, null, 2);
+                  let newYaml = canvasWorkflow.definition_yaml;
+                  try {
+                    const convRes = await convertWorkflowFormat(newJson, 'yaml');
+                    if (convRes.data?.converted) newYaml = convRes.data.converted;
+                  } catch (e) {}
+                  const res = await updateWorkflow(canvasWorkflow.id, {
+                    definition_json: newJson,
+                    definition_yaml: newYaml,
+                  });
+                  const updatedWf = res.data || {
+                    ...canvasWorkflow,
+                    definition_json: newJson,
+                    definition_yaml: newYaml,
+                  };
+                  setCanvasWorkflow(updatedWf);
+                  setWorkflows((prev) => prev.map((w) => (w.id === updatedWf.id ? updatedWf : w)));
+                  message.success(`Removed step "${deletedStep?.name || stepKey}"`);
+                } catch (err: any) {
+                  message.error(err.response?.data?.detail || 'Failed to delete step');
+                }
+              }}
               height={480}
             />
           );

@@ -1,0 +1,112 @@
+version: '3.8'
+
+services:
+  # --------------------------------------------------------------------------
+  # 1. Message Broker: RabbitMQ with Management UI & Quorum Queues
+  # --------------------------------------------------------------------------
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: agents_rabbitmq
+    ports:
+      - "5672:5672"     # AMQP 0-9-1 protocol port
+      - "15672:15672"   # RabbitMQ Web Management Dashboard
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
+  # 2. Database: PostgreSQL 16 with Multi-Tenant Row-Level Security (RLS)
+  # --------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: agents_postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: agents_platform
+      POSTGRES_USER: platform_admin
+      POSTGRES_PASSWORD: platform_secure_pass
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./poc/backend/db/init_postgres_rls.sql:/docker-entrypoint-initdb.d/01_init_rls.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U platform_admin -d agents_platform"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
+  # 3. Control Plane: FastAPI Backend & MCP Gateway
+  # --------------------------------------------------------------------------
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: agents_control_plane
+    ports:
+      - "8000:8000"
+    environment:
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      DATABASE_URL: postgresql://platform_admin:platform_secure_pass@postgres:5432/agents_platform
+      JWT_SECRET: ${JWT_SECRET:-super_secret_enterprise_jwt_key_2026}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./poc/data:/app/poc/data
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
+  # 4. Distributed Compute: Agent Worker Node Pool
+  # --------------------------------------------------------------------------
+  worker-pool:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: agents_worker_pool
+    environment:
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      DATABASE_URL: postgresql://platform_admin:platform_secure_pass@postgres:5432/agents_platform
+      WORKER_CONCURRENCY: 10
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./poc/data:/app/poc/data
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
+  # 5. Frontend UI: React 18 / Vite Production Dashboard & Pixel Canvas
+  # --------------------------------------------------------------------------
+  dashboard:
+    build:
+      context: poc/dashboard
+      dockerfile: Dockerfile
+    container_name: agents_dashboard
+    ports:
+      - "3000:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  rabbitmq_data:
+  postgres_data:

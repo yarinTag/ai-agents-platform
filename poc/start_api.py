@@ -23,10 +23,12 @@ def main():
     print("\nPress Ctrl+C to stop the server\n")
 
     uvicorn.run(
-        app,
+        "backend.main:app",
         host="0.0.0.0",
         port=8000,
-        reload=False,  # Disable reload to avoid import issues
+        reload=True,
+        reload_dirs=[current_dir],
+        app_dir=current_dir,
         log_level="info"
     )
 

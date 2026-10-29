@@ -138,3 +138,23 @@ cd poc/dashboard && npm run build
 > 1. **Zero Out-of-Sync Code**: Code changes without matching `AGENTS.md` updates are strictly unacceptable.
 > 2. **Surgical Accuracy**: Document exact endpoint paths, HTTP verbs, payload models, parameters, state machines, and invariants.
 > 3. **Index Maintenance**: If a new submodule or directory with an `AGENTS.md` is added, register it in the root table of contents immediately.
+
+### Playground verification
+Run `.venv/bin/python -m pytest --noconftest poc/tests/test_workflow_playground.py -q` for isolated SQLite/FastAPI contract checks without resetting the application's default database. These tests do not perform paid model inference. Playground is an internal tool-free workflow exercise; it uses the same DAG and configured models but cannot validate live tool effects.
+
+Workflow debugging: use the per-workflow Logs page for run/step errors and stdout/stderr runtime events. Isolated regression tests now exercise actual subprocess output pipes without invoking a model. A short tool-free diagnostic workflow can test the configured provider; passing contract tests alone does not establish provider connectivity.
+
+### Office isolation and plugin cache verification
+Run `.venv/bin/python -m pytest --noconftest poc/tests/test_workflow_origin.py poc/tests/test_workflow_playground.py -q` for real SQLite/FastAPI origin and playground contracts. In `poc/dashboard`, run `node --test tests/requestCache.test.mjs` (Node with TypeScript stripping) and `npm run build`. Office scoping is presentation separation, not a new permission boundary; normal task authorization remains required.
+
+### Workflow editing verification
+Run `.venv/bin/python -m pytest --noconftest poc/tests/test_workflow_revisions.py poc/tests/test_workflow_origin.py poc/tests/test_workflow_playground.py -q`, then `npm run build` in poc/dashboard. Revision tests use real SQLite and FastAPI, including concurrent writers, migration, pagination, actor attribution, extension-field preservation and tenant isolation.
+
+### Shared assistant authoring verification
+Run `.venv/bin/python -m pytest --noconftest poc/tests/test_workflow_assistant.py -q`. The suite uses real SQLite/FastAPI and signed JWTs, plus concurrent save/update requests. It checks stale-token privilege reduction, tenant/department isolation, exact resource approval, client scopes, history, no executable workflow creation, and idempotency. The module's README documents the structured API; no provider/model calls are needed for this backend phase.
+
+## Workflow Assistant model generation
+Workflow Assistant model/chat verification: run .venv/bin/python -m pytest --noconftest poc/tests/test_workflow_assistant.py poc/tests/test_workflow_assistant_generation.py -q and npm run build inside poc/dashboard. Generation contracts use real DB/FastAPI and real subprocess lifecycle tests; they do not establish successful live-provider inference. Never run authoring through ordinary tool-enabled task execution.
+
+## Model-only YAML authoring and internal MCP
+Model-only/YAML/MCP verification: run .venv/bin/python -m pytest --noconftest poc/tests/test_workflow_assistant.py poc/tests/test_workflow_assistant_generation.py poc/tests/test_workflow_assistant_yaml.py poc/tests/test_workflow_assistant_mcp.py poc/tests/test_workflow_revisions.py poc/tests/test_workflow_origin.py poc/tests/test_workflow_playground.py -q, then npm run build inside poc/dashboard. MCP SDK is pinned >=1.28,<2 in pyproject.toml/poc/requirements.txt; pydantic>=2.11 is required. No mock adapter or destructive shared conftest is used. Native YAML exports do not authorize execution.

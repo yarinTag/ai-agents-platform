@@ -16,6 +16,12 @@ from .tokens import create_access_token, decode_access_token, hash_password, ver
 from .correlation import CorrelationIdMiddleware, CORRELATION_HEADER
 from .rate_limiter import RateLimiterMiddleware
 from .errors import http_exception_handler, generic_exception_handler
+from .firewall import (
+    PromptInjectionFirewall,
+    PromptInjectionDetectedError,
+    InjectionScanResult,
+    get_prompt_firewall
+)
 
 __all__ = [
     "authenticate_request",
@@ -33,5 +39,9 @@ __all__ = [
     "CORRELATION_HEADER",
     "RateLimiterMiddleware",
     "http_exception_handler",
-    "generic_exception_handler"
+    "generic_exception_handler",
+    "PromptInjectionFirewall",
+    "PromptInjectionDetectedError",
+    "InjectionScanResult",
+    "get_prompt_firewall",
 ]

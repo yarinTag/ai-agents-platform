@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { cachedRequest, invalidateRequestCache } from './requestCache';
 import { Agent, AgentCreateDto, AgentUpdateDto, AgentTemplate, TemplateInstantiateDto } from '../types/agent';
 import { Task, TaskCreateDto, TaskDelegateDto, TaskTreeNode } from '../types/task';
 import { Skill, PluginPackage, PluginsConfig } from '../types/skill';
@@ -55,6 +56,7 @@ api.interceptors.response.use(
         url.includes('/invitations/accept');
 
       if (!isAuthExempt) {
+        invalidateRequestCache('plugins:');
         localStorage.removeItem(AUTH_TOKEN_KEY);
         localStorage.removeItem(AUTH_SESSION_KEY);
         window.dispatchEvent(new CustomEvent('auth:unauthorized'));
@@ -97,25 +99,43 @@ export const createProject = (data: Partial<Project>) => api.post<Project>('/api
 export const updateProject = (id: string, data: Partial<Project>) => api.put<Project>(`/api/v1/projects/${id}`, data);
 export const deleteProject = (id: string) => api.delete(`/api/v1/projects/${id}`);
 
+// Catalog data is kept only in memory and discarded whenever the auth session changes.
+let pluginCacheSession: string | null = null;
+function pluginCacheKey(kind: string, args: unknown = null) {
+  const session = localStorage.getItem(AUTH_TOKEN_KEY) || '';
+  if (pluginCacheSession !== session) {
+    invalidateRequestCache('plugins:');
+    pluginCacheSession = session;
+  }
+  return `plugins:${kind}:${JSON.stringify(args)}`;
+}
+
 // Skills
 export const getSkills = () => api.get<Skill[]>('/api/v1/skills/');
 export const getSkill = (id: string) => api.get<Skill>(`/api/v1/skills/${id}`);
 export const createSkill = (data: Partial<Skill>) => api.post<Skill>('/api/v1/skills/', data);
 export const updateSkill = (id: string, data: Partial<Skill>) => api.put<Skill>(`/api/v1/skills/${id}`, data);
 export const deleteSkill = (id: string) => api.delete(`/api/v1/skills/${id}`);
-export const scanPlugins = (params?: { source_mode?: 'local' | 'git'; git_repo?: string; local_path?: string }) =>
-  api.get<{ status: string; marketplace_path?: string; plugins: PluginPackage[]; total_skills: number }>('/api/v1/skills/plugins/scan', { params });
-export const getPluginsConfig = () => api.get<PluginsConfig>('/api/v1/skills/plugins/config');
-export const updatePluginsConfig = (data: { source_mode: 'local' | 'git'; git_repo?: string; local_path?: string }) =>
-  api.put<PluginsConfig>('/api/v1/skills/plugins/config', data);
-export const getPluginGitRepos = (token?: string) =>
-  api.get<{ repositories: any[]; has_token: boolean; provider?: string }>('/api/v1/skills/plugins/git-repos', {
+export const scanPlugins = (params?: { source_mode?: 'local' | 'git'; git_repo?: string; local_path?: string }, forceRefresh = false) =>
+  cachedRequest(pluginCacheKey('scan', params), () =>
+    api.get<{ status: string; marketplace_path?: string; plugins: PluginPackage[]; total_skills: number }>('/api/v1/skills/plugins/scan',
+      { params: { ...params, refresh: forceRefresh } }), 60_000, forceRefresh);
+export const getPluginsConfig = () => cachedRequest(pluginCacheKey('config'),
+  () => api.get<PluginsConfig>('/api/v1/skills/plugins/config'), 30_000);
+export const updatePluginsConfig = async (data: { source_mode: 'local' | 'git'; git_repo?: string; local_path?: string }) => {
+  invalidateRequestCache('plugins:');
+  const response = await api.put<PluginsConfig>('/api/v1/skills/plugins/config', data);
+  invalidateRequestCache('plugins:');
+  return response;
+};
+export const getPluginGitRepos = (token?: string) => cachedRequest(pluginCacheKey('repos', token),
+  () => api.get<{ repositories: any[]; has_token: boolean; provider?: string }>('/api/v1/skills/plugins/git-repos', {
     params: token ? { token } : {},
-  });
+  }), 60_000);
 export const getPluginSkillContent = (path: string) => api.get<{ path: string; content: string }>('/api/v1/skills/plugins/content', { params: { path } });
 
 // Tasks
-export const getTasks = (params?: { agent_id?: string; project_id?: string; status?: string; limit?: number }) =>
+export const getTasks = (params?: { agent_id?: string; project_id?: string; status?: string; limit?: number; execution_scope?: 'all' | 'office' | 'workflow' }) =>
   api.get<Task[]>('/api/v1/tasks/', { params });
 export const getTask = (id: string) => api.get<Task>(`/api/v1/tasks/${id}`);
 export const getTaskLogs = (id: string) => api.get<{ run_id: string; events: any[]; status: string; result: any; error: any }>(`/api/v1/tasks/${id}/logs`);
@@ -127,10 +147,25 @@ export const delegateTask = (taskId: string, data: TaskDelegateDto) => api.post<
 export const getSubtasks = (taskId: string) => api.get<Task[]>(`/api/v1/tasks/${taskId}/subtasks`);
 export const getTaskTree = (taskId: string) => api.get<TaskTreeNode>(`/api/v1/tasks/${taskId}/tree`);
 
+// Distributed Queue & RabbitMQ Broker
+export interface QueueStatus {
+  broker: string;
+  connected: boolean;
+  queues: Record<string, number>;
+  dead_letter_count: number;
+  worker_running: boolean;
+  active_worker_tasks: number;
+  timestamp: string;
+}
+
+export const getQueueStatus = () => api.get<QueueStatus>('/api/v1/queue/status');
+export const getDeadLetterQueue = () => api.get<any[]>('/api/v1/queue/dlq');
+export const retryDeadLetter = (messageId: string) => api.post(`/api/v1/queue/retry/${messageId}`);
+
 // System Stats & Real-Time Monitoring
 export const getSystemStats = () => api.get('/api/v1/events/system/stats');
 export const getSystemHealth = () => api.get('/api/v1/events/system/health');
-export const getRecentActivity = (limit = 25) => api.get<{ activity: ActivityEvent[]; timestamp: string }>(`/api/v1/events/system/recent-activity?limit=${limit}`);
+export const getRecentActivity = (limit = 25, executionScope: 'all' | 'office' | 'workflow' = 'all') => api.get<{ activity: ActivityEvent[]; timestamp: string }>(`/api/v1/events/system/recent-activity?limit=${limit}&execution_scope=${executionScope}`);
 
 // Models Discovery
 export interface DiscoveredModel {
@@ -228,6 +263,7 @@ import {
   AgentMCPPermission,
   PlatformWorkflow,
   WorkflowChannelBinding,
+  WorkflowExecution,
 } from '../types/mcp';
 
 export const getAgentMessages = (agentId?: string, limit: number = 50) =>
@@ -349,8 +385,15 @@ export const getWorkflows = () =>
 export const getWorkflow = (id: string) =>
   api.get<PlatformWorkflow>(`/api/v1/workflows/${id}`);
 
-export const updateWorkflow = (id: string, data: Partial<PlatformWorkflow>) =>
+export const updateWorkflow = (id: string, data: Partial<PlatformWorkflow> & {
+  expected_revision?: number; change_summary?: string;
+}) =>
   api.put<PlatformWorkflow>(`/api/v1/workflows/${id}`, data);
+
+export const getWorkflowRevisions = (id: string, beforeRevision?: number) =>
+  api.get<import('../types/mcp').WorkflowRevision[]>(`/api/v1/workflows/${id}/revisions`, {
+    params: { limit: 50, before_revision: beforeRevision },
+  });
 
 export const bindWorkflowChannel = (workflowId: string, data: WorkflowChannelBinding) =>
   api.post<PlatformWorkflow>(`/api/v1/workflows/${workflowId}/channel-binding`, data);
@@ -361,8 +404,29 @@ export const unbindWorkflowChannel = (workflowId: string) =>
 export const deleteWorkflow = (workflowId: string) =>
   api.delete<{ status: string; message: string }>(`/api/v1/workflows/${workflowId}`);
 
-export const executeWorkflow = (workflowId: string, payload?: Record<string, any>) =>
-  api.post<{ id: string; status: string; workflow_id: string }>(`/api/v1/workflows/${workflowId}/execute`, payload || {});
+export const executeWorkflow = (
+  workflowId: string,
+  payload?: Record<string, any>,
+  useQueue: boolean = true,
+  forceRerun: boolean = false
+) =>
+  api.post<WorkflowExecution>(
+    `/api/v1/workflows/${workflowId}/execute?use_queue=${useQueue}&force_rerun=${forceRerun}`,
+    payload || {}
+  );
+
+export const executeWorkflowPlayground = (workflowId: string, payload: Record<string, unknown>) =>
+  api.post<WorkflowExecution>(`/api/v1/workflows/${workflowId}/playground`, payload);
+
+export const getWorkflowExecutions = (workflowId?: string, limit: number = 50) => {
+  const params = new URLSearchParams();
+  if (workflowId) params.append('workflow_id', workflowId);
+  params.append('limit', String(limit));
+  return api.get<WorkflowExecution[]>(`/api/v1/workflows/executions?${params.toString()}`);
+};
+
+export const getWorkflowExecution = (executionId: string) =>
+  api.get<WorkflowExecution>(`/api/v1/workflows/executions/${executionId}`);
 
 export const createWorkflow = (data: {
   name: string;
@@ -431,3 +495,21 @@ export default api;
 
 
 
+
+// Permission-aware workflow authoring (never cached across requests).
+export const getAssistantContext = () => api.get<import('../types/assistant').AssistantContext>('/api/v1/workflow-assistant/context');
+export const getAssistantCatalog = (departmentId: string) => api.get<import('../types/assistant').AssistantCatalog>('/api/v1/workflow-assistant/catalog', { params: { department_id: departmentId } });
+export const getAssistantDrafts = (departmentId: string) => api.get<import('../types/assistant').AssistantDraft[]>('/api/v1/workflow-assistant/drafts', { params: { department_id: departmentId, limit: 100 } });
+export const getAssistantDraft = (id: string) => api.get<import('../types/assistant').AssistantDraft>(`/api/v1/workflow-assistant/drafts/${id}`);
+export const validateAssistantProposal = (departmentId: string, proposal: import('../types/assistant').WorkflowProposal) =>
+  api.post<import('../types/assistant').ProposalValidation>('/api/v1/workflow-assistant/validate', { department_id: departmentId, proposal });
+export const createAssistantGeneration = (request: import('../types/assistant').GenerationRequest, key: string) =>
+  api.post<import('../types/assistant').AssistantGeneration>('/api/v1/workflow-assistant/generations', request, { headers: { 'Idempotency-Key': key } });
+export const getAssistantGeneration = (id: string) => api.get<import('../types/assistant').AssistantGeneration>(`/api/v1/workflow-assistant/generations/${id}`);
+export const cancelAssistantGeneration = (id: string) => api.post<import('../types/assistant').AssistantGeneration>(`/api/v1/workflow-assistant/generations/${id}/cancel`);
+export const saveAssistantGeneration = (id: string, saveBlocked: boolean) => api.post<import('../types/assistant').AssistantDraft>(`/api/v1/workflow-assistant/generations/${id}/save-draft`, { save_blocked: saveBlocked });
+
+export const getAssistantDraftHistory = (id: string) => api.get<Array<{ revision: number; actor_label: string; created_at: string; snapshot: { proposal: import('../types/assistant').WorkflowProposal; status: string; definition_yaml?: string | null } }>>(`/api/v1/workflow-assistant/drafts/${id}/revisions`);
+
+export const getAssistantWorkflowSchema = () => api.get<{ workflow_schema_version: number; yaml_schema: string }>('/api/v1/workflow-assistant/workflow-schema');
+export const validateAssistantYaml = (departmentId: string, yamlContent: string) => api.post<import('../types/assistant').WorkflowArtifact & { proposal: import('../types/assistant').WorkflowProposal; validation: import('../types/assistant').ProposalValidation }>('/api/v1/workflow-assistant/validate-yaml', { department_id: departmentId, yaml_content: yamlContent });

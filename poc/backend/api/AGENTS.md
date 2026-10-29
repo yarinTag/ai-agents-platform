@@ -89,8 +89,9 @@ Mounted at `/api/v1/workflows`:
 | `DELETE` | `/{workflow_id}` | Delete workflow and unbind associated runner agents. |
 | `POST` | `/{workflow_id}/channel-binding` | Bind workflow execution updates to Telegram or Slack notification channels. |
 | `DELETE` | `/{workflow_id}/channel-binding` | Remove channel binding. |
-| `POST` | `/{workflow_id}/execute` | Trigger execution of workflow steps following topological DAG ordering. |
-| `POST` | `/webhook/{webhook_token}` | Unauthenticated webhook endpoint triggering workflow runs via external webhooks. |
+| `POST` | `/{workflow_id}/execute` | Trigger execution of workflow steps with transparent background queue dispatching (`use_queue=True`), `force_rerun`, and SHA-256 deduplication. |
+| `POST` | `/webhook/{webhook_token}` | Unauthenticated webhook endpoint triggering workflow runs via background queue with deduplication. |
+| `GET` | `/executions` | List recent workflow executions with filtering by `workflow_id`, `department_id`, `status`, and `limit`. |
 | `GET` | `/executions/{execution_id}` | Retrieve execution state, step progress, token counts, and cost breakdown. |
 | `POST` | `/executions/{execution_id}/evaluate` | Maker-checker evaluation allowing humans/managers to approve, rate, and review runs. |
 
@@ -98,7 +99,8 @@ Mounted at `/api/v1/workflows`:
 
 ### 5. Agents, Tasks, Projects & Filesystem
 * **Agents (`agents.py` mounted at `/api/v1/agents`)**: Scoped by `organization_id` and `department_id`. Endpoints: `GET /`, `POST /`, `GET /hierarchy`, `GET /{id}`, `PUT /{id}`, `DELETE /{id}`.
-* **Tasks (`tasks.py` mounted at `/api/v1/tasks`)**: Manages agent execution lifecycle. Endpoints: `GET /`, `POST /`, `GET /{run_id}`, `DELETE /{run_id}`, `POST /{run_id}/resume`, `GET /{run_id}/subtasks`, `GET /{run_id}/tree`.
+* **Tasks (`tasks.py` mounted at `/api/v1/tasks`)**: Manages agent execution lifecycle. Supports `use_queue: bool` and `priority: int` (1-10) for RabbitMQ distributed dispatching. Endpoints: `GET /`, `POST /`, `GET /{run_id}`, `DELETE /{run_id}`, `POST /{run_id}/resume`, `GET /{run_id}/subtasks`, `GET /{run_id}/tree`.
+* **Distributed Queue & Broker (`poc/backend/queue/router.py` mounted at `/api/v1/queue`)**: Manages distributed task queues, health metrics, and DLQ. Endpoints: `GET /status`, `GET /dlq`, `POST /retry/{message_id}`, `POST /publish-test`.
 * **Projects (`projects.py` mounted at `/api/v1/projects`)**: Scoped to organizations. Endpoints: `GET /`, `POST /`, `GET /{id}`, `PUT /{id}`, `DELETE /{id}`.
 * **Filesystem (`filesystem.py` mounted at `/api/v1/fs`)**: Local directory navigation and project type detection. Endpoints: `GET /browse`, `POST /pick-folder`.
 
@@ -117,3 +119,33 @@ Mounted at `/api/v1/workflows`:
 
 > [!IMPORTANT]
 > Whenever any route, request model, response schema, or business rule in `poc/backend/api/` is modified, added, or removed, the developer or agent **MUST** update this `AGENTS.md` file within the **SAME commit**.
+
+## Playground API and scoped execution inspection
+* `POST /api/v1/workflows/{workflow_id}/playground`: required JSON object body (workflow variables); returns HTTP 202 with WorkflowExecutionResponse and QUEUED status. Checks workflow scope, runtime tool-free capability (409 when unavailable), definition and configured agents (422), and agent organization (403). Missing workflows return 404. Always creates a fresh `PLAYGROUND` run with `pg_exec_` ID; no cache lookup. Hashes are namespaced separately from production. Executes via FastAPI BackgroundTasks on the same engine; exceptions persist FAILED with an error and completion time. This initial path is process-local and not durable across API restarts.
+* `GET /api/v1/workflows/executions/{execution_id}` now checks workflow tenant/department scope and includes `step_runs` (persisted step IDs, status, input/output, tokens/cost, timestamps). WorkflowExecutionResponse defaults step_runs to an empty list for list/launch responses.
+* `GET /api/v1/workflows/executions` filters records by authorized workflow scope. A non-admin with no authorized departments cannot inspect department workflows; inspection returns 403, foreign organizations return 404.
+
+### Runtime diagnostics in execution detail
+`GET /api/v1/workflows/executions/{execution_id}` enriches each step_runs entry with `events` (last 500 persisted task events), `error` (task error or null), and `task_status` (runtime enum value or null), joined through task_run_id after workflow scope checks. Missing/legacy task records return empty events/null metadata. The existing workflow_id list filter powers the per-workflow logs page; no new logs API route is introduced.
+
+## Task origin and plugin refresh contracts
+* `GET /api/v1/tasks/` accepts `execution_scope=all|office|workflow` (default all; invalid values return 422). Database filtering occurs before LIMIT, and merged live runtime records use the same origin classification. List responses include nullable workflow_execution_id and workflow_id. Origin includes direct step task IDs and recursive parent/root descendants; configured agent identity is unchanged.
+* `GET /api/v1/skills/plugins/scan` accepts `refresh: bool=false`; true bypasses the existing Git tree scan-result cache. `_scan_git_repo_via_api(..., force_refresh=False)` retains the current tree-SHA lookup behavior unless refresh is requested. Empty source behavior remains unchanged.
+
+## Workflow editing, lossless conversion and history
+* WorkflowResponse adds `revision: int` (initial 1) to create/list/get/update/channel responses.
+* `PUT /api/v1/workflows/{workflow_id}` accepts existing settings plus optional expected_revision (integer >=1) and change_summary (<=500 chars). It preserves omitted settings, accepts explicit null for nullable fields, rejects blank names and organization reassignment, and checks target department access. JSON/YAML definitions are checked for duplicate keys, unknown dependencies/flow endpoints and cycles. Unknown definition fields and metadata are preserved; workflow ID and original runner_agent_id remain stable. Conflicts return 409 and invalid definitions 400 without updating state/history. The endpoint uses engine.db for normal execution access consistently with WorkflowEngine.
+* `GET /api/v1/workflows/{workflow_id}/revisions?limit=50&before_revision=N` returns newest-first revision snapshots with actor_id, actor_label, change_summary, changed_fields and created_at. limit is 1..100; before_revision is exclusive and >=1. The same workflow tenant/department scope applies; foreign organizations return 404. History is separate from execution logs.
+* Creation records the requesting actor in v1. Channel binding add/remove records the actor and a summary, with expected current revision checked atomically. Canvas step removal uses the regular update endpoint and records a revision.
+* `/convert-format` validates and serializes raw mappings with safe YAML, preserving extension fields rather than rebuilding a reduced parser representation. New workflow IDs are injected into the saved definition. Manual/webhook/playground execution hashes include the saved revision, preventing cache reuse after edits.
+
+## Shared Workflow Assistant HTTP adapter
+The service router lives in [workflow_assistant](../workflow_assistant/AGENTS.md), mounted with authentication at `/api/v1/workflow-assistant`. Routes: GET /context, GET /catalog?department_id, GET /proposal-schema, POST /validate, POST/GET /drafts, GET/PUT /drafts/{id}, GET /drafts/{id}/revisions. Strict inputs reject model-supplied organization/actor/provenance/execution parameters. Save validation errors return 422 unless save_blocked=true explicitly retains a non-executable proposal; current-user/department errors remain 401/403/404. Idempotency and optimistic version conflicts return 409. Existing workflow generation/execution routes remain separate; chat and MCP adapters are not delivered by this phase.
+
+## Workflow Assistant model generation
+Workflow Assistant adds POST /api/v1/workflow-assistant/generations (202, GenerationRequest, optional Idempotency-Key), GET /generations/{id}, POST /generations/{id}/cancel, POST /generations/{id}/save-draft ({save_blocked:false}). Context adds supports_generation. Creator-only chats reload current permissions; save uses authoritative stored output and captured draft revision. Exact DTOs/statuses are in ../workflow_assistant/AGENTS.md.
+
+## Model-only YAML authoring and internal MCP
+Workflow Assistant GET /context now includes authoring_models [{model_id,provider_id,name}]. POST /generations requires model_id/provider_id and rejects planner_agent_id; legacy stored jobs remain readable. GET /workflow-schema returns workflow_schema_version/schema/yaml_schema. POST /validate-yaml accepts {department_id,yaml_content} and returns proposal/validation/native artifact; malformed native YAML ->422 WORKFLOW_YAML_INVALID. Generation responses include tool_calls (name/time only); exact DTOs are in ../workflow_assistant/AGENTS.md. workflows.py delegates its existing graph validator to workflows.parser.validate_workflow_definition, preserving legacy extension fields.
+
+The internal model reply uses validation_id for a canonical candidate stored through MCP; the HTTP generation result retains this ID for provenance. It is not a grant or a public lookup endpoint. The server resolves only candidates attached to the authenticated generation, verifies their hashes and revalidates current policy.
