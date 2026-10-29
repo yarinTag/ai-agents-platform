@@ -135,3 +135,9 @@ useOfficeEvents accepts an optional execution scope: all by default, office for 
 
 ### Workflow edit/history
 The Workflows hub now exposes Edit and History. The shared builder supports editing an existing PlatformWorkflow and optional change notes, with revision checks that prevent stale saves. WorkflowHistoryDrawer shows saved configuration snapshots and before/after differences with pagination. This history is distinct from per-run Logs. WorkflowRevision and PlatformWorkflow.revision define typed frontend contracts.
+
+## Workflow Assistant model generation
+WorkflowAssistant.tsx mounts at /workflow-assistant and appears under Operations. It uses typed assistant DTOs and uncached authenticated API calls for workspace/catalog/drafts, asynchronous model jobs, validation and explicit save. Query generation restores a private job. EN/HE strings use assistant.*; responsive chat/proposal columns respect RTL. Draft revision capture prevents stale refinements/saves.
+
+## Model-only YAML authoring and internal MCP
+WorkflowAssistant now selects an authoring model/provider from authenticated context rather than department agents. The model's execution agents remain per-step proposal data. The page loads the native YAML schema, displays/downloads canonical inactive YAML, validates it through /validate-yaml, shows actual MCP tool names and preserves source revision/history behavior. No local conversation or permission cache is added.

@@ -26,3 +26,9 @@ The **PostgreSQL RLS & Database Infrastructure Service** (`poc/backend/db/`) pro
 
 ## 🔄 Mandatory `AGENTS.md` Synchronization Rule
 Whenever any DDL script, table structure, RLS policy, or connection pooling logic in `poc/backend/db/` is modified, this file must be updated in the same commit.
+
+## Workflow Assistant persistence
+SQLite initialization in poc/persistence.py adds workflow_assistant_drafts, workflow_assistant_draft_revisions and workflow_assistant_generations. Exact columns, uniqueness, source-generation linking, CAS revisions and job transitions are documented in ../workflow_assistant/AGENTS.md. These proposal/job tables are separate from executable workflows and task runs; API_KEY generation costs count toward monthly department spend. Zero budget must remain zero. This change does not claim PostgreSQL/RLS authoring support.
+
+## Model-only YAML authoring and internal MCP
+workflow_assistant_tool_calls adds id INTEGER PK, generation_id FK to workflow_assistant_generations ON DELETE CASCADE, tool_name constrained to workflow_catalog/workflow_schema/validate_workflow_yaml, nullable proposal_hash, nullable unique validation_id, nullable proposal_json, created_at, and generation_id/id index. YAML validation stores the canonical candidate in proposal_json and returns an opaque wfc_ UUID; raw YAML tool arguments, credentials and the private context file are not recorded. Parent resolution is scoped to generation_id, verifies the candidate hash and rechecks live policy. Generations retain the old planner_agent_id column as an empty compatibility field; new selection is model_id/provider_id in request_json. No legacy records are rewritten.

@@ -46,6 +46,14 @@ class ClaudeCodeAdapter:
             task_id=task_id
         )
 
+    def get_authoring_models(self):
+        return self._adapter.get_authoring_models()
+
+    def infer_authoring(self, selection, prompt, system_prompt, response_schema,
+                        timeout_seconds=120, max_budget_usd=None, is_cancelled=None, authoring_context=None):
+        return self._adapter.infer_authoring(selection, prompt, system_prompt, response_schema,
+            timeout_seconds, max_budget_usd, is_cancelled, authoring_context)
+
     def start_playground_task(self, agent_id: str, task_id: str, prompt: str, workspace: str) -> str:
         return self._adapter.start_playground_task(agent_id, task_id, prompt, workspace)
 
@@ -108,6 +116,7 @@ class ClaudeCodeAdapter:
         """Return Claude Code runtime capabilities."""
         return RuntimeCapabilities(
             supports_playground=True,
+            supports_authoring=True,
             supports_streaming=True,
             supports_tool_use=True,
             supports_session_resume=True,

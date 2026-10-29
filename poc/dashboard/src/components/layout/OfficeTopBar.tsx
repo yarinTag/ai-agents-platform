@@ -16,6 +16,7 @@ interface OfficeTopBarProps {
 }
 
 const routeTitles: Record<string, { title: string; subtitle: string; icon: string }> = {
+  '/workflow-assistant': { title: 'WORKFLOW ASSISTANT', subtitle: 'Permission-aware workflow drafts', icon: '✦' },
   // '/': { title: 'OFFICE CANVAS', subtitle: 'Interactive Autonomous Workstation', icon: '🏢' },
   '/flow': { title: 'LIVE FLOW', subtitle: 'Execution Pipeline & Dag', icon: '⚡' },
   '/agents': { title: 'AGENTS ROSTER', subtitle: 'Autonomous Agent Fleet', icon: '🤖' },

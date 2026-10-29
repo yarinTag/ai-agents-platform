@@ -166,3 +166,13 @@ requestCache.ts shares in-flight requests and caches successful responses for a 
 
 ## Workflow revisions client contract
 PlatformWorkflow includes optional revision. updateWorkflow accepts expected_revision and change_summary in addition to editable fields. getWorkflowRevisions(id, beforeRevision?) GETs `/api/v1/workflows/{id}/revisions` with limit=50 and an exclusive before_revision cursor. WorkflowRevision includes workflow_id, revision, snapshot, changed_fields, actor_id/actor_label, change_summary and created_at. Responses use existing authentication; revision content is not persisted to browser cache.
+
+## Workflow Assistant model generation
+api.ts adds typed uncached getAssistantContext/Catalog/Drafts/Draft, validateAssistantProposal, createAssistantGeneration (Idempotency-Key), get/cancelAssistantGeneration and saveAssistantGeneration wrappers under /api/v1/workflow-assistant. types/assistant.ts models proposal, catalog, validation, draft and private generation DTOs. Do not cache catalogs across permission changes.
+
+Draft history is loaded through getAssistantDraftHistory (GET /drafts/{id}/revisions) and displayed as read-only revision snapshots in the proposal panel.
+
+## Model-only YAML authoring and internal MCP
+getAssistantWorkflowSchema and validateAssistantYaml wrap /workflow-schema and /validate-yaml. assistant.ts adds WorkflowArtifact (definition_yaml/definition_json/workflow_schema_version/yaml_error), authoring_models, model_id/provider_id and MCP tool_calls. Draft/history/generation API responses expose native artifacts. No source-generation authority is accepted from browser bodies.
+
+Completed generation results may include validation_id: the opaque, generation-scoped server candidate selected by the model. UI preview/save continue using server-produced proposal/YAML artifacts and never send replacement candidate content.

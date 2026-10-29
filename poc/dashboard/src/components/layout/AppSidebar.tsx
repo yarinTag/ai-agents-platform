@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from '../../i18n';
 import { Link, useLocation } from 'react-router-dom';
 import { Tooltip, Button } from 'antd';
 import {
@@ -36,6 +37,7 @@ interface NavSection {
 
 export const AppSidebar: React.FC<AppSidebarProps> = ({ collapsed, onToggleCollapse }) => {
   const location = useLocation();
+  const { t } = useTranslation();
 
   const sections: NavSection[] = [
     {
@@ -54,6 +56,11 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ collapsed, onToggleColla
           icon: <ApartmentOutlined style={{ fontSize: '15px' }} />,
           badge: 'DAG',
           badgeColor: '#8b5cf6',
+        },
+        {
+          to: '/workflow-assistant',
+          label: t('assistant.title'),
+          icon: <ApartmentOutlined style={{ fontSize: '15px' }} />,
         },
         {
           to: '/flow',

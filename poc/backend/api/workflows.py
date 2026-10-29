@@ -105,36 +105,9 @@ def _workflow_actor(request: Request) -> Dict[str, Any]:
             "actor_label": claims.get("name") or claims.get("email") or claims.get("sub") or "API/System"}
 
 
-def _validated_definition(data: Any) -> Dict[str, Any]:
-    if not isinstance(data, dict) or not isinstance(data.get("steps", []), list):
-        raise ValueError("Workflow definition must be an object with a steps array")
-    parsed = WorkflowParser.from_dict(data)
-    keys = [step.get("key") or step.get("id") or item.key
-            for step, item in zip(data.get("steps", []), parsed.steps)]
-    if len(set(keys)) != len(keys):
-        raise ValueError("Workflow step keys must be unique")
-    deps = {}
-    for key, step in zip(keys, data.get("steps", [])):
-        dependencies = step.get("depends_on", [])
-        if not isinstance(dependencies, list) or not all(isinstance(dep, str) for dep in dependencies):
-            raise ValueError("Step depends_on must be an array of step keys")
-        deps[key] = set(dependencies)
-    for transition in data.get("flow", []):
-        src, dst = transition.get("from"), transition.get("to")
-        if dst not in deps or (src and src not in deps):
-            raise ValueError("Workflow flow references an unknown step")
-        if src:
-            deps[dst].add(src)
-    if any(parent not in deps for parents in deps.values() for parent in parents):
-        raise ValueError("Workflow dependency references an unknown step")
-    pending = {key: set(parents) for key, parents in deps.items()}
-    while pending:
-        ready = {key for key, parents in pending.items() if not parents}
-        if not ready:
-            raise ValueError("Workflow dependencies contain a cycle")
-        pending = {key: parents - ready for key, parents in pending.items() if key not in ready}
-    return data
+from workflows.parser import validate_workflow_definition
 
+_validated_definition = validate_workflow_definition
 
 class WorkflowExecutionResponse(BaseModel):
     id: str

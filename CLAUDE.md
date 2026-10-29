@@ -149,3 +149,12 @@ Run `.venv/bin/python -m pytest --noconftest poc/tests/test_workflow_origin.py p
 
 ### Workflow editing verification
 Run `.venv/bin/python -m pytest --noconftest poc/tests/test_workflow_revisions.py poc/tests/test_workflow_origin.py poc/tests/test_workflow_playground.py -q`, then `npm run build` in poc/dashboard. Revision tests use real SQLite and FastAPI, including concurrent writers, migration, pagination, actor attribution, extension-field preservation and tenant isolation.
+
+### Shared assistant authoring verification
+Run `.venv/bin/python -m pytest --noconftest poc/tests/test_workflow_assistant.py -q`. The suite uses real SQLite/FastAPI and signed JWTs, plus concurrent save/update requests. It checks stale-token privilege reduction, tenant/department isolation, exact resource approval, client scopes, history, no executable workflow creation, and idempotency. The module's README documents the structured API; no provider/model calls are needed for this backend phase.
+
+## Workflow Assistant model generation
+Workflow Assistant model/chat verification: run .venv/bin/python -m pytest --noconftest poc/tests/test_workflow_assistant.py poc/tests/test_workflow_assistant_generation.py -q and npm run build inside poc/dashboard. Generation contracts use real DB/FastAPI and real subprocess lifecycle tests; they do not establish successful live-provider inference. Never run authoring through ordinary tool-enabled task execution.
+
+## Model-only YAML authoring and internal MCP
+Model-only/YAML/MCP verification: run .venv/bin/python -m pytest --noconftest poc/tests/test_workflow_assistant.py poc/tests/test_workflow_assistant_generation.py poc/tests/test_workflow_assistant_yaml.py poc/tests/test_workflow_assistant_mcp.py poc/tests/test_workflow_revisions.py poc/tests/test_workflow_origin.py poc/tests/test_workflow_playground.py -q, then npm run build inside poc/dashboard. MCP SDK is pinned >=1.28,<2 in pyproject.toml/poc/requirements.txt; pydantic>=2.11 is required. No mock adapter or destructive shared conftest is used. Native YAML exports do not authorize execution.

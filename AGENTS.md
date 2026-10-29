@@ -67,6 +67,7 @@ The **AI Agents Platform** is an enterprise multi-tenant autonomous agent orches
 * [**REST API Routers**](poc/backend/api/AGENTS.md): Complete guide to all backend REST API routes, models, and endpoints.
 * [**Security & Hardening**](poc/backend/security/AGENTS.md): HS256 JWT, PBKDF2 hashing, RateLimiterMiddleware (2000 req/min), tenant scoping.
 * [**Workflows Engine**](poc/workflows/AGENTS.md): WorkflowEngine, WorkflowParser, SandboxManager, DAG execution, and budgets.
+* [**Workflow Assistant Authoring**](poc/backend/workflow_assistant/AGENTS.md): Shared permission-aware catalog, proposal validation, non-executable drafts and revision history for future chat/MCP clients.
 * [**Runtime Abstraction**](poc/runtime/AGENTS.md): RuntimeAdapter protocol, model tiers, and curated `MODEL_CATALOG`.
 * [**Orchestration & Hierarchy**](poc/orchestration/AGENTS.md): Multi-agent task trees, supervisor chain resolution, and department MCP checks.
 * [**Agent-to-Agent Messaging**](poc/backend/messages/AGENTS.md): Peer communication, structured message types, and thread tracking.
@@ -124,3 +125,14 @@ Workflow task origin is resolved through workflow_step_runs and task parent/root
 
 ## Workflow editing and revision history
 Existing workflows can be edited in the shared visual/YAML builder and inspected through History. SQLite workflows.revision starts at 1; workflow_revisions stores full configuration snapshots and actor/change metadata. Each effective update appends a revision in the same BEGIN IMMEDIATE transaction; expected_revision provides optimistic concurrency. Existing records receive one Legacy baseline; earlier edits cannot be reconstructed. See backend API and workflow guides. Execution deduplication includes the saved revision so edits cannot reuse outputs from an older definition.
+
+## Shared workflow authoring foundation
+The protected `/api/v1/workflow-assistant` service reads current database user/membership/role policy, returns a sanitized organization/department resource catalog, validates strict proposals and stores non-executable drafts separately from workflows. Invalid proposals return structured errors; explicitly opted-in blocked proposals remain authoring records, never active workflows. Draft revisions/idempotency and current-policy revalidation are transactional. Chat generation and internal MCP authoring are implemented; external OAuth/MCP installation, publication and activation remain future work. Details and schema are in the module guide.
+
+## Workflow Assistant model generation
+Workflow Assistant phase two adds /workflow-assistant chat and isolated asynchronous model generation; its backend contract is documented in poc/backend/workflow_assistant/AGENTS.md. Configured runtime model/provider routing is reused without agent tasks or Office events; the internal MCP tool inventory is limited to catalog/schema/YAML validation. Draft save remains explicit and versioned; External MCP login/transport and workflow activation remain future work.
+
+## Model-only YAML authoring and internal MCP
+The Workflow Assistant now selects model_id/provider_id directly, uses an internal process-bound MCP server (catalog/schema/YAML validation only), and emits inactive native workflow YAML. Canonical governed schema: [Workflow authoring schema](poc/workflows/workflow-authoring.schema.yaml), generated from workflows.authoring_schema.WorkflowDocument. Execution agents remain per-step assignments; no planning agent is selected or persisted. The external installable OAuth MCP server remains future work.
+
+The model returns a generation-scoped validation_id for a server-stored YAML candidate instead of regenerating the document after validation; current permissions and candidate integrity are rechecked before presenting/saving.

@@ -168,3 +168,11 @@ OfficeView and AgentFlow call useOfficeEvents('office'); Tasks retains the defau
 
 ## Workflow Edit and History actions
 Each workflow row exposes Edit and History. Edit mounts a fresh shared builder instance with the selected workflow, updating the same record rather than creating another. Close/success clears edit context; new-workflow actions explicitly select create mode. History opens WorkflowHistoryDrawer, separate from the execution Logs view. Canvas deletions pass expected_revision and a change summary and reconcile flow edges, so they are also audited configuration revisions. Existing execution IDs/logs remain intact.
+
+## Workflow Assistant model generation
+WorkflowAssistant.tsx (/workflow-assistant, optional ?generation=id) loads current departments/catalog/drafts, selects a planning profile/model, submits bounded user/assistant conversations, polls active jobs every 1.5 seconds (5-second retry on transient reads), and allows cancellation. It renders clarification questions, per-step declared resources/dependencies, current validation and JSON. Saving calls the generation save-draft endpoint with explicit save_blocked on invalid proposals. Source revisions come from the loaded draft or saved generation snapshot, never silently from a newer list entry; stale drafts require reload. Permissions/resources are refreshed on terminal jobs/save. Conversation state stays in memory; known job links recover from the server.
+
+Draft history is loaded through getAssistantDraftHistory (GET /drafts/{id}/revisions) and displayed as read-only revision snapshots in the proposal panel.
+
+## Model-only YAML authoring and internal MCP
+WorkflowAssistant.tsx now sends model_id/provider_id, shows configured-runtime model options independent of department agents, loads /workflow-schema, previews/downloads workflow-draft.yaml and calls /validate-yaml for current checks. MCP call audit badges come from authenticated job data. New history snapshots prefer definition_yaml with legacy JSON fallback. Legacy chats with provider_id=legacy remain viewable without selecting a former planning agent; a current model must be selected for new generation.

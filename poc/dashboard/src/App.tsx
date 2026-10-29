@@ -7,6 +7,7 @@ import AuthPage from './pages/AuthPage';
 import AppLayout from './components/layout/AppLayout';
 import RuntimeSetupModal from './components/common/RuntimeSetupModal';
 import OfficeViewPage from './pages/OfficeView';
+import WorkflowAssistantPage from './pages/WorkflowAssistant';
 import WorkflowsPage from './pages/Workflows';
 import WorkflowLogsPage from './pages/WorkflowLogs';
 import AgentFlowPage from './pages/AgentFlow';
@@ -54,6 +55,7 @@ const AuthenticatedShell: React.FC = () => {
         <AppLayout>
           <Routes>
             <Route path="/" element={<OfficeViewPage />} />
+            <Route path="/workflow-assistant" element={<WorkflowAssistantPage />} />
             <Route path="/workflows" element={<WorkflowsPage />} />
             <Route path="/workflows/:workflowId/logs" element={<WorkflowLogsPage />} />
             <Route path="/flow" element={<AgentFlowPage />} />

@@ -83,3 +83,6 @@ app.add_exception_handler(Exception, generic_exception_handler)
 
 > [!IMPORTANT]
 > Whenever any security logic, token structure, auth dependency, rate limit configuration, or error handling in `poc/backend/security/` is modified, the developer or agent **MUST** update this `AGENTS.md` file within the **SAME commit**.
+
+## Workflow Assistant policy boundary
+The assistant service adds current-database validation after authenticate_request: an ACTIVE user must match the verified org claim, and current memberships determine accessible departments. Stale JWT role/department claims cannot restore revoked rights. Client read/write scopes reduce, never increase, database role rights. Scope-less first-party JWTs retain normal database authorization; future source=mcp callers must supply explicit verified delegated scopes. Organization-wide API-key access is insufficient without a personal user identity. This module does not supply an OAuth authorization server or MCP token verifier.
