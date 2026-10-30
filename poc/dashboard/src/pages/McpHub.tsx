@@ -13,7 +13,7 @@ import { McpWorkflowBuilder } from './McpWorkflowBuilder';
 
 export const McpHubPage: React.FC = () => {
   const model = useMcpPage();
-  const { loading, workflows, setCustomModalVisible, customForm, loadData } = model;
+  const { loading, resourceErrors, setCustomModalVisible, customForm, loadData } = model;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {/* Hero Header */}
