@@ -42,7 +42,7 @@ class DepartmentsRepository:
                 id=d['id'],
                 name=d['name'],
                 description=d.get('description'),
-                monthly_budget_usd=float(d.get('monthly_budget_usd') or 100.0),
+                monthly_budget_usd=float(d['monthly_budget_usd']) if d.get('monthly_budget_usd') is not None else 100.0,
                 current_spend_usd=self.get_department_monthly_spend(id),
                 budget_action=d.get('budget_action') or 'HARD_STOP',
                 alert_threshold_pct=float(d.get('alert_threshold_pct') or 80.0),
@@ -100,7 +100,11 @@ class DepartmentsRepository:
                   AND created_at LIKE ?
             """, (department_id, month_prefix))
             row = cursor.fetchone()
-            return float(row['total']) if row else 0.0
+            workflow_spend = float(row['total']) if row else 0.0
+            authoring = conn.execute("""SELECT COALESCE(SUM(cost_usd), 0.0) AS total
+                FROM workflow_assistant_generations WHERE department_id = ? AND created_at LIKE ?
+                AND cost_source = 'API_KEY'""", (department_id, month_prefix)).fetchone()
+            return workflow_spend + float(authoring['total'])
 
     def check_department_budget(self, department_id: str, requested_cost: float = 0.0) -> Dict[str, Any]:
         """

@@ -31,7 +31,7 @@ This is storage decomposition, not service/process isolation. Existing cross-tab
 | organization_schema.py | organizations, departments, department_mcp_access, users, department_members, org_invitations |
 | workflow_schema.py | workflows, workflow_executions, workflow_step_runs, run_evaluations |
 
-This master-based branch does not contain workflow revision or workflow-assistant draft/generation tables. Do not document later-branch schema as available here.
+The current master integration includes workflow revisions and isolated workflow-assistant draft/generation/tool-call tables in workflow_schema.py. Their additive migrations preserve existing rows and write one current-state Legacy baseline for workflows without history.
 
 ## Repository operation ownership
 
@@ -83,3 +83,18 @@ Source files must remain under 500 physical lines. Add cohesive repository respo
 Record.to_dict owns standard dataclass serialization; specialized User projection still excludes password_hash. Shared row_mapping helpers retain each prior strict/tolerant JSON behavior. Canonical row mappers own workflow, user, invitation, connector/tool, message, department-grant, project and skill get/list projections.
 
 Additional instance methods: save_workflow_step_run(record) writes the existing workflow_step_runs fields in one connection transaction; claim_waiting_parent(task_id) owns the existing conditional parent-state claim; retarget_interaction(interaction_id,target_approver_id) updates only the existing approver column. No table/column migration is introduced. Repository-level policy differences (agent MCP opt-out/globs versus explicit department grants) remain distinct rather than forced into an unsafe generic permission helper.
+
+
+## Current master integration: revisions, authoring and workflow origin
+
+Workflow now carries `revision: int = 1`; WorkflowExecution includes nullable `payload_hash`. `WorkflowRevisionConflict` remains publicly importable from persistence. Definition creation writes v1 history; `update_workflow` retains incoming actor_id/actor_label/change_summary/expected_revision keyword parameters and performs current-read, optimistic check, effective-change detection and snapshot append under one BEGIN IMMEDIATE transaction. No-op edits add no history. Explicit null clears description/department_id/cron_expression; other absent/null values retain upstream rules. History snapshots contain configuration fields and omit webhook tokens. Schema initialization adds revision/history and one Legacy baseline without inventing earlier changes.
+
+Execution APIs accept payload_hash and initial status, list/filter executions, resolve active or recent completed cache entries, and update started_at/sandbox_path/hash fields as in current master. `save_workflow_step_run` is an upsert by stable step ID: callers can persist RUNNING before inference, then final/paused outcome with the same task mapping. It includes nullable error_message and updates the stored observed outcome without inserting duplicate step records.
+
+TasksRepository provides `get_workflow_task_contexts`, `get_task_workflow_context`, and `list_task_runs(..., execution_scope='all')`; supported scopes are all/office/workflow. The recursive workflow-step/parent/root lineage CTE is retained. Shared agent definitions are never mutated to tag workflow origin.
+
+Department budget conversion preserves zero as an explicit budget. Monthly spend includes workflow execution cost plus API_KEY workflow_assistant_generations cost, retaining upstream cost-source semantics.
+
+Authoring schema includes workflow_assistant_drafts (scoped revisioned non-executable proposals and idempotency), workflow_assistant_draft_revisions (append-only snapshots), workflow_assistant_generations (QUEUED/RUNNING/COMPLETED/FAILED/CANCELLED, private job/result/cost/deadline/save metadata) and workflow_assistant_tool_calls (catalog/schema/YAML validation audit, unique validation_id and stored candidate proposal). Existing service-owned authoring transactions remain unchanged. These tables do not authorize workflow activation. Exact column/constraint definitions live in workflow_schema.py and the assistant module guide.
+
+All compatibility methods and the two legacy workflow field/CTE constants are explicitly routed through legacy_api.py to their repository owners. The refactor's connection, mapping, task-claim and resource lifecycle changes were retained. No database migration or other code was executed during source merge.

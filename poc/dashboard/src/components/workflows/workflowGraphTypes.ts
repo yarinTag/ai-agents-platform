@@ -29,6 +29,7 @@ export interface WorkflowCanvasGraphProps {
   skills?: WorkflowCanvasSkill[];
   allowedMcps?: string[];
   onSelectStep?: (step: WorkflowCanvasStep) => void;
+  onDeleteStep?: (stepKey: string) => void | Promise<void>;
   height?: number | string;
 }
 

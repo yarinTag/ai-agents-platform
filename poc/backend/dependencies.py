@@ -20,7 +20,7 @@ if _poc_root not in sys.path:
     sys.path.insert(0, _poc_root)
 
 from config import config_manager, ConfigManager, AgentConfig, AgentRole, AgentTemplate, ProjectConfig, Skill
-from persistence import db_manager, DatabaseManager
+from persistence import db_manager, DatabaseManager, WorkflowRevisionConflict
 from runtime.models import AgentRun, TaskStatus
 from runtime.protocol import RuntimeAdapter, RuntimeCapabilities
 from runtime.registry import runtime_registry, RuntimeRegistry
@@ -30,6 +30,9 @@ from .capabilities import capabilities
 
 # Compatibility type exports load only the implementation requested by a caller.
 _LAZY_EXPORTS = {
+    "TaskQueuePublisher": (f"{__package__}.queue.publisher", "TaskQueuePublisher"),
+    "get_message_broker": (f"{__package__}.queue.broker", "get_message_broker"),
+    "get_queue_worker": (f"{__package__}.queue.worker", "get_queue_worker"),
     "runtime_adapter": ("runtime_adapter", "runtime_adapter"),
     "ClaudeCodeRuntimeAdapter": ("runtime_adapter", "ClaudeCodeRuntimeAdapter"),
     "runtime_providers": ("runtime_providers", None),
@@ -100,6 +103,8 @@ async def init_services():
         except Exception:
             logger.exception("Optional capability %s failed to start", name)
             capabilities.mark(name, "UNAVAILABLE", "Initialization failed")
+    from .queue_lifecycle import start_queue
+    await start_queue()
     _services_initialized = True
 
 
@@ -120,6 +125,8 @@ async def shutdown_services():
     """Close started resources independently, even after partial startup failure."""
     global _services_initialized, _cron_engine, _claude_adapter
     global _orchestration_engine, _project_intelligence, _team_coordinator, _workflow_engine
+    from .queue_lifecycle import stop_queue
+    await stop_queue()
     try:
         if _cron_engine:
             capabilities.mark("scheduler-worker", "STOPPING")
@@ -282,6 +289,7 @@ def get_workflow_engine():
     global _workflow_engine
     capabilities.require("workflows")
     if _workflow_engine is None:
+        from .workflow_wiring import prompt_guard, sanitize_output, approval_dispatch
         from workflows.engine import WorkflowEngine
         from workflows.sandbox import SandboxManager
         notifier = None
@@ -297,6 +305,21 @@ def get_workflow_engine():
         _workflow_engine = WorkflowEngine(
             db_manager=get_db_manager(),
             runtime_adapter=get_runtime_adapter(),
-            sandbox_manager=SandboxManager(), notifier=notifier, skill_context=get_skill_context
+            sandbox_manager=SandboxManager(), notifier=notifier, skill_context=get_skill_context,
+            prompt_guard=prompt_guard(get_db_manager()), output_sanitizer=sanitize_output,
+            approval_dispatch=approval_dispatch(get_db_manager())
         )
     return _workflow_engine
+
+
+_task_queue_publisher: Optional[TaskQueuePublisher] = None
+
+
+def get_task_queue_publisher() -> TaskQueuePublisher:
+    """Get the global TaskQueuePublisher singleton instance."""
+    global _task_queue_publisher
+    capabilities.require("queue")
+    if _task_queue_publisher is None:
+        _task_queue_publisher = _implementation("TaskQueuePublisher")(_implementation("get_message_broker")())
+    return _task_queue_publisher
+

@@ -1,15 +1,21 @@
-"""Workflows: channels ownership."""
+from fastapi import APIRouter, HTTPException, Depends, Request
 
-from fastapi import HTTPException, Depends, Request
 import json
-from ..dependencies import get_db_manager, DatabaseManager
+
+import logging
+
+from ..dependencies import get_db_manager, DatabaseManager, WorkflowRevisionConflict
+
 from ..security import get_authorized_scope
+
+from workflows.parser import validate_workflow_definition
+
 from .workflows_models import ChannelBindingDto, WorkflowResponse
-from .workflows_mapping import _check_workflow_scope, _workflow_to_response
-from fastapi import APIRouter
+from .workflows_mapping import _workflow_actor, _check_workflow_scope, _workflow_to_response
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
-
+_validated_definition = validate_workflow_definition
 
 @router.post("/{workflow_id}/channel-binding", response_model=WorkflowResponse)
 def bind_workflow_channel(
@@ -39,10 +45,12 @@ def bind_workflow_channel(
     def_dict["metadata"] = metadata
 
     new_def_json = json.dumps(def_dict, indent=2)
-    updated = db.update_workflow(id=workflow_id, definition_json=new_def_json)
+    try:
+        updated = db.update_workflow(id=workflow_id, definition_json=new_def_json,
+            **_workflow_actor(request), change_summary="Channel binding updated", expected_revision=wf.revision)
+    except WorkflowRevisionConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return _workflow_to_response(updated)
-
-
 
 @router.delete("/{workflow_id}/channel-binding", response_model=WorkflowResponse)
 def unbind_workflow_channel(
@@ -67,6 +75,10 @@ def unbind_workflow_channel(
         del def_dict["metadata"]["channel_binding"]
 
     new_def_json = json.dumps(def_dict, indent=2)
-    updated = db.update_workflow(id=workflow_id, definition_json=new_def_json)
+    try:
+        updated = db.update_workflow(id=workflow_id, definition_json=new_def_json,
+            **_workflow_actor(request), change_summary="Channel binding removed", expected_revision=wf.revision)
+    except WorkflowRevisionConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return _workflow_to_response(updated)
 

@@ -147,4 +147,13 @@ METHOD_OWNERS = {
     "get_workflow_execution": "_workflows",
     "update_workflow_execution": "_workflows",
     "save_run_evaluation": "_workflows",
+    "get_workflow_task_contexts": "_tasks",
+    "get_task_workflow_context": "_tasks",
+    "_WORKFLOW_CONTEXT_CTE": "_tasks",
+    "_insert_workflow_revision": "_workflows",
+    "list_workflow_revisions": "_workflows",
+    "_row_to_workflow_execution": "_workflows",
+    "list_workflow_executions": "_workflows",
+    "find_matching_workflow_execution": "_workflows",
+    "_WORKFLOW_VERSION_FIELDS": "_workflows",
 }

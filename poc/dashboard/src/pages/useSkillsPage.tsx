@@ -127,7 +127,7 @@ export const useSkillsPage = () => {
         ...(mode === 'local' ? { local_path: lPath.trim() } : { git_repo: gRepo.trim() }),
       };
 
-      const res = await scanPlugins(scanParams);
+      const res = await scanPlugins(scanParams, isManual);
       setScanError(null);
       if (res.data && Array.isArray(res.data.plugins)) {
         setPlugins(res.data.plugins);

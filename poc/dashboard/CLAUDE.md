@@ -119,7 +119,8 @@ poc/dashboard/
 │   │   └── Tasks.tsx            # Orchestrated tasks queue (/tasks)
 │   ├── services/
 │   │   ├── AGENTS.md            # API client & SSE stream documentation
-│   │   ├── api.ts               # Central Axios client with interceptors
+│   │   ├── api.ts               # Public endpoint compatibility facade
+│   │   ├── httpClient.ts        # Shared Axios client and interceptors
 │   │   └── eventStream.ts       # SSE event bus client
 │   └── types/                   # TypeScript interfaces (agent, task, mcp, auth, etc.)
 ```
@@ -177,3 +178,20 @@ poc/dashboard/
 
 ## Optional feature conventions
 Keep route imports lazy and errors within FeatureErrorBoundary; shell navigation must remain usable. Gate only the exact unavailable capability, not a composite page's independent resources. Use shared resourceLoading/mcpResources rather than repeated fallback state or fabricated connector/channel defaults. ResourceWarning displays scoped failures/retry while independent content remains. Runtime setup can be deferred; backend execution gates remain authoritative. Current user restriction prohibits execution verification.
+
+### Playground UI verification
+The Workflows launch modal supports a tool-free Playground mode with JSON-object validation, fresh runs and clear model cost/tool availability text. Verify with `npm run build`; execution inspection uses scoped detail responses rather than list summaries for per-step output.
+
+Workflow logs live at `/workflows/:workflowId/logs`, with an optional execution query parameter. Validate empty history, early failures, live steps, navigation cleanup and authorized JSON export when changing this view. `npm run build` validates the production bundle.
+
+### Navigation, plugins and office scope
+Use bounded client request caching for plugin discovery (60s) and source config (30s); do not persist catalog content or credentials in browser storage. Manual scans must bypass both client results and the Git scan cache. Keep Office/Live Flow office-scoped without hiding workflow executions from Tasks. The outer app shell must stay viewport constrained while Content/sidebar navigation own scrolling. Verify the cache with `node --test tests/requestCache.test.mjs`, then build with `npm run build`.
+
+### Workflow editor compatibility
+Editing must retain workflow identity and unknown YAML/JSON extension fields. Do not apply connector catalog defaults over saved edit state. Save expected_revision and retain the draft on 409. Configuration history belongs in History; execution diagnostics remain in Logs. Validate the bundle with npm run build and backend revision tests with isolated SQLite/FastAPI.
+
+## Workflow Assistant model generation
+Workflow Assistant route /workflow-assistant uses existing auth and typed API wrappers, no browser-stored conversation/permission cache. Poll private generation IDs with cleanup, handle provider errors visibly, require explicit save or save-blocked, and preserve captured draft versions. Never dispatch planning as an Office task. Verify with npm run build in poc/dashboard.
+
+## Model-only YAML authoring and internal MCP
+Workflow Assistant selection must use context.authoring_models; never derive planning choices from catalog.agents. Agents in the proposal are execution assignments. Use server-provided definition_yaml for preview/download and validateAssistantYaml for native validation. Show draft-only behavior and server errors; do not silently replace an unsupported provider/model or activate downloaded YAML.

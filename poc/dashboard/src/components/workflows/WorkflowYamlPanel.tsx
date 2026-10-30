@@ -5,8 +5,9 @@ import { useWorkflowBuilder } from './useWorkflowBuilder';
 
 export function WorkflowYamlPanel({ model }: { model: ReturnType<typeof useWorkflowBuilder> }) {
   const {
-    copied, yamlContent, setYamlContent, yamlDirty, setYamlDirty,
+    copied, yamlContent, yamlDirty,
     handleCopyYaml, handleDownloadYaml, handleSyncYamlToVisual,
+    handleYamlChange,
   } = model;
   return (
 <div>
@@ -48,8 +49,7 @@ export function WorkflowYamlPanel({ model }: { model: ReturnType<typeof useWorkf
                   rows={15}
                   value={yamlContent}
                   onChange={(e) => {
-                    setYamlContent(e.target.value);
-                    setYamlDirty(true);
+                    handleYamlChange(e.target.value);
                   }}
                   style={{
                     fontFamily: 'monospace',

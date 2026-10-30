@@ -2,7 +2,7 @@ import { api } from './httpClient';
 import type { Task, TaskCreateDto, TaskDelegateDto, TaskTreeNode } from '../types/task';
 
 // Tasks
-export const getTasks = (params?: { agent_id?: string; project_id?: string; status?: string; limit?: number }) =>
+export const getTasks = (params?: { agent_id?: string; project_id?: string; status?: string; limit?: number; execution_scope?: 'all' | 'office' | 'workflow' }) =>
   api.get<Task[]>('/api/v1/tasks/', { params });
 export const getTask = (id: string) => api.get<Task>(`/api/v1/tasks/${id}`);
 export const getTaskLogs = (id: string) => api.get<{ run_id: string; events: any[]; status: string; result: any; error: any }>(`/api/v1/tasks/${id}/logs`);

@@ -14,7 +14,7 @@ authors = [
 dependencies = [
     "fastapi>=0.104.1",
     "uvicorn[standard]>=0.24.0",
-    "pydantic>=2.5.0",
+    "pydantic>=2.11,<3",
     "python-multipart>=0.0.6",
     "httpx>=0.25.0,<0.28.0",
     "pyyaml>=6.0",
@@ -23,6 +23,8 @@ dependencies = [
     "qdrant-client>=1.19.1",
     "fastembed>=0.8.1",
     "cocoindex>=1.0.24",
+    "aio-pika>=10.1.1",
+    "mcp>=1.28,<2",
 ]
 
 [project.optional-dependencies]

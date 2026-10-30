@@ -6,6 +6,7 @@ import subprocess
 import threading
 import time
 from datetime import datetime
+from collections import deque
 from typing import Optional
 from config import AgentConfig, ProjectConfig
 import runtime_providers as providers
@@ -49,12 +50,12 @@ class TaskExecutor:
             )
 
     def execute(self, run_id, agent_config, project_config, prompt, session_id,
-                fork_session, dangerously_skip_permissions=False):
+                fork_session, dangerously_skip_permissions=False, playground_workspace=None):
         # A resumed attempt cannot race the previous attempt's cleanup.
         lock = self.adapter._run_locks.setdefault(run_id, threading.RLock())
         with lock:
             return self._execute_locked(run_id, agent_config, project_config, prompt,
-                                        session_id, fork_session, dangerously_skip_permissions)
+                                        session_id, fork_session, dangerously_skip_permissions, playground_workspace)
 
     def _execute_locked(
         self,
@@ -64,7 +65,8 @@ class TaskExecutor:
         prompt: str,
         session_id: Optional[str],
         fork_session: bool,
-        dangerously_skip_permissions: bool = False
+        dangerously_skip_permissions: bool = False,
+        playground_workspace: Optional[str] = None
     ):
         """
         Execute a task in a Claude Code subprocess.
@@ -80,6 +82,8 @@ class TaskExecutor:
         """
         adapter = self.adapter
         run = adapter._runs[run_id]
+        stderr_tail = deque(maxlen=30)
+        stderr_thread = None
 
         try:
             if adapter._shutting_down or run.status == TaskStatus.CANCELLED:
@@ -115,7 +119,8 @@ class TaskExecutor:
             skip_perm = dangerously_skip_permissions or getattr(run, "dangerously_skip_permissions", False)
             cmd = adapter._build_claude_command(
                 agent_config, project_config, prompt, session_id, fork_session,
-                dangerously_skip_permissions=skip_perm
+                dangerously_skip_permissions=skip_perm,
+                playground=playground_workspace is not None
             )
             env = adapter._build_claude_env(
                 run_id=run_id,
@@ -124,7 +129,7 @@ class TaskExecutor:
             )
 
             # Determine working directory
-            work_dir = adapter._resolve_working_directory(project_config, agent_config)
+            work_dir = playground_workspace or adapter._resolve_working_directory(project_config, agent_config)
 
             # Launch Claude Code process
             process = subprocess.Popen(
@@ -140,8 +145,7 @@ class TaskExecutor:
 
             adapter._processes[run_id] = process
             # Drain stderr separately so a full pipe cannot deadlock inference.
-            from .output_stream import drain_stderr
-            stderr_thread = threading.Thread(target=drain_stderr, args=(process,), daemon=True)
+            stderr_thread = threading.Thread(target=adapter._stderr_reader, args=(process, stderr_tail), daemon=True)
             adapter._stderr_threads[run_id] = stderr_thread
             stderr_thread.start()
 
@@ -160,6 +164,7 @@ class TaskExecutor:
             adapter._reader_threads[run_id] = reader_thread
 
             # Process events
+            last_checkpoint = time.monotonic()
             while True:
                 try:
                     # Get event with timeout to allow checking for cancellation
@@ -168,6 +173,9 @@ class TaskExecutor:
                     # Add event to run
                     run.events.append(event)
                     adapter._subscriptions.publish(run_id, event)
+                    if playground_workspace and time.monotonic() - last_checkpoint >= 1:
+                        adapter.services.database().save_task_run(run)
+                        last_checkpoint = time.monotonic()
 
                     # Capture Claude session ID if emitted
                     captured_sid = None
@@ -178,7 +186,7 @@ class TaskExecutor:
                     elif event.get("type") == "result" and event.get("session_id"):
                         captured_sid = event["session_id"]
 
-                    if captured_sid:
+                    if captured_sid and not playground_workspace:
                         run.session_id = captured_sid
                         try:
                             adapter.services.capture_session(run, captured_sid)
@@ -187,7 +195,11 @@ class TaskExecutor:
 
                     # Check for explicit tool call for supervisor clarification or permission
                     tool_q = extract_supervisor_question(event)
-                    if tool_q:
+                    if tool_q and playground_workspace and event.get("type") != "result":
+                        run.status = TaskStatus.FAILED
+                        run.error = tool_q["question"]
+                        break
+                    if tool_q and not playground_workspace:
                         self._handle_question(run, tool_q)
                         break
 
@@ -215,6 +227,10 @@ class TaskExecutor:
                             run.model = str(model_reported)
 
                         q_data = extract_supervisor_question(event) or extract_supervisor_question(res_val)
+                        if q_data and playground_workspace:
+                            run.status = TaskStatus.FAILED
+                            run.error = q_data["question"]
+                            break
                         if q_data:
                             self._handle_question(run, q_data)
                             break
@@ -236,7 +252,10 @@ class TaskExecutor:
                         # Process ended without explicit result/error
                         run.status = TaskStatus.COMPLETED if run.result else TaskStatus.FAILED
                         if not run.error and not run.result:
-                            run.error = "Process ended without result or error"
+                            if stderr_thread:
+                                stderr_thread.join(timeout=0.2)
+                            diagnostic = "\n".join(stderr_tail)
+                            run.error = diagnostic or f"Process ended without result (exit code {process.poll()})"
                         break
 
                 except queue.Empty:
@@ -269,4 +288,11 @@ class TaskExecutor:
                 "_run_id": run_id
             })
         finally:
-            finalize_run(adapter, run)
+            if stderr_thread:
+                stderr_thread.join(timeout=0.2)
+            if stderr_tail:
+                run.events.append({"type": "stderr", "content": "\n".join(stderr_tail),
+                    "_timestamp": time.time(), "_run_id": run_id})
+                if run.status == TaskStatus.FAILED:
+                    run.error = (run.error or "Runtime failed") + "\n" + "\n".join(stderr_tail)
+            finalize_run(adapter, run, playground=playground_workspace is not None)

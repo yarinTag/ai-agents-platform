@@ -1,3 +1,4 @@
+import { invalidateRequestCache } from './requestCache';
 import axios from 'axios';
 
 export const AUTH_TOKEN_KEY = 'agents_platform_auth_token';
@@ -36,6 +37,7 @@ api.interceptors.response.use(
         url.includes('/invitations/accept');
 
       if (!isAuthExempt) {
+        invalidateRequestCache('plugins:');
         localStorage.removeItem(AUTH_TOKEN_KEY);
         localStorage.removeItem(AUTH_SESSION_KEY);
         window.dispatchEvent(new CustomEvent('auth:unauthorized'));

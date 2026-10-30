@@ -86,3 +86,9 @@ Both dictionaries define `featureAvailability`: unavailable, renderFailure, navi
 > 1. When adding a new string to [`locales/en.ts`](file:///Users/yarintag/Desktop/Projects/ai-agents-platform/poc/dashboard/src/i18n/locales/en.ts), you MUST simultaneously add the corresponding Hebrew translation to [`locales/he.ts`](file:///Users/yarintag/Desktop/Projects/ai-agents-platform/poc/dashboard/src/i18n/locales/he.ts).
 > 2. NEVER introduce hardcoded Hebrew strings into UI components or pages.
 > 3. Document any new translation domains or context helper utilities in this file.
+
+## Workflow Assistant model generation
+EN and HE dictionaries include assistant.* for the workflow authoring page, navigation, planning profiles, clarification, explicit ready/blocked saves, stale versions and provider errors. WorkflowAssistant uses the existing locale and dir values. Backend resource labels and structured error codes remain server data.
+
+## Model-only YAML authoring and internal MCP
+assistant.model replaces the planning-profile/agent label. EN/HE add noModels/downloadYaml/yamlSchema/yamlDraft and clarify that missing execution agents block executable step assignment, not discussion with the authoring model. The intro describes schema-driven inactive drafts. Runtime/provider/model/resource names remain server data.

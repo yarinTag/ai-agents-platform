@@ -1,11 +1,11 @@
 import { Tag, Button, Modal, Typography, Space } from 'antd';
-import { ToolOutlined, FileTextOutlined, ApartmentOutlined } from '@ant-design/icons';
+import { ToolOutlined, FileTextOutlined, ApartmentOutlined, DeleteOutlined } from '@ant-design/icons';
 
 const { Text, Paragraph } = Typography;
 
 import type { WorkflowCanvasStep } from './workflowGraphTypes';
 
-export function WorkflowStepInspector({ selectedStep, detailModalVisible, setDetailModalVisible }: { selectedStep: WorkflowCanvasStep | null; detailModalVisible: boolean; setDetailModalVisible: (visible: boolean) => void }) {
+export function WorkflowStepInspector({ selectedStep, detailModalVisible, setDetailModalVisible, onDeleteStep }: { onDeleteStep?: (stepKey: string) => void | Promise<void>; selectedStep: WorkflowCanvasStep | null; detailModalVisible: boolean; setDetailModalVisible: (visible: boolean) => void }) {
   return (<>
       {/* Step Inspector Modal */}
       <Modal
@@ -18,6 +18,12 @@ export function WorkflowStepInspector({ selectedStep, detailModalVisible, setDet
         open={detailModalVisible}
         onCancel={() => setDetailModalVisible(false)}
         footer={[
+          ...(onDeleteStep && selectedStep ? [
+            <Button key="delete" danger icon={<DeleteOutlined />}
+              onClick={() => { onDeleteStep(selectedStep.key); setDetailModalVisible(false); }}>
+              Delete Step
+            </Button>,
+          ] : []),
           <Button key="close" onClick={() => setDetailModalVisible(false)} style={{ background: '#21262d', color: '#f0f6fc' }}>
             Close
           </Button>,

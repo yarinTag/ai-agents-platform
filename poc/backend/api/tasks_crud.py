@@ -5,6 +5,8 @@ from typing import List, Optional
 from datetime import datetime
 from ..dependencies import get_config_manager, get_db_manager, get_runtime_adapter, get_optional_runtime_adapter, get_event_service, AgentRun, TaskStatus, EventService, EventType
 from ..security import get_current_org_id
+import uuid
+from ..dependencies import get_task_queue_publisher
 import asyncio
 import json
 from .tasks_models import TaskCreate, TaskResponse
@@ -22,7 +24,7 @@ async def create_task(
     request: Request,
     config_manager = Depends(get_config_manager),
     db_manager = Depends(get_db_manager),
-    runtime_adapter = Depends(get_runtime_adapter),
+    runtime_adapter = Depends(get_optional_runtime_adapter),
     event_service: EventService = Depends(get_event_service)
 ):
     """Submit a new task for execution."""
@@ -51,6 +53,51 @@ async def create_task(
             prompt = str(task_data.input_data)
     if not prompt:
         prompt = "Execute agent mission"
+
+    # AI Security Firewall: Scan prompt for Direct Injections, Jailbreaks, and Malicious Commands
+    from ..security.firewall import get_prompt_firewall
+    firewall = get_prompt_firewall()
+    firewall.assert_clean_prompt(
+        text=prompt,
+        source="tasks_api",
+        db_manager=db_manager,
+        org_id=org_id,
+        actor=getattr(request.state, "user", {}).get("email", "api_user") if hasattr(request, "state") else "api_user"
+    )
+
+    # Distributed Queue Dispatch branch
+    if task_data.use_queue:
+        task_id = f"task_{uuid.uuid4().hex[:12]}"
+        publisher = get_task_queue_publisher()
+        run = AgentRun(
+            run_id=task_id,
+            agent_id=agent.id,
+            project_id=task_data.project_id,
+            prompt=prompt,
+            status=TaskStatus.QUEUED,
+            created_at=datetime.now(),
+            organization_id=org_id
+        )
+        db_manager.save_task_run(run)
+        try:
+            await publisher.publish_task(
+                task_id=task_id,
+                agent_id=agent.id,
+                project_id=task_data.project_id or "default",
+                prompt=prompt,
+                org_id=org_id,
+                priority=task_data.priority or 5
+            )
+        except Exception as error:
+            run.status = TaskStatus.FAILED
+            run.error = "Queue dispatch unavailable"
+            run.ended_at = datetime.now()
+            db_manager.save_task_run(run)
+            raise HTTPException(status_code=503, detail="Queue dispatch unavailable") from error
+        return task_run_to_response(run)
+
+    if runtime_adapter is None:
+        runtime_adapter = get_runtime_adapter()
 
     # Start the task via runtime adapter
     run_id = runtime_adapter.start_task(
@@ -122,6 +169,7 @@ async def create_task(
 
 
 
+
 @router.get("/", response_model=List[TaskResponse])
 @router.get("", response_model=List[TaskResponse])
 async def list_tasks(
@@ -130,10 +178,14 @@ async def list_tasks(
     project_id: Optional[str] = None,
     status: Optional[str] = None,
     limit: int = 50,
+    execution_scope: str = "all",
     db_manager = Depends(get_db_manager),
     runtime_adapter = Depends(get_optional_runtime_adapter)
 ):
     """List tasks with optional filtering, merging DB and live runtime runs."""
+    if execution_scope not in ("all", "office", "workflow"):
+        raise HTTPException(status_code=422, detail="Invalid execution_scope")
+    contexts = db_manager.get_workflow_task_contexts()
     task_status = None
     if status:
         try:
@@ -152,13 +204,18 @@ async def list_tasks(
         project_id=project_id,
         status=task_status,
         limit=limit,
-        organization_id=org_id
+        organization_id=org_id,
+        execution_scope=execution_scope
     ):
         runs_map[run.run_id] = run
 
     if hasattr(runtime_adapter, 'list_runs'):
         for run in runtime_adapter.list_runs():
             if org_id and getattr(run, "organization_id", None) and run.organization_id != org_id:
+                continue
+            if execution_scope == "office" and run.run_id in contexts:
+                continue
+            if execution_scope == "workflow" and run.run_id not in contexts:
                 continue
             if agent_id and run.agent_id != agent_id:
                 continue
@@ -170,7 +227,8 @@ async def list_tasks(
 
     runs = list(runs_map.values())
     runs.sort(key=lambda r: r.created_at or datetime.min, reverse=True)
-    return [task_run_to_response(run) for run in runs[:limit]]
+    return [{**task_run_to_response(run), **contexts.get(run.run_id, {})} for run in runs[:limit]]
+
 
 
 

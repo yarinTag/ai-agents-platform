@@ -9,6 +9,7 @@ export function WorkflowDiagramPanel({ model }: { model: ReturnType<typeof useWo
   const {
     workflowName, channelProvider, channelId, triggerEnabled, notifyMode,
     allowedMcps, workflowSkills, steps, handleAddStep,
+    handleDeleteStepByKey,
   } = model;
   return (
 <div style={{ padding: '8px 0' }}>
@@ -38,6 +39,7 @@ export function WorkflowDiagramPanel({ model }: { model: ReturnType<typeof useWo
                   }}
                   skills={workflowSkills}
                   allowedMcps={allowedMcps}
+                  onDeleteStep={handleDeleteStepByKey}
                   height={460}
                 />
               </div>

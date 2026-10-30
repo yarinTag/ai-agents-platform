@@ -14,6 +14,8 @@ router = APIRouter()
 @router.post("/test-channel-message")
 def test_channel_message(req: ChannelTestMessageRequest, request: Request,
                          db: DatabaseManager = Depends(get_db_manager)):
+    from ..security.firewall import get_prompt_firewall
+    get_prompt_firewall().assert_clean_prompt(text=req.message, source="mcp_test_channel")
     organization_id = get_current_org_id(request)
     connector = find_channel_connector(db, req.provider, organization_id)
     if connector is None:

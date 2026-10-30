@@ -29,6 +29,7 @@ export const useTasksPage = () => {
 
   const handleCreate = () => {
     form.resetFields();
+    form.setFieldsValue({ use_queue: true, priority: 5 });
     setEditingKey('');
     setVisible(true);
   };
@@ -49,6 +50,8 @@ export const useTasksPage = () => {
         project_id: values.project_id ? String(values.project_id) : null,
         skill_id: values.skill_id ? String(values.skill_id) : null,
         input_data: parsedInputData,
+        use_queue: true,
+        priority: Number(values.priority) || 5,
       };
 
       if (editingKey) {

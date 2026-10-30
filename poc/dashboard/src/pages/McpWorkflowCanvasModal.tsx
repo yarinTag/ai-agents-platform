@@ -3,8 +3,8 @@ import { ApartmentOutlined } from '@ant-design/icons';
 import { WorkflowCanvasGraph } from '../components/workflows/WorkflowCanvasGraph';
 import type { useMcpPage } from './useMcpPage';
 
-export const McpWorkflowCanvasModal = (model: Pick<ReturnType<typeof useMcpPage>, 'canvasModalVisible' | 'setCanvasModalVisible' | 'canvasWorkflow'>) => {
-  const { canvasModalVisible, setCanvasModalVisible, canvasWorkflow } = model;
+export const McpWorkflowCanvasModal = (model: Pick<ReturnType<typeof useMcpPage>, 'handleDeleteCanvasStep' | 'canvasModalVisible' | 'setCanvasModalVisible' | 'canvasWorkflow'>) => {
+  const { handleDeleteCanvasStep, canvasModalVisible, setCanvasModalVisible, canvasWorkflow } = model;
   return (<>
       {/* Workflow Canvas Graph Modal */}
       <Modal
@@ -41,6 +41,7 @@ export const McpWorkflowCanvasModal = (model: Pick<ReturnType<typeof useMcpPage>
               channelBinding={canvasWorkflow.channel_binding}
               skills={parsedSkills}
               allowedMcps={parsedMcps}
+              onDeleteStep={handleDeleteCanvasStep}
               height={480}
             />
           );

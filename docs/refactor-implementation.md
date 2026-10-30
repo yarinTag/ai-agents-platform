@@ -1,6 +1,6 @@
 # Modular refactor implementation and review ledger
 
-Branch: codex/platform-modular-refactor, created directly from local master. The three commits on the previous workflow-playground branch were not incorporated. No remote fetch, commit, push, deployment, application startup, tests, build, lint, type check or live inference was performed.
+Branch: codex/platform-modular-refactor, created directly from master. The original source-only refactor was checkpointed in 71c1dcb before merging origin/master (523913e) at the user's explicit request. The merge incorporates the upstream workflow/queue/assistant additions. No deployment, application startup, tests, build, lint, type check or live inference was performed; commit hooks were disabled to honor that restriction.
 
 ## Ownership and review
 
@@ -53,9 +53,9 @@ Optional router names are defined in backend/router_registry. Runtime, orchestra
 
 API facades and existing component/renderer entry points remain because inspected consumers still use them. They re-export or delegate to one implementation; they are not duplicate business implementations. DatabaseManager delegates legacy instance methods via an explicit ownership registry. Class-level introspection/patching differs and is documented; inspected source found no such callers. Restoring the original class-level API is an explicit future compatibility decision if external consumers require it.
 
-The current master base has no queue/broker enterprise deployment files, workflow revision schema, workflow assistant or playground additions from the previous branch. Refactoring those absent features is not accomplished by silently merging unrelated commits. The earlier roadmap's references to them are conditional contracts for that other base, not features of this implementation.
+The subsequent user-authorized master merge incorporates enterprise queue/deployment files, workflow revision schema, model-only workflow authoring, internal MCP and playground. Incoming changes were moved into the extracted repositories, runtime collaborators, workflow modules and frontend hooks rather than restoring oversized source files. New backend router descriptors isolate queue and workflow-assistant availability.
 
-There is no microservice deployment migration, outbox/exactly-once delivery guarantee or new retry policy. No mock adapter was introduced; existing fixtures were relocated without execution. Three runtime-free workflow cases were subsequently corrected to assert explicit unavailability, preserved rendered inputs and dependency-stop behavior instead of fabricated success. They do not establish successful inference/metrics accumulation. A complete pre-existing security-policy audit is not claimed.
+Upstream deployment templates are retained; no deployment was performed and no outbox/exactly-once delivery guarantee is added. Queue dispatch acknowledgement is separate from runtime task completion. No mock adapter was introduced; existing fixtures were relocated without execution. Three runtime-free workflow cases were subsequently corrected to assert explicit unavailability, preserved rendered inputs and dependency-stop behavior instead of fabricated success. They do not establish successful inference/metrics accumulation. A complete pre-existing security-policy audit is not claimed.
 
 ## Completion evidence still missing
 
@@ -68,3 +68,11 @@ Final source-review follow-up: capability guards also reject a recorded DISABLED
 Reviewed the dispatch return normalization through both worker/manual scheduler call paths and corrected its event task ID to the normalized run_id. Reviewed required skill-provider injection through runtime and workflow composition; unresolved required context now fails dependent work explicitly. Reviewed the runtime-free workflow case source against the actual failed-step persistence/stop contract and made its database isolation explicit. No project code or test was executed.
 
 Source implementation/review is substantially complete; the remaining evidence gap is the combined application's compilation and behavior, including actual service-failure isolation. The user's no-tests/build/startup restriction remains in force, so this record does not mark those outcomes verified or the full goal achieved.
+
+## Master merge integration (2026-10-29)
+
+Merged master revision 523913e into the refactor branch. Revision/history transactions, optimistic concurrency, workflow task origin, generation/tool-audit schema, generation spend, authoring inference, tool-free playground and plugin refresh/cache contracts remain implemented in focused modules. Workflow step rows are saved RUNNING before dispatch and upserted with the same ID at completion; production and playground preserve actual runtime outcomes. Playground suppresses notification/reviewer/escalation callbacks. Workflow prompt/output policy and optional ChatOps are injected by backend/workflow_wiring rather than imported by the domain runner. Human approval wait is bounded to 30 minutes.
+
+Workflow execution list/detail/evaluation share exact organization and current/historical department scope. Publication failures settle precreated queue records as FAILED and return 503; they cannot leave undelivered QUEUED rows that deduplication treats as accepted. Queue broker and worker lifecycle are separate optional capabilities. Broker absence cannot block required-core readiness. Process-local memory transport is explicitly non-durable and reported DEGRADED.
+
+All merge review remains source-only; Python source parsing and line/conflict-marker inventories do not execute project imports or application behavior. No incoming or existing tests were run.

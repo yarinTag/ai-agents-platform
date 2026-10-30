@@ -24,7 +24,7 @@ def _parse_github_owner_repo(raw_url: str) -> Optional[tuple[str, str]]:
 
 
 
-async def _scan_git_repo_via_api(repo_url: str, token: Optional[str]) -> tuple[List[Dict[str, Any]], Optional[str]]:
+async def _scan_git_repo_via_api(repo_url: str, token: Optional[str], force_refresh: bool = False) -> tuple[List[Dict[str, Any]], Optional[str]]:
     """Scan a GitHub repository directly via REST API in-memory without cloning to disk."""
     import asyncio
 
@@ -51,7 +51,7 @@ async def _scan_git_repo_via_api(repo_url: str, token: Optional[str]) -> tuple[L
         tree_json = tree_resp.json()
         tree_sha = tree_json.get("sha") or "HEAD"
         cache_key = (owner.lower(), repo.lower(), tree_sha)
-        if cache_key in _GIT_TREE_SCAN_CACHE:
+        if not force_refresh and cache_key in _GIT_TREE_SCAN_CACHE:
             return _GIT_TREE_SCAN_CACHE[cache_key], f"https://github.com/{owner}/{repo}"
 
         blobs = [

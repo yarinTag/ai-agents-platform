@@ -3,16 +3,24 @@ Approvals & Agent Interactions API endpoints.
 Enables Human-In-The-Loop (HITL) and Manager-In-The-Loop approval and clarification workflows.
 """
 
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, HTTPException, Depends, status, Request
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 from datetime import datetime
+import json
+import httpx
 
 from ..dependencies import get_db_manager, get_runtime_adapter, get_event_bus
 from persistence import DatabaseManager
 from runtime.protocol import RuntimeAdapter
 from runtime.models import TaskStatus
 from events import EventBus, PlatformEvent, EventType
+from .chatops import (
+    send_telegram_interactive_approval,
+    update_telegram_message_in_place,
+    send_slack_interactive_approval,
+    format_slack_approval_blocks
+)
 
 router = APIRouter()
 
@@ -247,4 +255,196 @@ async def respond_to_interaction(
         "interaction": updated_interaction,
         "task_id": task_id,
         "resumed": payload.decision == "approve"
+    }
+
+
+# ============================================================================
+# Dual-Channel Interactive ChatOps Callback Endpoints (Telegram & Slack)
+# ============================================================================
+
+class DispatchChannelRequest(BaseModel):
+    channel_type: str = Field(..., pattern="^(telegram|slack)$")
+    target: str = Field(..., description="Telegram chat_id or Slack webhook URL")
+    bot_token: Optional[str] = Field(None, description="Telegram bot token (optional, falls back to env)")
+
+
+@router.post("/{interaction_id}/dispatch-channel")
+async def dispatch_interactive_approval_to_channel(
+    interaction_id: str,
+    req: DispatchChannelRequest,
+    db: DatabaseManager = Depends(get_db_manager)
+):
+    """
+    Dispatches an interactive approval prompt with buttons to Telegram or Slack.
+    """
+    interaction = db.get_interaction(interaction_id)
+    if not interaction:
+        raise HTTPException(status_code=404, detail="Interaction not found")
+
+    if req.channel_type == "telegram":
+        token = req.bot_token or ""
+        if not token:
+            # Check DB or environment for telegram token
+            import os
+            token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+        if not token:
+            raise HTTPException(status_code=400, detail="Telegram bot token required")
+
+        msg_id = await send_telegram_interactive_approval(
+            bot_token=token,
+            chat_id=req.target,
+            interaction=interaction
+        )
+        return {"status": "SUCCESS", "channel": "telegram", "message_id": msg_id}
+
+    elif req.channel_type == "slack":
+        success = await send_slack_interactive_approval(
+            webhook_url=req.target,
+            interaction=interaction
+        )
+        return {"status": "SUCCESS" if success else "FAILED", "channel": "slack"}
+
+
+@router.post("/telegram-callback")
+async def telegram_webhook_callback(
+    request: Request,
+    db: DatabaseManager = Depends(get_db_manager),
+    runtime: RuntimeAdapter = Depends(get_runtime_adapter),
+    event_bus: EventBus = Depends(get_event_bus)
+):
+    """
+    Telegram Bot Webhook endpoint handling Inline Keyboard button clicks.
+    Format: callback_query.data = "appr:<decision>:<interaction_id>"
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        return {"ok": False, "error": "Invalid JSON"}
+
+    callback_query = body.get("callback_query")
+    if not callback_query:
+        return {"ok": True, "message": "Ignored non-callback update"}
+
+    cb_id = callback_query.get("id")
+    cb_data = callback_query.get("data", "")
+    from_user = callback_query.get("from", {})
+    username = from_user.get("username") or from_user.get("first_name", "Telegram User")
+    message = callback_query.get("message", {})
+    chat_id = message.get("chat", {}).get("id")
+    message_id = message.get("message_id")
+    original_text = message.get("text", "")
+
+    # Parse callback_data: "appr:approve:<interaction_id>"
+    parts = cb_data.split(":")
+    if len(parts) < 3 or parts[0] != "appr":
+        return {"ok": True, "message": "Not an approval callback"}
+
+    decision = parts[1]  # "approve" or "reject"
+    interaction_id = parts[2]
+
+    # Resolve interaction using shared logic
+    payload = InteractionResponse(
+        interaction_id=interaction_id,
+        decision=decision,
+        response_text=f"Decision ({decision}) submitted via Telegram by @{username}",
+        responder=f"telegram:@{username}"
+    )
+
+    try:
+        await respond_to_interaction(payload, db, runtime, event_bus)
+    except HTTPException as e:
+        logger.warning(f"Failed to respond to interaction from telegram: {e.detail}")
+
+    # Edit Telegram message in-place to remove buttons and show confirmation
+    import os
+    token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    if token and chat_id and message_id:
+        await update_telegram_message_in_place(
+            bot_token=token,
+            chat_id=str(chat_id),
+            message_id=message_id,
+            original_text=original_text,
+            decision=decision,
+            responder=f"@{username}"
+        )
+
+        # Acknowledge callback query
+        try:
+            ack_url = f"https://api.telegram.org/bot{token}/answerCallbackQuery"
+            ack_text = f"Action {decision.upper()}ED successfully! 🚀" if decision == "approve" else "Action REJECTED ❌"
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                await client.post(ack_url, json={"callback_query_id": cb_id, "text": ack_text})
+        except Exception:
+            pass
+
+    return {"ok": True, "decision": decision, "interaction_id": interaction_id}
+
+
+@router.post("/slack-callback")
+async def slack_interactivity_callback(
+    request: Request,
+    db: DatabaseManager = Depends(get_db_manager),
+    runtime: RuntimeAdapter = Depends(get_runtime_adapter),
+    event_bus: EventBus = Depends(get_event_bus)
+):
+    """
+    Slack Interactivity Webhook endpoint handling Block Kit button clicks.
+    """
+    form_data = await request.form()
+    payload_str = form_data.get("payload")
+    if not payload_str:
+        # Check if direct JSON
+        try:
+            payload_data = await request.json()
+        except Exception:
+            return {"status": "error", "message": "Missing payload"}
+    else:
+        payload_data = json.loads(payload_str)
+
+    user = payload_data.get("user", {})
+    username = user.get("username") or user.get("name", "Slack User")
+    actions = payload_data.get("actions", [])
+
+    if not actions:
+        return {"status": "error", "message": "No actions found"}
+
+    action_value = actions[0].get("value", "")
+    # Format: "approve:<interaction_id>" or "reject:<interaction_id>"
+    if ":" not in action_value:
+        return {"status": "error", "message": "Invalid action value format"}
+
+    decision, interaction_id = action_value.split(":", 1)
+
+    payload = InteractionResponse(
+        interaction_id=interaction_id,
+        decision=decision,
+        response_text=f"Decision ({decision}) submitted via Slack by @{username}",
+        responder=f"slack:@{username}"
+    )
+
+    try:
+        await respond_to_interaction(payload, db, runtime, event_bus)
+    except HTTPException as e:
+        logger.warning(f"Failed to respond to interaction from slack: {e.detail}")
+
+    # Return updated in-place response for Slack channel
+    status_emoji = "✅" if decision == "approve" else "❌"
+    decision_text = "APPROVED" if decision == "approve" else "REJECTED"
+
+    return {
+        "response_type": "in_channel",
+        "replace_original": True,
+        "blocks": [
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": (
+                        f"{status_emoji} *Interaction {interaction_id} has been {decision_text}*\n"
+                        f"👤 Action taken by *@{username}* via Slack.\n"
+                        f"🚀 Task execution resumed in AI Agents Platform."
+                    )
+                }
+            }
+        ]
     }

@@ -33,7 +33,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   };
 
   return (
-    <Layout style={{ height: '100vh', overflow: 'hidden', background: '#0a0d12', color: '#f0f6fc' }}>
+    <Layout style={{ height: '100dvh', minHeight: 0, overflow: 'hidden', background: '#0a0d12', color: '#f0f6fc' }}>
       {/* Top Header */}
       <OfficeTopBar collapsed={collapsed} onToggleCollapse={handleToggleCollapse} />
 
@@ -43,8 +43,8 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           background: '#0a0d12',
           display: 'flex',
           flexDirection: 'row',
-          minHeight: 0,
           flex: 1,
+          minHeight: 0,
           overflow: 'hidden',
         }}
       >
@@ -54,6 +54,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           style={{
             background: '#0a0d12',
             minHeight: 0,
+            minWidth: 0,
             height: '100%',
             overflow: isOfficeView ? 'hidden' : 'auto',
             flex: 1,

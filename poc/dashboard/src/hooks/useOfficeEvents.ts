@@ -4,7 +4,7 @@ import { Task } from '../types/task';
 import { getAgents, getTasks } from '../services/api';
 import { eventStream, ConnectionStatus, PlatformEventPayload } from '../services/eventStream';
 
-export function useOfficeEvents() {
+export function useOfficeEvents(executionScope: 'all' | 'office' = 'all') {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -14,17 +14,28 @@ export function useOfficeEvents() {
   // Full fetch fallback / initial load
   const fetchData = useCallback(async () => {
     try {
-      const [agentsRes, tasksRes] = await Promise.all([getAgents(), getTasks()]);
-      setAgents(agentsRes.data || []);
-      setTasks(tasksRes.data || []);
+      const [agentsRes, tasksRes] = await Promise.all([getAgents(), getTasks({ execution_scope: executionScope })]);
+      const visibleAgents = (agentsRes.data || []).filter(agent => executionScope !== 'office' ||
+        (!agent.is_workflow_agent && agent.role_type !== 'WORKFLOW_AUTOMATION' && !agent.id.startsWith('wf-agent-')));
+      setAgents(visibleAgents);
+      const visibleIds = new Set(visibleAgents.map(agent => agent.id));
+      setTasks((tasksRes.data || []).filter(task => executionScope !== 'office' || visibleIds.has(task.agent_id)));
     } catch (err) {
       console.error('[useOfficeEvents] Failed to load data:', err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [executionScope]);
 
   useEffect(() => {
+    const subscribe = (type: string, handler: (event: PlatformEventPayload) => void) =>
+      eventStream.subscribe(type, event => {
+        const id = event.task_id || event.payload?.run_id || event.payload?.id || '';
+        if (executionScope === 'office' && (event.payload?.workflow_execution_id ||
+            id.startsWith('pg_task_') || id.startsWith('wf_task_') ||
+            event.payload?.is_workflow_agent || (event.agent_id || event.payload?.agent_id || '').startsWith('wf-agent-'))) return;
+        handler(event);
+      });
     // 1. Initial snapshot fetch
     fetchData();
 
@@ -37,7 +48,7 @@ export function useOfficeEvents() {
     eventStream.connect();
 
     // 4. Live Agent Events
-    const unsubAgentCreated = eventStream.subscribe('agent_created', (event) => {
+    const unsubAgentCreated = subscribe('agent_created', (event) => {
       setLastEvent(event);
       const newAgent: Agent = event.payload as Agent;
       if (newAgent && newAgent.id) {
@@ -53,7 +64,7 @@ export function useOfficeEvents() {
       }
     });
 
-    const unsubAgentUpdated = eventStream.subscribe('agent_updated', (event) => {
+    const unsubAgentUpdated = subscribe('agent_updated', (event) => {
       setLastEvent(event);
       const updatedAgent: Agent = event.payload as Agent;
       if (updatedAgent && updatedAgent.id) {
@@ -63,7 +74,7 @@ export function useOfficeEvents() {
       }
     });
 
-    const unsubAgentDeleted = eventStream.subscribe('agent_deleted', (event) => {
+    const unsubAgentDeleted = subscribe('agent_deleted', (event) => {
       setLastEvent(event);
       const deletedId = event.agent_id || event.payload?.id;
       if (deletedId) {
@@ -72,7 +83,7 @@ export function useOfficeEvents() {
     });
 
     // 5. Live Task Events
-    const unsubTaskCreated = eventStream.subscribe('task_created', (event) => {
+    const unsubTaskCreated = subscribe('task_created', (event) => {
       setLastEvent(event);
       const rawTask = event.payload;
       const taskId = rawTask.run_id || rawTask.id || event.task_id;
@@ -103,7 +114,7 @@ export function useOfficeEvents() {
       }
     });
 
-    const unsubTaskStarted = eventStream.subscribe('task_started', (event) => {
+    const unsubTaskStarted = subscribe('task_started', (event) => {
       setLastEvent(event);
       const taskId = event.task_id;
       if (taskId) {
@@ -122,7 +133,7 @@ export function useOfficeEvents() {
       }
     });
 
-    const unsubTaskCompleted = eventStream.subscribe('task_completed', (event) => {
+    const unsubTaskCompleted = subscribe('task_completed', (event) => {
       setLastEvent(event);
       const taskId = event.task_id;
       if (taskId) {
@@ -141,7 +152,7 @@ export function useOfficeEvents() {
       }
     });
 
-    const unsubTaskFailed = eventStream.subscribe('task_failed', (event) => {
+    const unsubTaskFailed = subscribe('task_failed', (event) => {
       setLastEvent(event);
       const taskId = event.task_id;
       if (taskId) {
@@ -160,13 +171,13 @@ export function useOfficeEvents() {
       }
     });
 
-    const unsubTaskDelegated = eventStream.subscribe('task_delegated', (event) => {
+    const unsubTaskDelegated = subscribe('task_delegated', (event) => {
       setLastEvent(event);
       // When task is delegated, refresh tasks to capture updated tree lineage
       fetchData();
     });
 
-    const unsubTaskDeleted = eventStream.subscribe('task_deleted', (event) => {
+    const unsubTaskDeleted = subscribe('task_deleted', (event) => {
       setLastEvent(event);
       const deletedTaskId = event.task_id || event.payload?.run_id || event.payload?.id;
       if (deletedTaskId) {
@@ -186,10 +197,13 @@ export function useOfficeEvents() {
       unsubTaskDelegated();
       unsubTaskDeleted();
     };
-  }, [fetchData]);
+  }, [fetchData, executionScope]);
 
   return {
-    agents,
+    agents: executionScope === 'office' ? agents.map(agent => ({ ...agent,
+      status: tasks.some(task => task.agent_id === agent.id && task.status === 'running')
+        ? 'running' as const : agent.status === 'running' ? 'idle' as const : agent.status
+    })) : agents,
     tasks,
     loading,
     connectionStatus,

@@ -1,16 +1,22 @@
 import { useWorkflowResources } from './useWorkflowResources';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Form, message } from 'antd';
 
-import { createWorkflow, generateWorkflowDefinition, convertWorkflowFormat, createSkill } from '../../services/api';
+import { createWorkflow, updateWorkflow, generateWorkflowDefinition, convertWorkflowFormat, createSkill } from '../../services/api';
 
 import { useAuth } from '../../context/AuthContext';
 
 import type { WorkflowStep, AttachedSkill, CreateWorkflowModalProps } from './workflowBuilderTypes';
 
-export function useWorkflowBuilder({ open, onClose, onSuccess, defaultChannelProvider = 'telegram', defaultChannelId = 'Hermes_test', departmentId }: CreateWorkflowModalProps) {
+export function useWorkflowBuilder({ open, onClose, onSuccess, defaultChannelProvider = 'telegram', defaultChannelId = '', departmentId, workflow }: CreateWorkflowModalProps) {
   const { departments, activeDepartmentId } = useAuth();
-  const effectiveDepartmentId = departmentId || activeDepartmentId || departments[0]?.id;
+  const effectiveDepartmentId = workflow ? workflow.department_id : departmentId || activeDepartmentId || departments[0]?.id;
+  const baseDefinition = useRef<Record<string, any>>({});
+  const conversionSequence = useRef(0);
+  const draftId = useRef(`wf_${Math.random().toString(36).substring(2, 10)}`);
+  const [formatting, setFormatting] = useState(false);
+  const [definitionError, setDefinitionError] = useState(false);
+  const [changeSummary, setChangeSummary] = useState('');
 
   const [activeTab, setActiveTab] = useState<string>('ai');
   const [generating, setGenerating] = useState<boolean>(false);
@@ -34,8 +40,8 @@ export function useWorkflowBuilder({ open, onClose, onSuccess, defaultChannelPro
   const [notifyMode, setNotifyMode] = useState<string>('ON_COMPLETE');
   const [allowedMcps, setAllowedMcps] = useState<string[]>([]);
   const [workflowSkills, setWorkflowSkills] = useState<AttachedSkill[]>([]);
-  const resources = useWorkflowResources({ open, channelProvider, channelId, setChannelId, setAllowedMcps });
-  const { installedMcps, telegramChannels, slackChannels, githubRepos, catalogSkills, setCatalogSkills, resourcesLoading, connectorError, skillsError, reloadResources } = resources;
+  const resources = useWorkflowResources({ open, editing: Boolean(workflow), channelProvider, channelId, setChannelId, setAllowedMcps, setTargetRepo });
+  const { installedMcps, telegramChannels, slackChannels, githubRepos, catalogSkills, setCatalogSkills, resourcesLoading, connectorError, skillsError, repositoryError, reloadResources } = resources;
   const [createSkillModalOpen, setCreateSkillModalOpen] = useState<boolean>(false);
   const [newSkillForm] = Form.useForm();
   const [creatingSkill, setCreatingSkill] = useState<boolean>(false);
@@ -92,54 +98,110 @@ export function useWorkflowBuilder({ open, onClose, onSuccess, defaultChannelPro
     curMcps = allowedMcps,
     curSkills = workflowSkills
   ) => {
-    const metadata: Record<string, any> = {};
+    const metadata: Record<string, any> = { ...(baseDefinition.current.metadata || {}) };
     if (curProv && curChan) {
       metadata.channel_binding = {
+        ...(metadata.channel_binding || {}),
         provider: curProv,
         connector_id: curProv,
         channel_id: curChan,
         channel_name: curChan,
         trigger_enabled: curTrig,
         notify_mode: curNotif,
-        message_template: `🚀 Workflow ${curName} finished step execution with status: {{status}}`,
+        message_template: metadata.channel_binding?.message_template || `🚀 Workflow ${curName} finished step execution with status: {{status}}`,
       };
     }
 
+    if (!curProv || !curChan) delete metadata.channel_binding;
     const payload = {
-      id: `wf_${Math.random().toString(36).substring(2, 10)}`,
+      ...baseDefinition.current,
+      id: workflow?.id || draftId.current,
       name: curName,
       description: curDesc,
-      department_id: null,
+      department_id: effectiveDepartmentId || null,
       mcp_servers: curMcps,
       skills: curSkills,
       steps: curSteps,
+      ...(baseDefinition.current.flow ? { flow: baseDefinition.current.flow.filter((edge: { from: string; to: string }) =>
+        curSteps.some(step => step.key === edge.to && (!edge.from || step.depends_on.includes(edge.from)))) } : {}),
       cron_expression: curCron || null,
       webhook_enabled: curWebhook,
       metadata,
     };
 
+    const sequence = ++conversionSequence.current;
+    setFormatting(true);
     try {
       const res = await convertWorkflowFormat({ json_content: JSON.stringify(payload, null, 2) });
-      setYamlContent(res.data.yaml_content);
-      setYamlDirty(false);
+      if (sequence === conversionSequence.current) {
+        setYamlContent(res.data.yaml_content);
+        setYamlDirty(false);
+        setDefinitionError(false);
+      }
     } catch (err) {
+      if (sequence === conversionSequence.current) setDefinitionError(true);
       console.error('Failed to format YAML', err);
-    }
+      message.error('Could not update YAML. Check step dependencies before saving.');
+    } finally { if (sequence === conversionSequence.current) setFormatting(false); }
   };
 
   useEffect(() => {
-    if (open) {
-      syncToYaml();
-    }
-  }, [open]);
+    if (!open) return;
+    if (!workflow) { syncToYaml(); return; }
+    let disposed = false;
+    const sequence = ++conversionSequence.current;
+    try {
+      const data = JSON.parse(workflow.definition_json);
+      baseDefinition.current = data;
+      setWorkflowName(workflow.name);
+      setDescription(workflow.description || '');
+      setCronExpression(workflow.cron_expression || '');
+      setWebhookEnabled(workflow.webhook_enabled);
+      setSteps((data.steps || []).map((step: WorkflowStep & {
+        id?: string; prompt?: string; instructions?: string; action?: string;
+        agent?: string; params?: { agentId?: string };
+      }, index: number) => {
+        const key = step.key || step.id || step.name?.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || `step_${index + 1}`;
+        return { ...step, key,
+          agent_id: step.agent_id || step.params?.agentId || step.agent || 'default-agent',
+          prompt_template: step.prompt_template || step.instructions || step.prompt || step.action || '',
+          depends_on: Array.from(new Set([...(step.depends_on || []),
+            ...(data.flow || []).filter((edge: { from: string; to: string }) => edge.to === key && edge.from).map((edge: { from: string }) => edge.from)])),
+        };
+      }));
+      setAllowedMcps(data.mcp_servers || []);
+      setWorkflowSkills((data.skills || []).map((skill: AttachedSkill | string) =>
+        typeof skill === 'string' ? { id: skill, name: skill, source: 'builtin' } : skill));
+      const binding = data.metadata?.channel_binding;
+      setChannelProvider(binding?.provider || ''); setChannelId(binding?.channel_id || '');
+      setTriggerEnabled(binding?.trigger_enabled ?? false); setNotifyMode(binding?.notify_mode || 'NONE');
+      setChangeSummary(''); setYamlDirty(false); setDefinitionError(false); setActiveTab('builder');
+      setFormatting(true);
+      convertWorkflowFormat({ json_content: workflow.definition_json }).then(response => {
+        if (!disposed && sequence === conversionSequence.current) setYamlContent(response.data.yaml_content);
+      }).catch(() => { if (!disposed) { setDefinitionError(true); message.error('Unable to load workflow definition'); } })
+        .finally(() => { if (!disposed && sequence === conversionSequence.current) setFormatting(false); });
+    } catch { message.error('Invalid saved workflow definition'); }
+    return () => { disposed = true; };
+  }, [open, workflow?.id]);
+
+  useEffect(() => {
+    if (open && !workflow && !resourcesLoading && !yamlDirty) syncToYaml();
+  }, [resourcesLoading]);
 
   const resourcesUnavailable = resourcesLoading ||
     Boolean(connectorError && (allowedMcps.length || channelId || steps.some(step => step.mcp_servers?.length))) ||
     Boolean(skillsError && (workflowSkills.length || steps.some(step => step.skills?.length)));
 
+  const handleYamlChange = (value: string) => {
+    conversionSequence.current += 1;
+    setFormatting(false); setYamlContent(value); setYamlDirty(true);
+  };
+
   // Trigger AI/Template generator
   const handleGenerateTemplate = async (tmplType?: string) => {
     if (resourcesUnavailable) { message.error('Required workflow resources are unavailable. Retry loading them first.'); return; }
+    const generationSequence = ++conversionSequence.current;
     setGenerating(true);
     try {
       const res = await generateWorkflowDefinition({
@@ -152,6 +214,7 @@ export function useWorkflowBuilder({ open, onClose, onSuccess, defaultChannelPro
         target_repo: targetRepo,
       });
 
+      if (generationSequence !== conversionSequence.current) return;
       const data = res.data;
       setWorkflowName(data.name);
       setDescription(data.description);
@@ -160,6 +223,7 @@ export function useWorkflowBuilder({ open, onClose, onSuccess, defaultChannelPro
       // Parse generated steps from definition_json
       try {
         const parsed = JSON.parse(data.definition_json);
+        baseDefinition.current = parsed;
         if (parsed.steps) {
           setSteps(parsed.steps);
         }
@@ -217,10 +281,31 @@ export function useWorkflowBuilder({ open, onClose, onSuccess, defaultChannelPro
     syncToYaml(workflowName, description, updated);
   };
 
-  const handleDeleteStep = (index: number) => {
-    const updated = steps.filter((_, i) => i !== index);
+  const handleDeleteStepByKey = (stepKey: string) => {
+    const deletedStep = steps.find((s) => s.key === stepKey);
+    const parentKeys = deletedStep?.depends_on || [];
+    const updated = steps
+      .filter((s) => s.key !== stepKey)
+      .map((s) => {
+        if (!s.depends_on?.includes(stepKey)) return s;
+        const nextDeps = Array.from(
+          new Set([
+            ...s.depends_on.filter((d) => d !== stepKey),
+            ...parentKeys.filter((p) => p !== s.key),
+          ])
+        );
+        return { ...s, depends_on: nextDeps };
+      });
     setSteps(updated);
     syncToYaml(workflowName, description, updated);
+    message.info(`Removed step "${deletedStep?.name || stepKey}"`);
+  };
+
+  const handleDeleteStep = (index: number) => {
+    const target = steps[index];
+    if (target) {
+      handleDeleteStepByKey(target.key);
+    }
   };
 
   // Skill management
@@ -312,17 +397,21 @@ export function useWorkflowBuilder({ open, onClose, onSuccess, defaultChannelPro
     try {
       const res = await convertWorkflowFormat({ yaml_content: yamlContent });
       const parsed = JSON.parse(res.data.json_content);
+      baseDefinition.current = parsed;
       if (parsed.name) setWorkflowName(parsed.name);
-      if (parsed.description) setDescription(parsed.description);
+      if (parsed.description !== undefined) setDescription(parsed.description || '');
       if (parsed.steps) setSteps(parsed.steps);
       if (parsed.mcp_servers) setAllowedMcps(parsed.mcp_servers);
       if (parsed.skills) setWorkflowSkills(parsed.skills);
-      if (parsed.cron_expression) setCronExpression(parsed.cron_expression);
+      setCronExpression(parsed.cron_expression || '');
       if (parsed.webhook_enabled !== undefined) setWebhookEnabled(parsed.webhook_enabled);
       if (parsed.metadata?.channel_binding) {
         setChannelProvider(parsed.metadata.channel_binding.provider);
         setChannelId(parsed.metadata.channel_binding.channel_id);
-      }
+        setTriggerEnabled(parsed.metadata.channel_binding.trigger_enabled ?? false);
+        setNotifyMode(parsed.metadata.channel_binding.notify_mode || 'NONE');
+      } else { setChannelProvider(''); setChannelId(''); }
+      setDefinitionError(false);
       setYamlDirty(false);
       message.success('YAML synchronized with visual builder & canvas!');
     } catch (err: any) {
@@ -335,16 +424,21 @@ export function useWorkflowBuilder({ open, onClose, onSuccess, defaultChannelPro
     if (resourcesUnavailable) { message.error('Required workflow resources are unavailable. Retry loading them first.'); return; }
     setSaving(true);
     try {
-      const res = await createWorkflow({
-        name: workflowName,
-        description,
-        department_id: effectiveDepartmentId,
-        definition_yaml: yamlContent,
-        cron_expression: cronExpression || undefined,
-        webhook_enabled: webhookEnabled,
-      });
-
-      message.success(`Workflow "${workflowName}" created and active!`);
+      const converted = await convertWorkflowFormat({ yaml_content: yamlContent });
+      const data = JSON.parse(converted.data.json_content);
+      const payload = {
+        name: data.name || workflowName,
+        description: data.description !== undefined ? data.description : description,
+        department_id: data.department_id !== undefined ? data.department_id : effectiveDepartmentId,
+        definition_json: converted.data.json_content,
+        cron_expression: data.cron_expression || '',
+        webhook_enabled: data.webhook_enabled ?? webhookEnabled,
+      };
+      const res = workflow
+        ? await updateWorkflow(workflow.id, { ...payload, expected_revision: workflow.revision || 1,
+            change_summary: changeSummary || undefined })
+        : await createWorkflow(payload);
+      message.success(workflow ? `Workflow saved as revision ${res.data.revision}` : `Workflow "${workflowName}" created and active!`);
       onSuccess(res.data);
       onClose();
     } catch (err: any) {
@@ -355,7 +449,8 @@ export function useWorkflowBuilder({ open, onClose, onSuccess, defaultChannelPro
   };
 
   return {
-    resourcesLoading, connectorError, skillsError, reloadResources, resourcesUnavailable,
+    workflow, formatting, definitionError, changeSummary, setChangeSummary, handleDeleteStepByKey,
+    resourcesLoading, connectorError, skillsError, repositoryError, reloadResources, resourcesUnavailable,
     open, onClose, onSuccess, defaultChannelProvider, defaultChannelId,
     departmentId, departments, activeDepartmentId, effectiveDepartmentId, activeTab,
     setActiveTab, generating, setGenerating, saving, setSaving,
@@ -370,6 +465,6 @@ export function useWorkflowBuilder({ open, onClose, onSuccess, defaultChannelPro
     setCreatingSkill, steps, setSteps, yamlContent, setYamlContent,
     yamlDirty, setYamlDirty, syncToYaml, handleGenerateTemplate, handleAddStep,
     handleUpdateStep, handleDeleteStep, handleAttachExistingSkill, handleRemoveSkill, handleCreateNewSkill,
-    handleCopyYaml, handleDownloadYaml, handleSyncYamlToVisual, handleSaveWorkflow,
+    handleCopyYaml, handleDownloadYaml, handleSyncYamlToVisual, handleSaveWorkflow, handleYamlChange,
   };
 }

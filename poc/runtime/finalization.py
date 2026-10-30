@@ -51,16 +51,19 @@ def record_response(adapter, run: AgentRun):
         logger.warning("Failed to record task response to chat: %s", error)
 
 
-def finalize_run(adapter, run: AgentRun):
+def finalize_run(adapter, run: AgentRun, *, playground: bool = False):
     run_id = run.run_id
     terminal = (TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED)
     run.ended_at = datetime.now() if run.status in terminal else None
     try:
-        record_response(adapter, run)
+        if playground:
+            adapter.services.database().save_task_run(run)
+        else:
+            record_response(adapter, run)
     except Exception as error:
         logger.warning("Failed to save task run to DB: %s", error)
 
-    if run.status in (TaskStatus.COMPLETED, TaskStatus.FAILED):
+    if not playground and run.status in (TaskStatus.COMPLETED, TaskStatus.FAILED):
         completion = adapter.on_task_completed or adapter.services.complete
         if completion:
             try:

@@ -95,3 +95,27 @@ poc/
 
 ## Refactor boundaries
 `poc/storage/` owns SQL, records and connections; persistence.py is its compatibility facade. Optional routers are registered by router_registry.py, availability belongs to capabilities.py, and service wiring belongs in dependencies.py. Domain/storage modules must not import the global container. Owned source files stay at most 500 physical lines. Under the current user instruction do not run tests, build, lint, type checks, startup or inference. Source review is authorized and is not runtime verification.
+### Workflow playground contracts
+The tool-free playground endpoint returns 202 and runs locally via BackgroundTasks, not RabbitMQ. Keep its fresh IDs/hash namespace and capability check; never fall back to ordinary unrestricted execution. Execution detail includes step_runs and enforces workflow scope. Run isolated contract tests with `.venv/bin/python -m pytest --noconftest poc/tests/test_workflow_playground.py -q`; the shared conftest resets the default application database and is intentionally not loaded for this suite. Real model inference is a separate smoke check, not covered by these tests.
+
+Tool-free playgrounds skip connector-grant prechecks for declared MCP dependencies, while ordinary runs still reject ungranted connectors. Do not grant production connector access to make a tool-free exercise runnable. The playground contract suite covers workflow and step declarations for both modes.
+
+Execution detail now exposes persisted runtime diagnostics per step (last 500 events), under the same workflow tenant/department scope. Step log rows are created before runtime launch and finalized in place. Runtime stdout/stderr regression checks use real local subprocesses and require no provider calls. The standalone logs route is `/workflows/:workflowId/logs`.
+
+Workflow origin is computed from workflow_step_runs plus recursive task lineage. Do not mark a shared agent as workflow-only to isolate a particular run. Task snapshot scope and SSE payload origin must agree. Origin tests run against isolated real SQLite/FastAPI with --noconftest. Plugin scan refresh=true explicitly bypasses the Git tree scan cache; source edits and manual refresh must invalidate client cache.
+
+### Workflow update invariants
+Workflow updates and history inserts must share one transaction. Use exclude_unset request data to preserve omitted settings, allow explicit clearing of nullable fields, and reject tenant reassignment. expected_revision mismatches return 409 with drafts retained in the client. Workflow YAML/JSON conversion must validate DAGs while preserving unknown extension fields and metadata. Schema migration captures a single legacy baseline; do not claim earlier history exists. Tests are in test_workflow_revisions.py and run with --noconftest.
+
+### Authoring foundation security contract
+The new WorkflowAssistantService is the common backend for future chat/MCP clients. It must reload the ACTIVE user and database department membership rather than accepting JWT role/department lists as fallback permission. Never expose raw connector configuration, schemas containing credentials, system prompts or anonymous/global resources in its catalog. Channels/repositories require explicit allowed_channels/allowed_repos list entries; default or discovered resources are not approval. Skills are restricted to registered organization-project skills explicitly assigned to the selected agent. Client scopes only reduce database permissions. Drafts are separate, non-executable records; do not publish or activate them from validation/save operations. See workflow_assistant/AGENTS.md for exact routes/state/schema.
+
+## Workflow Assistant model generation
+Authoring generation uses 202 BackgroundTasks plus persisted polling state, not agent dispatch or RabbitMQ. Keep per-department serialization, bounded context, timeout/cancel/expiry, fresh DB authorization, strict output validation and explicit revision-checked saves. Tests: test_workflow_assistant_generation.py with --noconftest. Never execute provider calls under a SQLite write transaction.
+
+Workflow Assistant clarification must resolve internal IDs from the authorized catalog. Empty-catalog guidance must distinguish missing department grants from missing organization installation; never auto-grant access or infer approval from default_repo. generation.py normalizes internal-ID requests into localized setup guidance before validation/persistence.
+
+## Model-only YAML authoring and internal MCP
+Model-only authoring must not load/save a planning agent. Use the current runtime's model/provider allowlist and the shared native workflow schema/graph validator. MCP exposes only bound catalog/schema/YAML validation; a mode-0600 context file delegates the current authenticated job/workspace, never credentials or identity supplied by the model. Recheck live rights/job expiry on each call and independently validate final output. Require a validation_id scoped to the current generation and verify the stored canonical candidate hash; never accept rewritten final YAML in place of the candidate. No automatic access grant, native connector execution or publication is permitted.
+
+Master integration retains modular dependencies and isolated lifecycle. queue_lifecycle owns broker/worker shutdown; workflow_wiring owns firewall and ChatOps adapters. Source-only merge review: do not infer passing builds/tests from conflict resolution.

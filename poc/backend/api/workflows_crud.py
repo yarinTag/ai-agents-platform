@@ -1,20 +1,27 @@
-"""Workflows: crud ownership."""
+from fastapi import APIRouter, HTTPException, Depends, status, Request, Query
 
-from fastapi import HTTPException, Depends, status, Request
 from typing import List, Optional
+
 import uuid
+
 import json
-from ..dependencies import get_db_manager, DatabaseManager, AgentConfig
-from workflows.parser import WorkflowParser
-from ..security import get_authorized_scope
-from .workflows_models import WorkflowCreateRequest, WorkflowResponse, WorkflowUpdateRequest
-from .workflows_mapping import _check_workflow_scope, _workflow_to_response
+
 import logging
+
+import yaml
+
+from ..dependencies import get_db_manager, DatabaseManager, AgentConfig, WorkflowRevisionConflict
+
+from ..security import get_authorized_scope
+
+from workflows.parser import validate_workflow_definition
+
+from .workflows_models import WorkflowCreateRequest, WorkflowUpdateRequest, WorkflowResponse, WorkflowRevisionResponse
+from .workflows_mapping import _workflow_actor, _check_workflow_scope, _workflow_to_response
+
 logger = logging.getLogger(__name__)
-from fastapi import APIRouter
-
 router = APIRouter()
-
+_validated_definition = validate_workflow_definition
 
 @router.post("", response_model=WorkflowResponse, status_code=status.HTTP_201_CREATED)
 @router.post("/", response_model=WorkflowResponse, status_code=status.HTTP_201_CREATED)
@@ -27,11 +34,16 @@ def create_workflow(
     def_json = req.definition_json
     if not def_json and req.definition_yaml:
         try:
-            def_json = WorkflowParser.yaml_to_json(req.definition_yaml)
+            def_json = json.dumps(_validated_definition(yaml.safe_load(req.definition_yaml)))
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Invalid YAML definition: {e}")
     elif not def_json:
         raise HTTPException(status_code=400, detail="Either definition_yaml or definition_json is required")
+
+    try:
+        _validated_definition(json.loads(def_json))
+    except (ValueError, TypeError, AttributeError) as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid workflow definition: {exc}") from exc
 
     scope = get_authorized_scope(request, db)
     org_id = scope["org_id"]
@@ -101,6 +113,7 @@ def create_workflow(
         logger.warning(f"Could not auto-create runner agent: {e}")
 
     # Inject runner agent ID and status into definition
+    def_dict["id"] = wf_id
     def_dict["runner_agent_id"] = runner_agent_id
     def_dict["is_workflow_agent"] = True
     def_json = json.dumps(def_dict, indent=2)
@@ -113,16 +126,18 @@ def create_workflow(
         description=req.description,
         cron_expression=req.cron_expression,
         webhook_enabled=req.webhook_enabled,
-        organization_id=org_id
+        organization_id=org_id,
+        **_workflow_actor(request)
     )
 
     yaml_repr = None
     try:
-        yaml_repr = WorkflowParser.json_to_yaml(wf.definition_json)
+        yaml_repr = yaml.safe_dump(json.loads(wf.definition_json), sort_keys=False, allow_unicode=True)
     except Exception:
         pass
 
     return WorkflowResponse(
+        revision=getattr(wf, "revision", 1),
         id=wf.id,
         name=wf.name,
         description=wf.description,
@@ -138,8 +153,6 @@ def create_workflow(
         created_at=wf.created_at,
         updated_at=wf.updated_at
     )
-
-
 
 @router.get("", response_model=List[WorkflowResponse])
 @router.get("/", response_model=List[WorkflowResponse])
@@ -171,8 +184,6 @@ def list_workflows(
     )
     return [_workflow_to_response(wf) for wf in workflows]
 
-
-
 @router.get("/{workflow_id}", response_model=WorkflowResponse)
 def get_workflow(
     workflow_id: str,
@@ -187,57 +198,70 @@ def get_workflow(
     _check_workflow_scope(wf, scope)
     return _workflow_to_response(wf)
 
-
+@router.get("/{workflow_id}/revisions", response_model=List[WorkflowRevisionResponse])
+def list_workflow_revisions(
+    workflow_id: str, request: Request,
+    limit: int = Query(50, ge=1, le=100),
+    before_revision: Optional[int] = Query(None, ge=1),
+    db: DatabaseManager = Depends(get_db_manager)
+):
+    wf = db.get_workflow(workflow_id)
+    if not wf:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    _check_workflow_scope(wf, get_authorized_scope(request, db))
+    return db.list_workflow_revisions(workflow_id, limit=limit, before_revision=before_revision)
 
 @router.put("/{workflow_id}", response_model=WorkflowResponse)
 def update_workflow(
-    workflow_id: str,
-    req: WorkflowUpdateRequest,
-    request: Request,
+    workflow_id: str, req: WorkflowUpdateRequest, request: Request,
     db: DatabaseManager = Depends(get_db_manager)
 ):
-    """Update workflow settings or definition with scope validation."""
+    """Save one atomic revision, retaining unspecified settings and tenant identity."""
     wf = db.get_workflow(workflow_id)
     if not wf:
         raise HTTPException(status_code=404, detail="Workflow not found")
     scope = get_authorized_scope(request, db)
     _check_workflow_scope(wf, scope)
-
-    if req.department_id:
-        dept = db.get_department(req.department_id)
-        if not dept or (scope["org_id"] and dept.organization_id and dept.organization_id != scope["org_id"]):
-            raise HTTPException(status_code=400, detail=f"Department '{req.department_id}' does not belong to your organization")
-        if not scope["is_org_admin"] and req.department_id not in scope["department_ids"]:
-            raise HTTPException(status_code=403, detail=f"Not authorized to assign workflow to department '{req.department_id}'")
-
-    def_json = req.definition_json
-    if not def_json and req.definition_yaml:
+    changes = req.model_dump(exclude_unset=True)
+    changes.pop("definition_yaml", None)
+    changes.pop("expected_revision", None)
+    changes.pop("change_summary", None)
+    if "organization_id" in changes and changes["organization_id"] != wf.organization_id:
+        raise HTTPException(status_code=403, detail="Workflow organization cannot be changed")
+    if "name" in changes and (not changes["name"] or not changes["name"].strip()):
+        raise HTTPException(status_code=400, detail="Workflow name cannot be empty")
+    if "department_id" in changes:
+        dept_id = changes["department_id"]
+        if dept_id:
+            dept = db.get_department(dept_id)
+            if not dept or (scope["org_id"] and dept.organization_id != scope["org_id"]):
+                raise HTTPException(status_code=400, detail="Department does not belong to your organization")
+            if not scope["is_org_admin"] and dept_id not in scope["department_ids"]:
+                raise HTTPException(status_code=403, detail="Not authorized to assign this department")
+        elif not scope["is_org_admin"]:
+            raise HTTPException(status_code=403, detail="Only organization admins can remove department scope")
+    if req.definition_json is not None or req.definition_yaml is not None:
         try:
-            def_json = WorkflowParser.yaml_to_json(req.definition_yaml)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Invalid YAML definition: {e}")
-
-    updated = db.update_workflow(
-        id=workflow_id,
-        name=req.name,
-        description=req.description,
-        department_id=req.department_id,
-        definition_json=def_json,
-        cron_expression=req.cron_expression,
-        webhook_enabled=req.webhook_enabled,
-        is_active=req.is_active,
-        organization_id=req.organization_id
-    )
-
-    if req.department_id:
+            data = _validated_definition(json.loads(req.definition_json) if req.definition_json is not None
+                                         else yaml.safe_load(req.definition_yaml))
+            data["id"] = wf.id
+            original = json.loads(wf.definition_json)
+            if "runner_agent_id" in original:
+                data["runner_agent_id"] = original["runner_agent_id"]
+            changes["definition_json"] = json.dumps(data, ensure_ascii=False)
+        except (ValueError, TypeError, AttributeError, yaml.YAMLError) as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid workflow definition: {exc}") from exc
+    try:
+        updated = db.update_workflow(workflow_id, **changes, **_workflow_actor(request),
+            expected_revision=req.expected_revision, change_summary=req.change_summary)
+    except WorkflowRevisionConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if "department_id" in changes:
         runner_agent = db.get_agent(f"wf-agent-{workflow_id}")
         if runner_agent:
-            runner_agent.department_id = req.department_id
+            runner_agent.department_id = changes["department_id"]
             db.save_agent(runner_agent)
-
     return _workflow_to_response(updated)
-
-
 
 @router.delete("/{workflow_id}")
 def delete_workflow(

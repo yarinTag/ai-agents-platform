@@ -12,6 +12,10 @@ The **Supervisor & Human-In-The-Loop Approval Service** (`poc/backend/approvals/
 * **State Machine Coordination**:
   * Suspends tasks into `WAITING_INPUT` (for questions/clarifications) or `PENDING_APPROVAL` (for dangerous commands or permissions).
   * Automatically transitions tasks back to `RUNNING` or `FAILED` upon decision.
+* **Dual-Channel Interactive ChatOps (Telegram & Slack)**:
+  * Generates Telegram Inline Keyboards (`approve` / `reject`) and handles `callback_query` webhooks with in-place message editing via Telegram Bot API.
+  * Generates Slack Block Kit interactive buttons and handles Slack interactivity webhooks with in-channel block replacement.
+  * Resolves decisions into DB and triggers `runtime_adapter.resume_task` automatically without human intervention in the web dashboard.
 * **Resumption Triggering (`resume_task`)**:
   * Integrates with `runtime_adapter.resume_task` to inject human/manager answers directly back into the waiting Claude agent run.
 * **Notification Broadcasting**:
@@ -25,6 +29,9 @@ The **Supervisor & Human-In-The-Loop Approval Service** (`poc/backend/approvals/
 * `GET /api/v1/approvals/pending` - List all pending approval requests and queries.
 * `POST /api/v1/approvals/` - Create a new clarification or approval request.
 * `POST /api/v1/approvals/respond` - Submit an approval, denial, or answer to unblock the agent.
+* `POST /api/v1/approvals/{interaction_id}/dispatch-channel` - Dispatch interactive approval message to Telegram or Slack.
+* `POST /api/v1/approvals/telegram-callback` - Telegram Bot webhook for inline keyboard actions.
+* `POST /api/v1/approvals/slack-callback` - Slack Interactivity webhook for block actions.
 
 ---
 

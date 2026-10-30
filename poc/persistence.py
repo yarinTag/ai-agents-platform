@@ -13,7 +13,7 @@ from events.models import PlatformEvent
 from storage.records import (
     AgentMessage, MCPConnector, MCPTool, MCPToolCall, AgentTeam, Organization,
     User, DepartmentMember, OrgInvitation, Department, DepartmentMCPAccess,
-    Workflow, WorkflowExecution, WorkflowStepRun, RunEvaluation,
+    Workflow, WorkflowExecution, WorkflowStepRun, RunEvaluation, WorkflowRevisionConflict,
 )
 from storage.paths import POC_ROOT, DEFAULT_DB_PATH
 from storage.connection import ConnectionStore
@@ -67,7 +67,7 @@ class DatabaseManager:
             initialize_collaboration_schema(conn)
             initialize_integration_schema(conn)
             initialize_organization_schema(conn)
-            initialize_workflow_schema(conn)
+            initialize_workflow_schema(conn, self._insert_workflow_revision)
             self._seed_default_templates(conn)
             self._seed_default_agents(conn)
             conn.commit()

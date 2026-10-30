@@ -192,6 +192,7 @@ class Workflow(Record):
     organization_id: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+    revision: int = 1
 
 
 @dataclass
@@ -211,6 +212,7 @@ class WorkflowExecution(Record):
     completed_at: Optional[str] = None
     error_message: Optional[str] = None
     created_at: Optional[str] = None
+    payload_hash: Optional[str] = None
 
 
 @dataclass
@@ -242,4 +244,9 @@ class RunEvaluation(Record):
     feedback_notes: Optional[str] = None
     lessons_extracted: Optional[str] = None
     created_at: Optional[str] = None
+
+
+
+class WorkflowRevisionConflict(ValueError):
+    """A workflow was edited after the caller loaded its base revision."""
 

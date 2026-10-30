@@ -114,7 +114,8 @@ class RuntimeCommandBuilder:
         prompt: str,
         session_id: Optional[str] = None,
         fork_session: bool = False,
-        dangerously_skip_permissions: bool = False
+        dangerously_skip_permissions: bool = False,
+        playground: bool = False
     ) -> List[str]:
         """
         Build Claude Code command with appropriate arguments.
@@ -140,6 +141,27 @@ class RuntimeCommandBuilder:
 
         if resolved_model and resolved_model.lower() != "default":
             cmd.extend(["--model", resolved_model.lower()])
+
+        if playground:
+            system_prompt = agent_config.system_prompt or ""
+            if agent_config.skills:
+                skill_context = self.services.skills_prompt(agent_config.skills)
+                if not skill_context:
+                    raise ValueError("Required playground skill context is unavailable")
+                system_prompt += "\n" + skill_context
+            # Explicit tool inventory and MCP configuration; no inherited customization.
+            cmd.extend([
+                "-p", prompt, "--output-format", "stream-json", "--verbose",
+                "--safe-mode", "--tools", "", "--strict-mcp-config",
+                "--mcp-config", '{"mcpServers":{}}',
+                "--setting-sources", "", "--settings", '{"disableAllHooks":true}',
+                "--permission-mode", "dontAsk", "--no-session-persistence",
+                "--disable-slash-commands", "--no-chrome",
+                "--system-prompt", system_prompt +
+                "\nThis is an internal, tool-free workflow exercise. Use only supplied "
+                "data. Report missing information explicitly; do not claim external actions occurred."
+            ])
+            return cmd
 
         if session_id and not session_id.startswith("pending_") and not session_id.startswith("sess_"):
             cmd.extend(["--resume", session_id])

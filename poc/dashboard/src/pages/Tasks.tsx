@@ -1,5 +1,6 @@
+import { TaskQueuePanel } from './TaskQueuePanel';
 import React from 'react';
-import { Table, Form, Input, Button, Modal, Tag, message, Select, InputNumber, Tree, Card } from 'antd';
+import { Table, Form, Input, Button, Modal, Tag, Slider, message, Select, InputNumber, Tree, Card } from 'antd';
 import { PlusOutlined, SyncOutlined, CopyOutlined, CodeOutlined } from '@ant-design/icons';
 import { Task } from '../types/task';
 import { Agent } from '../types/agent';
@@ -10,6 +11,7 @@ export const TasksPage: React.FC = () => {
   const model = useTasksPage();
   const {
     tasks,
+    refresh,
     agents,
     loading,
     visible,
@@ -41,10 +43,10 @@ export const TasksPage: React.FC = () => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <div>
           <h2 style={{ margin: 0, color: '#f3f4f6', fontSize: '22px', fontWeight: 700 }}>
-            📋 Task Orchestration & Execution Queue
+            📋 Task Orchestration & Execution
           </h2>
           <span style={{ color: '#9ca3af', fontSize: '13px' }}>
-            Live asynchronous executions, structured subtask delegation, and result lineage.
+            Live asynchronous executions, structured subtask delegation, and multi-agent task coordination.
           </span>
         </div>
         <Button
@@ -56,6 +58,8 @@ export const TasksPage: React.FC = () => {
           Dispatch New Task
         </Button>
       </div>
+
+      <TaskQueuePanel onTaskRetried={refresh} />
 
       <Table
         dataSource={tasks}
@@ -96,6 +100,14 @@ export const TasksPage: React.FC = () => {
             rules={[{ required: true, message: 'Task prompt is required' }]}
           >
             <Input.TextArea rows={4} placeholder="Analyze codebase and create report..." />
+          </Form.Item>
+          <Form.Item name="priority" label="Execution Priority (1: Background, 5: Standard, 10: Urgent Incident)" initialValue={5}>
+            <Slider min={1} max={10} marks={{
+              1: { style: { color: '#64748b' }, label: '1 (Low)' },
+              5: { style: { color: '#38bdf8' }, label: '5 (Std)' },
+              8: { style: { color: '#f59e0b' }, label: '8 (High)' },
+              10: { style: { color: '#ef4444' }, label: '10 (Urgent)' },
+            }} />
           </Form.Item>
         </Form>
       </Modal>

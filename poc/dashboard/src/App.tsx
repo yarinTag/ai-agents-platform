@@ -11,6 +11,9 @@ import { OptionalRuntimeSetup } from './components/common/OptionalRuntimeSetup';
 // Optional view modules load only when their route is selected.
 const featureRoutes = [
   { path: '/', load: () => import('./pages/OfficeView') },
+  { path: '/workflow-assistant', capability: 'workflow-assistant', load: () => import('./pages/WorkflowAssistant') },
+  { path: '/workflows', capability: 'workflows', load: () => import('./pages/Workflows') },
+  { path: '/workflows/:workflowId/logs', capability: 'workflows', load: () => import('./pages/WorkflowLogs') },
   { path: '/flow', load: () => import('./pages/AgentFlow') },
   { path: '/agents', load: () => import('./pages/Agents') },
   { path: '/skills', capability: 'skills', load: () => import('./pages/Skills') },

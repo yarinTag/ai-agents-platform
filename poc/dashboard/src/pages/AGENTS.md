@@ -164,3 +164,35 @@ Capability readiness and backend service fault isolation are not established by 
 
 ## Final review shared ownership
 MCP channel/repository projections reuse services/mcpResources rather than duplicate provider-specific loops. Scoped ResourceSection errors/retry preserve independent tabs when optional backends are unavailable. Existing routes and component exports remain compatible.
+
+
+## Workflows Playground
+`/workflows` provides a Playground button per workflow. The shared launch modal switches to tool-free mode, accepts only JSON objects, explains model costs and disabled tools/notifications/approvals, and hides production cache controls. It calls executeWorkflowPlayground, opens the execution inspector and execution tab, and shows PLAYGROUND badges. The inspector refreshes authorized execution details every three seconds while open, cancels updates on close/ID changes, and displays persisted per-step input, output, status and cost alongside aggregate metrics. This mode does not emulate tool responses or train model weights.
+
+## Per-workflow logs page
+`WorkflowLogs.tsx` mounts at `/workflows/:workflowId/logs`; optional `?execution=<id>` selects a permanent run link. The Workflows table exposes Logs and its inspector links to Full logs. The page loads authorized workflow metadata, latest 200 executions filtered by workflow_id, and selected execution details. It refreshes every five seconds with cleanup on navigation, supports playground/live filters, searches step data, shows run/step errors and timestamps, input/output, costs and up to 500 persisted runtime events per step. Empty logs explain failures before step launch or legacy records. JSON export downloads only the selected authorized execution detail. Errors are displayed inline with Refresh available.
+
+## Office versus workflow activity
+OfficeView and AgentFlow call useOfficeEvents('office'); Tasks retains the default all scope. Live Flow requests office-scoped historical recent activity. Shared specialist definitions can be reused by workflows, but those runs and descendants do not affect the Office canvas, office task counters or Live Flow feed. SkillsPage uses the session-memory plugin API cache; manual Scan and Save & Sync force a rescan, while configuration fetch failures stop initial scanning instead of falling back to an unintended source.
+
+## Workflow Edit and History actions
+Each workflow row exposes Edit and History. Edit mounts a fresh shared builder instance with the selected workflow, updating the same record rather than creating another. Close/success clears edit context; new-workflow actions explicitly select create mode. History opens WorkflowHistoryDrawer, separate from the execution Logs view. Canvas deletions pass expected_revision and a change summary and reconcile flow edges, so they are also audited configuration revisions. Existing execution IDs/logs remain intact.
+
+## Workflow Assistant model generation
+WorkflowAssistant.tsx (/workflow-assistant, optional ?generation=id) loads current departments/catalog/drafts, selects a planning profile/model, submits bounded user/assistant conversations, polls active jobs every 1.5 seconds (5-second retry on transient reads), and allows cancellation. It renders clarification questions, per-step declared resources/dependencies, current validation and JSON. Saving calls the generation save-draft endpoint with explicit save_blocked on invalid proposals. Source revisions come from the loaded draft or saved generation snapshot, never silently from a newer list entry; stale drafts require reload. Permissions/resources are refreshed on terminal jobs/save. Conversation state stays in memory; known job links recover from the server.
+
+Draft history is loaded through getAssistantDraftHistory (GET /drafts/{id}/revisions) and displayed as read-only revision snapshots in the proposal panel.
+
+## Model-only YAML authoring and internal MCP
+WorkflowAssistant.tsx now sends model_id/provider_id, shows configured-runtime model options independent of department agents, loads /workflow-schema, previews/downloads workflow-draft.yaml and calls /validate-yaml for current checks. MCP call audit badges come from authenticated job data. New history snapshots prefer definition_yaml with legacy JSON fallback. Legacy chats with provider_id=legacy remain viewable without selecting a former planning agent; a current model must be selected for new generation.
+
+
+## Incoming master integration ownership
+
+`Workflows.tsx` mounts at `/workflows` and now delegates loading, polling, execution, optimistic revision writes and modal state to `useWorkflowsPage.tsx`. `workflowColumns.tsx` owns saved-workflow actions (Edit/History/Run/Playground/Logs/Canvas/Definition/Delete); `workflowExecutionColumns.tsx` owns execution summaries; `WorkflowExecutionDrawer.tsx` owns authorized selected-run/step inspection. Existing 10-second list and 3-second detail refresh/cleanup are preserved. Workflow Logs and Workflow Assistant remain separate routes, retaining model-only generation, permission-aware drafts and non-executable YAML semantics.
+
+`services/workflowDefinitions.ts:removeWorkflowStep` owns DAG-stage removal/dependency rewiring and flow-edge reconciliation for both workflow and MCP canvases. Both update the current workflow using expected_revision and change_summary; optimistic conflicts retain displayed state and show the error. The MCP canvas no longer calls format conversion with an unsupported positional signature.
+
+Tasks uses `useTaskQueue.ts` and `TaskQueuePanel.tsx` for broker metrics, independent 5-second refresh, DLQ inspection/retry and explicit unavailable states. Task dispatch preserves upstream use_queue=true and priority (1–10) while all-scope task history remains separate from broker availability. Agents Fleet retains office-agent filtering; workflow agents are managed through Workflows rather than a duplicate fleet tab. Plugin manual Scan/Save & Sync pass forceRefresh=true through the cached API, and source-config read failure still prevents a scan.
+
+No tests, build, lint, type checking, import execution or application startup were run during merge resolution. Source/API contract review does not establish live integration correctness.

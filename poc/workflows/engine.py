@@ -7,6 +7,8 @@ maker-checker reviews, and captures run evaluations.
 """
 
 import uuid
+import json
+import hashlib
 import logging
 import concurrent.futures
 from datetime import datetime
@@ -22,8 +24,16 @@ from .execution_models import BudgetExceededError, MCPGovernanceViolationError, 
 from .conditions import evaluate_condition_rule, evaluate_trigger_conditions
 from .step_runner import WorkflowStepRunner
 from .stages import group_steps_into_stages
+from .agent_scope import require_agent_scope
 
 logger = logging.getLogger(__name__)
+
+
+def compute_execution_hash(workflow_id: str, payload: Any, revision: Optional[int] = None) -> str:
+    """Stable namespace includes the saved revision and playground identity."""
+    payload_text = json.dumps(payload, sort_keys=True) if payload else ""
+    namespace = f"{workflow_id}:v{revision}" if revision is not None else workflow_id
+    return hashlib.sha256(f"{namespace}:{payload_text}".encode("utf-8")).hexdigest()[:16]
 
 
 class WorkflowEngine:
@@ -41,11 +51,14 @@ class WorkflowEngine:
         sandbox_manager: Optional[SandboxManager] = None,
         notifier: Optional[WorkflowNotifications] = None,
         skill_context=None,
+        prompt_guard=None,
+        output_sanitizer=None,
+        approval_dispatch=None,
     ):
         self.db = db_manager
         self.notifier = notifier
         self.runtime = runtime_adapter
-        self._step_runner = WorkflowStepRunner(db_manager, runtime_adapter, skill_context)
+        self._step_runner = WorkflowStepRunner(db_manager, runtime_adapter, skill_context, prompt_guard, output_sanitizer, approval_dispatch)
         self.orchestration = orchestration_engine
         self.sandbox_manager = sandbox_manager or SandboxManager()
 
@@ -56,7 +69,10 @@ class WorkflowEngine:
         trigger_payload: Optional[Dict[str, Any]] = None,
         source_workspace: Optional[str] = None,
         runtime_provider: Optional[str] = None,
-        user_context: Optional[Dict[str, Any]] = None
+        user_context: Optional[Dict[str, Any]] = None,
+        execution_id: Optional[str] = None,
+        payload_hash: Optional[str] = None,
+        playground: bool = False
     ) -> WorkflowExecution:
         """
         Execute an entire workflow instance.
@@ -69,6 +85,11 @@ class WorkflowEngine:
         workflow = self.db.get_workflow(workflow_id)
         if not workflow:
             raise ValueError(f"Workflow '{workflow_id}' not found")
+
+        if playground:
+            if not self.runtime or not getattr(self.runtime.get_capabilities(), "supports_playground", False):
+                raise ValueError("The configured runtime does not support tool-free playground execution")
+            trigger_type = "PLAYGROUND"
 
         # 1. Budget and Department Access Authorization pre-check
         dept_id = workflow.department_id
@@ -98,24 +119,41 @@ class WorkflowEngine:
                     budget=budget_status.get("monthly_budget_usd", 0.0)
                 )
 
-        execution_id = f"wf_exec_{uuid.uuid4().hex[:12]}"
+        if not execution_id:
+            execution_id = f"{'pg_exec_' if playground else 'wf_exec_'}{uuid.uuid4().hex[:12]}"
+
+        if not payload_hash:
+            payload_hash = compute_execution_hash(f"playground:{workflow_id}" if playground else workflow_id, trigger_payload, revision=workflow.revision)
 
         # 2. Setup sandbox session
         sandbox = self.sandbox_manager.create_sandbox(
             execution_id=execution_id,
-            source_workspace=source_workspace
+            source_workspace=None if playground else source_workspace,
+            force_type="EPHEMERAL_DIR" if playground else None
         )
 
-        # 3. Create execution record in database
-        payload_str = str(trigger_payload) if trigger_payload else None
-        wf_exec = self.db.create_workflow_execution(
-            execution_id=execution_id,
-            workflow_id=workflow_id,
-            trigger_type=trigger_type,
-            trigger_payload=payload_str,
-            department_id=dept_id,
-            sandbox_path=sandbox.path
-        )
+        # 3. Create or update execution record in database
+        payload_str = json.dumps(trigger_payload) if trigger_payload is not None else None
+        existing_exec = self.db.get_workflow_execution(execution_id)
+        if existing_exec:
+            wf_exec = self.db.update_workflow_execution(
+                execution_id=execution_id,
+                status="RUNNING",
+                started_at=datetime.now().isoformat(),
+                sandbox_path=sandbox.path,
+                payload_hash=payload_hash
+            )
+        else:
+            wf_exec = self.db.create_workflow_execution(
+                execution_id=execution_id,
+                workflow_id=workflow_id,
+                trigger_type=trigger_type,
+                trigger_payload=payload_str,
+                department_id=dept_id,
+                sandbox_path=sandbox.path,
+                payload_hash=payload_hash,
+                status="RUNNING"
+            )
 
         # 4. Parse workflow definition
         wf_def: WorkflowDefinition
@@ -134,8 +172,24 @@ class WorkflowEngine:
                 sandbox.cleanup()
                 return self.db.get_workflow_execution(execution_id)
 
+        try:
+            for step in wf_def.steps:
+                require_agent_scope(self.db.get_agent(step.agent_id), workflow, user_context)
+                reviewer_id = (getattr(step, "params", None) or {}).get("reviewerAgentId")
+                if reviewer_id and not playground:
+                    require_agent_scope(self.db.get_agent(reviewer_id), workflow, user_context)
+        except Exception as error:
+            self.db.update_workflow_execution(
+                execution_id, status="FAILED", error_message=str(error),
+                completed_at=datetime.now().isoformat(),
+            )
+            sandbox.cleanup()
+            raise
+
+        # Tool-free exercises never connect to declared MCP servers.
+        # Live executions still require department connector grants.
         # 4b. Pre-flight MCP Governance check
-        if dept_id:
+        if dept_id and not playground:
             all_mcp_servers = set(getattr(wf_def, "mcp_servers", []) or [])
             for s in wf_def.steps:
                 for sm in (getattr(s, "mcp_servers", []) or []):
@@ -184,7 +238,8 @@ class WorkflowEngine:
                         execution_id=execution_id,
                         step_outputs=step_outputs,
                         trigger_payload=trigger_payload,
-                        dept_id=dept_id
+                        dept_id=dept_id,
+                        playground_workspace=sandbox.path if playground else None
                     )
                     step_outputs[res.step_key] = res.output or ""
                     total_input_tokens += res.input_tokens
@@ -204,7 +259,8 @@ class WorkflowEngine:
                                 execution_id,
                                 dict(step_outputs),
                                 trigger_payload,
-                                dept_id
+                                dept_id,
+                                sandbox.path if playground else None
                             ): s for s in stage
                         }
                         for fut in concurrent.futures.as_completed(future_map):
@@ -253,7 +309,7 @@ class WorkflowEngine:
         )
 
         # Optional delivery must not change the authoritative execution result.
-        if self.notifier:
+        if self.notifier and not playground:
             try:
                 self.notifier.notify(
                     workflow_id, execution_id, trigger_type, final_status, step_outputs,
@@ -264,9 +320,9 @@ class WorkflowEngine:
 
         return self.db.get_workflow_execution(execution_id)
 
-    def _execute_single_step(self, step, execution_id, step_outputs, trigger_payload, dept_id):
+    def _execute_single_step(self, step, execution_id, step_outputs, trigger_payload, dept_id, playground_workspace=None):
         self._step_runner.runtime = self.runtime
-        return self._step_runner.execute(step, execution_id, step_outputs, trigger_payload, dept_id)
+        return self._step_runner.execute(step, execution_id, step_outputs, trigger_payload, dept_id, playground_workspace)
 
     def _group_steps_into_stages(self, steps):
         return group_steps_into_stages(steps)

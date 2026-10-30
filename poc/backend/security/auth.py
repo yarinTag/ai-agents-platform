@@ -143,7 +143,8 @@ async def authenticate_request(
     # Exempt public documentation, health check, and auth onboarding endpoints
     exempt_paths = {
         "/", "/health", "/docs", "/openapi.json", "/redoc",
-        "/api/v1/auth/status", "/api/v1/auth/login", "/api/v1/auth/org-register", "/api/v1/invitations/accept"
+        "/api/v1/auth/status", "/api/v1/auth/login", "/api/v1/auth/org-register", "/api/v1/invitations/accept",
+        "/api/v1/approvals/telegram-callback", "/api/v1/approvals/slack-callback"
     }
     if path in exempt_paths or request.url.path in exempt_paths or request.url.path.startswith("/api/v1/workflows/webhooks/"):
         return {

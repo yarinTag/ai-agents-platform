@@ -24,7 +24,6 @@ export const AgentsPage: React.FC = () => {
     fetchAgents,
     handleCreate,
     officeFloorAgents,
-    workflowAgents,
   } = model;
   const columns = createAgentColumns(model);
   return (
@@ -58,7 +57,7 @@ export const AgentsPage: React.FC = () => {
             key: 'roster',
             label: (
               <span>
-                <TeamOutlined /> 🏢 Office Floor Team ({officeFloorAgents.length})
+                <TeamOutlined /> 🏢 Agents Fleet ({officeFloorAgents.length})
               </span>
             ),
             children: (
@@ -71,51 +70,6 @@ export const AgentsPage: React.FC = () => {
                 scroll={{ x: 1000 }}
                 style={{ background: '#161b22', borderRadius: '12px' }}
               />
-            ),
-          },
-          {
-            key: 'workflows',
-            label: (
-              <span>
-                <ThunderboltOutlined /> ⚡ Workflow Automations ({workflowAgents.length})
-              </span>
-            ),
-            children: (
-              <div>
-                <div
-                  style={{
-                    background: 'linear-gradient(90deg, rgba(88, 28, 135, 0.25) 0%, rgba(30, 27, 75, 0.45) 100%)',
-                    border: '1px solid #7c3aed',
-                    borderRadius: '10px',
-                    padding: '14px 18px',
-                    marginBottom: '16px',
-                    color: '#e9d5ff',
-                    fontSize: '13px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '14px',
-                  }}
-                >
-                  <span style={{ fontSize: '24px' }}>⚡</span>
-                  <div>
-                    <div style={{ fontWeight: 700, color: '#f3e8ff', fontSize: '14px', marginBottom: '2px' }}>
-                      Decoupled Workflow Automation Agents
-                    </div>
-                    <div style={{ fontSize: '12px', color: '#c084fc', lineHeight: 1.5 }}>
-                      These agents are automatically provisioned when workflows are created to maintain scheduled executions (cron) or listen to selected channel events (Telegram/Slack). They run in the cloud background and are <strong>completely detached from the 2D Pixel Office Canvas</strong>, keeping physical workstations reserved for human-collaborative team agents.
-                    </div>
-                  </div>
-                </div>
-                <Table
-                  dataSource={workflowAgents}
-                  columns={columns}
-                  rowKey="id"
-                  loading={loading}
-                  pagination={{ pageSize: 8 }}
-                  scroll={{ x: 1000 }}
-                  style={{ background: '#161b22', borderRadius: '12px' }}
-                />
-              </div>
             ),
           },
           {

@@ -21,6 +21,8 @@ class RuntimeCapabilities:
     supports_concurrent: bool
     max_concurrent: Optional[int]
     supported_models: List[str]
+    supports_playground: bool = False
+    supports_authoring: bool = False
 
 
 @runtime_checkable
@@ -110,4 +112,46 @@ class RuntimeAdapter(Protocol):
 
     def get_capabilities(self) -> RuntimeCapabilities:
         """Return the runtime's declared capabilities."""
+        ...
+
+
+@runtime_checkable
+class PlaygroundRuntimeAdapter(RuntimeAdapter, Protocol):
+    """Optional tool-free extension; ordinary adapters need not implement it."""
+
+    def start_playground_task(self, agent_id: str, task_id: str, prompt: str, workspace: str) -> str:
+        """Optional capability: fresh tool-free inference, no external callbacks or escalation."""
+        ...
+
+
+@dataclass
+class AuthoringInferenceResult:
+    output: Any = None
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cost_usd: Optional[float] = None
+    cost_source: str = "ESTIMATED"
+    model: Optional[str] = None
+    error_code: Optional[str] = None
+    error_message: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class AuthoringModelSelection:
+    model_id: str
+    provider_id: str
+
+
+@runtime_checkable
+class AuthoringRuntimeAdapter(RuntimeAdapter, Protocol):
+    def get_authoring_models(self) -> List[Dict[str, str]]:
+        """Model options for the currently configured provider; no agent profile is read."""
+        ...
+
+    def infer_authoring(self, selection: AuthoringModelSelection, prompt: str, system_prompt: str,
+                        response_schema: Dict[str, Any], timeout_seconds: float = 120,
+                        max_budget_usd: Optional[float] = None,
+                        is_cancelled: Optional[Callable[[], bool]] = None,
+                        authoring_context: Optional[Dict[str, Any]] = None) -> AuthoringInferenceResult:
+        """Isolated tool-free inference, without normal tasks, sessions, or agent callbacks."""
         ...

@@ -1,3 +1,5 @@
+import { removeWorkflowStep } from '../services/workflowDefinitions';
+import { updateWorkflow } from '../services/api';
 import { message } from 'antd';
 import { bindWorkflowChannel, unbindWorkflowChannel, deleteWorkflow, executeWorkflow } from '../services/api';
 import { PlatformWorkflow } from '../types/mcp';
@@ -9,6 +11,9 @@ export const useMcpWorkflowActions = (state: Pick<
   | 'setQuickAddBindingInput'
   | 'setExtraBindingChannels'
   | 'resourceErrors'
+  | 'canvasWorkflow'
+  | 'setCanvasWorkflow'
+  | 'setWorkflows'
   | 'setBindingModalVisible'
   | 'bindingWorkflow'
   | 'setBindingWorkflow'
@@ -22,6 +27,9 @@ export const useMcpWorkflowActions = (state: Pick<
     setQuickAddBindingInput,
     setExtraBindingChannels,
     resourceErrors,
+    canvasWorkflow,
+    setCanvasWorkflow,
+    setWorkflows,
     setBindingModalVisible,
     bindingWorkflow,
     setBindingWorkflow,
@@ -30,6 +38,23 @@ export const useMcpWorkflowActions = (state: Pick<
     setRunningWfMap,
     loadData,
   } = state;
+  const handleDeleteCanvasStep = async (stepKey: string) => {
+    if (!canvasWorkflow) return;
+    try {
+      const updated = removeWorkflowStep(canvasWorkflow.definition_json, stepKey);
+      const { data } = await updateWorkflow(canvasWorkflow.id, {
+        definition_json: updated.definitionJson,
+        expected_revision: canvasWorkflow.revision || 1,
+        change_summary: `Removed step ${stepKey}`,
+      });
+      setCanvasWorkflow(data);
+      setWorkflows(previous => previous.map(workflow => workflow.id === data.id ? data : workflow));
+      message.success(`Removed step "${updated.deletedName}"`);
+    } catch (error: any) {
+      message.error(error.response?.data?.detail || 'Failed to delete step');
+    }
+  };
+
   const handleQuickAddBindingChannel = (provider: 'slack' | 'telegram') => {
     const channel = quickAddBindingInput.trim();
     if (!channel) return;
@@ -134,5 +159,5 @@ export const useMcpWorkflowActions = (state: Pick<
   };
 
   // Categories list
-  return { handleQuickAddBindingChannel, handleOpenBindingModal, handleSaveBinding, handleUnbindChannel, handleRunWorkflow, handleDeleteWorkflow };
+  return { handleDeleteCanvasStep, handleQuickAddBindingChannel, handleOpenBindingModal, handleSaveBinding, handleUnbindChannel, handleRunWorkflow, handleDeleteWorkflow };
 };

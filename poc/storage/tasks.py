@@ -239,11 +239,17 @@ class TasksRepository:
         project_id: Optional[str] = None,
         status: Optional[TaskStatus] = None,
         limit: int = 100,
-        organization_id: Optional[str] = None
+        organization_id: Optional[str] = None,
+        execution_scope: str = "all"
     ) -> List[AgentRun]:
         """List task runs with optional filtering, scoped by organization if provided."""
         with self._get_connection() as conn:
-            query = "SELECT * FROM task_runs WHERE 1=1"
+            if execution_scope not in ("all", "office", "workflow"):
+                raise ValueError("Invalid execution scope")
+            query = (self._WORKFLOW_CONTEXT_CTE if execution_scope != "all" else "") + "SELECT * FROM task_runs WHERE 1=1"
+            if execution_scope != "all":
+                operator = "NOT IN" if execution_scope == "office" else "IN"
+                query += f" AND run_id {operator} (SELECT run_id FROM workflow_context)"
             params = []
 
             if organization_id:
@@ -332,3 +338,41 @@ class TasksRepository:
             )
             row = cursor.fetchone()
             return int(row[0]) if row else 0
+
+    _WORKFLOW_CONTEXT_CTE = """
+        WITH RECURSIVE workflow_context(run_id, execution_id, workflow_id) AS (
+            SELECT s.task_run_id, e.id, e.workflow_id FROM workflow_step_runs s
+            JOIN workflow_executions e ON e.id = s.execution_id WHERE s.task_run_id IS NOT NULL
+            UNION
+            SELECT t.run_id, w.execution_id, w.workflow_id FROM task_runs t
+            JOIN workflow_context w ON t.parent_task_id = w.run_id OR t.root_task_id = w.run_id
+        )
+    """
+
+
+    def get_workflow_task_contexts(self) -> Dict[str, Dict[str, str]]:
+        """Resolve direct workflow steps and descendants without changing agent identities."""
+        with self._get_connection() as conn:
+            rows = conn.execute(self._WORKFLOW_CONTEXT_CTE +
+                " SELECT run_id, execution_id, workflow_id FROM workflow_context").fetchall()
+        return {row["run_id"]: {"workflow_execution_id": row["execution_id"],
+                                 "workflow_id": row["workflow_id"]} for row in rows}
+
+
+    def get_task_workflow_context(self, run_id: str) -> Dict[str, str]:
+        with self._get_connection() as conn:
+            row = conn.execute("""
+                WITH RECURSIVE lineage(run_id) AS (
+                    VALUES (?)
+                    UNION SELECT t.parent_task_id FROM task_runs t JOIN lineage l ON t.run_id = l.run_id
+                        WHERE t.parent_task_id IS NOT NULL
+                    UNION SELECT t.root_task_id FROM task_runs t JOIN lineage l ON t.run_id = l.run_id
+                        WHERE t.root_task_id IS NOT NULL
+                )
+                SELECT e.id, e.workflow_id FROM lineage l
+                JOIN workflow_step_runs s ON s.task_run_id = l.run_id
+                JOIN workflow_executions e ON e.id = s.execution_id LIMIT 1
+            """, (run_id,)).fetchone()
+        return {"workflow_execution_id": row["id"], "workflow_id": row["workflow_id"]} if row else {}
+
+

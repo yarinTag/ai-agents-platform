@@ -15,6 +15,7 @@ router = APIRouter()
 @router.get("/plugins/scan")
 async def scan_plugins(
     request: Request,
+    refresh: bool = Query(False),
     source_mode: Optional[str] = Query(None),
     git_repo: Optional[str] = Query(None),
     local_path: Optional[str] = Query(None),
@@ -53,7 +54,7 @@ async def scan_plugins(
                 "total_skills": 0
             }
         git_tok, _ = _find_git_token(db_manager, org.id)
-        plugins_data, repo_display = await _scan_git_repo_via_api(effective_git_repo, git_tok)
+        plugins_data, repo_display = await _scan_git_repo_via_api(effective_git_repo, git_tok, force_refresh=refresh)
         return {
             "status": "success",
             "source_mode": "git",

@@ -21,7 +21,8 @@ from runtime.progress import build_task_progress_payload, summarize_runtime_even
 from runtime.command_builder import RuntimeCommandBuilder
 from runtime.execution import TaskExecutor
 from runtime.legacy_services import create_legacy_services
-from runtime.output_stream import parse_output_line, read_output
+from runtime.output_stream import parse_output_line, read_output, read_stderr_tail
+from runtime import authoring, playground
 from runtime.processes import terminate_process
 from runtime.services import RuntimeServices
 from runtime.subscriptions import RuntimeSubscriptions, subscribe_to_events
@@ -61,6 +62,7 @@ class ClaudeCodeRuntimeAdapter:
         self._execution_threads = {}
         self._run_locks = {}
         self._stderr_threads = {}
+        self._authoring_lock = threading.Lock()
         self.on_task_completed: Optional[Callable[[AgentRun], None]] = None
 
         self.services = services or create_legacy_services(self)
@@ -137,10 +139,10 @@ class ClaudeCodeRuntimeAdapter:
 
     def _build_claude_command(self, agent_config, project_config, prompt,
                               session_id=None, fork_session=False,
-                              dangerously_skip_permissions=False):
+                              dangerously_skip_permissions=False, playground=False):
         return self._command_builder._build_claude_command(
             agent_config, project_config, prompt, session_id, fork_session,
-            dangerously_skip_permissions,
+            dangerously_skip_permissions, playground,
         )
 
     def _parse_claude_output_line(self, line):
@@ -150,14 +152,31 @@ class ClaudeCodeRuntimeAdapter:
         return read_output(self._parse_claude_output_line, run_id, process, event_queue, stop_event)
 
     def _execute_task(self, run_id, agent_config, project_config, prompt,
-                      session_id, fork_session, dangerously_skip_permissions=False):
+                      session_id, fork_session, dangerously_skip_permissions=False,
+                      playground_workspace=None):
         return self._executor.execute(
             run_id, agent_config, project_config, prompt, session_id,
-            fork_session, dangerously_skip_permissions,
+            fork_session, dangerously_skip_permissions, playground_workspace,
         )
 
     def subscribe_to_events(self, run_id, handler):
         return subscribe_to_events(self, run_id, handler)
+
+    _stderr_reader = staticmethod(read_stderr_tail)
+
+    def _read_authoring_process(self, process, timeout_seconds, is_cancelled=None):
+        return authoring._read_authoring_process(self, process, timeout_seconds, is_cancelled)
+
+    def get_authoring_models(self):
+        return authoring.get_authoring_models(self)
+
+    def infer_authoring(self, selection, prompt, system_prompt, response_schema,
+                        timeout_seconds=120, max_budget_usd=None, is_cancelled=None, authoring_context=None):
+        return authoring.infer_authoring(self, selection, prompt, system_prompt, response_schema,
+            timeout_seconds, max_budget_usd, is_cancelled, authoring_context)
+
+    def start_playground_task(self, agent_id, task_id, prompt, workspace):
+        return playground.start_playground_task(self, agent_id, task_id, prompt, workspace)
 
     def start_task(
         self,
@@ -184,6 +203,8 @@ class ClaudeCodeRuntimeAdapter:
         """
         if self._shutting_down:
             raise RuntimeError("Runtime is shutting down")
+        if (task_id and task_id.startswith("pg_task_")) or agent_id.startswith("pg_task_"):
+            raise ValueError("Use a fresh playground run for playground tasks")
         # Import here to avoid circular imports
         config_manager = self.services.configuration()
 
@@ -327,6 +348,8 @@ class ClaudeCodeRuntimeAdapter:
         """
         Resume an existing paused task (WAITING_INPUT) by passing the supervisor/human answer back into the session.
         """
+        if run_id.startswith("pg_task_"):
+            raise ValueError("Playground tasks cannot be resumed; start a fresh playground run")
         if self._shutting_down:
             raise RuntimeError("Runtime is shutting down")
         run = self._runs.get(run_id)
@@ -419,7 +442,7 @@ class ClaudeCodeRuntimeAdapter:
 
         run.status = TaskStatus.CANCELLED
         run.ended_at = datetime.now()
-        run.error = "Task cancelled by user"
+        run.error = "Task cancelled"
         self._subscriptions.close_run(run_id)
 
         return True
@@ -436,6 +459,11 @@ class ClaudeCodeRuntimeAdapter:
                 logger.exception("Runtime cancellation failed for %s", run.run_id)
             finally:
                 self._subscriptions.close_run(run.run_id)
+        for process in list(self._processes.values()):
+            try:
+                terminate_process(process)
+            except Exception:
+                logger.exception("Runtime process shutdown failed")
         for thread in list(self._execution_threads):
             if thread is not threading.current_thread():
                 thread.join(timeout=2)

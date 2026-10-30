@@ -27,5 +27,6 @@ export interface CreateWorkflowModalProps {
   defaultChannelProvider?: string;
   defaultChannelId?: string;
   departmentId?: string;
+  workflow?: PlatformWorkflow | null;
 }
 

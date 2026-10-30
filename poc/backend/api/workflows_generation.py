@@ -1,15 +1,24 @@
-"""Workflows: generation ownership."""
+from fastapi import APIRouter, HTTPException, Depends
 
-from fastapi import HTTPException, Depends
 import uuid
+
 import json
+
+import logging
+
+import yaml
+
 from ..dependencies import get_db_manager, DatabaseManager
+
 from workflows.parser import WorkflowParser
-from .workflows_models import WorkflowFormatConvertRequest, WorkflowFormatConvertResponse, WorkflowGenerateRequest, WorkflowGenerateResponse
-from fastapi import APIRouter
 
+from workflows.parser import validate_workflow_definition
+
+from .workflows_models import WorkflowGenerateRequest, WorkflowGenerateResponse, WorkflowFormatConvertRequest, WorkflowFormatConvertResponse
+
+logger = logging.getLogger(__name__)
 router = APIRouter()
-
+_validated_definition = validate_workflow_definition
 
 @router.post("/generate", response_model=WorkflowGenerateResponse)
 def generate_workflow_definition(
@@ -350,22 +359,20 @@ def generate_workflow_definition(
         steps_count=len(steps),
     )
 
-
-
 @router.post("/convert-format", response_model=WorkflowFormatConvertResponse)
 def convert_format(req: WorkflowFormatConvertRequest):
-    """Convert bidirectionally between YAML and JSON workflow definitions."""
-    if req.yaml_content:
-        try:
-            json_str = WorkflowParser.yaml_to_json(req.yaml_content)
-            return WorkflowFormatConvertResponse(yaml_content=req.yaml_content, json_content=json_str)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Invalid YAML: {e}")
-    elif req.json_content:
-        try:
-            yaml_str = WorkflowParser.json_to_yaml(req.json_content)
-            return WorkflowFormatConvertResponse(yaml_content=yaml_str, json_content=req.json_content)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Invalid JSON: {e}")
-    raise HTTPException(status_code=400, detail="Either yaml_content or json_content is required")
+    """Validate and convert without stripping extension fields or runner metadata."""
+    try:
+        if req.yaml_content:
+            data = _validated_definition(yaml.safe_load(req.yaml_content))
+        elif req.json_content:
+            data = _validated_definition(json.loads(req.json_content))
+        else:
+            raise ValueError("Either yaml_content or json_content is required")
+        return WorkflowFormatConvertResponse(
+            yaml_content=yaml.safe_dump(data, sort_keys=False, allow_unicode=True),
+            json_content=json.dumps(data, ensure_ascii=False)
+        )
+    except (ValueError, TypeError, AttributeError, yaml.YAMLError) as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid workflow definition: {exc}") from exc
 

@@ -1,21 +1,25 @@
-"""Compatibility exports and router composition for workflows."""
-
-from fastapi import APIRouter
-# Bootstrap the single legacy import bridge before domain compatibility exports.
+"""Workflow API composition and compatibility exports."""
 from ..dependencies import get_db_manager
-from .workflows_models import (WorkflowCreateRequest, WorkflowUpdateRequest, ChannelBindingDto, WorkflowResponse, WorkflowExecutionResponse, EvaluationRequest, WorkflowGenerateRequest, WorkflowGenerateResponse, WorkflowFormatConvertRequest, WorkflowFormatConvertResponse)
-from .workflows_mapping import (_check_workflow_scope, _workflow_to_response)
-from .workflows_generation import (generate_workflow_definition, convert_format)
-from .workflows_crud import (create_workflow, list_workflows, get_workflow, update_workflow, delete_workflow)
-from .workflows_channels import (bind_workflow_channel, unbind_workflow_channel)
-from .workflows_execution import (execute_workflow, trigger_webhook, get_execution_status, evaluate_execution)
+from fastapi import APIRouter
+from .workflows_models import *
+from .workflows_mapping import _workflow_actor, _check_workflow_scope, _workflow_to_response, _execution_to_response
+from . import workflows_generation as _generation
+from .workflows_generation import *
+from . import workflows_crud as _crud
+from .workflows_crud import *
+from . import workflows_channels as _channels
+from .workflows_channels import *
+from . import workflows_execution as _execution
+from .workflows_execution import *
+from . import workflows_playground as _playground
+from .workflows_playground import *
+from . import workflows_queries as _queries
+from .workflows_queries import *
 
 router = APIRouter()
-from .workflows_generation import router as generation_router
-router.include_router(generation_router)
-from .workflows_crud import router as crud_router
-router.include_router(crud_router)
-from .workflows_channels import router as channels_router
-router.include_router(channels_router)
-from .workflows_execution import router as execution_router
-router.include_router(execution_router)
+router.include_router(_generation.router)
+router.include_router(_queries.router)
+router.include_router(_channels.router)
+router.include_router(_playground.router)
+router.include_router(_execution.router)
+router.include_router(_crud.router)

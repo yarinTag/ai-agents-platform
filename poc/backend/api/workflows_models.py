@@ -1,8 +1,6 @@
-"""Workflows: models ownership."""
-
+"""Workflow request and response contracts."""
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
-
 
 class WorkflowCreateRequest(BaseModel):
     name: str = Field(..., min_length=1)
@@ -14,8 +12,6 @@ class WorkflowCreateRequest(BaseModel):
     webhook_enabled: bool = True
     organization_id: Optional[str] = None
 
-
-
 class WorkflowUpdateRequest(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
@@ -26,8 +22,8 @@ class WorkflowUpdateRequest(BaseModel):
     webhook_enabled: Optional[bool] = None
     is_active: Optional[bool] = None
     organization_id: Optional[str] = None
-
-
+    expected_revision: Optional[int] = Field(None, ge=1)
+    change_summary: Optional[str] = Field(None, max_length=500)
 
 class ChannelBindingDto(BaseModel):
     provider: str = Field(..., description="slack or telegram")
@@ -38,9 +34,8 @@ class ChannelBindingDto(BaseModel):
     notify_mode: str = Field("ON_COMPLETE", description="ON_COMPLETE, ON_FAILURE, ALWAYS, NONE")
     message_template: Optional[str] = None
 
-
-
 class WorkflowResponse(BaseModel):
+    revision: int = 1
     id: str
     name: str
     description: Optional[str] = None
@@ -57,7 +52,15 @@ class WorkflowResponse(BaseModel):
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
-
+class WorkflowRevisionResponse(BaseModel):
+    workflow_id: str
+    revision: int
+    snapshot: Dict[str, Any]
+    changed_fields: List[str]
+    actor_id: Optional[str] = None
+    actor_label: str
+    change_summary: Optional[str] = None
+    created_at: str
 
 class WorkflowExecutionResponse(BaseModel):
     id: str
@@ -74,15 +77,15 @@ class WorkflowExecutionResponse(BaseModel):
     completed_at: Optional[str] = None
     error_message: Optional[str] = None
     created_at: Optional[str] = None
-
-
+    payload_hash: Optional[str] = None
+    is_deduplicated: Optional[bool] = False
+    message: Optional[str] = None
+    step_runs: List[Dict[str, Any]] = Field(default_factory=list)
 
 class EvaluationRequest(BaseModel):
     rating: int = Field(..., ge=1, le=5)
     feedback_notes: Optional[str] = None
     lessons_extracted: Optional[str] = None
-
-
 
 class WorkflowGenerateRequest(BaseModel):
     prompt: Optional[str] = None
@@ -94,8 +97,6 @@ class WorkflowGenerateRequest(BaseModel):
     skills: Optional[List[Dict[str, Any]]] = None
     target_repo: Optional[str] = None
 
-
-
 class WorkflowGenerateResponse(BaseModel):
     id: str
     name: str
@@ -104,13 +105,9 @@ class WorkflowGenerateResponse(BaseModel):
     definition_yaml: str
     steps_count: int
 
-
-
 class WorkflowFormatConvertRequest(BaseModel):
     yaml_content: Optional[str] = None
     json_content: Optional[str] = None
-
-
 
 class WorkflowFormatConvertResponse(BaseModel):
     yaml_content: str

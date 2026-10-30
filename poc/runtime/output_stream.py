@@ -98,3 +98,14 @@ def drain_stderr(process):
             pass
     except (OSError, ValueError):
         pass
+
+
+def read_stderr_tail(process, tail):
+    """Drain stderr independently so a full pipe cannot block runtime exit."""
+    if process.stderr is None:
+        return
+    for line in process.stderr:
+        text = line.decode("utf-8", errors="replace") if isinstance(line, bytes) else line
+        if text.strip():
+            tail.append(text.strip()[-2000:])
+

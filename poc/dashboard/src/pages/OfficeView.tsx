@@ -12,7 +12,7 @@ import { Agent } from '../types/agent';
 import { useOfficeEvents } from '../hooks/useOfficeEvents';
 
 export const OfficeViewPage: React.FC = () => {
-  const { agents, tasks, loading, connectionStatus, refresh } = useOfficeEvents();
+  const { agents, tasks, loading, connectionStatus, refresh } = useOfficeEvents('office');
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [drawerVisible, setDrawerVisible] = useState<boolean>(false);
   const [chatVisible, setChatVisible] = useState<boolean>(false);

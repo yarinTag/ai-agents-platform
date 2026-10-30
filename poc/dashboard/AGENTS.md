@@ -44,6 +44,7 @@ The **AI Agents Platform Dashboard** (`poc/dashboard/`) is an enterprise-grade, 
 * The collapsible navigation sidebar partitions application features into 4 functional domains:
   1. **`OPERATIONS`**:
      * Office Canvas (`/`): Spatial 2D/3D workstation office floor with live status.
+     * Workflows (`/workflows`): Dedicated Workflows & Automations Hub for multi-agent DAG pipelines, manual execution, RabbitMQ distributed queue dispatching, and automated run deduplication.
      * Live Flow (`/flow`): Visual task delegation pipeline and live SSE activity feed.
      * Agents Roster (`/agents`): Agent fleet roster, templates, hierarchy, and mini-chats.
   2. **`TOOLS & PLUGINS`**:
@@ -126,4 +127,24 @@ The **AI Agents Platform Dashboard** (`poc/dashboard/`) is an enterprise-grade, 
 ## Feature composition and failure containment
 App loads optional route views lazily through LazyFeatureRoute/FeatureErrorBoundary. AppLayout sidebar/topbar remain outside feature boundaries. Exact-router capability gates read authenticated /api/v1/capabilities; composite MCP/Calendar/Agents views use scoped resource states so unrelated sections remain usable. A failed report is a warning, not a global app outage. Runtime setup is separately lazy and deferrable.
 
+The merged `/workflow-assistant`, `/workflows`, and `/workflows/:workflowId/logs` routes use this same lazy/error-contained loading. Workflow log parameter/search navigation resets the route boundary independently. `AppLayout` retains incoming `100dvh`, `minWidth: 0` and `minHeight: 0` scrolling constraints. Existing sidebar parent-route highlighting and Office-scoped snapshots are preserved.
+
 Large pages use page-local hooks and typed panels; workflow/chat/office/war-room components use focused hooks/panels; PixelRenderer composes scene state, lifecycle and painters while retaining its public API. services/resourceLoading distinguishes failed reads from empty results; services/mcpResources owns configured-resource projection. No fake fallback channels/connectors are supplied after failed reads. EN/HE feature-availability keys and RTL infrastructure remain available. No build/type check/browser rendering was performed.
+
+### Internal workflow playground
+The Workflows page now launches fresh tool-free exercises through `POST /api/v1/workflows/{workflow_id}/playground`. Execution inspection shows persisted step input/output/status/cost and refreshes while open. WorkflowExecution in `src/types/mcp.ts` includes optional step_runs. See pages/services guides for lifecycle and request details.
+
+### Workflow logs route
+`/workflows/:workflowId/logs?execution=<executionId>` renders WorkflowLogsPage for run history and detailed step/runtime diagnostics, with mode filters, search and JSON export. It is linked from each workflow row and execution inspector. Existing authenticated routing and scoped APIs apply.
+
+### Office origin filtering, plugin cache and shell layout
+useOfficeEvents accepts an optional execution scope: all by default, office for OfficeView/AgentFlow. Workflow origin is tracked per run/lineage rather than inferred from shared agent identity. Task DTOs include optional workflow_execution_id/workflow_id. Plugin API response caching is bounded, in memory and invalidated on auth/source changes, with explicit manual refresh. The app shell is viewport constrained and navigation/content scroll independently. `tests/requestCache.test.mjs` verifies request sharing, expiry, failure eviction and invalidation races using Node's test runner.
+
+### Workflow edit/history
+The Workflows hub now exposes Edit and History. The shared builder supports editing an existing PlatformWorkflow and optional change notes, with revision checks that prevent stale saves. WorkflowHistoryDrawer shows saved configuration snapshots and before/after differences with pagination. This history is distinct from per-run Logs. WorkflowRevision and PlatformWorkflow.revision define typed frontend contracts.
+
+## Workflow Assistant model generation
+WorkflowAssistant.tsx mounts at /workflow-assistant and appears under Operations. It uses typed assistant DTOs and uncached authenticated API calls for workspace/catalog/drafts, asynchronous model jobs, validation and explicit save. Query generation restores a private job. EN/HE strings use assistant.*; responsive chat/proposal columns respect RTL. Draft revision capture prevents stale refinements/saves.
+
+## Model-only YAML authoring and internal MCP
+WorkflowAssistant now selects an authoring model/provider from authenticated context rather than department agents. The model's execution agents remain per-step proposal data. The page loads the native YAML schema, displays/downloads canonical inactive YAML, validates it through /validate-yaml, shows actual MCP tool names and preserves source revision/history behavior. No local conversation or permission cache is added.

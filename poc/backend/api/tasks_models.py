@@ -11,6 +11,8 @@ class TaskCreate(BaseModel):
     project_id: Optional[str] = None
     skill_id: Optional[str] = None
     organization_id: Optional[str] = None
+    priority: Optional[int] = Field(default=5, ge=1, le=10)
+    use_queue: Optional[bool] = False
 
 
 
@@ -55,6 +57,9 @@ class TaskResponse(BaseModel):
     cost_usd: Optional[float] = 0.0
     cost_source: Optional[str] = "UNKNOWN"
     model: Optional[str] = None
+
+    workflow_execution_id: Optional[str] = None
+    workflow_id: Optional[str] = None
 
     class Config:
         from_attributes = True

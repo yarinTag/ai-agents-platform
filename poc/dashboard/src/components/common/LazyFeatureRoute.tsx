@@ -1,6 +1,7 @@
 import { lazy, Suspense, useMemo, useState } from 'react';
 import type { ComponentType } from 'react';
 import { Spin } from 'antd';
+import { useLocation } from 'react-router-dom';
 import { useTranslation } from '../../i18n';
 import { FeatureCapabilityGate } from './FeatureCapabilityGate';
 import { FeatureErrorBoundary } from './FeatureErrorBoundary';
@@ -15,12 +16,13 @@ interface LazyFeatureRouteProps {
 
 export function LazyFeatureRoute({ load, capability }: LazyFeatureRouteProps) {
   const { t } = useTranslation();
+  const location = useLocation();
   const [attempt, setAttempt] = useState(0);
   // A fresh React.lazy instance clears its rejected-promise cache on explicit retry.
   const Feature = useMemo(() => lazy(load), [load, attempt]);
   return (
     <FeatureErrorBoundary
-      key={attempt}
+      key={`${location.pathname}${location.search}:${attempt}`}
       fallback={<FeatureUnavailable onRetry={() => setAttempt((value) => value + 1)} />}
     >
       <FeatureCapabilityGate capability={capability}>

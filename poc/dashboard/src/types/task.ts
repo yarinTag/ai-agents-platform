@@ -3,6 +3,8 @@ export type TaskStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancel
 export interface Task {
   id: string;
   agent_id: string;
+  workflow_execution_id?: string | null;
+  workflow_id?: string | null;
   project_id?: string | null;
   skill_id?: string | null;
   status: TaskStatus | string;
@@ -28,6 +30,8 @@ export interface TaskCreateDto {
   project_id?: string | null;
   skill_id?: string | null;
   input_data: Record<string, any>;
+  use_queue?: boolean;
+  priority?: number;
 }
 
 export interface TaskDelegateDto {

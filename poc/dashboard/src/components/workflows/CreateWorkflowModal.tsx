@@ -1,6 +1,6 @@
 import { ResourceWarning } from '../common/ResourceWarning';
 import React from 'react';
-import { Modal, Tabs, Form, Input, Button, Checkbox, Tag, Radio } from 'antd';
+import { Modal, Tabs, Form, Input, Button, Checkbox, Tag, Radio, message } from 'antd';
 import { ThunderboltOutlined, CodeOutlined, ApartmentOutlined, SendOutlined, SlackOutlined, RocketOutlined, ToolOutlined, FileTextOutlined, GithubOutlined, FolderOpenOutlined } from '@ant-design/icons';
 
 import type { CreateWorkflowModalProps } from './workflowBuilderTypes';
@@ -15,6 +15,7 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = (props) =
   const model = useWorkflowBuilder(props);
   const {
     open, onClose, activeTab, setActiveTab, saving,
+    workflow, formatting, definitionError, yamlContent, yamlDirty, changeSummary, setChangeSummary,
     channelProvider, channelId, allowedMcps, workflowSkills,
     createSkillModalOpen, setCreateSkillModalOpen, newSkillForm, creatingSkill, steps,
     handleCreateNewSkill, handleSaveWorkflow,
@@ -26,7 +27,7 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = (props) =
           <RocketOutlined style={{ color: '#38bdf8', fontSize: '20px' }} />
           <div>
             <span style={{ fontSize: '16px', fontWeight: 800, color: '#f0f6fc' }}>
-              Create Workflow, Canvas DAG & Auto YAML Playbook
+              {workflow ? `Edit Workflow · revision ${workflow.revision || 1}` : 'Create Workflow, Canvas DAG & Auto YAML Playbook'}
             </span>
             <div style={{ fontSize: '12px', color: '#8b949e', fontWeight: 400 }}>
               Design multi-agent DAG pipelines restricted strictly to configured MCPs with attached skills
@@ -56,18 +57,23 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = (props) =
           type="primary"
           icon={<ThunderboltOutlined />}
           loading={saving}
-          disabled={model.resourcesUnavailable}
+          disabled={formatting || (definitionError && !yamlDirty) || !yamlContent.trim() || model.resourcesUnavailable}
           onClick={handleSaveWorkflow}
           style={{ background: '#059669', borderColor: '#059669', fontWeight: 700 }}
         >
-          Deploy & Save Workflow
+          {workflow ? 'Save Changes' : 'Deploy & Save Workflow'}
         </Button>,
       ]}
     >
-      <ResourceWarning errors={[model.connectorError, model.skillsError]} onRetry={model.reloadResources} />
+      <ResourceWarning errors={[model.connectorError, model.skillsError, model.repositoryError]} onRetry={model.reloadResources} />
+      {workflow && <Input style={{ marginBottom: 16 }} placeholder="Change note (optional)" maxLength={500}
+        value={changeSummary} onChange={event => setChangeSummary(event.target.value)} />}
       <Tabs
         activeKey={activeTab}
-        onChange={setActiveTab}
+        onChange={key => {
+          if (yamlDirty && key !== activeTab) { message.warning('Apply YAML changes to the visual builder before switching tabs.'); return; }
+          setActiveTab(key);
+        }}
         items={[
           {
             key: 'ai',

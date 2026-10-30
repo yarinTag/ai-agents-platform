@@ -203,15 +203,6 @@ export const useAgentsPage = () => {
     );
   }, [agents]);
 
-  const workflowAgents = React.useMemo(() => {
-    return agents.filter(
-      (a) =>
-        a.role_type === 'WORKFLOW_AUTOMATION' ||
-        Boolean((a as any).is_workflow_agent) ||
-        a.department === 'Workflow Automations'
-    );
-  }, [agents]);
-
   const eligibleManagers = agents.filter((a) => {
     if (editingKey && a.id === editingKey) return false;
     const r = (a.role_type || '').toUpperCase();
@@ -257,7 +248,6 @@ export const useAgentsPage = () => {
     handleCreate,
     handleOk,
     officeFloorAgents,
-    workflowAgents,
     eligibleManagers,
   };
 };

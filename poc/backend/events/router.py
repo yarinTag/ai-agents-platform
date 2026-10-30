@@ -38,6 +38,13 @@ async def stream_events(
     Global Server-Sent Events (SSE) stream endpoint.
     Streams real-time platform events with support for filtering and historical replay.
     """
+    def stream_data(event):
+        data = event.to_dict()
+        if event.task_id and not (data.get("payload") or {}).get("workflow_execution_id"):
+            data["payload"] = {**(data.get("payload") or {}),
+                **event_service.db_manager.get_task_workflow_context(event.task_id)}
+        return data
+
     async def event_generator():
         # Match filter for live events
         def matches_filter(event: PlatformEvent) -> bool:
@@ -71,7 +78,7 @@ async def stream_events(
                 for e in historical_events:
                     if e.sequence_number and e.sequence_number > last_seq:
                         last_seq = e.sequence_number
-                    yield f"event: {e.event_type}\ndata: {json.dumps(e.to_dict())}\n\n"
+                    yield f"event: {e.event_type}\ndata: {json.dumps(stream_data(e))}\n\n"
                     sent_count += 1
                     if limit and sent_count >= limit:
                         return
@@ -87,7 +94,7 @@ async def stream_events(
                     # Deduplicate if event was already yielded in historical replay
                     if last_seq and event.sequence_number and event.sequence_number <= last_seq:
                         continue
-                    yield f"event: {event.event_type}\ndata: {json.dumps(event.to_dict())}\n\n"
+                    yield f"event: {event.event_type}\ndata: {json.dumps(stream_data(event))}\n\n"
                     sent_count += 1
                     if limit and sent_count >= limit:
                         break
@@ -240,13 +247,19 @@ async def get_system_health(
 
 @router.get("/system/recent-activity")
 async def get_recent_activity(
+    request: Request,
     limit: int = 20,
+    execution_scope: str = "all",
     db_manager = Depends(get_db_manager)
 ):
     """Get recent system activity across agents, projects, skills, and tasks."""
+    if execution_scope not in ("all", "office", "workflow"):
+        raise HTTPException(status_code=422, detail="Invalid execution_scope")
+    from ..security import get_current_org_id
     try:
         # Get recent task runs
-        recent_tasks = db_manager.list_task_runs(limit=limit)
+        recent_tasks = db_manager.list_task_runs(limit=limit, execution_scope=execution_scope,
+            organization_id=get_current_org_id(request))
 
         activity = []
         for task in recent_tasks:

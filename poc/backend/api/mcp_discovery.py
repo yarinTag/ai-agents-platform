@@ -29,6 +29,9 @@ def discover_resources(
     if not token and req.configuration and isinstance(req.configuration, dict):
         token = req.configuration.get("token") or req.configuration.get("personal_access_token") or req.configuration.get("api_key")
 
+    if token and ("..." in token or "****" in token):
+        token = None
+
     org_id = get_current_org_id(request)
     if not token and org_id and provider in ("github", "gitlab", "git"):
         connectors = db.list_mcp_connectors(organization_id=org_id)
@@ -37,7 +40,7 @@ def discover_resources(
             if c_prov == provider or (provider in ("github", "git") and c_prov in ("github", "git")):
                 cfg = conn.configuration or {}
                 cand = cfg.get("token") or cfg.get("personal_access_token") or cfg.get("api_key")
-                if cand:
+                if cand and "..." not in cand and "****" not in cand:
                     token = cand
                     break
 
