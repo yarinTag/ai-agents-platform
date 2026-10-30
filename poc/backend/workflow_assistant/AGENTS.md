@@ -61,6 +61,8 @@ All routes are under /api/v1/workflow-assistant and use existing platform authen
 - POST /generations/{id}/cancel: terminal CANCELLED for active jobs; stopping own authorized job does not require additional write scope.
 - POST /generations/{id}/save-draft: {save_blocked=false}; saves the authoritative model proposal, never arbitrary client output. Source revision CAS and generation-to-draft link are atomic.
 
+Runtime containment: `/context` uses an optional adapter; when runtime or authoring-model inventory is unavailable, it still returns the authorized persisted workspace with `supports_generation=false` and `authoring_models=[]`. Model metadata errors do not become authorization or fabricated model data. GET generation, cancellation and saving a completed generation construct `AuthoringGenerationService` without a runtime dependency; their existing identity, membership, current-policy, status and revision checks remain authoritative. POST `/generations` alone resolves the required runtime adapter before scheduling background work. Direct service creation without a runtime raises structured `AUTHORING_UNAVAILABLE` (503) before persisting a queued generation; direct background `run` without one records an explicit failed generation through the existing error lifecycle. No successful inference is synthesized.
+
 HTTP errors use detail={code,message,...}; strict request errors use standard FastAPI 422. Codes include USER_LOGIN_REQUIRED (401), CLIENT_SCOPE_DENIED/DRAFT_WRITE_DENIED (403), private IDs (404), PROPOSAL_INVALID/WORKFLOW_YAML_INVALID (422), IDEMPOTENCY_CONFLICT/REVISION_CONFLICT/AUTHORING_MODEL_NOT_ALLOWED (409), BUDGET_EXHAUSTED (402). Runtime errors include MODEL_TIMEOUT/MODEL_OUTPUT_INVALID/AUTHORING_TOOLS_NOT_USED/AUTHORING_CANDIDATE_NOT_FOUND/AUTHORING_CANDIDATE_INVALID. No synthetic successful reply is substituted.
 
 ## Runtime and actual MCP path
@@ -73,7 +75,7 @@ Only workflow_catalog, workflow_schema and validate_workflow_yaml are exposed. N
 
 ## Persistence, compatibility and lifecycle
 
-SQLite schema lives in persistence.py (not a PostgreSQL/RLS claim):
+SQLite schema lives in `storage/workflow_schema.py`, initialized through the `persistence.py` compatibility facade (not a PostgreSQL/RLS claim):
 - workflow_assistant_drafts: id,organization_id,department_id,created_by,intent_text,proposal_json,validation_json,status,revision,created_at,updated_at,idempotency_key,request_hash. Unique org/creator/idempotency key; revision>=1; status READY_FOR_REVIEW/BLOCKED/NEEDS_CLARIFICATION. Org/department deletes cascade.
 - workflow_assistant_draft_revisions: PK(draft_id,revision),snapshot_json,actor_id,actor_label,source,client_id,created_at; draft delete cascades. Snapshot contains proposal/intent/validation/status plus canonical artifact and trusted generation_id when applicable. Application history, not a tamper-proof audit archive.
 - workflow_assistant_generations: id,organization_id,department_id,created_by,planner_agent_id (reserved legacy column, empty for new jobs),request_json,request_hash,idempotency_key,status,result_json,saved_draft_id,saved_draft_revision,error_code,error_message,input_tokens,output_tokens,cost_usd,cost_source,model,created_at,started_at,completed_at,deadline_at. Model/provider selection lives in request_json; model may later hold the reported upstream name. Unique org/creator/idempotency key.

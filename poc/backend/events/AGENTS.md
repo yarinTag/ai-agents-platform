@@ -56,6 +56,9 @@ event_bus.publish(PlatformEvent(
 
 > [!IMPORTANT]
 > Whenever any event type, pub/sub queue logic, SSE streaming protocol, or event persistence schema in `poc/backend/events/` is modified, the developer or agent **MUST** update this `AGENTS.md` file within the **SAME commit**.
+# Optional runtime monitoring
+
+System statistics and health use an optional runtime dependency. When inference is unavailable they still return stored information; stats includes runtime_available=false and recorded recent active tasks, while health reports the unavailable runtime component. Monitoring uses the RuntimeAdapter.list_runs contract rather than the private _runs dictionary. This is separate from /health liveness and /health/ready required-core database readiness. No monitoring endpoint was executed during this refactor.
 
 ## Execution origin in event feeds
 EventService.emit enriches task event payloads with workflow_execution_id/workflow_id resolved from persisted step and ancestor records. SSE serialization also enriches historical or direct EventBus publications lacking that context, so filtering does not depend on a producer. Existing event names and global stream subscription remain unchanged. `GET /api/v1/events/system/recent-activity` accepts execution_scope=all|office|workflow (422 for invalid values), filters before LIMIT and scopes task queries to the authenticated organization. Office/Live Flow clients request office; other clients default to all.

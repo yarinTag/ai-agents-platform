@@ -7,8 +7,8 @@ from fastapi import APIRouter, Depends, Query, Request
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 
-from backend.dependencies import get_db_manager
-from backend.security.auth import authenticate_request, get_configured_api_key
+from ..dependencies import get_db_manager
+from ..security.auth import authenticate_request, get_configured_api_key
 
 router = APIRouter()
 

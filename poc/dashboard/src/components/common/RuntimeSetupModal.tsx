@@ -3,6 +3,7 @@ import { Modal, Radio, Space, Tag, Typography, Input, Button, Alert, Spin, App }
 import { ReloadOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
 import { getRuntimeSetupState, redetectRuntimeProviders, selectRuntimeProvider } from '../../services/api';
 import { RuntimeProviderId, RuntimeSetupState } from '../../types/runtime';
+import { useTranslation } from '../../i18n';
 
 const { Text, Paragraph } = Typography;
 
@@ -15,6 +16,7 @@ const { Text, Paragraph } = Typography;
  * diagnosable rather than just absent.
  */
 export const RuntimeSetupModal: React.FC = () => {
+  const { t } = useTranslation();
   // Hook form, not the static export: the static one cannot read the dark
   // theme from ConfigProvider and antd v6 warns about it.
   const { message } = App.useApp();
@@ -96,11 +98,15 @@ export const RuntimeSetupModal: React.FC = () => {
     <Modal
       title="Choose how agents run"
       open={open}
-      closable={false}
+      closable={!saving}
+      onCancel={() => { if (!saving) setOpen(false); }}
       mask={{ closable: false }}
-      keyboard={false}
+      keyboard={!saving}
       width={640}
       footer={[
+        <Button key="later" onClick={() => setOpen(false)} disabled={saving}>
+          {t('featureAvailability.configureLater')}
+        </Button>,
         <Button key="rescan" icon={<ReloadOutlined />} onClick={handleRescan} disabled={loading || saving}>
           Re-scan
         </Button>,

@@ -93,6 +93,8 @@ poc/
 > [!IMPORTANT]
 > Whenever any backend logic, API router endpoint, database model, security rule, or workflow behavior is modified, the developer or agent **MUST** update the corresponding `AGENTS.md` (and `CLAUDE.md`) in the same commit. Keeping documentation in absolute parity with the codebase is a mandatory system invariant.
 
+## Refactor boundaries
+`poc/storage/` owns SQL, records and connections; persistence.py is its compatibility facade. Optional routers are registered by router_registry.py, availability belongs to capabilities.py, and service wiring belongs in dependencies.py. Domain/storage modules must not import the global container. Owned source files stay at most 500 physical lines. Under the current user instruction do not run tests, build, lint, type checks, startup or inference. Source review is authorized and is not runtime verification.
 ### Workflow playground contracts
 The tool-free playground endpoint returns 202 and runs locally via BackgroundTasks, not RabbitMQ. Keep its fresh IDs/hash namespace and capability check; never fall back to ordinary unrestricted execution. Execution detail includes step_runs and enforces workflow scope. Run isolated contract tests with `.venv/bin/python -m pytest --noconftest poc/tests/test_workflow_playground.py -q`; the shared conftest resets the default application database and is intentionally not loaded for this suite. Real model inference is a separate smoke check, not covered by these tests.
 
@@ -115,3 +117,7 @@ Workflow Assistant clarification must resolve internal IDs from the authorized c
 
 ## Model-only YAML authoring and internal MCP
 Model-only authoring must not load/save a planning agent. Use the current runtime's model/provider allowlist and the shared native workflow schema/graph validator. MCP exposes only bound catalog/schema/YAML validation; a mode-0600 context file delegates the current authenticated job/workspace, never credentials or identity supplied by the model. Recheck live rights/job expiry on each call and independently validate final output. Require a validation_id scoped to the current generation and verify the stored canonical candidate hash; never accept rewritten final YAML in place of the candidate. No automatic access grant, native connector execution or publication is permitted.
+
+Master integration retains modular dependencies and isolated lifecycle. queue_lifecycle owns broker/worker shutdown; workflow_wiring owns firewall and ChatOps adapters. Source-only merge review: do not infer passing builds/tests from conflict resolution.
+
+Keep queue-api (HTTP monitoring) separate from queue (transport) and queue-worker (consumers). Broker initialization failure must not hide its status endpoint; transport-dependent mutations must still reject unavailable dispatch.

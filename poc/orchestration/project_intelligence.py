@@ -5,14 +5,15 @@ conventions, ADRs, active/recent tasks, and skills to provide deterministic answ
 for Super Agents and subordinate workers.
 """
 
+from __future__ import annotations
+
 import os
 import re
 import json
 import logging
-from typing import Dict, Any, Optional, List
+from typing import TYPE_CHECKING, Dict, Any, Optional, List
 from pathlib import Path
 
-from persistence import DatabaseManager
 try:
     from .code_indexer import CodeIndexer, code_indexer as default_code_indexer
 except ImportError:
@@ -20,6 +21,9 @@ except ImportError:
         from orchestration.code_indexer import CodeIndexer, code_indexer as default_code_indexer
     except ImportError:
         default_code_indexer = None
+
+if TYPE_CHECKING:
+    from .ports import IntelligenceStore
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +35,7 @@ class ProjectIntelligence:
     Combines Qdrant hybrid vector search with SQLite organizational memories.
     """
 
-    def __init__(self, db_manager: DatabaseManager, code_indexer: Optional[Any] = None):
+    def __init__(self, db_manager: IntelligenceStore, code_indexer: Optional[Any] = None):
         self.db = db_manager
         self.code_indexer = code_indexer or default_code_indexer
 

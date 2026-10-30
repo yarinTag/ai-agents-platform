@@ -37,6 +37,31 @@ The **Runtime & Execution Service** (`poc/runtime/`, `poc/runtime_adapter.py`, a
 
 ## 3. Interfaces & Contracts
 
+### Composed subprocess runtime
+
+`poc/runtime_adapter.py` retains the compatibility exports `ClaudeCodeRuntimeAdapter`, `runtime_adapter`, `AgentRun`, `TaskStatus`, provider setting keys, `extract_supervisor_question`, `summarize_runtime_event` and `build_task_progress_payload`. The stateful adapter owns active run/process/queue/thread maps and retains start/resume/cancel/status/subscription entry points. It composes focused collaborators rather than inheriting implementation fragments:
+
+| Module | Responsibility |
+|---|---|
+| command_builder.py | Runtime provider precedence, gateway settings, sanitized environment, workspace selection and CLI/system-prompt construction |
+| questions.py | Structured permission/tool/text clarification recognition; direct and nested tool events share one input/question/options interpreter |
+| progress.py | Runtime event summaries and task progress payloads |
+| output_stream.py | Stream-JSON parsing, raw-output events, reader queue metadata and end-of-output signaling |
+| execution.py | Subprocess launch, result/token/cost handling, session capture and one shared supervisor/waiting-state handler |
+| finalization.py | Final timestamps, run/chat persistence, completion notification and resource-map cleanup |
+| processes.py | Shared terminate/wait/kill policy used by execution cleanup and cancellation |
+| subscriptions.py | Per-subscriber bounded queues, callback threads, real unsubscribe and run-close signaling; subscriber queues never consume executor input |
+| services.py | RuntimePersistence/RuntimeConfiguration protocols and RuntimeServices integration ports |
+| legacy_services.py | Lazy compatibility adapters for persistence/config/model policy/skills, supervisor resolution and optional backend event/completion integration |
+
+`ClaudeCodeRuntimeAdapter(services: Optional[RuntimeServices] = None)` accepts explicit integration ports. `configure_services(services)` replaces them before runs start and updates command construction wiring. Application startup may use `dataclasses.replace(adapter.services, ...)` to retain default model/skills/session adapters while replacing event, supervisor and persistence integration.
+
+Required RuntimeServices providers are `database()`, `configuration()`, `resolve_model(model)`, `skills_prompt(skills)` and `capture_session(run, session_id)`. Optional callbacks are `emit(**EventService.emit_kwargs)`, `publish_chat(run, persisted_message)`, `supervisor(**resolve_or_escalate_question_kwargs)` and `complete(run)`. The legacy `on_task_completed` callback takes precedence over `complete`. Missing event/chat/completion callbacks skip only their delivery; missing or failing supervisor resolution leaves the run in WAITING_INPUT addressed to HUMAN_OPERATOR, retaining its question/session for resumption. An AUTO_RESOLVED question preserves RUNNING; other resolver results preserve WAITING_INPUT and the explanatory result. No unavailable dependency creates a fabricated COMPLETED result.
+
+Default services are lazy: importing or constructing the runtime facade does not import backend dependencies, initialize persistence or create a supervisor resolver. Concrete optional backend coupling is confined to legacy_services; explicitly composed runtime execution/command/reader modules do not import backend services. Legacy defaults retain the historical dynamic integration for standalone callers until the composition root supplies replacements.
+
+The command builder continues to put the PoC root (the parent of `runtime/`) in subprocess PYTHONPATH, and its Windows fallback still resolves `poc/lms`, preserving path semantics after relocation. Output draining accepts either text lines from Popen(text=True) or bytes, avoiding an unconditional bytes decode on remaining text output. Event callbacks receive a fan-out after the executor appends each event to the canonical run. They no longer race the executor for its result/session events. Each subscriber has a 1000-event queue; overflow stops that optional subscriber and logs a warning rather than blocking execution. Unsubscribe removes its listener and stops its thread; finalization/cancellation close run listeners. The callback API does not replay historical events. Existing terminal states, session fields, CLI permission flags, provider precedence and persistence ordering are retained. Source extraction does not establish runtime resilience or behavioral verification; no tests, build, lint, import execution, type checking or application startup were run under the user's restriction.
+
 ### Key Usage Pattern
 ```python
 from backend.dependencies import get_runtime_adapter, get_model_policy_resolver
@@ -84,6 +109,16 @@ run = adapter.get_run_status(run_id)
 > [!IMPORTANT]
 > Whenever any runtime adapter logic, model catalog entry, capability tier mapping, or subprocess lifecycle code in `poc/runtime/` is modified, the developer or agent **MUST** update this `AGENTS.md` file within the **SAME commit**.
 
+## Final parent review corrections
+Provider selection precedence is owned by runtime_providers.resolve_provider_selection and reused by setup reporting and command building; setup reporting does not import the concrete execution singleton. Runtime shutdown stops admission, cancels known runs, closes subscribers and joins tracked execution threads with bounded waits. Same-run execution attempts serialize across prior finalization so automatic session resumption cannot race old process-map cleanup. stderr is drained without retaining unbounded/secret content; termination waits are bounded. Subscriber queues remain independent of execution input; terminal subscriptions close and already-terminal runs do not create idle listeners. Explicit result is_error produces FAILED. Reader completion owns the output-end marker, avoiding premature failure before final output drains.
+
+Unavailable supervisor callbacks leave WAITING_INPUT rather than failing or completing a clarification. Composed backend fallback stores a HUMAN_OPERATOR interaction. These corrections were reviewed in source only, not exercised.
+
+Required declared agent skills no longer silently disappear on enrichment failure: missing/unresolved context raises an explicit runtime failure before subprocess launch. Optional backend wiring supplies the skill-context callback. This change is source-reviewed only.
+
+
+## Integration of current master capabilities
+
 ## Optional Playground runtime capability
 `RuntimeCapabilities.supports_playground` defaults to false. `PlaygroundRuntimeAdapter` extends the base protocol with `start_playground_task(agent_id, task_id, prompt, workspace)`; existing adapters retain the base contract. ClaudeCodeAdapter advertises support and delegates to ClaudeCodeRuntimeAdapter. The command uses fresh print-mode inference, `--safe-mode`, an empty `--tools` inventory, `--strict-mcp-config` with empty servers, disabled hooks/skills discovery/Chrome, empty setting sources, `dontAsk`, and no session persistence. Agent system prompts and explicit skill text are retained; inherited hierarchy delegation instructions are omitted. The subprocess cwd is the ephemeral workspace. Permission bypass settings cannot override this command. Playground tasks cannot use ordinary start/resume paths. Model errors and missing-input requests fail locally without supervisor routing. Playground does not modify normal agent conversations or invoke orchestration completion callbacks. This requires a CLI supporting these flags; unsupported CLIs fail rather than retrying with broader permissions. These controls disable agent tools; they do not claim OS-level network isolation of the model provider client.
 
@@ -98,3 +133,11 @@ AuthoringModelSelection (frozen model_id/provider_id) is separate from execution
 Without authoring_context the inference remains tool-free. With a trusted parent-created context it creates a private mode-0600 context file and a strict MCP configuration for backend.workflow_assistant.mcp_server, launched by the current Python interpreter. safe-mode is removed because it suppresses MCP customizations; restricted mode, empty built-in tools, empty setting sources, disabled hooks/skills/Chrome and exact allowedTools limit access to workflow_catalog/workflow_schema/validate_workflow_yaml. Only that internal server is configured. The model never receives file/shell tools or external connector tools. Provider networking remains necessary; this is not OS-level network isolation.
 
 AuthoringInferenceResult contains output,tokens,nullable cost_usd,cost_source,model,error_code/error_message. A new POSIX process group covers CLI and MCP descendants; termination/kill and temporary-directory cleanup occur on result, error, timeout or cancellation. No AgentRun, Office event, agent conversation or normal completion callback is created. The MCP server verifies current user rights/job RUNNING/deadline per call. The parent independently checks required tool calls and the selected validation_id and stored candidate hash against the current generation. Actual SDK stdio tests and live-provider smoke calls are separate checks.
+
+### Integrated component ownership and verification limits
+
+Model-only inference is implemented in `authoring.py`, exposed through facade methods `get_authoring_models`, `infer_authoring(selection, prompt, system_prompt, response_schema, timeout_seconds=120, max_budget_usd=None, is_cancelled=None, authoring_context=None)` and `_read_authoring_process`. It uses the existing injected command/model services and shared process maps/authoring lock, never ordinary AgentRun dispatch. Runtime shutdown also cancels authoring admission/reads and terminates tracked authoring process groups.
+
+`playground.py` owns `start_playground_task(agent_id, task_id, prompt, workspace)`. Its threads are tracked by the existing runtime shutdown owner and serialized with existing per-run locks. `TaskExecutor` accepts `playground_workspace` and suppresses supervisor routing/session capture; finalization persists playground run state without normal conversation, chat notification or completion callbacks. The command builder has an explicit playground flag before normal permissions/customization injection. The bounded stderr reader now retains the upstream diagnostic tail; this supersedes the earlier note that diagnostics were drained without retained content. Buffered-output, process lifetime, subscription fan-out and source path fixes from the refactor are retained.
+
+The upstream regression tests mentioned above were merged as source only. No tests, import execution, build, lint, startup or model inference were performed during conflict resolution; live behavior remains unverified.

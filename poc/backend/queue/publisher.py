@@ -82,41 +82,11 @@ class TaskQueuePublisher:
             "metadata": metadata or {},
         }
 
-        if self.broker.is_fallback:
-            # Determine fallback queue
-            if priority >= 8:
-                q_name = QUEUE_HIGH_PRIORITY
-            elif priority <= 3:
-                q_name = QUEUE_BACKGROUND
-            else:
-                q_name = QUEUE_STANDARD
-
-            q = self.broker._fallback_queues.get(q_name)
-            if q is not None:
-                # PriorityQueue in Python pops lowest first, so we use (10 - priority)
-                item = (10 - priority, datetime.utcnow().timestamp(), payload)
-                await q.put(item)
-                logger.info(f"[Fallback Queue] Enqueued task {task_id} into {q_name} (priority={priority})")
-        else:
-            import aio_pika
-
-            message = aio_pika.Message(
-                body=json.dumps(payload).encode("utf-8"),
-                priority=priority,
-                delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
-                correlation_id=correlation_id,
-                headers={
-                    "organization_id": org_id or "",
-                    "department_id": department_id or "",
-                    "task_id": task_id,
-                    "agent_id": agent_id,
-                },
-                content_type="application/json",
-            )
-
-            if self.broker._exchange:
-                await self.broker._exchange.publish(message, routing_key=routing_key)
-                logger.info(f"[RabbitMQ] Published task {task_id} with key '{routing_key}' (priority={priority})")
+        queue_name = (
+            QUEUE_HIGH_PRIORITY if priority >= 8 else
+            QUEUE_BACKGROUND if priority <= 3 else QUEUE_STANDARD
+        )
+        await self.broker.publish_payload(payload, queue_name, routing_key)
 
         return {
             "task_id": task_id,
@@ -161,30 +131,7 @@ class TaskQueuePublisher:
             "retry_count": 0,
         }
 
-        if self.broker.is_fallback:
-            q = self.broker._fallback_queues.get(QUEUE_WORKFLOW_STEPS)
-            if q is not None:
-                item = (10 - priority, datetime.utcnow().timestamp(), payload)
-                await q.put(item)
-                logger.info(f"[Fallback Queue] Enqueued workflow step {step_key} for run {run_id}")
-        else:
-            import aio_pika
-
-            message = aio_pika.Message(
-                body=json.dumps(payload).encode("utf-8"),
-                priority=priority,
-                delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
-                correlation_id=correlation_id,
-                headers={
-                    "workflow_id": workflow_id,
-                    "run_id": run_id,
-                    "step_key": step_key,
-                },
-                content_type="application/json",
-            )
-            if self.broker._exchange:
-                await self.broker._exchange.publish(message, routing_key=routing_key)
-                logger.info(f"[RabbitMQ] Published workflow step {step_key} for run {run_id}")
+        await self.broker.publish_payload(payload, QUEUE_WORKFLOW_STEPS, routing_key)
 
         return {
             "run_id": run_id,
@@ -224,31 +171,7 @@ class TaskQueuePublisher:
             "retry_count": 0,
         }
 
-        if self.broker.is_fallback:
-            q = self.broker._fallback_queues.get(QUEUE_WORKFLOW_EXECUTION)
-            if q is not None:
-                item = (10 - priority, datetime.utcnow().timestamp(), payload)
-                await q.put(item)
-                logger.info(f"[Fallback Queue] Enqueued workflow execution {execution_id} for workflow {workflow_id}")
-        else:
-            import aio_pika
-
-            message = aio_pika.Message(
-                body=json.dumps(payload).encode("utf-8"),
-                priority=priority,
-                delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
-                correlation_id=correlation_id,
-                headers={
-                    "workflow_id": workflow_id,
-                    "execution_id": execution_id,
-                    "organization_id": org_id or "",
-                    "department_id": department_id or "",
-                },
-                content_type="application/json",
-            )
-            if self.broker._exchange:
-                await self.broker._exchange.publish(message, routing_key=routing_key)
-                logger.info(f"[RabbitMQ] Published workflow execution {execution_id} for workflow {workflow_id}")
+        await self.broker.publish_payload(payload, QUEUE_WORKFLOW_EXECUTION, routing_key)
 
         return {
             "execution_id": execution_id,

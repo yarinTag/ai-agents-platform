@@ -6,124 +6,34 @@ coordinates sandboxes, supports parallel multi-agent stages, step-level skills,
 maker-checker reviews, and captures run evaluations.
 """
 
-import re
 import uuid
 import json
 import hashlib
 import logging
 import concurrent.futures
 from datetime import datetime
-from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Any
 
-from persistence import DatabaseManager, Workflow, WorkflowExecution, WorkflowStepRun, RunEvaluation
+from storage.records import WorkflowExecution
+from .ports import WorkflowStore, WorkflowNotifications
 from runtime.protocol import RuntimeAdapter
-from runtime.models import AgentRun, TaskStatus
 from .parser import WorkflowParser, WorkflowDefinition, WorkflowStepDefinition
-from .sandbox import SandboxManager, SandboxSession
+from .sandbox import SandboxManager
+
+from .execution_models import BudgetExceededError, MCPGovernanceViolationError, UnauthorizedUserDepartmentError, WorkflowStepResult
+from .conditions import evaluate_condition_rule, evaluate_trigger_conditions
+from .step_runner import WorkflowStepRunner
+from .stages import group_steps_into_stages
+from .agent_scope import require_agent_scope
 
 logger = logging.getLogger(__name__)
 
 
 def compute_execution_hash(workflow_id: str, payload: Any, revision: Optional[int] = None) -> str:
-    """Compute deterministic short hash for workflow payload deduplication and idempotency."""
-    try:
-        payload_str = json.dumps(payload, sort_keys=True) if payload else ""
-    except Exception:
-        payload_str = str(payload) if payload else ""
+    """Stable namespace includes the saved revision and playground identity."""
+    payload_text = json.dumps(payload, sort_keys=True) if payload else ""
     namespace = f"{workflow_id}:v{revision}" if revision is not None else workflow_id
-    return hashlib.sha256(f"{namespace}:{payload_str}".encode("utf-8")).hexdigest()[:16]
-
-
-class BudgetExceededError(Exception):
-    """Raised when department monthly budget is exceeded under HARD_STOP policy."""
-    def __init__(self, department_id: str, message: str, current_spend: float, budget: float):
-        super().__init__(message)
-        self.department_id = department_id
-        self.current_spend = current_spend
-        self.budget = budget
-
-
-class MCPGovernanceViolationError(Exception):
-    """Raised when an MCP connector or tool violates department governance policies."""
-    def __init__(self, department_id: str, connector_id: str, reason: str, tool_name: Optional[str] = None):
-        super().__init__(reason)
-        self.department_id = department_id
-        self.connector_id = connector_id
-        self.tool_name = tool_name
-        self.reason = reason
-
-
-class UnauthorizedUserDepartmentError(Exception):
-    """Raised when an authenticated user attempts to execute a workflow outside their authorized departments."""
-    def __init__(self, user_id: str, department_id: str, message: str):
-        super().__init__(message)
-        self.user_id = user_id
-        self.department_id = department_id
-
-
-@dataclass
-class WorkflowStepResult:
-    """Result of an individual workflow step execution."""
-    step_key: str
-    status: str
-    task_run_id: str
-    output: Optional[str] = None
-    input_tokens: int = 0
-    output_tokens: int = 0
-    cost_usd: float = 0.0
-    error: Optional[str] = None
-
-
-def evaluate_condition_rule(rule: Dict[str, Any], payload: Dict[str, Any]) -> bool:
-    """Evaluate a single rule against a nested payload using dot notation."""
-    field_path = rule.get("field", "")
-    operator = rule.get("operator", "equals").lower()
-    target_value = rule.get("value")
-
-    curr = payload
-    for part in field_path.split("."):
-        if isinstance(curr, dict) and part in curr:
-            curr = curr[part]
-        else:
-            curr = None
-            break
-
-    if curr is None:
-        return False
-
-    str_curr = str(curr)
-    str_target = str(target_value)
-
-    if operator in ("matches", "regex"):
-        return bool(re.search(str_target, str_curr))
-    elif operator in ("equals", "eq", "=="):
-        return str_curr == str_target
-    elif operator in ("not_equals", "ne", "!="):
-        return str_curr != str_target
-    elif operator in ("contains", "has"):
-        return str_target in str_curr
-    elif operator == "in":
-        if isinstance(target_value, (list, tuple)):
-            return curr in target_value
-        return str_curr in str_target
-    return False
-
-
-def evaluate_trigger_conditions(trigger: Dict[str, Any], payload: Dict[str, Any]) -> bool:
-    """Evaluate full trigger conditions with combinator 'and'/'or'."""
-    conds = trigger.get("conditions")
-    if not conds:
-        return True
-    combinator = conds.get("combinator", "and").lower()
-    rules = conds.get("rules", [])
-    if not rules:
-        return True
-
-    results = [evaluate_condition_rule(r, payload) for r in rules]
-    if combinator == "or":
-        return any(results)
-    return all(results)
+    return hashlib.sha256(f"{namespace}:{payload_text}".encode("utf-8")).hexdigest()[:16]
 
 
 class WorkflowEngine:
@@ -135,13 +45,20 @@ class WorkflowEngine:
 
     def __init__(
         self,
-        db_manager: DatabaseManager,
+        db_manager: WorkflowStore,
         runtime_adapter: Optional[RuntimeAdapter] = None,
         orchestration_engine: Any = None,
-        sandbox_manager: Optional[SandboxManager] = None
+        sandbox_manager: Optional[SandboxManager] = None,
+        notifier: Optional[WorkflowNotifications] = None,
+        skill_context=None,
+        prompt_guard=None,
+        output_sanitizer=None,
+        approval_dispatch=None,
     ):
         self.db = db_manager
+        self.notifier = notifier
         self.runtime = runtime_adapter
+        self._step_runner = WorkflowStepRunner(db_manager, runtime_adapter, skill_context, prompt_guard, output_sanitizer, approval_dispatch)
         self.orchestration = orchestration_engine
         self.sandbox_manager = sandbox_manager or SandboxManager()
 
@@ -194,7 +111,7 @@ class WorkflowEngine:
                         )
 
             budget_status = self.db.check_department_budget(dept_id)
-            if not budget_status.get("allowed", True):
+            if not budget_status.get("allowed", False):
                 raise BudgetExceededError(
                     department_id=dept_id,
                     message=budget_status.get("message", "Department budget limit exceeded. Additional budget required."),
@@ -255,6 +172,20 @@ class WorkflowEngine:
                 sandbox.cleanup()
                 return self.db.get_workflow_execution(execution_id)
 
+        try:
+            for step in wf_def.steps:
+                require_agent_scope(self.db.get_agent(step.agent_id), workflow, user_context)
+                reviewer_id = (getattr(step, "params", None) or {}).get("reviewerAgentId")
+                if reviewer_id and not playground:
+                    require_agent_scope(self.db.get_agent(reviewer_id), workflow, user_context)
+        except Exception as error:
+            self.db.update_workflow_execution(
+                execution_id, status="FAILED", error_message=str(error),
+                completed_at=datetime.now().isoformat(),
+            )
+            sandbox.cleanup()
+            raise
+
         # Tool-free exercises never connect to declared MCP servers.
         # Live executions still require department connector grants.
         # 4b. Pre-flight MCP Governance check
@@ -295,7 +226,7 @@ class WorkflowEngine:
                 # Check mid-run budget cap before launching next stage
                 if dept_id:
                     check = self.db.check_department_budget(dept_id, requested_cost=total_cost_usd)
-                    if not check.get("allowed", True):
+                    if not check.get("allowed", False):
                         final_status = "FAILED"
                         failure_error = f"Mid-run budget exceeded for department {dept_id}. Additional budget required."
                         break
@@ -373,408 +304,28 @@ class WorkflowEngine:
             total_input_tokens=total_input_tokens,
             total_output_tokens=total_output_tokens,
             total_cost_usd=total_cost_usd,
-            completed_at=datetime.now().isoformat(),
+            completed_at=datetime.now().isoformat() if final_status in {"COMPLETED", "FAILED", "CANCELLED"} else None,
             error_message=failure_error
         )
 
-        if playground:
-            return self.db.get_workflow_execution(execution_id)
-
-        # Dispatch outgoing notification to bound communication channel (Slack / Telegram)
-        try:
-            wf_record = self.db.get_workflow(workflow_id)
-            if wf_record and wf_record.definition_json:
-                dj = json.loads(wf_record.definition_json)
-                channel_binding = dj.get("metadata", {}).get("channel_binding")
-                if channel_binding:
-                    notify_mode = channel_binding.get("notify_mode", "ON_COMPLETE")
-                    should_notify = (
-                        notify_mode == "ALWAYS" or
-                        (notify_mode == "ON_COMPLETE" and final_status == "COMPLETED") or
-                        (notify_mode == "ON_FAILURE" and final_status == "FAILED")
-                    )
-                    if should_notify:
-                        provider = channel_binding.get("provider", "slack")
-                        channel_id = channel_binding.get("channel_id", "")
-                        custom_tmpl = channel_binding.get("message_template")
-
-                        final_output = list(step_outputs.values())[-1] if step_outputs else ""
-                        if len(final_output) > 2500:
-                            final_output = final_output[:2450] + "...\n(truncated)"
-
-                        if custom_tmpl:
-                            msg_body = custom_tmpl.replace("{{workflow_name}}", wf_record.name).replace("{{status}}", final_status)
-                            if "{{output}}" in custom_tmpl:
-                                msg_body = msg_body.replace("{{output}}", final_output)
-                            elif final_output and final_output not in msg_body:
-                                msg_body += f"\n\n📋 *Workflow Summary / Report:*\n{final_output}"
-                        else:
-                            msg_body = (
-                                f"🤖 *Workflow Run Notification*\n"
-                                f"• Workflow: *{wf_record.name}* (`{wf_record.id}`)\n"
-                                f"• Status: *{final_status}*\n"
-                                f"• Trigger: `{trigger_type}`\n"
-                                f"• Tokens: {total_input_tokens + total_output_tokens} (Cost: ${total_cost_usd:.4f})"
-                            )
-                            if final_output:
-                                msg_body += f"\n\n📋 *Result:*\n{final_output}"
-                            if failure_error:
-                                msg_body += f"\n• Error: {failure_error}"
-
-                        if provider.lower() == "telegram":
-                            try:
-                                conn = self.db.get_mcp_connector("telegram")
-                                if conn and conn.configuration:
-                                    bot_token = conn.configuration.get("bot_token")
-                                    configured_chat_id = conn.configuration.get("chat_id")
-                                    target_chat = channel_id
-                                    if target_chat in ("@agents_office_alerts", "@hermesganbot", "hermesganbot", "Hermes_test") and configured_chat_id:
-                                        target_chat = configured_chat_id
-                                    elif target_chat.lower().endswith("bot") and configured_chat_id:
-                                        target_chat = configured_chat_id
-
-                                    if bot_token and target_chat:
-                                        import urllib.request
-                                        payload = json.dumps({"chat_id": target_chat, "text": msg_body}).encode("utf-8")
-                                        telegram_req = urllib.request.Request(
-                                            f"https://api.telegram.org/bot{bot_token}/sendMessage",
-                                             data=payload,
-                                             headers={"Content-Type": "application/json"}
-                                        )
-                                        with urllib.request.urlopen(telegram_req, timeout=5) as t_resp:
-                                            if t_resp.status == 200:
-                                                logger.info(f"Successfully delivered live Telegram notification to {target_chat}")
-                            except Exception as t_err:
-                                logger.warning(f"Failed to post live notification to Telegram API: {t_err}")
-
-                        now_dt = datetime.now().isoformat()
-                        self.db.save_mcp_tool_call({
-                            "id": f"call_notify_{uuid.uuid4().hex[:8]}",
-                            "connector_id": channel_binding.get("connector_id", provider),
-                            "tool_id": f"tool_{provider}_send_message",
-                            "agent_id": "ceo-orchestrator",
-                            "task_id": None,
-                            "arguments": {"channel": channel_id, "text": msg_body},
-                            "status": "COMPLETED",
-                            "result": f"Notification posted to {channel_id}",
-                            "started_at": now_dt,
-                            "completed_at": now_dt
-                        })
-                        logger.info(f"Successfully posted workflow notification to {provider}:{channel_id}")
-        except Exception as notify_err:
-            logger.warning(f"Failed to dispatch channel binding notification: {notify_err}")
+        # Optional delivery must not change the authoritative execution result.
+        if self.notifier and not playground:
+            try:
+                self.notifier.notify(
+                    workflow_id, execution_id, trigger_type, final_status, step_outputs,
+                    total_input_tokens, total_output_tokens, total_cost_usd, failure_error,
+                )
+            except Exception:
+                logger.warning("Workflow notification adapter failed for %s", execution_id)
 
         return self.db.get_workflow_execution(execution_id)
 
-    def _execute_single_step(
-        self,
-        step: WorkflowStepDefinition,
-        execution_id: str,
-        step_outputs: Dict[str, str],
-        trigger_payload: Optional[Dict[str, Any]],
-        dept_id: Optional[str],
-        playground_workspace: Optional[str] = None
-    ) -> WorkflowStepResult:
-        """Execute a single workflow step with dynamic substitutions, skill injection, and agent reuse."""
-        formatted_prompt = step.prompt_template
-        for prev_key, prev_out in step_outputs.items():
-            formatted_prompt = formatted_prompt.replace(f"{{{{{prev_key}.output}}}}", prev_out or "")
-            formatted_prompt = formatted_prompt.replace(f"${{{prev_key}.output}}", prev_out or "")
+    def _execute_single_step(self, step, execution_id, step_outputs, trigger_payload, dept_id, playground_workspace=None):
+        self._step_runner.runtime = self.runtime
+        return self._step_runner.execute(step, execution_id, step_outputs, trigger_payload, dept_id, playground_workspace)
 
-        if trigger_payload:
-            for k, v in trigger_payload.items():
-                formatted_prompt = formatted_prompt.replace(f"{{{{{k}}}}}", str(v))
-                formatted_prompt = formatted_prompt.replace(f"${{{k}}}", str(v))
-
-        # AI Security Firewall: Scan formatted step prompt for prompt injection & destructive payloads
-        from backend.security.firewall import get_prompt_firewall
-        firewall = get_prompt_firewall()
-        firewall.assert_clean_prompt(
-            text=formatted_prompt,
-            source=f"workflow_step:{step.key}",
-            db_manager=self.db,
-            actor=f"workflow_execution:{execution_id}"
-        )
-
-        # Step-level MCP Governance check & Tool filtering (Least Privilege & Hard Block)
-        if dept_id and not playground_workspace and getattr(step, "mcp_servers", None):
-            for conn_id in step.mcp_servers:
-                perm = self.db.check_department_mcp_permission(dept_id, conn_id)
-                if not perm.get("allowed", False):
-                    raise MCPGovernanceViolationError(
-                        department_id=dept_id,
-                        connector_id=conn_id,
-                        reason=perm.get("reason", f"Access to MCP connector '{conn_id}' denied for department '{dept_id}'")
-                    )
-
-                # Tool-level filtering
-                step_tools = []
-                if hasattr(step, "params") and isinstance(step.params, dict):
-                    raw_tools = step.params.get("tools") or step.params.get("mcp_tools") or []
-                    if isinstance(raw_tools, list):
-                        step_tools = raw_tools
-                    elif isinstance(raw_tools, str):
-                        step_tools = [raw_tools]
-
-                for t in step_tools:
-                    tool_perm = self.db.check_department_mcp_permission(dept_id, conn_id, tool_name=t)
-                    if not tool_perm.get("allowed", False):
-                        raise MCPGovernanceViolationError(
-                            department_id=dept_id,
-                            connector_id=conn_id,
-                            reason=tool_perm.get("reason", f"Tool '{t}' blocked by department policy"),
-                            tool_name=t
-                        )
-
-        # Step-level Skills injection (dynamic resolution)
-        step_skills = []
-        for sk in getattr(step, "skills", []) or []:
-            sk_rendered = str(sk)
-            if trigger_payload:
-                for k, v in trigger_payload.items():
-                    sk_rendered = sk_rendered.replace(f"{{{{{k}}}}}", str(v))
-                    sk_rendered = sk_rendered.replace(f"${{{k}}}", str(v))
-            step_skills.append(sk_rendered)
-
-        if step_skills:
-            try:
-                from skills_service import build_skills_system_prompt
-                skills_context = build_skills_system_prompt(step_skills)
-                if skills_context:
-                    formatted_prompt = f"{skills_context}\n\n[TASK INSTRUCTIONS]\n{formatted_prompt}"
-            except Exception as sk_err:
-                logger.warning(f"Failed to build skills prompt for step '{step.key}': {sk_err}")
-
-        # Ensure agent exists in database (reuse or auto-provision)
-        agent = self.db.get_agent(step.agent_id)
-        actual_agent_id = step.agent_id
-        if not agent and playground_workspace:
-            raise ValueError(f"Playground requires a configured agent: {step.agent_id}")
-        if not agent:
-            try:
-                from config import AgentConfig
-                placeholder = AgentConfig(
-                    id=step.agent_id,
-                    name=step.name or step.agent_id,
-                    description=f"Auto-generated agent for workflow step {step.key}",
-                    system_prompt=f"You are an autonomous agent specialized in {step.name or step.key}.",
-                    model="default"
-                )
-                self.db.save_agent(placeholder)
-            except Exception as ex:
-                logger.warning(f"Could not auto-provision agent '{step.agent_id}': {ex}")
-                existing = self.db.list_agents()
-                if existing:
-                    actual_agent_id = existing[0].id
-                else:
-                    raise
-
-        # Create task run for this step
-        task_id = f"{'pg_task_' if playground_workspace else 'wf_task_'}{uuid.uuid4().hex[:12]}"
-        now_dt = datetime.now()
-        step_run = AgentRun(
-            run_id=task_id,
-            agent_id=actual_agent_id,
-            project_id=None,
-            prompt=formatted_prompt,
-            status=TaskStatus.RUNNING,
-            created_at=now_dt,
-            started_at=now_dt,
-            acceptance_criteria=step.acceptance_criteria,
-            retry_count=step.retry_count,
-            organization_id=getattr(agent, "organization_id", None)
-        )
-        self.db.save_task_run(step_run)
-        step_record_id = f"step_run_{uuid.uuid4().hex[:8]}"
-        with self.db._get_connection() as conn:
-            conn.execute("""
-                INSERT INTO workflow_step_runs
-                (id, execution_id, step_key, agent_id, status, task_run_id, input_data, started_at)
-                VALUES (?, ?, ?, ?, 'RUNNING', ?, ?, ?)
-            """, (step_record_id, execution_id, step.key, actual_agent_id, task_id,
-                  formatted_prompt, now_dt.isoformat()))
-            conn.commit()
-
-        # Execute step via runtime adapter if available
-        if self.runtime:
-            try:
-                if playground_workspace:
-                    self.runtime.start_playground_task(
-                        agent_id=actual_agent_id, task_id=task_id,
-                        prompt=formatted_prompt, workspace=playground_workspace
-                    )
-                else:
-                    self.runtime.start_task(
-                        task_id=task_id, agent_id=actual_agent_id, prompt=formatted_prompt
-                    )
-                import time
-                max_wait = min(step.timeout_seconds or 180, 300)
-                start_wait = time.time()
-                while time.time() - start_wait < max_wait:
-                    updated_run = self.db.get_task_run(task_id)
-                    if playground_workspace and updated_run and updated_run.status in (TaskStatus.WAITING_INPUT, TaskStatus.PENDING_APPROVAL):
-                        self.runtime.cancel_run(task_id)
-                        raise RuntimeError("Playground requires additional input; start a new run with that input")
-                    if updated_run and str(updated_run.status).lower() in (
-                        "completed", "failed", "cancelled",
-                        str(TaskStatus.COMPLETED).lower(),
-                        str(TaskStatus.FAILED).lower(),
-                        str(TaskStatus.CANCELLED).lower()
-                    ):
-                        break
-
-                    # Active HITL Gate handling: Auto-dispatch interactive prompt to bound Telegram / Slack channels
-                    if updated_run and str(updated_run.status).lower() in (
-                        "waiting_input", "pending_approval",
-                        str(TaskStatus.WAITING_INPUT).lower(),
-                        str(TaskStatus.PENDING_APPROVAL).lower()
-                    ):
-                        if not getattr(step, "_chatops_dispatched", False):
-                            setattr(step, "_chatops_dispatched", True)
-                            try:
-                                interactions = self.db.list_interactions(task_id=task_id, status="PENDING")
-                                if interactions:
-                                    intr = interactions[0]
-                                    # 1. Telegram Dispatch
-                                    t_conn = self.db.get_mcp_connector("telegram")
-                                    if t_conn and t_conn.configuration:
-                                        t_token = t_conn.configuration.get("bot_token")
-                                        t_chat = t_conn.configuration.get("chat_id")
-                                        if t_token and t_chat:
-                                            from backend.approvals.chatops import send_telegram_interactive_approval
-                                            import asyncio
-                                            try:
-                                                loop = asyncio.get_event_loop()
-                                                if loop.is_running():
-                                                    loop.create_task(send_telegram_interactive_approval(t_token, str(t_chat), intr))
-                                                else:
-                                                    loop.run_until_complete(send_telegram_interactive_approval(t_token, str(t_chat), intr))
-                                            except RuntimeError:
-                                                asyncio.run(send_telegram_interactive_approval(t_token, str(t_chat), intr))
-                                            logger.info(f"Auto-dispatched Telegram interactive HITL gate for step '{step.key}'")
-
-                                    # 2. Slack Dispatch
-                                    s_conn = self.db.get_mcp_connector("slack")
-                                    if s_conn and s_conn.configuration:
-                                        s_webhook = s_conn.configuration.get("webhook_url")
-                                        if s_webhook:
-                                            from backend.approvals.chatops import send_slack_interactive_approval
-                                            import asyncio
-                                            try:
-                                                loop = asyncio.get_event_loop()
-                                                if loop.is_running():
-                                                    loop.create_task(send_slack_interactive_approval(s_webhook, intr))
-                                                else:
-                                                    loop.run_until_complete(send_slack_interactive_approval(s_webhook, intr))
-                                            except RuntimeError:
-                                                asyncio.run(send_slack_interactive_approval(s_webhook, intr))
-                                            logger.info(f"Auto-dispatched Slack interactive HITL gate for step '{step.key}'")
-                            except Exception as d_err:
-                                logger.debug(f"ChatOps auto-dispatch notification: {d_err}")
-
-                        # Keep extending wait time buffer while waiting for human sign-off (up to 30 mins)
-                        start_wait = max(start_wait, time.time() - 30.0)
-
-                    time.sleep(1.0)
-            except Exception as ex:
-                if playground_workspace:
-                    self.runtime.cancel_run(task_id)
-                    failed_run = self.db.get_task_run(task_id) or step_run
-                    failed_run.status = TaskStatus.FAILED
-                    failed_run.error = str(ex)
-                    self.db.save_task_run(failed_run)
-                logger.warning(f"Runtime execution warning for step '{step.key}': {ex}")
-
-        # Optional Maker-Checker review
-        reviewer_id = step.params.get("reviewerAgentId") if getattr(step, "params", None) else None
-        if reviewer_id and self.runtime and not playground_workspace:
-            try:
-                reviewer_agent = self.db.get_agent(reviewer_id)
-                if reviewer_agent:
-                    review_task_id = f"review_{uuid.uuid4().hex[:10]}"
-                    updated_run = self.db.get_task_run(task_id) or step_run
-                    rev_prompt = (
-                        f"Review deliverable from {actual_agent_id} for step '{step.name}'.\n"
-                        f"Acceptance criteria: {step.acceptance_criteria or 'Ensure high quality'}\n"
-                        f"Deliverable:\n{updated_run.result or 'No output'}"
-                    )
-                    self.db.save_task_run(AgentRun(
-                        run_id=review_task_id, agent_id=reviewer_id, project_id=None,
-                        prompt=rev_prompt, status=TaskStatus.QUEUED, created_at=datetime.now(),
-                        parent_task_id=task_id, root_task_id=task_id,
-                        organization_id=getattr(reviewer_agent, "organization_id", None)
-                    ))
-                    self.runtime.start_task(task_id=review_task_id, agent_id=reviewer_id, prompt=rev_prompt)
-            except Exception as r_err:
-                logger.warning(f"Maker-checker review note for step '{step.key}': {r_err}")
-
-        # Refresh task run to capture output, tokens, and cost
-        updated_run = self.db.get_task_run(task_id) or step_run
-        result_status = "COMPLETED"
-        result_error = None
-        if playground_workspace and updated_run.status != TaskStatus.COMPLETED:
-            self.runtime.cancel_run(task_id)
-            result_status = "FAILED"
-            result_error = updated_run.error or (
-                f"Playground timed out after {min(step.timeout_seconds or 180, 300)} seconds waiting for the model. "
-                "Check the runtime events and model provider connection in workflow logs."
-            )
-        step_output = updated_run.result or result_error or getattr(updated_run, "error", None) or f"Step {step.name} completed"
-
-        # AI Security Firewall: Sanitize MCP / external tool output against indirect prompt injections
-        try:
-            step_output = firewall.sanitize_mcp_output(tool_name=step.key, raw_output=step_output)
-        except Exception as sec_ex:
-            logger.error(f"Security Alert: Step '{step.key}' output contained indirect prompt injection: {sec_ex}")
-            step_output = f"[SANITIZED_BY_SECURITY_FIREWALL: Potential indirect prompt injection neutralized]"
-        step_in_tok = getattr(updated_run, "input_tokens", 0) or 0
-        step_out_tok = getattr(updated_run, "output_tokens", 0) or 0
-        step_cost = getattr(updated_run, "cost_usd", 0.0) or 0.0
-
-        now_iso = datetime.now().isoformat()
-        with self.db._get_connection() as conn:
-            conn.execute("""
-                UPDATE workflow_step_runs SET status = ?, output_data = ?, input_tokens = ?,
-                    output_tokens = ?, cost_usd = ?, completed_at = ? WHERE id = ?
-            """, (result_status, step_output, step_in_tok, step_out_tok, step_cost,
-                  now_iso, step_record_id))
-            conn.commit()
-
-        return WorkflowStepResult(
-            step_key=step.key,
-            status=result_status,
-            error=result_error,
-            task_run_id=task_id,
-            output=step_output,
-            input_tokens=step_in_tok,
-            output_tokens=step_out_tok,
-            cost_usd=step_cost
-        )
-
-    def _group_steps_into_stages(self, steps: List[WorkflowStepDefinition]) -> List[List[WorkflowStepDefinition]]:
-        """Group steps into DAG execution stages for parallel multi-agent execution."""
-        if not steps:
-            return []
-        step_map = {s.key: s for s in steps}
-        completed_keys = set()
-        stages: List[List[WorkflowStepDefinition]] = []
-        remaining = list(steps)
-
-        while remaining:
-            ready = [
-                s for s in remaining
-                if all(dep in completed_keys or dep not in step_map for dep in s.depends_on)
-            ]
-            if not ready:
-                # Cycle or disconnected steps - fallback to sequential
-                stages.append(remaining)
-                break
-            stages.append(ready)
-            for s in ready:
-                completed_keys.add(s.key)
-                remaining.remove(s)
-
-        return stages
+    def _group_steps_into_stages(self, steps):
+        return group_steps_into_stages(steps)
 
     def _topological_sort_steps(self, steps: List[Any]) -> List[Any]:
         """Flatten stages into ordered steps."""

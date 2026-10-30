@@ -26,38 +26,25 @@ logging.basicConfig(
 )
 logger = logging.getLogger("worker_entrypoint")
 
-from backend.queue import get_message_broker, get_queue_worker
-from backend.dependencies import get_runtime_adapter, get_event_bus
+from backend.queue import get_queue_worker
+from backend.queue_lifecycle import start_queue, stop_queue
+from backend.dependencies import shutdown_services
 
 
 async def run_worker():
-    logger.info("Starting Enterprise Autonomous Agent Worker Node...")
-    concurrency = int(os.environ.get("WORKER_CONCURRENCY", "10"))
-    worker_id = os.environ.get("HOSTNAME", f"worker_{os.getpid()}")
-
-    broker = get_message_broker()
-    connected = await broker.connect()
-    if not connected:
-        logger.error("Failed to connect to RabbitMQ broker.")
-        return
-
+    """Use the same injected runtime/workflow composition as the API worker."""
     worker = get_queue_worker()
-    worker.worker_id = worker_id
-    worker.max_concurrency = concurrency
-    worker.runtime_adapter = get_runtime_adapter()
-    worker.event_bus = get_event_bus()
-
-    await worker.start()
-    logger.info(f"Worker Node [{worker_id}] is listening on RabbitMQ topic queues. Ready for tasks!")
-
-    # Keep worker running indefinitely
+    worker.worker_id = os.environ.get("HOSTNAME", f"worker_{os.getpid()}")
+    worker.max_concurrency = int(os.environ.get("WORKER_CONCURRENCY", "10"))
     try:
-        while True:
+        await start_queue()
+        if not worker.is_running:
+            raise RuntimeError("Queue worker could not start")
+        while worker.is_running:
             await asyncio.sleep(1)
-    except (asyncio.CancelledError, KeyboardInterrupt):
-        logger.info("Worker shutting down gracefully...")
-        await worker.stop()
-        await broker.disconnect()
+    finally:
+        await stop_queue()
+        await shutdown_services()
 
 
 if __name__ == "__main__":

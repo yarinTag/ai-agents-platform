@@ -58,16 +58,7 @@ The `src/pages/` directory contains top-level page components mounted by React R
   * Collapsible plugin cards with expand/collapse all controls.
   * Modal for viewing skill implementation code or markdown prompt instructions.
 
-### 2.5 `Workflows.tsx` (`/workflows`)
-* **Purpose**: Dedicated Workflows & Automations Hub for multi-agent DAG pipelines, manual execution, transparent background queue dispatching, and automated run deduplication.
-* **Key Components**:
-  * [`CreateWorkflowModal`](file:///Users/yarintag/Desktop/Projects/ai-agents-platform/poc/dashboard/src/components/workflows/CreateWorkflowModal.tsx): Visual and YAML workflow builder with skills and MCP channel bindings.
-  * [`WorkflowCanvasGraph`](file:///Users/yarintag/Desktop/Projects/ai-agents-platform/poc/dashboard/src/components/workflows/WorkflowCanvasGraph.tsx): Interactive DAG canvas graph visualization of workflow step dependencies with direct step deletion (`handleDeleteStepFromCanvas`) that persists updated JSON/YAML definitions via `updateWorkflow`.
-  * Execution History Table & Live Queue Inspector: Displays status (`QUEUED`, `RUNNING`, `COMPLETED`, `FAILED`), token consumption, costs, and `⚡ DEDUPLICATED / CACHED` badges.
-  * Execution Launch Modal: Supports custom JSON trigger payloads and force re-run deduplication bypass (background queue dispatching operates transparently behind the scenes).
-  * Execution Inspection Drawer: Inspects sandbox paths, token accounting, error messages, and input payloads.
-
-### 2.6 `McpHub.tsx` (`/mcp`)
+### 2.5 `McpHub.tsx` (`/mcp`)
 * **Purpose**: Model Context Protocol (MCP) integrations and workflow trigger channels hub.
 * **Key Components**:
   * [`CreateWorkflowModal`](file:///Users/yarintag/Desktop/Projects/ai-agents-platform/poc/dashboard/src/components/workflows/CreateWorkflowModal.tsx): Multi-step workflow builder with channel bindings.
@@ -80,7 +71,7 @@ The `src/pages/` directory contains top-level page components mounted by React R
   * Connector installation modal supporting standard providers (`github`, `gitlab`, `slack`, `telegram`, `postgres`, `filesystem`, `brave-search`) and custom stdio/SSE commands.
   * Connector connection tester with real-time tool discovery verification.
 
-### 2.7 `OrganizationPage.tsx` (`/organization`)
+### 2.6 `OrganizationPage.tsx` (`/organization`)
 * **Purpose**: Enterprise multi-tenant governance, department hierarchy, budgets, and user access.
 * **Key Components**:
   * Top Hero Banner: Organization identity, slug, and hierarchical structure overview.
@@ -92,7 +83,7 @@ The `src/pages/` directory contains top-level page components mounted by React R
   * Scoped to the authenticated user's organization (`AuthContext`).
   * Real-time refresh of organization profile and departments.
 
-### 2.8 `AuthPage.tsx` (`/auth` or unauthenticated root)
+### 2.7 `AuthPage.tsx` (`/auth` or unauthenticated root)
 * **Purpose**: Multi-tenant authentication and user onboarding portal.
 * **Key Components**:
   * [`SignInForm`](file:///Users/yarintag/Desktop/Projects/ai-agents-platform/poc/dashboard/src/components/auth/SignInForm.tsx): Email and password sign-in.
@@ -102,20 +93,18 @@ The `src/pages/` directory contains top-level page components mounted by React R
   * Auto-detects `?token=...` or `?invite=...` in URL query parameters to default to the Accept Invitation tab.
   * Clear error alerts for invalid credentials or expired invitation tokens.
 
-### 2.9 `Tasks.tsx` (`/tasks`)
-* **Purpose**: Queue of all tasks across the platform with hierarchical execution trees and RabbitMQ distributed worker status.
+### 2.8 `Tasks.tsx` (`/tasks`)
+* **Purpose**: Queue of all tasks across the platform with hierarchical execution trees.
 * **Key Components**:
-  * RabbitMQ Status Banner: Live broker connection, queue depths (Urgent, Standard, Background, Workflows), active worker count, and DLQ badge.
   * Task Roster Table: Columns for Title, Agent, Status tag, Priority, Duration, and Action buttons.
-  * Dead-Letter Queue (DLQ) Inspector Drawer: Lists isolated failed messages (>3 attempts) with root causes and one-click `Retry Task 🔁` requeuing.
   * Task Tree Modal: Displays the hierarchical delegation breakdown (`TaskTreeNode`) showing parent and subtask dependencies.
   * Task Logs Modal: Real-time event log viewer for task execution trace.
   * Delegation Modal: Allows humans to delegate an existing task to another agent.
 * **State & Features**:
   * Live status tags (`pending`, `running`, `completed`, `failed`, `waiting_input`, `pending_approval`).
-  * Task creation with RabbitMQ Topic Queue dispatch option and Priority slider (1: Low to 10: Urgent Incident).
+  * Task creation with priority, max steps, and timeout.
 
-### 2.10 `Projects.tsx` (`/projects`)
+### 2.9 `Projects.tsx` (`/projects`)
 * **Purpose**: Enterprise workspace and repository project definitions.
 * **Key Components**:
   * Project List Table: Path, Git repository, description, and created timestamp.
@@ -124,7 +113,7 @@ The `src/pages/` directory contains top-level page components mounted by React R
   * Links physical disk directories to autonomous agents.
   * Project creation and update modals with path validation.
 
-### 2.11 `CalendarView.tsx` (`/calendar`)
+### 2.10 `CalendarView.tsx` (`/calendar`)
 * **Purpose**: Automated cron schedule management and recurring routines.
 * **Key Components**:
   * Ant Design `Calendar` view with event indicators on scheduled days.
@@ -135,7 +124,7 @@ The `src/pages/` directory contains top-level page components mounted by React R
   * One-click trigger of scheduled routines (`triggerScheduleNow`).
   * Pending approvals badge showing actionable decisions requiring human intervention.
 
-### 2.12 `Dashboard.tsx` (`/dashboard`)
+### 2.11 `Dashboard.tsx` (`/dashboard`)
 * **Purpose**: High-level platform health, system metrics, and runtime statistics.
 * **Key Components**:
   * System Health Alert banner (`Healthy`, `Degraded`, `Critical`).
@@ -148,6 +137,22 @@ The `src/pages/` directory contains top-level page components mounted by React R
 
 ## 3. 🔄 Mandatory UI `AGENTS.md` Synchronization Rule
 
+### Page feature ownership after modular extraction
+
+Routes, endpoint signatures and existing API facade imports are unchanged. The five page shells below own composition and delegate state/effects to page-specific hooks. Presentation helpers receive explicit typed subsets of hook results, rather than creating additional data subscriptions or independent copies of the same state. New helper files are page-local and are not additional router destinations.
+
+| Page | State and application actions | Presentation ownership |
+|---|---|---|
+| Agents.tsx | useAgentsPage.tsx: auth-derived department choices, agent/skill/model loading, editor state, CRUD and agent groups | agentColumns.tsx creates roster columns; AgentEditor.tsx owns the existing create/edit form and folder picker; shell retains tabs and chat composition |
+| Skills.tsx | useSkillsPage.tsx: source configuration, scans, repository discovery, skill CRUD, content loading and collapse state | PluginSourceConfiguration.tsx renders local/Git source selection and token discovery; SkillsCatalogTabs.tsx renders plugin browsing/custom skill registry; shell retains skill/content/folder modals |
+| Tasks.tsx | useTasksPage.tsx: one useOfficeEvents subscription, task CRUD, delegation, tree loading, row actions and tree projection | Tasks.tsx retains table and action/detail dialogs; no new polling or streaming client |
+| CalendarView.tsx | useCalendarViewPage.tsx: schedule/task/approval loading, existing 10-second refresh and cleanup, schedule actions, date-cell rendering and schedule columns | Shell retains calendar/tabs/date inspection and cron/approval modal composition; calendarDates.ts owns the shared Dayjs relative-time configuration |
+| McpHub.tsx | useMcpState.tsx owns auth context, form instances, shared UI state and initial fetch; useMcpConnectorActions.tsx owns connector discovery/configuration/tools/permissions; useMcpWorkflowActions.tsx owns channel bindings and workflow actions; useMcpPage.tsx composes these and derives channels/catalog filtering | McpHubTabs, McpMarketplace, McpInstalledConnectors and McpWorkflowChannels own tab content. McpConnectorModal composes McpRepositorySelection, McpSlackSelection and McpTelegramSelection within the same Form. McpBindingModal, McpCustomConnectorModal, McpToolsDrawer, McpPermissionsModal, McpWorkflowCanvasModal and McpWorkflowBuilder own existing dialogs. mcpProviderIcon.tsx owns provider icon mapping. |
+
+Selected-resource updates, inline editing, notifications, form validation and modal close handlers are preserved by relocation. `resourceLoading.ts` supplies `readResource`, which records read failure independently from successful empty results. `ResourceSection.tsx` renders scoped unavailable/retry states. MCP catalog/connectors/workflows load independently; unavailable permissions disable Access mutations and render an explicit warning. Connector and binding save handlers also guard dialogs left open during a failed refresh. Channel suggestions come only from configured connector arrays, without invented fallback channel names. Calendar schedule/history/approval reads remain independent, with unavailable sections and disabled dependent schedule actions rather than false empty-success states. Skills initial source configuration failure stops scanning and exposes retry; neither manual rescan nor source overrides bypass a missing initial configuration. The custom skills tab remains separate from plugin source/scan availability. Workflow quick-add channel mutation is owned once by `useMcpWorkflowActions.handleQuickAddBindingChannel` and reused by Enter and Add.
+
+Capability readiness and backend service fault isolation are not established by this frontend extraction. No tests, build, lint, type checking or application startup were run for this change under the user's current restriction; source review is the available validation boundary.
+
 > [!IMPORTANT]
 > **Every time any page in `src/pages/` is added, modified, or refactored, the developer/agent MUST update this file (`src/pages/AGENTS.md`) as part of the same task.**
 >
@@ -156,6 +161,10 @@ The `src/pages/` directory contains top-level page components mounted by React R
 > 2. Detail any new modals, drawers, or subcomponents mounted by the page.
 > 3. Document state flow changes (new React Context consumption, SSE listeners, or Axios calls).
 > 4. Ensure master index in [`poc/dashboard/AGENTS.md`](file:///Users/yarintag/Desktop/Projects/ai-agents-platform/poc/dashboard/AGENTS.md) is updated if page routes or responsibilities are altered.
+
+## Final review shared ownership
+MCP channel/repository projections reuse services/mcpResources rather than duplicate provider-specific loops. Scoped ResourceSection errors/retry preserve independent tabs when optional backends are unavailable. Existing routes and component exports remain compatible.
+
 
 ## Workflows Playground
 `/workflows` provides a Playground button per workflow. The shared launch modal switches to tool-free mode, accepts only JSON objects, explains model costs and disabled tools/notifications/approvals, and hides production cache controls. It calls executeWorkflowPlayground, opens the execution inspector and execution tab, and shows PLAYGROUND badges. The inspector refreshes authorized execution details every three seconds while open, cancels updates on close/ID changes, and displays persisted per-step input, output, status and cost alongside aggregate metrics. This mode does not emulate tool responses or train model weights.
@@ -176,3 +185,17 @@ Draft history is loaded through getAssistantDraftHistory (GET /drafts/{id}/revis
 
 ## Model-only YAML authoring and internal MCP
 WorkflowAssistant.tsx now sends model_id/provider_id, shows configured-runtime model options independent of department agents, loads /workflow-schema, previews/downloads workflow-draft.yaml and calls /validate-yaml for current checks. MCP call audit badges come from authenticated job data. New history snapshots prefer definition_yaml with legacy JSON fallback. Legacy chats with provider_id=legacy remain viewable without selecting a former planning agent; a current model must be selected for new generation.
+
+
+## Incoming master integration ownership
+
+`Workflows.tsx` mounts at `/workflows` and now delegates loading, polling, execution, optimistic revision writes and modal state to `useWorkflowsPage.tsx`. `workflowColumns.tsx` owns saved-workflow actions (Edit/History/Run/Playground/Logs/Canvas/Definition/Delete); `workflowExecutionColumns.tsx` owns execution summaries; `WorkflowExecutionDrawer.tsx` owns authorized selected-run/step inspection. Existing 10-second list and 3-second detail refresh/cleanup are preserved. Workflow Logs and Workflow Assistant remain separate routes, retaining model-only generation, permission-aware drafts and non-executable YAML semantics.
+
+`services/workflowDefinitions.ts:removeWorkflowStep` owns DAG-stage removal/dependency rewiring and flow-edge reconciliation for both workflow and MCP canvases. Both update the current workflow using expected_revision and change_summary; optimistic conflicts retain displayed state and show the error. The MCP canvas no longer calls format conversion with an unsupported positional signature.
+
+Tasks uses `useTaskQueue.ts` and `TaskQueuePanel.tsx` for broker metrics, independent 5-second refresh, DLQ inspection/retry and explicit unavailable states. Task dispatch preserves upstream use_queue=true and priority (1–10) while all-scope task history remains separate from broker availability. Agents Fleet retains office-agent filtering; workflow agents are managed through Workflows rather than a duplicate fleet tab. Plugin manual Scan/Save & Sync pass forceRefresh=true through the cached API, and source-config read failure still prevents a scan.
+
+No tests, build, lint, type checking, import execution or application startup were run during merge resolution. Source/API contract review does not establish live integration correctness.
+
+## MCP page render correction (2026-10-30)
+McpHubPage reads resourceErrors from useMcpPage before using connectors availability to disable Add Custom MCP. The resource state remains owned by useMcpState; the page must not reference an undeclared local. This fixes the reported resourceErrors ReferenceError. No tests/build were run.

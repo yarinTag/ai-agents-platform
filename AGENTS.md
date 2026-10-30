@@ -77,7 +77,7 @@ The **AI Agents Platform** is an enterprise multi-tenant autonomous agent orches
 * [**Scheduler & Cron**](poc/backend/scheduler/AGENTS.md): Background cron polling loop, croniter forecasting, and scheduled tasks.
 * [**Events & Streaming Bus**](poc/backend/events/AGENTS.md): In-memory EventBus pub/sub, SQLite event store, and persistent SSE stream.
 * [**Approvals & HITL**](poc/backend/approvals/AGENTS.md): Human-in-the-loop permission requests, supervisor escalation, and dual-channel Telegram/Slack ChatOps callbacks.
-* [**Distributed Queues**](poc/backend/queue/AGENTS.md): RabbitMQ AMQP message broker, priority task queues (1-10), quorum queues, and dead-letter exchanges (DLX).
+* [**Distributed Queues**](poc/backend/queue/AGENTS.md): RabbitMQ AMQP message broker, priority task queues (1-10), durable queues, and dead-letter exchanges (DLX).
 * [**Database & Postgres RLS**](poc/backend/db/AGENTS.md): Enterprise PostgreSQL schema with kernel-level Row-Level Security (RLS) tenant isolation.
 * [**War Room Deliberation**](poc/backend/war_room/AGENTS.md): Multi-agent deliberation councils, debate rounds, consensus synthesis.
 
@@ -113,6 +113,16 @@ The **AI Agents Platform** is an enterprise multi-tenant autonomous agent orches
 > * **Precise Technical Contracts**: Document exact routes, request/response models, database columns, enum values, and state transition rules.
 > * **Master Directory Registration**: If a new submodule or directory is created with an `AGENTS.md`, immediately register its link in this root table of contents.
 
+## Modular refactor source policy
+Owned source files must remain at most 500 physical lines, including comments and blank lines. Split by responsibility and preserve public contracts. Third-party dependencies and generated build outputs are excluded. See [refactor roadmap](docs/refactor-roadmap.md) and [SQLite storage components](poc/storage/AGENTS.md), which owns composed repositories, records, connections and the legacy persistence facade. Runtime verification is not authorized in the current task.
+
+## Refactor implementation index
+* [Plugin discovery](poc/plugins/AGENTS.md): HTTP-independent metadata, local and Git adapters.
+* [External channel adapters](poc/integrations/AGENTS.md): acknowledged Telegram/Slack delivery, no simulated success.
+* [Test source organization](poc/tests/AGENTS.md): existing cases/fixtures split by responsibility; not executed.
+* [Implementation and code review ledger](docs/refactor-implementation.md): ownership, source evidence, intentional corrections and unverified runtime requirements.
+
+Demo registration is implemented once in poc/demo_data.py and imported by both explicit demo/setup entry points. No demo registration was executed during this refactor.
 ## Internal Workflow Playground (2026-10-24)
 `POST /api/v1/workflows/{workflow_id}/playground` runs the existing DAG with fresh tool-free model inference. Runs use `PLAYGROUND`, `pg_exec_` execution IDs, `pg_task_` task IDs, and a separate deduplication hash namespace. No channel notifications, automatic reviewer tasks, supervisor escalation, or production completion callbacks run. This is a prompt/data exercise, not a full container security boundary or live integration test. See workflows and runtime guides. Contract tests: `poc/tests/test_workflow_playground.py` use real SQLite and FastAPI; run with `--noconftest` to avoid the shared default-database reset fixture.
 
@@ -136,3 +146,6 @@ Workflow Assistant phase two adds /workflow-assistant chat and isolated asynchro
 The Workflow Assistant now selects model_id/provider_id directly, uses an internal process-bound MCP server (catalog/schema/YAML validation only), and emits inactive native workflow YAML. Canonical governed schema: [Workflow authoring schema](poc/workflows/workflow-authoring.schema.yaml), generated from workflows.authoring_schema.WorkflowDocument. Execution agents remain per-step assignments; no planning agent is selected or persisted. The external installable OAuth MCP server remains future work.
 
 The model returns a generation-scoped validation_id for a server-stored YAML candidate instead of regenerating the document after validation; current permissions and candidate integrity are rechecked before presenting/saving.
+
+## Master merge composition (2026-10-29)
+The refactor now includes master 523913e. Workflow revision/history, assistant/internal MCP, playground, queue, Office task-origin scoping and plugin cache remain available through extracted modules. backend/queue_lifecycle owns independent broker/worker startup; backend/workflow_wiring injects policy/output and optional human-approval delivery into workflow execution. No tests/build/application were executed during integration.

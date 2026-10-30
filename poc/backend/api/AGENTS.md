@@ -120,6 +120,34 @@ Mounted at `/api/v1/workflows`:
 > [!IMPORTANT]
 > Whenever any route, request model, response schema, or business rule in `poc/backend/api/` is modified, added, or removed, the developer or agent **MUST** update this `AGENTS.md` file within the **SAME commit**.
 
+## Modular source ownership
+The original agents.py, tasks.py, organizations.py, mcp.py, skills.py and workflows.py retain compatibility exports and router composition. Endpoint bodies now belong to sibling modules; no HTTP paths, methods or request/response models are intentionally changed.
+
+| Prefix | Responsibilities |
+|---|---|
+| agents_ | models/provider validation; mapping/scope; queries; commands |
+| tasks_ | models; response mapping; CRUD/cancel; SSE/logs; delegation/trees |
+| organizations_ | models; organization/department CRUD/budget; governance; auth; members/invitations |
+| mcp_ | catalog; models; connectors; permissions; resource discovery; channels |
+| skills_ | models; metadata; scoped credentials; remote tree/blob scanner/cache; plugin settings; source scan/content; CRUD |
+| workflows_ | models; scope/mapping; generation/conversion; CRUD; channels; executions/webhooks/evaluations |
+
+Route modules own routers and explicitly import shared models/helpers. Facades assemble subrouters; static plugin routes precede dynamic skill IDs. Metadata parsing and Git scanning do not import router facades or the dependency container. Compatibility exports reference the sole implementation. Source files stay at most 500 physical lines. No tests/build/lint/startup were run.
+
+### Scoped credential and execution access
+
+Organization-scoped plugin discovery uses only that organization's connector credentials. `_find_git_token(db, org_id)` never falls back to all-organizations connectors or host `gh` credentials when `org_id` is supplied. Unscoped local/API-key legacy requests retain the prior host-token discovery path. A scoped organization ID that no longer resolves returns HTTP 404 rather than selecting another organization's plugin settings.
+
+GET `/api/v1/workflows/executions/{execution_id}` and POST `/api/v1/workflows/executions/{execution_id}/evaluate` inject the current Request and authorize the execution through its parent workflow. A scoped tenant must exactly match the workflow organization; missing parent or mismatched tenant returns 404. Non-admin scoped callers need membership in both the workflow's current department and the execution's recorded department when those are set, including denial for an empty authorized-department set. Existing workflow scope checks also apply. Evaluation creates no row until authorization succeeds. Legacy unscoped/API-key access retains the existing authorization mode. Response payloads and HTTP methods are unchanged.
+
+### Reviewed behavioral corrections
+Task GET collection/detail use an optional live runtime and continue serving persisted authorized data when runtime is unavailable. Workflow execution responses share one mapping helper. Manual execution scope lookup uses engine.db. GET /api/v1/workflows/executions/{execution_id} and POST /api/v1/workflows/executions/{execution_id}/evaluate now authorize parent workflow tenant and both current/historical department membership; scoped empty membership cannot bypass a department gate.
+
+Skill discovery's reusable implementation lives in poc/plugins. Org-scoped credential lookup cannot fall back to all-org connectors or host gh auth. GET /skills/plugins/content (under /api/v1) revalidates GitHub content under current credentials and restricts local paths to the current configured source root. It does not return globally cached private remote content. MCP POST /api/v1/mcp/test-channel-message uses the shared channel adapter: 503 missing connector; 400 delivery/configuration failure; success/delivery=delivered only after provider acknowledgement. No new schema is introduced.
+
+Compatibility router facades bootstrap the single legacy import bridge before domain exports, preserving direct package imports. Audit uses relative container/security imports, avoiding a second backend dependency namespace. Task SSE callbacks marshal messages onto the request event loop via call_soon_threadsafe and a bounded queue. Stored logs/chat history and monitoring remain readable with an unavailable inference runtime.
+
+Capability guards treat persisted DISABLED states as unavailable as well as current disabled configuration. This does not implement hot enabling or uninstalling capabilities.
 ## Playground API and scoped execution inspection
 * `POST /api/v1/workflows/{workflow_id}/playground`: required JSON object body (workflow variables); returns HTTP 202 with WorkflowExecutionResponse and QUEUED status. Checks workflow scope, runtime tool-free capability (409 when unavailable), definition and configured agents (422), and agent organization (403). Missing workflows return 404. Always creates a fresh `PLAYGROUND` run with `pg_exec_` ID; no cache lookup. Hashes are namespaced separately from production. Executes via FastAPI BackgroundTasks on the same engine; exceptions persist FAILED with an error and completion time. This initial path is process-local and not durable across API restarts.
 * `GET /api/v1/workflows/executions/{execution_id}` now checks workflow tenant/department scope and includes `step_runs` (persisted step IDs, status, input/output, tokens/cost, timestamps). WorkflowExecutionResponse defaults step_runs to an empty list for list/launch responses.
@@ -149,3 +177,11 @@ Workflow Assistant adds POST /api/v1/workflow-assistant/generations (202, Genera
 Workflow Assistant GET /context now includes authoring_models [{model_id,provider_id,name}]. POST /generations requires model_id/provider_id and rejects planner_agent_id; legacy stored jobs remain readable. GET /workflow-schema returns workflow_schema_version/schema/yaml_schema. POST /validate-yaml accepts {department_id,yaml_content} and returns proposal/validation/native artifact; malformed native YAML ->422 WORKFLOW_YAML_INVALID. Generation responses include tool_calls (name/time only); exact DTOs are in ../workflow_assistant/AGENTS.md. workflows.py delegates its existing graph validator to workflows.parser.validate_workflow_definition, preserving legacy extension fields.
 
 The internal model reply uses validation_id for a canonical candidate stored through MCP; the HTTP generation result retains this ID for provenance. It is not a grant or a public lookup endpoint. The server resolves only candidates attached to the authenticated generation, verifies their hashes and revalidates current policy.
+
+## Refactored master integration contracts
+Workflow models now include revision/expected_revision/change_summary, payload_hash/is_deduplicated/message/step_runs. workflows_crud owns CRUD and GET /{workflow_id}/revisions; workflows_queries owns execution list/detail/evaluation; workflows_playground owns POST /{workflow_id}/playground; workflows_execution owns queued/manual/webhook dispatch. All execution reads enforce current and historical department plus exact tenant access. Queue publication failure marks the execution FAILED and returns 503. Static routes are composed before /{workflow_id}. Tasks accept use_queue and priority1–10, expose workflow origin, and list execution_scope=all|office|workflow. Queued tasks are persisted before publication, with failed dispatch marked FAILED. Plugin scan refresh=true bypasses the Git-tree cache. Masked MCP token placeholders are ignored; credentials remain organization scoped.
+
+## Empty-path route composition correction (2026-10-30)
+Agents, Tasks and Workflows facades use router_composition.compose_routers for their route-only child modules. Both empty-path and slash aliases are retained until router_registry mounts the aggregate under its nonempty /api/v1 domain prefix. Calling include_router(child) without a prefix at the facade stage rejects empty aliases with FastAPIError and caused these capabilities to register unavailable. Child modules must not define router-level lifecycle hooks/dependencies; per-route metadata and application authentication/availability guards remain applied by the final include. Isolated import diagnostics captured the exception without starting services or accessing the live database. No tests/build were run.
+
+GET /api/v1/queue/status reports disconnected transport without depending on queue readiness; the queue-api descriptor guards module availability separately. Retry/publish operations still require queue dispatch availability and return503 when unavailable.

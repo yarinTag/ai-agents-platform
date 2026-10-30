@@ -67,6 +67,19 @@ The **Spatial Office Simulation & Visualization Engines** (`poc/dashboard/src/en
 
 ## 5. 🔄 Mandatory UI `AGENTS.md` Synchronization Rule
 
+### Renderer composition (2026-10-29 refactor)
+
+`PixelRenderer.ts` is the public lifecycle/input facade. It retains constructor, `panX`/`panY`/`zoom` access, `updateData`, connection/selection setters, resize, start/stop, click/mouse-move handling and render. It privately owns `PixelSceneState`; consumers do not receive mutable scene state.
+
+* `pixelSceneLayout.ts`: palette, room/grid constants, character colors and visual/walk contracts. Grid dimensions and desk coordinates are unchanged.
+* `pixelSceneState.ts`: canvas/context, viewport, agents/tasks, selection, stable colors and animation maps.
+* `pixelSceneLifecycle.ts`: data updates, connection derivation, animation-frame ownership and input hit testing. Frame rendering is supplied as a callback by the facade, so lifecycle does not import the painting coordinator.
+* `pixelCoordinates.ts`: coordinate/pixel scaling helpers. `pixelAgentActivity.ts`: working/manager predicates and completion/walk transitions. `pixelDeskLayout.ts`: room assignment, desk allocation and stable colors.
+* `pixelScenePainter.ts`: explicit render order and room/entrance/corridor orchestration. It preserves shell → floors → walls → doors → furniture → entrance → corridors → chairs → seated agents → desks → walking agents → connections → HUD → room labels.
+* Drawing implementations are grouped in `pixelBuildingPainter.ts`, `pixelCharacterPainter.ts`, `pixelConnectionPainter.ts`, `pixelDeskPainter.ts`, `pixelLeisurePainter.ts` and `pixelRoomFurniturePainter.ts`. They receive scene context explicitly and do not own animation-frame lifecycle.
+
+No inheritance or runtime method injection is used. Painters depend on low-level coordinates/state/layout; state does not import painters. The existing `VisualConnection` type remains re-exported from `PixelRenderer.ts`. This is a source-only structural extraction; no rendering or execution verification was run.
+
 > [!IMPORTANT]
 > **Every time `PixelRenderer.ts`, `PixelOfficeCanvas.tsx`, `AgentsOfficeV3Canvas.tsx`, or any visual rendering logic in `src/engine/` is added, modified, or refactored, the developer/agent MUST update this file (`src/engine/AGENTS.md`) as part of the same task.**
 >

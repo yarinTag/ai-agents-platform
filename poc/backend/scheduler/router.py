@@ -9,9 +9,10 @@ from pydantic import BaseModel, Field
 from datetime import datetime
 
 from ..dependencies import get_db_manager, get_runtime_adapter
-from .engine import calculate_next_run, get_upcoming_runs, validate_cron_expression
+from .dispatch import dispatch_scheduled_job
+from .expressions import calculate_next_run, get_upcoming_runs, validate_cron_expression
 from persistence import DatabaseManager
-from runtime_adapter import ClaudeCodeRuntimeAdapter
+from runtime.protocol import RuntimeAdapter
 
 router = APIRouter()
 
@@ -172,7 +173,7 @@ async def toggle_schedule(
 async def trigger_schedule_now(
     job_id: str,
     db: DatabaseManager = Depends(get_db_manager),
-    runtime: ClaudeCodeRuntimeAdapter = Depends(get_runtime_adapter)
+    runtime: RuntimeAdapter = Depends(get_runtime_adapter)
 ):
     """Manually dispatch a scheduled job immediately."""
     job = db.get_cron_job(job_id)
@@ -180,15 +181,7 @@ async def trigger_schedule_now(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Schedule not found")
 
     now_iso = datetime.now().isoformat()
-    import inspect
-    task_res = runtime.start_task(
-        prompt=job["prompt"],
-        agent_id=job["agent_id"],
-        project_id=job.get("project_id")
-    )
-    if inspect.isawaitable(task_res):
-        task_res = await task_res
-    task_run_id = getattr(task_res, "run_id", str(task_res))
+    task_run_id = await dispatch_scheduled_job(runtime, job)
 
     db.update_cron_job(job_id, {
         "last_run_id": task_run_id,

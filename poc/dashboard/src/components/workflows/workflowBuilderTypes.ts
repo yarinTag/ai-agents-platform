@@ -1,0 +1,32 @@
+import type { PlatformWorkflow } from '../../types/mcp';
+
+export interface WorkflowStep {
+  key: string;
+  name: string;
+  agent_id: string;
+  prompt_template: string;
+  depends_on: string[];
+  timeout_seconds?: number;
+  mcp_servers?: string[];
+  skills?: string[];
+}
+
+export interface AttachedSkill {
+  id: string;
+  name: string;
+  source: string; // 'git' | 'local' | 'builtin' | 'custom'
+  location?: string; // Git repo url or local directory/file path
+  description?: string;
+  content?: string;
+}
+
+export interface CreateWorkflowModalProps {
+  open: boolean;
+  onClose: () => void;
+  onSuccess: (workflow: PlatformWorkflow) => void;
+  defaultChannelProvider?: string;
+  defaultChannelId?: string;
+  departmentId?: string;
+  workflow?: PlatformWorkflow | null;
+}
+

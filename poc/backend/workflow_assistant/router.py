@@ -1,16 +1,18 @@
 """HTTP adapter; future MCP tools can call the same service with verified identity."""
 
 from typing import Optional
+import logging
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request
 
-from ..dependencies import get_db_manager, get_runtime_adapter
+from ..dependencies import get_db_manager, get_runtime_adapter, get_optional_runtime_adapter
 from .models import DraftCreate, DraftUpdate, GenerationRequest, SaveGenerationRequest, ValidationRequest, YamlValidationRequest
 from .service import AssistantError, WorkflowAssistantService
 from .generation import AuthoringGenerationService
 from .tools import WorkflowAuthoringTools
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def get_assistant_service(request: Request, db=Depends(get_db_manager)):
@@ -28,10 +30,19 @@ def _call(operation, *args, **kwargs):
 
 
 @router.get("/context")
-def context(service=Depends(get_assistant_service), runtime=Depends(get_runtime_adapter)):
-    return {**_call(service.context),
-            "supports_generation": bool(getattr(runtime.get_capabilities(), "supports_authoring", False)),
-            "authoring_models": runtime.get_authoring_models() if getattr(runtime.get_capabilities(), "supports_authoring", False) else []}
+def context(service=Depends(get_assistant_service), runtime=Depends(get_optional_runtime_adapter)):
+    workspace = _call(service.context)
+    supports_generation, models = False, []
+    if runtime is not None:
+        try:
+            supports_generation = bool(getattr(runtime.get_capabilities(), "supports_authoring", False))
+            if supports_generation:
+                models = runtime.get_authoring_models()
+        except Exception:
+            # Provider inventory is optional metadata, not authority for DB reads.
+            logger.warning("Authoring model inventory is unavailable")
+            supports_generation, models = False, []
+    return {**workspace, "supports_generation": supports_generation, "authoring_models": models}
 
 
 @router.get("/catalog")
@@ -82,13 +93,19 @@ def history(draft_id: str, limit: int = Query(50, ge=1, le=100),
     return _call(service.history, draft_id, limit=limit, before_revision=before_revision)
 
 
-def get_generation_service(service=Depends(get_assistant_service), runtime=Depends(get_runtime_adapter)):
+def get_generation_service(service=Depends(get_assistant_service)):
+    """Read/cancel/save persisted generations independently from inference."""
+    return AuthoringGenerationService(service)
+
+
+def get_generation_execution_service(service=Depends(get_assistant_service), runtime=Depends(get_runtime_adapter)):
+    """Only new inference requests require a live execution adapter."""
     return AuthoringGenerationService(service, runtime)
 
 
 @router.post("/generations", status_code=202)
 def create_generation(request: GenerationRequest, background: BackgroundTasks,
-                      service=Depends(get_generation_service),
+                      service=Depends(get_generation_execution_service),
                       idempotency_key: Optional[str] = Header(None, min_length=1, max_length=128,
                           pattern=r"^[A-Za-z0-9._:-]+$", alias="Idempotency-Key")):
     generation, created = _call(service.create, request, idempotency_key)

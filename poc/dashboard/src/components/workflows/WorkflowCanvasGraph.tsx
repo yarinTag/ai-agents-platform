@@ -1,61 +1,12 @@
+import { WorkflowStepInspector } from './WorkflowStepInspector';
 import React, { useState, useMemo } from 'react';
-import { Card, Tag, Button, Tooltip, Badge, Modal, Typography, Space } from 'antd';
-import {
-  RocketOutlined,
-  SendOutlined,
-  SlackOutlined,
-  BranchesOutlined,
-  ThunderboltOutlined,
-  CheckCircleOutlined,
-  ClockCircleOutlined,
-  ToolOutlined,
-  GithubOutlined,
-  FileTextOutlined,
-  ZoomInOutlined,
-  ZoomOutOutlined,
-  ReloadOutlined,
-  ApartmentOutlined,
-  CodeOutlined,
-  CheckOutlined,
-  DeleteOutlined,
-} from '@ant-design/icons';
+import { Tag, Button, Typography, Space, Tooltip } from 'antd';
+import { SendOutlined, SlackOutlined, ThunderboltOutlined, ClockCircleOutlined, ToolOutlined, FileTextOutlined, ZoomInOutlined, ZoomOutOutlined, ReloadOutlined, ApartmentOutlined, DeleteOutlined } from '@ant-design/icons';
 
 const { Text, Paragraph } = Typography;
 
-export interface WorkflowCanvasStep {
-  key: string;
-  name: string;
-  agent_id: string;
-  prompt_template: string;
-  depends_on: string[];
-  timeout_seconds?: number;
-  mcp_servers?: string[];
-  skills?: string[];
-}
-
-export interface WorkflowCanvasSkill {
-  id: string;
-  name: string;
-  source?: string;
-  location?: string;
-  description?: string;
-}
-
-interface WorkflowCanvasGraphProps {
-  workflowName?: string;
-  steps: WorkflowCanvasStep[];
-  channelBinding?: {
-    provider?: string;
-    channel_id?: string;
-    trigger_enabled?: boolean;
-    notify_mode?: string;
-  };
-  skills?: WorkflowCanvasSkill[];
-  allowedMcps?: string[];
-  onSelectStep?: (step: WorkflowCanvasStep) => void;
-  onDeleteStep?: (stepKey: string) => void;
-  height?: number | string;
-}
+import type { WorkflowCanvasStep, WorkflowCanvasSkill, WorkflowCanvasGraphProps } from './workflowGraphTypes';
+export type { WorkflowCanvasStep, WorkflowCanvasSkill } from './workflowGraphTypes';
 
 const AGENT_COLORS: Record<string, { bg: string; border: string; text: string; icon: string }> = {
   'software-architect': { bg: 'rgba(99, 102, 241, 0.15)', border: '#6366f1', text: '#a5b4fc', icon: '🏛️' },
@@ -351,17 +302,10 @@ export const WorkflowCanvasGraph: React.FC<WorkflowCanvasGraphProps> = ({
                         </Tag>
                         {onDeleteStep && (
                           <Tooltip title="Delete Step from Workflow">
-                            <Button
-                              type="text"
-                              size="small"
-                              danger
+                            <Button type="text" size="small" danger
                               icon={<DeleteOutlined style={{ fontSize: '12px' }} />}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onDeleteStep(step.key);
-                              }}
-                              style={{ padding: '0 4px', height: '20px', minWidth: '20px' }}
-                            />
+                              onClick={event => { event.stopPropagation(); onDeleteStep(step.key); }}
+                              style={{ padding: '0 4px', height: '20px', minWidth: '20px' }} />
                           </Tooltip>
                         )}
                       </div>
@@ -504,112 +448,7 @@ export const WorkflowCanvasGraph: React.FC<WorkflowCanvasGraphProps> = ({
         </div>
       </div>
 
-      {/* Step Inspector Modal */}
-      <Modal
-        title={
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <ApartmentOutlined style={{ color: '#38bdf8' }} />
-            <span>Step Details: {selectedStep?.name} ({selectedStep?.key})</span>
-          </div>
-        }
-        open={detailModalVisible}
-        onCancel={() => setDetailModalVisible(false)}
-        footer={[
-          ...(onDeleteStep && selectedStep
-            ? [
-                <Button
-                  key="delete"
-                  danger
-                  icon={<DeleteOutlined />}
-                  onClick={() => {
-                    onDeleteStep(selectedStep.key);
-                    setDetailModalVisible(false);
-                  }}
-                >
-                  Delete Step
-                </Button>,
-              ]
-            : []),
-          <Button key="close" onClick={() => setDetailModalVisible(false)} style={{ background: '#21262d', color: '#f0f6fc' }}>
-            Close
-          </Button>,
-        ]}
-        styles={{
-          body: { background: '#0d1117', color: '#f0f6fc' },
-          header: { background: '#0d1117', borderBottom: '1px solid #21262d' },
-        }}
-      >
-        {selectedStep && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <div>
-              <div style={{ fontSize: '12px', color: '#8b949e', marginBottom: '4px' }}>Assigned Agent:</div>
-              <Tag color="cyan" style={{ fontSize: '13px', padding: '4px 10px' }}>
-                🤖 {selectedStep.agent_id}
-              </Tag>
-            </div>
-
-            {selectedStep.mcp_servers && selectedStep.mcp_servers.length > 0 && (
-              <div>
-                <div style={{ fontSize: '12px', color: '#8b949e', marginBottom: '4px' }}>Restricted MCP Connectors:</div>
-                <Space>
-                  {selectedStep.mcp_servers.map((mcp) => (
-                    <Tag key={mcp} color="purple">
-                      <ToolOutlined /> {mcp.toUpperCase()}
-                    </Tag>
-                  ))}
-                </Space>
-              </div>
-            )}
-
-            {selectedStep.skills && selectedStep.skills.length > 0 && (
-              <div>
-                <div style={{ fontSize: '12px', color: '#8b949e', marginBottom: '4px' }}>Attached Skills:</div>
-                <Space>
-                  {selectedStep.skills.map((sk) => (
-                    <Tag key={sk} color="gold">
-                      <FileTextOutlined /> {sk}
-                    </Tag>
-                  ))}
-                </Space>
-              </div>
-            )}
-
-            <div>
-              <div style={{ fontSize: '12px', color: '#8b949e', marginBottom: '4px' }}>Prompt Template:</div>
-              <div
-                style={{
-                  background: '#161b22',
-                  border: '1px solid #30363d',
-                  borderRadius: '8px',
-                  padding: '12px',
-                  fontFamily: 'monospace',
-                  fontSize: '12px',
-                  color: '#34d399',
-                  lineHeight: 1.5,
-                  whiteSpace: 'pre-wrap',
-                }}
-              >
-                {selectedStep.prompt_template}
-              </div>
-            </div>
-
-            <div>
-              <div style={{ fontSize: '12px', color: '#8b949e', marginBottom: '4px' }}>DAG Dependencies:</div>
-              {selectedStep.depends_on && selectedStep.depends_on.length > 0 ? (
-                <Space>
-                  {selectedStep.depends_on.map((dep) => (
-                    <Tag key={dep} color="blue">
-                      ↳ {dep}
-                    </Tag>
-                  ))}
-                </Space>
-              ) : (
-                <span style={{ color: '#6e7681', fontSize: '12px' }}>None (Root step)</span>
-              )}
-            </div>
-          </div>
-        )}
-      </Modal>
+      <WorkflowStepInspector onDeleteStep={onDeleteStep} selectedStep={selectedStep} detailModalVisible={detailModalVisible} setDetailModalVisible={setDetailModalVisible} />
     </div>
   );
 };

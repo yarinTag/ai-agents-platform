@@ -18,7 +18,7 @@ The **AI Agents Platform Dashboard** (`poc/dashboard/`) is an enterprise-grade, 
 * **Icons**: `@ant-design/icons`
 * **Routing**: `react-router-dom` v6 with layout wrapper pattern (`AppLayout` in `src/App.tsx`)
 * **State Management**: React Context (`AuthContext`, `I18nContext`), custom hooks (`useOfficeEvents`), and local component state
-* **Networking**: Central Axios client (`src/services/api.ts`) with request/response interceptors
+* **Networking**: Public compatibility facade (`src/services/api.ts`), domain endpoint clients (`src/services/*Api.ts`), and one Axios transport/interceptor owner (`src/services/httpClient.ts`). Domain clients depend on transport and types, not on one another. Existing consumers retain facade imports.
 * **Real-Time Layer**: Global Server-Sent Events (SSE) bus (`src/services/eventStream.ts`) streaming from `/api/v1/events/stream`
 
 ---
@@ -123,6 +123,13 @@ The **AI Agents Platform Dashboard** (`poc/dashboard/`) is an enterprise-grade, 
 > * **Adding or Modifying API Endpoints or SSE Handlers**: Update [`src/services/AGENTS.md`](file:///Users/yarintag/Desktop/Projects/ai-agents-platform/poc/dashboard/src/services/AGENTS.md) with new API signatures and stream behavior.
 > * **Modifying Canvas Engine or Rendering Logic**: Update [`src/engine/AGENTS.md`](file:///Users/yarintag/Desktop/Projects/ai-agents-platform/poc/dashboard/src/engine/AGENTS.md) with new sprites, department layouts, or tick calculations.
 > * **High-Level Layout, Architecture, or Navigation Changes**: Update [`poc/dashboard/AGENTS.md`](file:///Users/yarintag/Desktop/Projects/ai-agents-platform/poc/dashboard/AGENTS.md) and [`poc/dashboard/CLAUDE.md`](file:///Users/yarintag/Desktop/Projects/ai-agents-platform/poc/dashboard/CLAUDE.md).
+
+## Feature composition and failure containment
+App loads optional route views lazily through LazyFeatureRoute/FeatureErrorBoundary. AppLayout sidebar/topbar remain outside feature boundaries. Exact-router capability gates read authenticated /api/v1/capabilities; composite MCP/Calendar/Agents views use scoped resource states so unrelated sections remain usable. A failed report is a warning, not a global app outage. Runtime setup is separately lazy and deferrable.
+
+The merged `/workflow-assistant`, `/workflows`, and `/workflows/:workflowId/logs` routes use this same lazy/error-contained loading. Workflow log parameter/search navigation resets the route boundary independently. `AppLayout` retains incoming `100dvh`, `minWidth: 0` and `minHeight: 0` scrolling constraints. Existing sidebar parent-route highlighting and Office-scoped snapshots are preserved.
+
+Large pages use page-local hooks and typed panels; workflow/chat/office/war-room components use focused hooks/panels; PixelRenderer composes scene state, lifecycle and painters while retaining its public API. services/resourceLoading distinguishes failed reads from empty results; services/mcpResources owns configured-resource projection. No fake fallback channels/connectors are supplied after failed reads. EN/HE feature-availability keys and RTL infrastructure remain available. No build/type check/browser rendering was performed.
 
 ### Internal workflow playground
 The Workflows page now launches fresh tool-free exercises through `POST /api/v1/workflows/{workflow_id}/playground`. Execution inspection shows persisted step input/output/status/cost and refreshes while open. WorkflowExecution in `src/types/mcp.ts` includes optional step_runs. See pages/services guides for lifecycle and request details.

@@ -139,9 +139,14 @@ class AuthoringGenerationService:
     TIMEOUT_SECONDS = 240
     DEADLINE_SECONDS = 300
 
-    def __init__(self, policy: WorkflowAssistantService, runtime):
+    def __init__(self, policy: WorkflowAssistantService, runtime=None):
         self.policy, self.db, self.runtime = policy, policy.db, runtime
         self.tools = WorkflowAuthoringTools(policy)
+
+    def _require_runtime(self):
+        if self.runtime is None:
+            raise AssistantError("AUTHORING_UNAVAILABLE", "Authoring inference is unavailable. Saved drafts and generations remain accessible.", 503)
+        return self.runtime
 
     def _budget(self, department_id):
         budget = self.db.check_department_budget(department_id)
@@ -151,8 +156,9 @@ class AuthoringGenerationService:
 
     def _planning_context(self, request):
         catalog = self.tools.catalog(request.department_id)
+        runtime = self._require_runtime()
         if not any(item["model_id"] == request.model_id and item["provider_id"] == request.provider_id
-                   for item in self.runtime.get_authoring_models()):
+                   for item in runtime.get_authoring_models()):
             raise AssistantError("AUTHORING_MODEL_NOT_ALLOWED", "Select a model from the currently configured provider.", 409)
         if request.draft_id:
             draft = self.policy.get_draft(request.draft_id)
@@ -206,7 +212,7 @@ class AuthoringGenerationService:
         with self.db._get_connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
             user, _, _, _ = self.policy._workspace(request.department_id, write=True)
-            if not getattr(self.runtime.get_capabilities(), "supports_authoring", False):
+            if not getattr(self._require_runtime().get_capabilities(), "supports_authoring", False):
                 raise AssistantError("AUTHORING_UNAVAILABLE", "Configured runtime does not support isolated authoring.", 409)
             selection, _ = self._planning_context(request)
             self._budget(request.department_id)

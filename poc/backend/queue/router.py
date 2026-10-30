@@ -10,8 +10,14 @@ from .broker import get_message_broker, MessageBroker
 from .publisher import TaskQueuePublisher
 from .worker import get_queue_worker, QueueWorkerDaemon
 from ..security import authenticate_request
+from ..capabilities import capabilities
 
 router = APIRouter(tags=["Queue & Message Broker"])
+
+
+def require_queue_dispatch():
+    """Monitoring remains readable while transport-dependent mutations fail."""
+    capabilities.require("queue")
 
 
 class EnqueueTestTaskRequest(BaseModel):
@@ -61,7 +67,7 @@ async def get_dead_letter_queue():
     return broker.get_dead_letters()
 
 
-@router.post("/retry/{message_id}")
+@router.post("/retry/{message_id}", dependencies=[Depends(require_queue_dispatch)])
 async def retry_dead_letter(message_id: str):
     """
     Re-queues a failed message from the Dead Letter Queue for reprocessing.
@@ -93,7 +99,7 @@ async def retry_dead_letter(message_id: str):
     return {"status": "SUCCESS", "message": f"Message '{message_id}' successfully re-queued"}
 
 
-@router.post("/publish-test")
+@router.post("/publish-test", dependencies=[Depends(require_queue_dispatch)])
 async def publish_test_task(req: EnqueueTestTaskRequest):
     """
     Dispatches a test task into the RabbitMQ / AMQP message queue.

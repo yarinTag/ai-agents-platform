@@ -11,7 +11,7 @@ from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
-from ..dependencies import db_manager, runtime_adapter, runtime_providers as providers
+from ..dependencies import db_manager, runtime_providers as providers
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ class ProviderSelectionRequest(BaseModel):
 def _build_setup_state() -> SetupStateResponse:
     selected = db_manager.get_setting(providers.SETTING_PROVIDER)
     setup_completed = db_manager.get_setting(providers.SETTING_SETUP_COMPLETED) == "true"
-    effective = runtime_adapter.resolve_runtime_provider()
+    effective = providers.resolve_provider_selection(saved_choice=selected)
 
     detected = providers.detect_providers()
     return SetupStateResponse(

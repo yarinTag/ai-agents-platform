@@ -72,6 +72,21 @@ async def lifespan(app: FastAPI):
 > [!IMPORTANT]
 > Whenever any backend logic, API route, database schema, security policy, or background worker behavior is modified, the developer or agent **MUST** update the corresponding directory's `AGENTS.md` (and `CLAUDE.md` where applicable) in the **SAME task/commit**. Unsynchronized code changes are strictly prohibited.
 
+## Modular composition and capability availability
+`router_registry.py` owns router descriptors and imports optional implementations independently. `PLATFORM_DISABLED_CAPABILITIES` is a comma-separated list of descriptor/service names. Disabled optional routers are not imported. Import failures are logged server-side and exposed as sanitized HTTP 503 responses with detail `{code: CAPABILITY_UNAVAILABLE, capability: name}`. Shared project-memory and auth-audit prefixes use specific fallback paths to avoid masking unrelated routes. Organizations/authentication remain required core. Existing route prefixes remain unchanged, including memory under `/api/v1/projects`.
+
+`capabilities.py` separates availability (DISABLED, STARTING, READY, DEGRADED, UNAVAILABLE, STOPPING) from task states. Authenticated GET `/api/v1/capabilities` returns `{capabilities: {name: {state, reason}}}` without exception details or credentials. GET `/health` retains process-liveness semantics, not database/provider readiness.
+
+`dependencies.py` is the composition root. Required storage readiness precedes independent optional runtime, orchestration, scheduler, intelligence and teams startup. Failed optional initialization does not abort unrelated startup; getters return explicit 503 rather than fake execution. Concrete compatibility exports load on demand. Scheduler shutdown is isolated; remaining background tasks are cancelled even if shutdown fails. This in-process separation does not isolate process crashes or memory exhaustion.
+
+[Storage](../storage/AGENTS.md) owns SQL, records and connections. `poc/persistence.py` retains record exports, DatabaseManager and db_manager. Repository bound methods are resolved through an explicit legacy ownership map; class-level introspection differs, as documented in the storage guide.
+
+### Lifecycle and read availability refinements
+Scheduler router availability is distinct from scheduler-worker; teams router availability is distinct from team-coordinator. Unavailable runtime does not hide persisted task reads or stored schedule administration. Team creation/synthesis no longer constructs an unused orchestration dependency; dispatch obtains a runtime callable only when needed. Notification imports fail independently of workflow execution. Shutdown cancels known runtime runs, closes subscriber queues, releases the loaded indexer, clears service singletons and unregisters the runtime. STARTING/READY describe initialized adapters, not proven provider connectivity.
+
+GET /health/ready returns HTTP 200 `{status: ready}` after a required SQLite connection responds to SELECT 1; it returns 503 `{status: unavailable}` on failure. Core event primitives are required infrastructure even if the optional events HTTP router is disabled. Organizations is required and cannot be disabled through configuration. Runtime wiring injects database/configuration, session persistence, event/chat publication and supervisor/intelligence callbacks. If orchestration is unavailable, clarification is persisted for HUMAN_OPERATOR and the task remains WAITING_INPUT.
+
+get_skill_context is the composition adapter for required step/runtime skill enrichment; it enforces skills capability availability before loading skills_service. Workflow and runtime implementations receive this callback instead of importing that optional service directly.
 ## Workflow revision persistence
 SQLite `workflows.revision INTEGER NOT NULL DEFAULT 1` tracks the current configuration. `workflow_revisions` has `(workflow_id TEXT, revision INTEGER)` as composite primary key, snapshot_json TEXT, changed_fields_json TEXT, actor_id TEXT nullable, actor_label TEXT, change_summary TEXT nullable, and created_at TEXT. workflow_id references workflows(id) ON DELETE CASCADE. Snapshot fields are name, description, department_id, definition_json, webhook_enabled, cron_expression, is_active, organization_id; webhook tokens are excluded. Creation records v1. Initialization captures the current saved state of legacy workflows once, without reconstructing older edits. `update_workflow` reads/checks/writes/appends under BEGIN IMMEDIATE; no-op writes do not add versions; expected_revision mismatch raises WorkflowRevisionConflict. Explicit null clears description/department_id/cron_expression, while omitted keys remain unchanged. Revision rows are append-only through application APIs and retained for the workflow lifetime, not a tamper-proof audit archive.
 
@@ -85,3 +100,8 @@ Workflow Assistant now exposes private asynchronous generations and save-draft r
 
 ## Model-only YAML authoring and internal MCP
 workflow_assistant now includes yaml_contract.py (strict loader/semantic conversion), tools.py (shared policy handlers) and mcp_server.py (actual internal SDK stdio transport). Generation requests use model_id/provider_id, not planner_agent_id. /workflow-schema and /validate-yaml expose the native authoring contract; draft/generation responses include canonical YAML. See workflow_assistant/AGENTS.md for exact lifecycle, schema and security limits.
+
+## Master merge adapters
+router_registry registers optional workflow-assistant (/api/v1/workflow-assistant) and queue (/api/v1/queue). queue_lifecycle starts/stops queue and queue-worker independently; required-core readiness is unaffected by failure. workflow_wiring binds firewall prompt checks, sanitized output and tenant-scoped optional ChatOps to injected workflow callbacks; domain engines do not import backend implementations.
+
+Queue availability correction: queue-api owns the /api/v1/queue HTTP module, while queue owns broker readiness and queue-worker owns consumers. The status route remains readable during transport failure; queue mutations require the queue capability explicitly.

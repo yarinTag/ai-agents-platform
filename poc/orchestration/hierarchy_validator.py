@@ -10,11 +10,15 @@ Enforces business and architectural rules for agent organizational hierarchy:
 - Maximum hierarchy depth is enforced (default: 3)
 """
 
-from typing import Optional, List, Set
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Optional, List, Set
 import logging
 
 from config import AgentConfig, AgentRole
-from persistence import DatabaseManager
+
+if TYPE_CHECKING:
+    from .ports import HierarchyStore
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +44,7 @@ def validate_agent_hierarchy(
     agent_id: str,
     role_type: str,
     parent_id: Optional[str],
-    db_manager: DatabaseManager,
+    db_manager: HierarchyStore,
     max_depth: int = DEFAULT_MAX_HIERARCHY_DEPTH
 ) -> None:
     """
@@ -114,7 +118,7 @@ def validate_agent_hierarchy(
 def validate_agent_communication(
     sender: AgentConfig,
     receiver: AgentConfig,
-    db_manager: DatabaseManager
+    db_manager: HierarchyStore
 ) -> None:
     """
     Validate that sender is authorized to send a message to receiver according to hierarchy and permissions.
@@ -177,7 +181,7 @@ def validate_agent_communication(
 def validate_delegation_authority(
     parent_agent: AgentConfig,
     target_agent: AgentConfig,
-    db_manager: Optional[DatabaseManager] = None
+    db_manager: Optional[HierarchyStore] = None
 ) -> None:
     """
     Validate that parent_agent is authorized to delegate a task to target_agent.

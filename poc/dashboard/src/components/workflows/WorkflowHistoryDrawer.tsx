@@ -1,8 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Alert, Button, Card, Collapse, Drawer, Empty, Space, Tag, Typography } from 'antd';
 import axios from 'axios';
 import { getWorkflowRevisions } from '../../services/api';
 import { PlatformWorkflow, WorkflowRevision } from '../../types/mcp';
+import { useRequestGeneration } from '../../hooks/useRequestGeneration';
 
 interface Props { workflow: PlatformWorkflow; onClose: () => void }
 const format = (value: unknown) => {
@@ -17,24 +18,25 @@ export const WorkflowHistoryDrawer: React.FC<Props> = ({ workflow, onClose }) =>
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [hasMore, setHasMore] = useState(false);
-  const alive = useRef(true);
+  const { begin, invalidate } = useRequestGeneration();
   const load = async (before?: number) => {
+    const current = begin();
     setLoading(true);
     try {
       const response = await getWorkflowRevisions(workflow.id, before);
-      if (!alive.current) return;
+      if (!current()) return;
       setRevisions(previous => before ? [...previous, ...response.data] : response.data);
       setHasMore(response.data.length === 50); setError('');
     } catch (cause: unknown) {
-      if (alive.current) {
+      if (current()) {
         const detail = axios.isAxiosError(cause) ? cause.response?.data?.detail : null;
         setError(typeof detail === 'string' ? detail : 'Unable to load change history');
       }
-    } finally { if (alive.current) setLoading(false); }
+    } finally { if (current()) setLoading(false); }
   };
   useEffect(() => {
-    alive.current = true; void load();
-    return () => { alive.current = false; };
+    setRevisions([]); setError(''); setHasMore(false); void load();
+    return invalidate;
   }, [workflow.id]);
 
   return <Drawer open title={`Change history · ${workflow.name}`} onClose={onClose} size="large">
@@ -59,7 +61,7 @@ export const WorkflowHistoryDrawer: React.FC<Props> = ({ workflow, onClose }) =>
         </Card>;
       })}
       {loading && <Button loading>Loading history</Button>}
-      {hasMore && <Button disabled={loading} onClick={() => void load(revisions.at(-1)?.revision)}>Load older revisions</Button>}
+      {hasMore && <Button disabled={loading} onClick={() => void load(revisions[revisions.length - 1]?.revision)}>Load older revisions</Button>}
     </Space>
   </Drawer>;
 };

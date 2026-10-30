@@ -34,6 +34,10 @@ class RuntimeRegistry:
         if set_default or len(self._runtimes) == 1:
             self._default_runtime_name = clean_name
 
+    def unregister(self, name: str) -> None:
+        """Release one composed runtime after its lifecycle has stopped."""
+        self._runtimes.pop(name.strip().lower(), None)
+
     def get(self, name: Optional[str] = None) -> RuntimeAdapter:
         """Get a registered runtime adapter by name, or default if omitted."""
         if not name:
