@@ -103,3 +103,5 @@ workflow_assistant now includes yaml_contract.py (strict loader/semantic convers
 
 ## Master merge adapters
 router_registry registers optional workflow-assistant (/api/v1/workflow-assistant) and queue (/api/v1/queue). queue_lifecycle starts/stops queue and queue-worker independently; required-core readiness is unaffected by failure. workflow_wiring binds firewall prompt checks, sanitized output and tenant-scoped optional ChatOps to injected workflow callbacks; domain engines do not import backend implementations.
+
+Queue availability correction: queue-api owns the /api/v1/queue HTTP module, while queue owns broker readiness and queue-worker owns consumers. The status route remains readable during transport failure; queue mutations require the queue capability explicitly.

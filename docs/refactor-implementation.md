@@ -79,3 +79,5 @@ All merge review remains source-only; Python source parsing and line/conflict-ma
 
 ## Router import incident (2026-10-30)
 The reported Agents/Tasks/Workflows503 was traced to FastAPI rejecting an empty child route plus empty include prefix in the extracted facades. The shared compose_routers adapter retains both slash aliases and flattens route-only modules before the final nonempty domain mount applies authentication/availability guards. An isolated temporary source copy captured the exact import traceback; no live database or server startup was used. This is a confirmed import defect, distinct from the remaining runtime verification limits. MCP page resourceErrors binding was also corrected in5fc40c3.
+
+Queue-status follow-up: queue-api is now distinct from broker capability queue. Authenticated monitoring reads remain available when broker startup fails and report disconnected; dispatch routes retain explicit queue guards. This fixes the reported /queue/status503 without claiming that the broker is connected or silently selecting a memory transport.

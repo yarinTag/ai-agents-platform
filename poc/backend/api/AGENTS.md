@@ -183,3 +183,5 @@ Workflow models now include revision/expected_revision/change_summary, payload_h
 
 ## Empty-path route composition correction (2026-10-30)
 Agents, Tasks and Workflows facades use router_composition.compose_routers for their route-only child modules. Both empty-path and slash aliases are retained until router_registry mounts the aggregate under its nonempty /api/v1 domain prefix. Calling include_router(child) without a prefix at the facade stage rejects empty aliases with FastAPIError and caused these capabilities to register unavailable. Child modules must not define router-level lifecycle hooks/dependencies; per-route metadata and application authentication/availability guards remain applied by the final include. Isolated import diagnostics captured the exception without starting services or accessing the live database. No tests/build were run.
+
+GET /api/v1/queue/status reports disconnected transport without depending on queue readiness; the queue-api descriptor guards module availability separately. Retry/publish operations still require queue dispatch availability and return503 when unavailable.
