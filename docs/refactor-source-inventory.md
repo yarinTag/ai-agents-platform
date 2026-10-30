@@ -2,7 +2,7 @@
 
 Source text read on 2026-10-30 after merging master 523913e. Project modules were not imported or executed; this is source-size evidence, not test/build/runtime verification.
 
-Owned source/config files inventoried: 472. Largest file: 482 physical lines. Files above 500: 0.
+Owned source/config files inventoried: 473. Largest file: 482 physical lines. Files above 500: 0.
 
 Dependency folders, caches, generated build outputs and generated package-lock.json are excluded. Markdown documentation is outside the code limit. The unrelated existing :memory:.ses artifact was not edited.
 
@@ -11,7 +11,7 @@ Dependency folders, caches, generated build outputs and generated package-lock.j
 | . | 4 | 112 |
 | poc | 25 | 473 |
 | poc/backend | 9 | 326 |
-| poc/backend/api | 54 | 378 |
+| poc/backend/api | 55 | 378 |
 | poc/backend/approvals | 3 | 450 |
 | poc/backend/chat | 2 | 447 |
 | poc/backend/config | 1 | 349 |
