@@ -41,6 +41,7 @@ METHOD_OWNERS = {
     "get_next_sequence_number": "_events",
     "save_event": "_events",
     "get_events": "_events",
+    "get_event_owner": "_events",
     "log_audit": "_audit",
     "get_audit_logs": "_audit",
     "create_cron_job": "_schedules",
