@@ -57,9 +57,9 @@ class ClaudeCodeAdapter:
         """Cancel an in-flight execution run."""
         return self._adapter.cancel_run(run_id)
 
-    def resume_task(self, run_id: str, answer: str) -> str:
+    def resume_task(self, run_id: str, answer: str, grant_permissions: bool = False) -> str:
         """Resume a suspended or waiting task run with an operator or supervisor response."""
-        return self._adapter.resume_task(run_id, answer)
+        return self._adapter.resume_task(run_id, answer, grant_permissions=grant_permissions)
 
     def list_runs(self) -> List[AgentRun]:
         """List all tracked runs."""

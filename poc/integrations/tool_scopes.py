@@ -169,7 +169,8 @@ def prepare_execution_context(db, execution, workflow, definition, user_context=
     if not workflow.organization_id or not workflow.department_id:
         raise ToolAccessError('Live integrations require an organization and department.')
     identity = (user_context or {}).get('sub')
-    if user_context and not identity:
+    # API-key/dev service callers are org-bound but have no user; they run as service executions.
+    if user_context and not identity and not user_context.get('service'):
         raise ToolAccessError('Authenticated workflow initiator identity is missing.')
     require_initiator(db, identity, workflow.organization_id, workflow.department_id)
     context = {'organization_id': workflow.organization_id, 'department_id': workflow.department_id,

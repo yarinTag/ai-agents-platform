@@ -51,3 +51,6 @@ The **Supervisor & Human-In-The-Loop Approval Service** (`poc/backend/approvals/
 Approval routes use canonical runtime.models.TaskStatus; importing the approval inbox no longer imports the concrete process implementation. Execution/resumption remains behind the runtime dependency. No endpoint/schema changes or runtime verification were introduced.
 
 Creating a persisted approval/question no longer requires an unused live runtime dependency. Approve/resume operations still resolve the runtime explicitly.
+
+## Callback authenticity and permission grants
+approvals/callback_auth.py: /telegram-callback requires X-Telegram-Bot-Api-Secret-Token == TELEGRAM_WEBHOOK_SECRET; /slack-callback requires a Slack v0 HMAC (SLACK_SIGNING_SECRET) with a timestamp within 300s. Both use constant-time comparison. A missing secret returns 503 and a bad signature returns 401, before the body is interpreted. respond_to_interaction resumes approved tasks with resume_task(..., grant_permissions=True). This is the only path that widens permissions; RuntimeAdapter.resume_task no longer infers grants from answer text.

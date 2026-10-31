@@ -40,3 +40,4 @@ python_classes = ["Test*"]
 python_functions = ["test_*"]
 asyncio_mode = "auto"
 pythonpath = [".", "poc"]
+addopts = "-p poc.tests.platform_test_env"

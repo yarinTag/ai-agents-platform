@@ -340,9 +340,10 @@ class ClaudeCodeRuntimeAdapter:
 
         return run_id
 
-    def resume_task(self, run_id: str, answer: str) -> str:
+    def resume_task(self, run_id: str, answer: str, grant_permissions: bool = False) -> str:
         """
         Resume an existing paused task (WAITING_INPUT) by passing the supervisor/human answer back into the session.
+        Permissions are only widened by an explicit structured approval (grant_permissions=True), never by answer text.
         """
         if run_id.startswith("pg_task_"):
             raise ValueError("Playground tasks cannot be resumed; start a fresh playground run")
@@ -378,11 +379,8 @@ class ClaudeCodeRuntimeAdapter:
         run.ended_at = None
         run.result = None
 
-        # Check if user answer or previous run status indicates permission was granted
-        answer_lower = answer.lower()
-        grants_perm = any(w in answer_lower for w in ("permission", "grant", "allow", "continue", "approved", "approve", "yes", "proceed", "ok"))
-        was_perm_blocked = run.result and ("permission" in run.result.lower() or "blocked" in run.result.lower())
-        skip_perm = grants_perm or bool(was_perm_blocked) or getattr(run, "dangerously_skip_permissions", False)
+        # Only a structured approval decision (approvals API) may widen permissions for this run.
+        skip_perm = bool(grant_permissions) or bool(getattr(run, "dangerously_skip_permissions", False))
         run.dangerously_skip_permissions = skip_perm
 
         thread = threading.Thread(

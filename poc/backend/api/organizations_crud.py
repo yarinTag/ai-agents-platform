@@ -111,18 +111,14 @@ def list_departments(
     organization_id: Optional[str] = Query(None, description="Filter departments by organization ID"),
     db: DatabaseManager = Depends(get_db_manager)
 ):
-    """List departments, optionally filtered by organization ID."""
-    filter_org_id = organization_id
-    if not filter_org_id:
-        user_state = getattr(request.state, "user", None)
-        if isinstance(user_state, dict):
-            filter_org_id = user_state.get("org_id")
+    """List the caller's organization departments; another organization's ID is never honored."""
+    user_state = getattr(request.state, "user", None)
+    filter_org_id = user_state.get("org_id") if isinstance(user_state, dict) else None
+    if not filter_org_id or (organization_id and organization_id != filter_org_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Departments are limited to your organization.")
 
     with db._get_connection() as conn:
-        if filter_org_id:
-            rows = conn.execute("SELECT * FROM departments WHERE organization_id = ? ORDER BY name ASC", (filter_org_id,)).fetchall()
-        else:
-            rows = conn.execute("SELECT * FROM departments ORDER BY name ASC").fetchall()
+        rows = conn.execute("SELECT * FROM departments WHERE organization_id = ? ORDER BY name ASC", (filter_org_id,)).fetchall()
         depts = [
             Department(
                 id=r['id'],

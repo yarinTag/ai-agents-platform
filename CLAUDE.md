@@ -176,3 +176,6 @@ Integration modules now implement fixed-origin GitHub activity reads and strict 
 
 ## Sandboxed repository workspaces
 Clone only for steps that run or change code: declare params.workspace on the step. The backend clones on the host (git metadata outside the mount, token only in git's env) and runs every model tool in a no-network Docker container. This requires a Direct API provider and a digest-pinned PLATFORM_SANDBOX_IMAGE, and fails closed without Docker. Write mode opens only a new-branch draft PR; it never pushes to existing branches and never merges. See docs/repo-workspaces.md. No tests, builds, startup, Docker runs or live GitHub calls were performed.
+
+## Security configuration (fail closed)
+The server requires JWT_SECRET_KEY (>= 32 chars) unless PLATFORM_DEV_MODE=1. API keys need PLATFORM_API_KEY_ORG_ID. Approval callbacks need TELEGRAM_WEBHOOK_SECRET / SLACK_SIGNING_SECRET. CORS uses PLATFORM_CORS_ORIGINS. SSE and stats are organization-scoped, and task resume never infers permission grants from text. See docs/security-configuration.md. No tests, builds or startup were run.
