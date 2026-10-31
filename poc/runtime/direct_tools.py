@@ -15,6 +15,7 @@ class DirectTools:
         self.inventory = []
         self.connector = None
         self.root = Path(args.add_dir or os.getcwd()).resolve()
+        self.sandbox = None
 
     async def __aenter__(self):
         try:
@@ -28,6 +29,9 @@ class DirectTools:
                 self.connector = WorkflowToolExecutor(DatabaseManager(database), task)
                 self.inventory = self.connector.inventory()
                 return self
+            if getattr(self.args, 'sandbox_container', None):
+                from .sandbox_tools import SandboxTools
+                self.sandbox = SandboxTools(self.args.sandbox_container, self._shell_env())
             config = json.loads(self.args.mcp_config or '{"mcpServers":{}}')
             if config.get('mcpServers'):
                 raise ValueError('Unsupported MCP server in direct API runtime.')
@@ -40,6 +44,10 @@ class DirectTools:
 
     async def __aexit__(self, *exc):
         await self.stack.__aexit__(*exc)
+
+    @staticmethod
+    def _shell_env():
+        return {k: v for k, v in os.environ.items() if not any(x in k for x in ('API_KEY', 'AUTH_TOKEN', 'OAUTH_TOKEN'))}
 
     def allowed(self):
         return set((self.args.allowedTools or '').split(','))
@@ -76,10 +84,12 @@ class DirectTools:
             session, tool = self.sessions[name]
             response = await session.call_tool(tool, inputs)
             return json.dumps(response.model_dump(mode='json'), ensure_ascii=False)
+        if name == 'Bash' and not self.args.dangerously_skip_permissions:
+            raise PermissionError('Shell execution requires operator permission.')
+        if self.sandbox is not None:
+            return await self.sandbox.call(name, inputs)  # Never touch the host filesystem.
         if name == 'Bash':
-            if not self.args.dangerously_skip_permissions:
-                raise PermissionError('Shell execution requires operator permission.')
-            env = {k: v for k, v in os.environ.items() if not any(x in k for x in ('API_KEY', 'AUTH_TOKEN', 'OAUTH_TOKEN'))}
+            env = self._shell_env()
             process = await asyncio.create_subprocess_exec('/bin/sh', '-c', inputs['command'], cwd=self.root,
                 env=env, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
             try:

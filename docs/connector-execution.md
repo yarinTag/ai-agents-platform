@@ -184,3 +184,6 @@ or exactly-once guarantee is introduced. Manual test input remains <=3500 chars;
 runtime MessageInput permits <=60000. Tests and live calls were not run.
 
 Telegram sendMessage supports bounded text messages; see [Telegram sendMessage](https://core.telegram.org/bots/api#sendmessage). Report splitting prevents the platform truncation previously seen as [Summary truncated]. It does not add PR diff/code access or change the factual scope of generated reviews.
+
+## Running or changing code
+Connector tools never clone. Steps that must run or edit code use sandboxed repository workspaces (draft PR only, Docker required, Direct API only). See [repo-workspaces.md](repo-workspaces.md).
