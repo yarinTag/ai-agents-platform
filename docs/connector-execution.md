@@ -96,7 +96,7 @@ model results cannot overwrite the cancelled task state.
 
 Actual I/O is preceded by an atomic `STARTED` audit claim, followed by `COMPLETED`
 or `FAILED`. A duplicate read can return its authorized successful receipt.
-Channel sends have one attempted message per task/connector/channel; changed
+Channel sends have one attempted logical report per task/connector/channel; changed
 text, timeout or unknown outcome does not automatically resend. Message audit
 arguments contain a content hash rather than the body. Known denied tool attempts
 are also recorded without hostile arguments.
@@ -143,3 +143,44 @@ setup guidance. No test is sent automatically or retried after an uncertain resu
 No runtime checks or outbound tests were performed during this change.
 
 Telegram HTTP rejection bodies now produce fixed allowlisted setup hints when recognized. Unknown reasons remain generic; no raw Telegram response or credentials are exposed. Migrated group IDs require explicit rediscovery/save. This diagnostic change was source-reviewed only.
+
+## Deterministic channel action steps
+`channel_action.py` owns explicit `params.channel_action` with strict fields:
+`action: send_channel_message`, `connector_id`, `channel_id`, `source_step`.
+The source must be in depends_on. Only its nonempty output is delivered; output
+up to60,000 characters is preserved and delivered as numbered bounded parts; larger reports fail explicitly without truncation.
+No prompt parsing or model decision triggers sends. After saving RUNNING task/step
+and prepare_scope, step_runner dispatches this action through WorkflowToolExecutor
+instead of model inference. Exactly one scoped delivery tool and one destination
+are required. All live tenant/initiator/agent/department/resource checks, atomic
+no-retry call claims and provider acknowledgements remain mandatory. The task
+becomes COMPLETED only after receipt verification and a still-RUNNING check.
+Failure follows normal failed-step recording; Playground rejects delivery actions
+without invoking tools. Native definition validation checks action structure and
+source dependency. Existing tool-calling model steps retain their behavior unless
+explicitly converted. No tests, application or provider calls were executed.
+
+Repair applied locally: the two inspected workflows now reference the previously
+acknowledged channel -1004464346735 rather than its username; connector allowlist
+was updated consistently. The AndroidApp send step is explicitly deterministic.
+Workflow revisions were appended (6 and2), retaining prior definitions and run
+records. No new send or execution was triggered. Numeric IDs avoid username
+resolution changes but still require the current bot's access/posting rights.
+
+Channel presentation: configured channel_labels feed workflow selectors, chat previews and diagrams. The name is displayed while the exact ID remains the saved/submitted option value. channel_name is presentation metadata; no provider operation or policy lookup uses it. Telegram discovery suggestions show the name with ID on hover. Missing names fall back to the ID rather than inventing a channel. Source review only; no tests/build/live sends executed.
+
+## Lossless multipart reports
+message_parts.py splits plain-text reports up to60000 Unicode characters into
+parts <=3500 UTF-16 units, including [i/n] headers when multipart. Content and
+whitespace are preserved, with preferred newline/space boundaries; no ellipsis.
+scoped_channels sends sequential parts with3.1-second spacing between parts of
+this report and reauthorizes each part. Pacing is not a global rate-limit guarantee.
+A logical report is one existing atomic audit claim, not a claim per part. All
+parts must return verified receipts before COMPLETED. Receipts retain the first
+provider_message_id plus provider_message_ids and parts_delivered. Failures retain
+acknowledged-count diagnostics; failed/unknown batches never automatically resume
+or resend, even after partial delivery. No individual chunk-progress transaction
+or exactly-once guarantee is introduced. Manual test input remains <=3500 chars;
+runtime MessageInput permits <=60000. Tests and live calls were not run.
+
+Telegram sendMessage supports bounded text messages; see [Telegram sendMessage](https://core.telegram.org/bots/api#sendmessage). Report splitting prevents the platform truncation previously seen as [Summary truncated]. It does not add PR diff/code access or change the factual scope of generated reviews.

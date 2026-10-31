@@ -45,3 +45,15 @@ test_connector_execution_security.py uses real SQLite, real FastAPI/JWT discover
 Connector security source cases additionally cover invalid optional notification not blocking a GitHub-only explicit resource scope even when legacy mcp_servers contains Telegram; completion still requires a real receipt. No execution verification was run.
 
 Connector security source cases also cover manual channel-test rejection of aliases, foreign connectors and stale administrator claims without outbound I/O. These cases were not executed.
+
+Connector security source includes explicit channel-action destination substitution denial with real SQLite and no outbound call, dependency enforcement, missing output and single-message bounds. Added cases remain unexecuted under repository instructions.
+
+Workflow chat source cases cover real local plugin files + SQLite: skills catalog, proposal validation/native persistence, full scoped instruction resolution, unique relative reference compatibility and revocation after source clearing. Cases were not executed.
+
+Workflow chat source cases now verify workflow-level skill persistence, legacy step promotion, deduplication and mixed attached-object/string inheritance. Cases remain unexecuted.
+
+Workflow chat source cases cover real SQLite/FastAPI creation with no office agents, planned option tool grants, actual runner provisioning/tenant/department binding, inactive workflow persistence without sentinel IDs, invented-ID rejection and revocation before confirmation. Tests remain unexecuted.
+
+Manual workflow creation has a real FastAPI/SQLite source case asserting planned-runner ID replacement and actual department-bound runner creation; not executed.
+
+Connector source tests cover exact long-report preservation, Hebrew/emoji UTF-16 chunk bounds, numbering, whitespace reconstruction and explicit >60000-character rejection. No tests executed.

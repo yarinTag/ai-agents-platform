@@ -7,7 +7,7 @@ import { useWorkflowBuilder } from './useWorkflowBuilder';
 
 export function WorkflowDiagramPanel({ model }: { model: ReturnType<typeof useWorkflowBuilder> }) {
   const {
-    workflowName, channelProvider, channelId, triggerEnabled, notifyMode,
+    workflowName, channelProvider, channelId, getChannelLabel, triggerEnabled, notifyMode,
     allowedMcps, workflowSkills, steps, handleAddStep,
     handleDeleteStepByKey,
   } = model;
@@ -34,6 +34,7 @@ export function WorkflowDiagramPanel({ model }: { model: ReturnType<typeof useWo
                   channelBinding={{
                     provider: channelProvider,
                     channel_id: channelId,
+                    channel_name: getChannelLabel(channelProvider, channelId),
                     trigger_enabled: triggerEnabled,
                     notify_mode: notifyMode,
                   }}

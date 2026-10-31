@@ -129,3 +129,34 @@ Supported operations currently read GitHub.com activity and send literal plain-t
 WorkflowNotifier now uses the captured binding and governed notification_guard instead of choosing the first connector by provider. It rechecks current rights and requires delivery acknowledgement, preserves no-auto-retry audit semantics, and skips a destination already delivered by an explicit workflow step. The notifier constructor/call signatures remain compatible; injected legacy deliver/lookup functions are retained attributes but no longer provide governed delivery. Notification failure remains best-effort and is audited separately from step completion. No integration or model was executed for verification.
 
 Completion notifications remain optional: invalid/denied destinations produce a stored notification_error warning and no send, while authorized GitHub/model steps continue. An explicit channel-send step remains a required operation and fails on missing access. Explicit authorized_resources narrows legacy per-step connector supersets, so a copied Telegram declaration alone cannot create a delivery tool. Scope preflight is authoritative for required steps; optional delivery warnings are separate from execution.error_message.
+
+Completion notification failures retain safe connector diagnostics via notification_guard and notification_error. Main workflow COMPLETED remains distinct from delivery failure. No resend or runtime verification was performed for the diagnostic correction.
+
+## Deterministic channel action steps
+`channel_action.py` owns explicit `params.channel_action` with strict fields:
+`action: send_channel_message`, `connector_id`, `channel_id`, `source_step`.
+The source must be in depends_on. Only its nonempty output is delivered; output
+up to60,000 characters is preserved and delivered as numbered bounded parts; larger reports fail explicitly without truncation.
+No prompt parsing or model decision triggers sends. After saving RUNNING task/step
+and prepare_scope, step_runner dispatches this action through WorkflowToolExecutor
+instead of model inference. Exactly one scoped delivery tool and one destination
+are required. All live tenant/initiator/agent/department/resource checks, atomic
+no-retry call claims and provider acknowledgements remain mandatory. The task
+becomes COMPLETED only after receipt verification and a still-RUNNING check.
+Failure follows normal failed-step recording; Playground rejects delivery actions
+without invoking tools. Native definition validation checks action structure and
+source dependency. Existing tool-calling model steps retain their behavior unless
+explicitly converted. No tests, application or provider calls were executed.
+
+WorkflowStepRunner passes workflow.organization_id when resolving explicit step skills. Plugin workflow skill IDs are checked against that organization source and full content injected before the prompt guard/model launch. Analysis skills belong on model steps, not deterministic channel delivery steps.
+
+## Shared workflow skills (supersedes per-step selection UI)
+All AI steps inherit the deduplicated union of definition.skills and legacy
+steps[*].skills, normalized by skill_inheritance.workflow_skill_ids. Supported
+native entries are string IDs or attached-skill objects with id/location. Missing
+IDs fail explicitly. WorkflowStepRunner resolves these through the organization
+plugin source before model invocation; server channel_action steps skip skill
+loading entirely. Legacy step assignments remain readable but are now shared.
+New authoring writes only workflow-level skills. No execution/tests were run.
+
+Long report delivery no longer truncates source output at3500 or completion-notification output at2500 characters. Channel actions preserve <=60000 characters and the shared adapter numbers/splits long reports. Oversize reports fail explicitly, partial acknowledgement fails the delivery, and historical runs are never resent.

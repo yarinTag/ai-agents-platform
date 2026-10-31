@@ -2,6 +2,7 @@
 import uuid
 import logging
 import re
+import json
 from datetime import datetime
 from typing import Dict, Optional, Any
 from runtime.models import AgentRun, TaskStatus
@@ -75,8 +76,15 @@ class WorkflowStepRunner:
                         )
 
         # Step-level Skills injection (dynamic resolution)
+        from .skill_inheritance import workflow_skill_ids
+        execution_for_skills = self.db.get_workflow_execution(execution_id)
+        workflow_for_skills = self.db.get_workflow(execution_for_skills.workflow_id)
+        configured_skills = workflow_skill_ids(json.loads(workflow_for_skills.definition_json))
+        # Server delivery uses predecessor text directly and performs no inference.
+        if (step.params or {}).get('channel_action') is not None:
+            configured_skills = []
         step_skills = []
-        for sk in getattr(step, "skills", []) or []:
+        for sk in configured_skills:
             sk_rendered = str(sk)
             if trigger_payload:
                 for k, v in trigger_payload.items():
@@ -87,7 +95,7 @@ class WorkflowStepRunner:
         if step_skills and self.runtime is not None:
             if self.skill_context is None:
                 raise RuntimeError("Required skill context provider is unavailable")
-            skills_context = self.skill_context(step_skills)
+            skills_context = self.skill_context(step_skills, organization_id=workflow_for_skills.organization_id)
             if not skills_context:
                 raise RuntimeError("Configured step skill context could not be resolved")
             formatted_prompt = f"{skills_context}\n\n[TASK INSTRUCTIONS]\n{formatted_prompt}"
@@ -151,6 +159,10 @@ class WorkflowStepRunner:
         try:
             if self.runtime is None:
                 raise RuntimeError("Runtime capability is unavailable")
+            from .channel_action import action_configuration, execute_channel_action
+            channel_action = action_configuration(step)
+            if channel_action and playground_workspace:
+                raise RuntimeError("Channel delivery actions cannot run in the tool-free Playground")
             if playground_workspace:
                 self.runtime.start_playground_task(
                     agent_id=actual_agent_id, task_id=task_id,
@@ -159,7 +171,10 @@ class WorkflowStepRunner:
             else:
                 from integrations.tool_scopes import prepare_scope
                 prepare_scope(self.db, task_id, execution_id, step)
-                self.runtime.start_task(task_id=task_id, agent_id=actual_agent_id, prompt=formatted_prompt)
+                if channel_action:
+                    execute_channel_action(self.db, step, step_run, step_outputs)
+                else:
+                    self.runtime.start_task(task_id=task_id, agent_id=actual_agent_id, prompt=formatted_prompt)
             import time
             deadline = time.monotonic() + min(step.timeout_seconds or 180, 300)
             approval_sent = False

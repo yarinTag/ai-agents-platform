@@ -1,3 +1,4 @@
+import { collectWorkflowSkills } from './workflowSkillSelection';
 import { useWorkflowResources } from './useWorkflowResources';
 import { useState, useEffect, useRef } from 'react';
 import { Form, message } from 'antd';
@@ -40,8 +41,8 @@ export function useWorkflowBuilder({ open, onClose, onSuccess, defaultChannelPro
   const [notifyMode, setNotifyMode] = useState<string>('ON_COMPLETE');
   const [allowedMcps, setAllowedMcps] = useState<string[]>([]);
   const [workflowSkills, setWorkflowSkills] = useState<AttachedSkill[]>([]);
-  const resources = useWorkflowResources({ open, editing: Boolean(workflow), channelProvider, channelId, setChannelId, setAllowedMcps, setTargetRepo });
-  const { installedMcps, telegramChannels, slackChannels, githubRepos, catalogSkills, setCatalogSkills, resourcesLoading, connectorError, skillsError, repositoryError, reloadResources } = resources;
+  const resources = useWorkflowResources({ open, editing: Boolean(workflow), channelProvider, channelId, setChannelId, setAllowedMcps, setTargetRepo, departmentId: effectiveDepartmentId, workflowId: workflow?.id });
+  const { agentOptions, getChannelLabel, installedMcps, telegramChannels, slackChannels, githubRepos, catalogSkills, setCatalogSkills, resourcesLoading, connectorError, skillsError, repositoryError, reloadResources } = resources;
   const [createSkillModalOpen, setCreateSkillModalOpen] = useState<boolean>(false);
   const [newSkillForm] = Form.useForm();
   const [creatingSkill, setCreatingSkill] = useState<boolean>(false);
@@ -51,7 +52,7 @@ export function useWorkflowBuilder({ open, onClose, onSuccess, defaultChannelPro
     {
       key: 'pr_triage',
       name: 'PR Diff & Architecture Analysis',
-      agent_id: 'software-architect',
+      agent_id: '__workflow_runner__',
       prompt_template: 'Inspect incoming PR {{pr_id}} on repository {{repo}}. Review architectural adherence, API contracts, and code diff.',
       depends_on: [],
       timeout_seconds: 300,
@@ -61,7 +62,7 @@ export function useWorkflowBuilder({ open, onClose, onSuccess, defaultChannelPro
     {
       key: 'qa_validation',
       name: 'Automated Test Suite & Regression Check',
-      agent_id: 'qa-test-engineer',
+      agent_id: '__workflow_runner__',
       prompt_template: 'Execute test suites and verify 100% pass rate for PR {{pr_id}} changes: {{pr_triage.output}}.',
       depends_on: ['pr_triage'],
       timeout_seconds: 300,
@@ -71,7 +72,7 @@ export function useWorkflowBuilder({ open, onClose, onSuccess, defaultChannelPro
     {
       key: 'security_audit',
       name: 'Secrets & Security Release Audit',
-      agent_id: 'release-security-reviewer',
+      agent_id: '__workflow_runner__',
       prompt_template: 'Perform secrets scan, CVE check, and readiness gate audit for PR {{pr_id}}.',
       depends_on: ['qa_validation'],
       timeout_seconds: 240,
@@ -105,7 +106,7 @@ export function useWorkflowBuilder({ open, onClose, onSuccess, defaultChannelPro
         provider: curProv,
         connector_id: curProv,
         channel_id: curChan,
-        channel_name: curChan,
+        channel_name: getChannelLabel(curProv, curChan),
         trigger_enabled: curTrig,
         notify_mode: curNotif,
         message_template: metadata.channel_binding?.message_template || `🚀 Workflow ${curName} finished step execution with status: {{status}}`,
@@ -121,7 +122,7 @@ export function useWorkflowBuilder({ open, onClose, onSuccess, defaultChannelPro
       department_id: effectiveDepartmentId || null,
       mcp_servers: curMcps,
       skills: curSkills,
-      steps: curSteps,
+      steps: curSteps.map(({ skills: _legacySkills, ...step }) => step),
       ...(baseDefinition.current.flow ? { flow: baseDefinition.current.flow.filter((edge: { from: string; to: string }) =>
         curSteps.some(step => step.key === edge.to && (!edge.from || step.depends_on.includes(edge.from)))) } : {}),
       cron_expression: curCron || null,
@@ -170,8 +171,7 @@ export function useWorkflowBuilder({ open, onClose, onSuccess, defaultChannelPro
         };
       }));
       setAllowedMcps(data.mcp_servers || []);
-      setWorkflowSkills((data.skills || []).map((skill: AttachedSkill | string) =>
-        typeof skill === 'string' ? { id: skill, name: skill, source: 'builtin' } : skill));
+      setWorkflowSkills(collectWorkflowSkills(data));
       const binding = data.metadata?.channel_binding;
       setChannelProvider(binding?.provider || ''); setChannelId(binding?.channel_id || '');
       setTriggerEnabled(binding?.trigger_enabled ?? false); setNotifyMode(binding?.notify_mode || 'NONE');
@@ -230,9 +230,7 @@ export function useWorkflowBuilder({ open, onClose, onSuccess, defaultChannelPro
         if (parsed.mcp_servers) {
           setAllowedMcps(parsed.mcp_servers);
         }
-        if (parsed.skills) {
-          setWorkflowSkills(parsed.skills);
-        }
+        setWorkflowSkills(collectWorkflowSkills(parsed));
         if (parsed.cron_expression) {
           setCronExpression(parsed.cron_expression);
         }
@@ -262,7 +260,7 @@ export function useWorkflowBuilder({ open, onClose, onSuccess, defaultChannelPro
     const newStep: WorkflowStep = {
       key: newKey,
       name: `Step ${steps.length + 1}`,
-      agent_id: 'auto-agent',
+      agent_id: workflow ? `wf-agent-${workflow.id}` : '__workflow_runner__',
       prompt_template: 'Process input and execute task for step.',
       depends_on: prevKey ? [prevKey] : [],
       timeout_seconds: 300,
@@ -312,12 +310,12 @@ export function useWorkflowBuilder({ open, onClose, onSuccess, defaultChannelPro
   const handleAttachExistingSkill = (skillId: string) => {
     const found = catalogSkills.find((s) => s.id === skillId);
     if (!found) return;
-    if (workflowSkills.some((s) => s.id === skillId)) {
+    if (workflowSkills.some((s) => s.id === (found.path || skillId))) {
       message.info('Skill already attached to this workflow');
       return;
     }
     const newSkill: AttachedSkill = {
-      id: found.id,
+      id: found.path || found.id,
       name: found.name,
       source: found.source || (found.path ? 'local' : 'builtin'),
       location: found.path || found.location,
@@ -402,7 +400,7 @@ export function useWorkflowBuilder({ open, onClose, onSuccess, defaultChannelPro
       if (parsed.description !== undefined) setDescription(parsed.description || '');
       if (parsed.steps) setSteps(parsed.steps);
       if (parsed.mcp_servers) setAllowedMcps(parsed.mcp_servers);
-      if (parsed.skills) setWorkflowSkills(parsed.skills);
+      setWorkflowSkills(collectWorkflowSkills(parsed));
       setCronExpression(parsed.cron_expression || '');
       if (parsed.webhook_enabled !== undefined) setWebhookEnabled(parsed.webhook_enabled);
       if (parsed.metadata?.channel_binding) {
@@ -458,7 +456,7 @@ export function useWorkflowBuilder({ open, onClose, onSuccess, defaultChannelPro
     setWorkflowName, description, setDescription, cronExpression, setCronExpression,
     webhookEnabled, setWebhookEnabled, targetRepo, setTargetRepo, channelProvider,
     setChannelProvider, channelId, setChannelId, triggerEnabled, setTriggerEnabled,
-    notifyMode, setNotifyMode, telegramChannels, slackChannels,
+    notifyMode, setNotifyMode, agentOptions, getChannelLabel, telegramChannels, slackChannels,
     githubRepos, installedMcps,
     allowedMcps, setAllowedMcps, workflowSkills, setWorkflowSkills, catalogSkills,
     setCatalogSkills, createSkillModalOpen, setCreateSkillModalOpen, newSkillForm, creatingSkill,

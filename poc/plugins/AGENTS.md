@@ -9,3 +9,14 @@ GET `/api/v1/skills/plugins/content` revalidates remote content through GitHub u
 The shared runtime skill-content cache remains a compatibility integration in skills_service; this refactor does not claim a complete audit of every runtime skill-resolution policy. No source import, scanner execution, live provider request, test, build or lint was executed during this task.
 
 Master refresh integration: _scan_git_repo_via_api(repo_url, token, force_refresh=False) bypasses cached Git tree results when requested by GET /api/v1/skills/plugins/scan?refresh=true; configured empty sources still return no plugins.
+
+workflow_skills.py projects only the organization's explicit configured plugin
+source into id/name/key/plugin/description metadata. Git mode uses the existing
+in-memory scanner and exact-tenant GitHub connector credentials; local mode has
+no fallback roots. Context resolution revalidates current catalog membership,
+fetches remote full Markdown via bounded fixed-host GitHub API, or reads a local
+file inside the configured root. Unique legacy keys/relative suffixes resolve
+only within that catalog; unavailable/ambiguous references fail. No global skill
+content cache supplies workflow instructions. Combined content is <=120000 chars,
+local files <=100000 bytes; empty/missing content fails. No clone, tool grant or
+script execution is implied. Runtime verification was not performed.

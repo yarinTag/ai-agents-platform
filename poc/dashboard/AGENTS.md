@@ -163,3 +163,15 @@ The AI creation window can recover the authorized stored chat from ?workflowChat
 Manual Workflow Run now provides an explicit local-server/background option (UI default) and a separate message-queue option. Local mode removes only the broker requirement; it changes neither agent tools nor runtime/governance checks. Errors name unavailable capabilities.
 
 Governed connector resources now distinguish executable availability from a descriptive/connected catalog entry. The chat resource panel shows Available/Unavailable from the server. Telegram Fetch resources requests actual bot chat IDs, has no suggested phantom targets and requires explicit selection/save. Slack lists real-format configured IDs only. This task did not build/run the dashboard.
+
+ChatWorkflow step types preserve optional send_output_of for explicit server-executed channel delivery proposals. No automatic sending occurs from the authoring UI.
+
+Workflow chat catalog types include optional channel_labels (exact-ID-to-display-name map). Destination selectors/chat previews/diagrams display labels while API requests retain canonical IDs.
+
+ChatWorkflow step types carry optional skills:string[]; context catalog includes optional plugin skill metadata. Old stored drafts lacking skills remain compatible.
+
+ChatWorkflow types now support root skills:string[]; optional step skills are legacy compatibility. The workflow builder owns one shared skill selection and all AI steps inherit it.
+
+Workflow chat agent catalog types support provision_on_create. No-agent warnings count the explicit provisioning option as available authoring capacity, while previews distinguish it from an existing execution agent.
+
+The manual workflow agent dropdown now reflects authorized persisted agents, not static role names. A planned dedicated runner is an explicit option only for new workflows; other workflow runners are excluded.

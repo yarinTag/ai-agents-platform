@@ -18,6 +18,12 @@ export function WorkflowChatModal({ onClose, onCreated }: Props) {
     if (active) { if (await model.stop()) onClose(); } else if (!model.submitting) onClose();
   };
   const connectors = context?.catalog?.connectors || [];
+  const agentLabel = (id: string) => {
+    const agent = context?.catalog?.agents.find(item => item.id === id);
+    return agent?.provision_on_create ? text.plannedRunner : agent?.name || id;
+  };
+  const skillLabel = (id: string) => context?.catalog?.skills?.find(skill => skill.id === id)?.name || id;
+  const channelLabel = (connectorId: string, id: string) => connectors.find(c => c.id === connectorId)?.channel_labels?.[id] || id;
   return <Modal open title={<Space><BulbOutlined />{text.title}</Space>} onCancel={() => void close()}
     closable={!model.submitting || active} mask={{ closable: false }} footer={null} width={1120} styles={{ body: { paddingTop: 12 } }}>
     <div dir={dir}>
@@ -69,11 +75,15 @@ export function WorkflowChatModal({ onClose, onCreated }: Props) {
             <Tag>{workflow.cron_expression ? `${text.schedule}: ${workflow.cron_expression}` : text.manual}</Tag>
             <Steps direction="vertical" size="small" style={{ marginTop: 20, marginBottom: 16 }}
               items={workflow.steps.map(step => ({ status: 'wait' as const, title: step.name, description: <>
-                <Typography.Text type="secondary">{context?.catalog?.agents.find(a => a.id === step.agent_id)?.name || step.agent_id}</Typography.Text>
+                <Typography.Text type="secondary">{agentLabel(step.agent_id)}</Typography.Text>
                 {!!step.resources.length && <div dir="ltr">{step.resources.map((r, i) =>
-                  <Tag key={i} style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{[r.repository, r.channel_id, r.tool_name].filter(Boolean).join(' · ')}</Tag>)}</div>}
+                  <Tag key={i} style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{[r.repository, r.channel_id ? channelLabel(r.connector_id, r.channel_id) : null, r.tool_name].filter(Boolean).join(' · ')}</Tag>)}</div>}
               </> }))} />
-            {workflow.destination && <Typography.Paragraph>{text.delivery}: <Typography.Text code>{workflow.destination.channel_id}</Typography.Text></Typography.Paragraph>}
+            <Typography.Paragraph>{text.workflowSkills}: </Typography.Paragraph>
+            {[...new Set([...(workflow.skills || []), ...workflow.steps.flatMap(step => step.skills || [])])].map(id =>
+              <Tag color="purple" key={id} title={id}>{skillLabel(id)}</Tag>)}
+            <Typography.Paragraph type="secondary">{text.skillInheritance}</Typography.Paragraph>
+            {workflow.destination && <Typography.Paragraph>{text.delivery}: <Typography.Text code>{channelLabel(workflow.destination.connector_id, workflow.destination.channel_id)}</Typography.Text></Typography.Paragraph>}
             {!!job?.result?.errors.length && <Alert type="warning" message={text.invalid}
               description={job.result.errors.map((value, index) => <div key={index}>{value}</div>)} style={{ marginBottom: 12 }} />}
             {created ? <Alert type="success" showIcon message={text.created} /> : <>
@@ -85,10 +95,14 @@ export function WorkflowChatModal({ onClose, onCreated }: Props) {
       </div>
       <Collapse ghost style={{ marginTop: 12 }} items={[{ key: 'resources', label: text.resources, children: <>
         <Typography.Paragraph type="secondary">{text.missing}</Typography.Paragraph>
+        {!!context?.catalog?.skills?.length && <div style={{ marginBottom: 12 }}>
+          <Typography.Text strong>{text.skills}: </Typography.Text>
+          {context.catalog.skills.map(skill => <Tag key={skill.id} title={skill.description}>{skill.plugin} / {skill.name}</Tag>)}
+        </div>}
         {connectors.map(connector => <div key={connector.id} style={{ marginBottom: 12 }}>
           <Typography.Text strong>{connector.name}</Typography.Text>{' '}
           <Tag color={connector.execution_supported ? 'success' : 'default'}>{connector.execution_supported ? text.available : text.unavailable}</Tag>
-          {[{ label: text.repositories, items: connector.repositories }, { label: text.channels, items: connector.channels }, { label: text.tools, items: connector.tools }].map(({ label, items }) =>
+          {[{ label: text.repositories, items: connector.repositories }, { label: text.channels, items: connector.channels.map(id => connector.channel_labels?.[id] || id) }, { label: text.tools, items: connector.tools }].map(({ label, items }) =>
             items.length > 0 ? <div key={String(label)}><Typography.Text type="secondary">{String(label)}: </Typography.Text>
               {items.map(value => <Tag key={value}>{value}</Tag>)}</div> : null)}
         </div>)}

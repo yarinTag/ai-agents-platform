@@ -75,6 +75,9 @@ def persist_workflow(req, request, db, workflow_id=None, initially_active=True):
     skills_raw = def_dict.get("skills") or []
     skill_names = [s.get("name", s.get("id", str(s))) if isinstance(s, dict) else str(s) for s in skills_raw]
     steps = def_dict.get("steps") or []
+    for step in steps:
+        if step.get('agent_id') == '__workflow_runner__':
+            step['agent_id'] = runner_agent_id
     cb = def_dict.get("metadata", {}).get("channel_binding") or {}
     channel_info = f"{cb.get('provider')}:{cb.get('channel_id')}" if cb.get("channel_id") else "API/Webhook/Manual"
     cron = req.cron_expression or def_dict.get("trigger", {}).get("cron_expression") or def_dict.get("trigger", {}).get("cron") or "None"
@@ -114,7 +117,8 @@ def persist_workflow(req, request, db, workflow_id=None, initially_active=True):
         )
         db.save_agent(runner_agent)
     except Exception as e:
-        logger.warning(f"Could not auto-create runner agent: {e}")
+        logger.warning("Could not provision dedicated workflow runner")
+        raise HTTPException(503, "Could not provision the dedicated workflow runner. Retry creation after checking agent capacity.") from e
 
     # Inject runner agent ID and status into definition
     def_dict["id"] = wf_id

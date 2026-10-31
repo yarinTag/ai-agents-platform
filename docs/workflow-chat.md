@@ -77,3 +77,55 @@ startup and live inference were not run by the agent under the repository's
 verification restriction. An existing user-triggered job was inspected through a
 read-only SQLite connection to diagnose its successful reply and misleading UI
 banner; that inspection did not run another inference.
+
+Workflow chat catalog now includes organization-scoped configured plugin skills
+(id = canonical source path/URI, key, name, plugin, bounded description). ChatStep
+adds skills:string[] (default [], max20). Validation checks all IDs against the
+current plugin catalog during generation and confirmed creation; native conversion
+preserves per-step skills. Server-only channel actions reject analysis skills.
+No skill contents or credentials are included in the model's authoring catalog.
+
+workflow_skills.py projects only the organization's explicit configured plugin
+source into id/name/key/plugin/description metadata. Git mode uses the existing
+in-memory scanner and exact-tenant GitHub connector credentials; local mode has
+no fallback roots. Context resolution revalidates current catalog membership,
+fetches remote full Markdown via bounded fixed-host GitHub API, or reads a local
+file inside the configured root. Unique legacy keys/relative suffixes resolve
+only within that catalog; unavailable/ambiguous references fail. No global skill
+content cache supplies workflow instructions. Combined content is <=120000 chars,
+local files <=100000 bytes; empty/missing content fails. No clone, tool grant or
+script execution is implied. Runtime verification was not performed.
+
+The last PR-review workflow had omitted the requested tech-backend/skills/senior-architect/SKILL.md reference. It was restored on fetch_open_prs in revision3. Its remote availability/content has not been verified; execution must resolve it uniquely against the current configured source before use. No workflow was run.
+
+Workflow chat adds ChatWorkflow.skills:string[] (default[], max20), the shared
+selection for every AI step. ChatStep.skills remains accepted solely for existing
+jobs/clients. Validation checks both against the current plugin catalog. Native
+conversion deduplicates/promotes all legacy step skills into root skills and omits
+per-step skills. Global skills are allowed alongside channel delivery actions,
+which do not use a model or load these instructions.
+
+## Shared workflow skills (supersedes per-step selection UI)
+All AI steps inherit the deduplicated union of definition.skills and legacy
+steps[*].skills, normalized by skill_inheritance.workflow_skill_ids. Supported
+native entries are string IDs or attached-skill objects with id/location. Missing
+IDs fail explicitly. WorkflowStepRunner resolves these through the organization
+plugin source before model invocation; server channel_action steps skip skill
+loading entirely. Legacy step assignments remain readable but are now shared.
+New authoring writes only workflow-level skills. No execution/tests were run.
+
+## Explicit planned workflow runner
+Workflow chat catalog agents includes reserved `__workflow_runner__`, named
+Dedicated workflow runner, with provision_on_create=true. This is a provisioning
+option, not a persisted/executing agent. Its connector_tools are exactly the current
+department's catalog tool grants; it grants no new connector/resource access.
+Ordinary same-org/department agents remain selectable; other workflow runners
+remain excluded. Unknown model-generated IDs continue to fail validation.
+On confirmed /ai/chat/{job_id}/create, native_definition maps only this reserved
+ID to wf-agent-{new_workflow_id}; shared persist_workflow creates that real scoped
+runner before saving the inactive workflow. Provisioning failure now returns503
+instead of saving a workflow without its runner. Existing user/grant/resource
+revalidation and idempotency checks remain. Generation with validation errors uses
+a server-owned corrective message instead of a model's misleading ready claim.
+
+Existing invalid drafts keep their original errors; send a follow-up selecting the dedicated workflow runner to generate an updated proposal. No saved draft is automatically marked valid or created by this correction. No tests/build/app startup/live inference was run.

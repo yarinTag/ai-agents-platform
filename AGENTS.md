@@ -166,3 +166,11 @@ Manual workflow execution now offers explicit local-server background dispatch a
 Production workflow steps now use server-owned tool scopes for GitHub.com read operations and exact-ID Telegram/Slack sends through Direct API workers. Each actual call intersects its frozen step resources with current tenant/department/agent permissions, user status, budget and run lifetime. Connector-backed workflows (including analysis steps and reviews) have no shell/file/delegation tools; Playground and workflow chat receive no live connectors. Successful audited receipts are required for completion. The known exact legacy preview sentence is removed from production step input without rewriting saved workflow revisions. See [connector execution](docs/connector-execution.md) and integrations/runtime/workflow guides. No tests, live connector/model calls or message sends were executed.
 
 Optional completion delivery is separate from required workflow work: invalid Telegram/Slack targets are blocked and surfaced as notification_error warnings, while authorized data steps can continue. Explicit channel-send steps remain required and fail closed.
+
+Explicit workflow channel delivery uses params.channel_action (send_channel_message, connector_id, channel_id, source_step) and the governed tool executor rather than model-selected calls. Chat proposals expose send_output_of. See workflow/API guides; Playground performs no sends.
+
+AI workflow chat now catalogs current organization plugin skills, validates and preserves ChatStep.skills, and shows selected skills in preview. Workflow execution resolves full skill instructions within the organization source, without global skill-cache fallback. See plugin/API/workflow guides.
+
+Workflow Skills is now a single shared selection inherited by every AI step. Legacy step skills are promoted/deduplicated; deterministic delivery actions do not load skills. AI chat and the visual builder save shared root skills. See workflow/API/dashboard component guides.
+
+Workflow AI chat exposes an explicit planned dedicated-runner option, materialized only during confirmed creation. It does not require an Office agent or reuse other workflow runners. Current department/resource grants still govern all steps; unknown IDs are rejected.

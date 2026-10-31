@@ -123,7 +123,7 @@ The `src/components/` directory provides modular, reusable, and typed React comp
 
 Large components are composed from domain state hooks and presentation panels. Public component names and existing props remain compatible; shared prop contracts live in sibling `*Types.ts` modules. Views import hook symbols as types when they only need `ReturnType<typeof hook>`, avoiding a runtime dependency back into their state owner.
 
-* Workflow builder: `CreateWorkflowModal` composes `useWorkflowBuilder` with `WorkflowGeneratorPanel`, `WorkflowDiagramPanel`, `WorkflowStepsPanel` and `WorkflowYamlPanel`. The hook owns loading, all draft state, YAML conversion, skill creation and save actions. `workflowBuilderTypes.ts` owns `WorkflowStep`, `AttachedSkill` and modal props; the legacy modal continues to re-export its two public types. `workflowBuilderDefaults.ts` owns the existing agent choices. The initial extraction preserves endpoint contracts; the incoming native edit/revision contract is integrated below.
+* Workflow builder: `CreateWorkflowModal` composes `useWorkflowBuilder` with `WorkflowGeneratorPanel`, `WorkflowDiagramPanel`, `WorkflowStepsPanel` and `WorkflowYamlPanel`. The hook owns loading, all draft state, YAML conversion, skill creation and save actions. `workflowBuilderTypes.ts` owns `WorkflowStep`, `AttachedSkill` and modal props; the legacy modal continues to re-export its two public types. Agent choices now load from the authorized agents API; the former workflowBuilderDefaults.ts static choices were removed. The initial extraction preserves endpoint contracts; the incoming native edit/revision contract is integrated below.
 * Workflow graph: `WorkflowCanvasGraph` retains zoom, DAG depth calculation and selected-node state. `WorkflowStepInspector` displays selected-step details and calls the parent's visibility setter. Graph props/step/skill types live in `workflowGraphTypes.ts`; legacy graph exports of step/skill types remain available.
 * Agent mini-chat: `useAgentChat` owns session/history loading, polling cleanup, message/task state and approval/send/session actions. `AgentChatContent` renders conversation/task content, while `AgentMiniChatDrawer` renders navigation, session selection and composer. The null-agent guard remains in the public drawer; derived supervisor state tolerates a null agent inside the hook. Prompt presets remain owned by the drawer. Props live in `agentChatTypes.ts`.
 * Desk/sidebar: `useAgentDesk` owns forms, resource loading and dispatch/configuration actions; it always returns a model, derives no agent tasks when selection is null, and guards dispatch/save actions without an agent. `AgentDeskDrawer` owns tab presentation and the null-agent rendering guard. `useOfficeSidebar` owns department choices, task filtering and dispatch/deletion actions; `OfficeRightSidebar` renders their controls. Contracts live in `agentDeskTypes.ts` and `officeSidebarTypes.ts` respectively.
@@ -166,3 +166,26 @@ useWorkflowChat owns context reload/cancellation, private job polling (1.5s; tra
 Chat reconnect correction: useWorkflowChat separates transient connection errors from action/model errors, clears connection errors after successful reads, and reports network/timeout/HTTP/422 details instead of a generic banner. workflowChat URL query IDs recover authorized stored messages/result after refresh. Sending is blocked while an unresolved recovery is pending; Retry reconnects, and Close remains available. The model label uses the submitted job model when a job exists.
 
 WorkflowChatModal's resource list adds Available/Unavailable status from connectors[].execution_supported. A connected integration without a supported granted execution tool is shown unavailable; this does not alter credentials or grants.
+
+Workflow destination selectors now use channel_labels for option labels and retain exact IDs as option values. useWorkflowResources exposes getChannelLabel(provider,id); builder persists channel_name independently of channel_id. Diagram nodes and final publish caption prefer channel_name. Workflow chat previews/resource lists resolve labels by connector_id+channel_id from the authorized catalog. Unknown labels fall back to IDs. Delivery payloads and governance scopes never resolve labels as identifiers.
+
+WorkflowChatModal previews equipped skill names per step and lists organization plugin skills in the resource panel. It preserves exact skills IDs through proposal/confirmed creation.
+
+WorkflowStepsPanel replaces Connected Skills/Step Skills with one Workflow Skills
+section, describing inheritance and direct-action exclusion. No per-step selector
+remains. workflowSkillSelection.collectWorkflowSkills deduplicates root+legacy
+step selections for saved definitions, generation and YAML import. Builder saves
+root AttachedSkill objects and strips per-step skills on visual export, allowing
+removal from the shared selection to take effect. Plugin attachments prefer their
+canonical path IDs. AI chat previews show one shared skill list, including old
+step assignments. Existing raw YAML remains readable without automatic DB edits.
+
+WorkflowChatModal renders planned agent entries using the localized dedicated-runner-on-confirmation label. It preserves the reserved ID in authoring payloads; backend creation replaces it with the real runner ID.
+
+Workflow manual agent selection uses getAgents() rather than a static role list.
+useWorkflowResources filters to the selected department or org-wide agents and
+excludes other workflows' runners; an existing workflow may select its own runner.
+A new workflow exposes the explicitly planned __workflow_runner__ option. Default
+new steps select that option, not invented role IDs. Refresh clears stale options;
+loading failure blocks saving via the existing resource error path, with no fake
+agent fallback. Changing department/workflow reloads the source. No live checks.

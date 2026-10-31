@@ -273,3 +273,49 @@ def test_manual_channel_test_rejects_aliases_foreign_connectors_and_stale_admin(
         conn.execute("UPDATE users SET role='MEMBER' WHERE id='operator'")
     payload['connector_id'] = 'telegram-secure'
     assert client.post('/api/v1/mcp/test-channel-message', json=payload).status_code == 403
+
+
+def test_channel_action_cannot_change_a_scoped_destination(database):
+    from workflows.channel_action import execute_channel_action
+    _, task = scoped_run(database, channel=True)
+    step = WorkflowParser.from_dict({'name': 'Delivery', 'steps': [{'key': 'send',
+        'depends_on': ['summary'], 'params': {'channel_action': {
+            'action': 'send_channel_message', 'connector_id': 'telegram-secure',
+            'channel_id': '-1009999999999', 'source_step': 'summary'}}}]}).steps[0]
+    with pytest.raises(ToolAccessError, match='exactly one authorized'):
+        execute_channel_action(database, step, task, {'summary': 'Summary'})
+    assert database.list_mcp_tool_calls(task_id=task.run_id) == []
+
+
+def test_channel_action_requires_explicit_output_dependency_and_preserves_long_report():
+    from workflows.channel_action import action_configuration, delivery_text
+    step = WorkflowParser.from_dict({'name': 'Delivery', 'steps': [{'key': 'send',
+        'params': {'channel_action': {'action': 'send_channel_message',
+            'connector_id': 'telegram', 'channel_id': '-1001234567890',
+            'source_step': 'summary'}}}]}).steps[0]
+    with pytest.raises(ValueError, match='explicit step dependency'):
+        action_configuration(step)
+    step.depends_on = ['summary']
+    action = action_configuration(step)
+    with pytest.raises(ValueError, match='nonempty output'):
+        delivery_text(action, {})
+    text = delivery_text(action, {'summary': 'x' * 5000, 'unrelated': 'ignore'})
+    assert text == 'x' * 5000
+
+
+@pytest.mark.parametrize('text', ['עברית 🚀\n' * 1200, 'x' * 60000, 'a\n\nb ' * 2000])
+def test_report_parts_preserve_all_text_within_telegram_limits(text):
+    from integrations.message_parts import message_parts
+    parts = message_parts(text)
+    assert len(parts) > 1
+    reconstructed = ''.join(part.split('\n', 1)[1] for part in parts)
+    assert reconstructed == text
+    assert all(len(part.encode('utf-16-le')) // 2 <= 3500 for part in parts)
+    assert all(part.startswith(f'[{index}/{len(parts)}]\n') for index, part in enumerate(parts, 1))
+
+
+def test_report_size_limit_fails_without_silently_cutting_text():
+    from integrations.message_parts import message_parts
+    assert message_parts('Short report') == ['Short report']
+    with pytest.raises(ToolAccessError, match='No text was sent or truncated'):
+        message_parts('x' * 60001)

@@ -17,7 +17,7 @@ class RepositoryInput(BaseModel):
 class MessageInput(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
     channel_id: str = Field(min_length=1, max_length=200)
-    text: str = Field(min_length=1, max_length=3500)
+    text: str = Field(min_length=1, max_length=60000)
 
 
 OPERATIONS = {

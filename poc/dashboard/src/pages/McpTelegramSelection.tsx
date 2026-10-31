@@ -157,6 +157,7 @@ export const McpTelegramSelection = (model: Pick<
                     return (
                       <Tag.CheckableTag
                         key={chatName}
+                        title={chatName}
                         checked={isChecked}
                         onChange={(checked) => {
                           if (checked) {
@@ -174,7 +175,7 @@ export const McpTelegramSelection = (model: Pick<
                           border: '1px solid #30363d',
                         }}
                       >
-                        {chat.name && chat.name !== chatName ? `${chat.name} · ${chatName}` : chatName}
+                        {chat.name || chatName}
                       </Tag.CheckableTag>
                     );
                   })}

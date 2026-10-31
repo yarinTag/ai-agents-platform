@@ -4,7 +4,7 @@ from .provider_http import request_json
 from .tool_definitions import ToolAccessError, valid_channel
 
 
-def send_message(connector, channel_id, text, authorize):
+def _send_part(connector, channel_id, text, authorize):
     provider = connector.provider.lower()
     if not valid_channel(provider, channel_id):
         raise ToolAccessError('Configure an exact Telegram chat ID/@channel username or Slack channel ID. Display names are not delivery IDs.')
@@ -41,3 +41,25 @@ def send_message(connector, channel_id, text, authorize):
             raise ToolAccessError('Slack delivery receipt is incomplete or has a different target; do not resend automatically.')
     return {'delivery': 'delivered', 'channel_id': channel_id, 'delivered_channel_id': str(actual),
             'provider_message_id': str(message_id)}
+
+
+def send_message(connector, channel_id, text, authorize):
+    """Send one audited logical report, acknowledging every lossless numbered part."""
+    import time
+    from .message_parts import message_parts
+    parts = message_parts(text)
+    receipts = []
+    try:
+        for index, part in enumerate(parts):
+            if index:
+                # Pace this report conservatively; concurrent runs may still be rate limited.
+                time.sleep(3.1)
+            receipts.append(_send_part(connector, channel_id, part, authorize))
+    except ToolAccessError as exc:
+        raise ToolAccessError(f'{exc} Acknowledged {len(receipts)} of {len(parts)} report parts. '
+                              'Remaining delivery stopped; no automatic resend was made.') from exc
+    except Exception as exc:
+        raise ToolAccessError(f'Delivery stopped; acknowledged {len(receipts)} of {len(parts)} report parts. '
+                              'Current part outcome may be unknown. No automatic resend was made.') from exc
+    return {**receipts[0], 'parts_delivered': len(receipts),
+            'provider_message_ids': [receipt['provider_message_id'] for receipt in receipts]}

@@ -65,10 +65,12 @@ def deliver_notification(db, workflow, execution_id, text):
     try:
         def authorize():
             notification_target(db, workflow, execution_id)
-        output = send_message(connector, channel, text[:3500], authorize)
+        output = send_message(connector, channel, text, authorize)
         db.update_mcp_tool_call(identifier, 'COMPLETED', result=json.dumps(output), completed_at=datetime.now().isoformat())
         return output
     except Exception as exc:
-        db.update_mcp_tool_call(identifier, 'FAILED', error='Governed notification delivery failed or is unknown.',
+        # ToolAccessError contains fixed, credential-safe policy/provider diagnostics.
+        detail = str(exc) if isinstance(exc, ToolAccessError) else 'Notification delivery failed or is unknown. No automatic resend was made.'
+        db.update_mcp_tool_call(identifier, 'FAILED', error=detail,
                                completed_at=datetime.now().isoformat())
-        raise ToolAccessError('Notification delivery failed or is unknown. No automatic resend was made.') from exc
+        raise ToolAccessError(detail) from exc

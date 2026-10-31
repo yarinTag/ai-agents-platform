@@ -224,3 +224,41 @@ WorkflowExecutionResponse adds nullable notification_error. Authenticated/scoped
 Manual channel test contract: POST /api/v1/mcp/test-channel-message accepts provider (telegram|slack), optional connector_id, exact channel_id and message (1..3500). It requires current persisted ACTIVE ORG_ADMIN with matching JWT tenant. Missing connector_id resolves only one tenant connector; ambiguity fails. Only CONNECTED, same-tenant/provider connectors and saved exact allowlisted destinations pass. Uses scoped_channels acknowledgement receipts (delivery, delivered_channel_id, provider_message_id), no alias fallback, redirect or automatic retry. Message audits hash content; no agent means no synthetic audit actor. Telegram discovery returns private first/last names where no title/username exists, and configured channel_labels as presentation only.
 
 Manual channel-test errors now preserve fixed safe Telegram rejection hints from provider_http instead of only HTTP status; unknown descriptions remain generic. No automatic retry or target migration is performed.
+
+Workflow chat ChatStep adds optional send_output_of (1..80-character source key).
+It requires that source in depends_on and exactly one channel-only resource.
+Native conversion emits params.channel_action for governed server delivery; this
+field is excluded from the native step top level. Current catalog/grant checks
+still apply and user-confirmed creation remains required.
+
+Workflow chat catalog connectors add channel_labels mapping only currently authorized channel IDs to bounded configured display labels (<=200 chars, ID fallback). Native destination metadata carries channel_name from this map and preserves channel_id unchanged. Names do not affect authorization or transport.
+
+Workflow chat catalog now includes organization-scoped configured plugin skills
+(id = canonical source path/URI, key, name, plugin, bounded description). ChatStep
+adds skills:string[] (default [], max20). Validation checks all IDs against the
+current plugin catalog during generation and confirmed creation; native conversion
+preserves per-step skills. Server-only channel actions reject analysis skills.
+No skill contents or credentials are included in the model's authoring catalog.
+
+Workflow chat adds ChatWorkflow.skills:string[] (default[], max20), the shared
+selection for every AI step. ChatStep.skills remains accepted solely for existing
+jobs/clients. Validation checks both against the current plugin catalog. Native
+conversion deduplicates/promotes all legacy step skills into root skills and omits
+per-step skills. Global skills are allowed alongside channel delivery actions,
+which do not use a model or load these instructions.
+
+## Explicit planned workflow runner
+Workflow chat catalog agents includes reserved `__workflow_runner__`, named
+Dedicated workflow runner, with provision_on_create=true. This is a provisioning
+option, not a persisted/executing agent. Its connector_tools are exactly the current
+department's catalog tool grants; it grants no new connector/resource access.
+Ordinary same-org/department agents remain selectable; other workflow runners
+remain excluded. Unknown model-generated IDs continue to fail validation.
+On confirmed /ai/chat/{job_id}/create, native_definition maps only this reserved
+ID to wf-agent-{new_workflow_id}; shared persist_workflow creates that real scoped
+runner before saving the inactive workflow. Provisioning failure now returns503
+instead of saving a workflow without its runner. Existing user/grant/resource
+revalidation and idempotency checks remain. Generation with validation errors uses
+a server-owned corrective message instead of a model's misleading ready claim.
+
+Manual POST workflow creation also resolves explicit __workflow_runner__ step assignments to its own generated wf-agent-{workflow_id} before persistence/provisioning. It creates no arbitrary role-based agent from dropdown labels. Other agent API behavior is unchanged.

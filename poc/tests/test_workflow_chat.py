@@ -139,3 +139,103 @@ def test_usage_contributes_to_department_spend(setup):
         conn.execute("UPDATE workflow_builder_jobs SET cost_usd=0.25 WHERE id='chat-ready-request'")
         conn.commit()
     assert db.get_department_monthly_spend('dept-chat') == pytest.approx(0.25)
+
+
+def test_plugin_skill_is_catalogued_preserved_and_revalidated(setup, tmp_path):
+    from plugins.workflow_skills import skill_catalog, skill_context
+    from backend.api.workflow_chat_policy import native_definition
+    db, identity, _ = setup
+    root = tmp_path / 'plugins'
+    folder = root / 'tech-backend' / 'skills' / 'senior-architect'
+    folder.mkdir(parents=True)
+    source = folder / 'SKILL.md'
+    source.write_text('# Senior Architect\nReview system architecture carefully.', encoding='utf-8')
+    db.update_organization(id='org-chat', plugins_source_mode='local', plugins_local_path=str(root))
+    resources = catalog(db, identity, 'dept-chat')
+    identifier = str(source)
+    assert identifier in {skill['id'] for skill in resources['skills']}
+    candidate = ChatWorkflow.model_validate({'name': 'Review', 'steps': [{
+        'key': 'review', 'name': 'Review', 'agent_id': 'chat-agent',
+        'prompt_template': 'Review architecture.', 'skills': [identifier]}]})
+    assert validate_candidate(candidate, resources) == []
+    assert native_definition(candidate, resources)['skills'] == [identifier]
+    assert 'skills' not in native_definition(candidate, resources)['steps'][0]
+    assert 'Review system architecture carefully.' in skill_context(db, 'org-chat', [identifier])
+    # Legacy relative references resolve only when unique inside the current source.
+    assert 'Senior Architect' in skill_context(db, 'org-chat', ['tech-backend/skills/senior-architect/SKILL.md'])
+    db.update_organization(id='org-chat', plugins_local_path='')
+    assert skill_catalog(db, 'org-chat') == []
+    with pytest.raises(ValueError, match='unavailable or ambiguous'):
+        skill_context(db, 'org-chat', [identifier])
+    assert any('skill outside' in error for error in validate_candidate(candidate, catalog(db, identity, 'dept-chat')))
+
+
+def test_workflow_skill_selection_is_shared_and_legacy_assignments_are_promoted():
+    from workflows.skill_inheritance import workflow_skill_ids
+    from backend.api.workflow_chat_policy import native_definition
+    candidate = ChatWorkflow.model_validate({'name': 'Shared skills', 'skills': ['architecture'], 'steps': [
+        {'key': 'review', 'name': 'Review', 'agent_id': 'chat-agent', 'prompt_template': 'Review.',
+         'skills': ['security', 'architecture']},
+        {'key': 'summarize', 'name': 'Summarize', 'agent_id': 'chat-agent', 'prompt_template': 'Summarize.'}]})
+    native = native_definition(candidate, {'connectors': []})
+    assert native['skills'] == ['architecture', 'security']
+    assert all('skills' not in step for step in native['steps'])
+    assert workflow_skill_ids(native) == ['architecture', 'security']
+    legacy = {'skills': [{'id': 'architecture', 'name': 'Architecture'}],
+              'steps': [{'skills': ['security', 'architecture']}, {'skills': ['testing']}]}
+    assert workflow_skill_ids(legacy) == ['architecture', 'security', 'testing']
+
+
+def test_chat_can_plan_and_create_its_own_runner_without_office_agents(setup):
+    from backend.api.workflow_chat_policy import PLANNED_RUNNER_ID
+    db, identity, client = setup
+    db.delete_agent('chat-agent')
+    resources = catalog(db, identity, 'dept-chat')
+    assert len(resources['agents']) == 1
+    planned = resources['agents'][0]
+    assert planned['id'] == PLANNED_RUNNER_ID and planned['provision_on_create']
+    assert planned['connector_tools']['github'] == ['get_repository_activity']
+    assert db.get_agent(PLANNED_RUNNER_ID) is None
+    value = candidate()
+    value.steps[0].agent_id = PLANNED_RUNNER_ID
+    assert validate_candidate(value, resources) == []
+    seed_job(db, value)
+    response = client.post('/api/v1/workflows/ai/chat/chat-ready-request/create')
+    assert response.status_code == 200, response.text
+    saved = response.json()
+    runner = db.get_agent(saved['runner_agent_id'])
+    assert runner.is_workflow_agent and runner.organization_id == 'org-chat'
+    assert runner.department_id == 'dept-chat'
+    definition = json.loads(db.get_workflow(saved['id']).definition_json)
+    assert definition['steps'][0]['agent_id'] == runner.id
+    assert PLANNED_RUNNER_ID not in json.dumps(definition)
+    assert not saved['is_active']
+
+
+def test_planned_runner_does_not_allow_invented_ids_or_revoked_tools(setup):
+    from backend.api.workflow_chat_policy import PLANNED_RUNNER_ID
+    db, identity, client = setup
+    value = candidate()
+    value.steps[0].agent_id = 'invented-fetcher'
+    assert any('not available' in error for error in validate_candidate(value, catalog(db, identity, 'dept-chat')))
+    value.steps[0].agent_id = PLANNED_RUNNER_ID
+    seed_job(db, value)
+    db.revoke_department_mcp_access('dept-chat', 'github')
+    assert client.post('/api/v1/workflows/ai/chat/chat-ready-request/create').status_code == 422
+    assert db.list_workflows(organization_id='org-chat') == []
+
+
+def test_manual_creation_binds_planned_runner_to_real_agent(setup):
+    from backend.api.workflows_crud import router as crud_router
+    db, _, client = setup
+    client.app.include_router(crud_router, prefix='/api/v1/workflows', dependencies=[Depends(authenticate_request)])
+    response = client.post('/api/v1/workflows', json={
+        'name': 'Manual runner', 'department_id': 'dept-chat', 'webhook_enabled': False,
+        'definition_json': json.dumps({'name': 'Manual runner', 'steps': [{
+            'key': 'work', 'agent_id': '__workflow_runner__', 'prompt_template': 'Summarize.'}]})})
+    assert response.status_code == 201, response.text
+    saved = db.get_workflow(response.json()['id'])
+    definition = json.loads(saved.definition_json)
+    assert definition['steps'][0]['agent_id'] == definition['runner_agent_id']
+    runner = db.get_agent(definition['runner_agent_id'])
+    assert runner.is_workflow_agent and runner.department_id == 'dept-chat'

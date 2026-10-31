@@ -28,6 +28,8 @@ class ChatStep(StrictModel):
     depends_on: list[str] = Field(default_factory=list, max_length=40)
     resources: list[ResourceRef] = Field(default_factory=list, max_length=40)
     timeout_seconds: int = Field(default=300, ge=10, le=1800)
+    skills: list[str] = Field(default_factory=list, max_length=20)
+    send_output_of: str | None = Field(default=None, min_length=1, max_length=80)
 
 
 class Destination(StrictModel):
@@ -39,6 +41,7 @@ class ChatWorkflow(StrictModel):
     name: str = Field(min_length=1, max_length=150)
     description: str = Field(default='', max_length=4000)
     steps: list[ChatStep] = Field(min_length=1, max_length=40)
+    skills: list[str] = Field(default_factory=list, max_length=20)
     destination: Destination | None = None
     cron_expression: str | None = Field(default=None, max_length=100)
 

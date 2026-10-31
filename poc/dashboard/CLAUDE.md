@@ -213,3 +213,15 @@ Connector resource selection uses real discovered IDs and explicit selection/sav
 Installed integration destination tests send exactly one explicit message via connector_id. Keep connection checks separate from message delivery; discovered names persist in channel_labels while allowlists retain canonical IDs.
 
 Connector channel-label persistence reads discoveredResources through the hook state contract; preserve this dependency when changing save logic. Missing state previously threw before the save request. No runtime checks were performed.
+
+Workflow chat step payloads may include send_output_of; preserve it through preview and confirmed creation so explicit channel actions remain deterministic.
+
+Keep channel display names distinct from delivery identities: option label uses channel_labels, value uses channel ID; workflow metadata.channel_name is presentation only. No runtime verification was performed.
+
+AI workflow previews show selected plugin skills; saved proposal payloads retain canonical skill IDs, distinct from display names. Source review only, no build/typecheck executed.
+
+Use one Workflow Skills selection; never require assigning it to each step. Promote legacy assignments on load/import and strip per-step fields on visual export. Tests/build/typecheck remain unrun under current instructions.
+
+Planned workflow runners are labeled as created on confirmation, not existing agents. Unknown agent IDs stay invalid; previews must retain backend validation errors. Runtime verification remains unauthorized.
+
+Never populate workflow agent selectors from static/demo roles. Use authorized live records with department/current-workflow filtering and distinguish planned provisioning from existing agents. No runtime checks performed.

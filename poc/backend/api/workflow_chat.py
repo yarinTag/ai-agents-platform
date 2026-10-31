@@ -143,7 +143,8 @@ def generate(db, runtime, identity, job_id):
         else:
             reply = parse_reply(inference.get('output'))
             errors = validate_candidate(reply.workflow, resources) if reply.workflow else []
-            result = {'message': reply.message, 'workflow': reply.workflow.model_dump() if reply.workflow else None,
+            message = reply.message if not errors else ('הטיוטה דורשת תיקון לפני היצירה. הפרטים מופיעים בתצוגה המקדימה.' if payload.locale == 'he' else 'This draft needs corrections before it can be created. See the details in the preview.')
+            result = {'message': message, 'workflow': reply.workflow.model_dump() if reply.workflow else None,
                 'errors': errors, 'ready': bool(reply.workflow) and not errors}
     except HTTPException as exc:
         error = str(exc.detail)
@@ -205,7 +206,7 @@ def create_from_chat(job_id: str, request: Request, db=Depends(get_db_manager)):
             raise HTTPException(404, 'The created workflow is no longer available in this department.')
         response = _workflow_to_response(existing)
     else:
-        definition = native_definition(candidate, resources)
+        definition = native_definition(candidate, resources, runner_agent_id=f"wf-agent-{workflow_id}")
         payload = WorkflowCreateRequest(name=candidate.name, description=candidate.description,
             department_id=row['department_id'], definition_json=json.dumps(definition),
             cron_expression=candidate.cron_expression, webhook_enabled=False)

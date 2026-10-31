@@ -104,3 +104,9 @@ workflowRun EN/HE adds the separate optional-delivery warning label for executio
 `connectorResources.ts` owns English/Hebrew chat-ID discovery labels, target input guidance and invalid delivery-target validation messages.
 
 connectorResources also supplies Find chats, Send test message, Check connection and save-before-testing guidance in English/Hebrew.
+
+workflowChat supplies the plugin-skills resource label in English/Hebrew.
+
+workflowChat includes Workflow Skills and inheritance/direct-action guidance in English/Hebrew, shared by the builder and AI preview.
+
+workflowChat plannedRunner describes dedicated workflow runner provisioning on confirmation in English/Hebrew.

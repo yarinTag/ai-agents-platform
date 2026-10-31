@@ -134,3 +134,19 @@ Manual channel testing uses exact saved tenant connector/allowlist checks and pe
 Telegram provider rejection diagnostics are fixed allowlisted messages. Never expose raw response bodies or token-bearing endpoint paths when reporting channel-test errors.
 
 Bot-to-bot and conversation-not-started Telegram rejections have separate safe setup hints; diagnose the saved receiving target independently of the sender token. No live calls were performed.
+
+Notification adapter safe ToolAccessError details must survive audit and execution-warning persistence; unexpected exceptions remain redacted. Historical generic failures do not establish provider rejection versus uncertain outcome.
+
+Explicit workflow channel actions deliver predecessor output through the governed executor, without model inference. Preserve scoped checks and receipt requirements. Chat generation may specify send_output_of; validation requires an explicit source dependency and one channel resource.
+
+Workflow chat channel_labels is a presentation projection limited to authorized IDs, with no credentials; never accept a label as delivery authorization or replace canonical channel_id with it.
+
+Workflow skill injection passes the workflow organization to get_skill_context. Full skill contents resolve against current configured plugin source; missing skills fail rather than silently dropping an instruction. No runtime verification performed.
+
+Workflow skills are shared at the root, inherited by all AI steps; preserve legacy step assignments through promotion. Deterministic channel actions skip skill content entirely. No runtime verification was performed.
+
+Workflow chat may plan __workflow_runner__, which is materialized as a real tenant/department-scoped runner only on explicit creation. Do not treat planned agents as existing runtime records, bypass current grants, or persist the sentinel ID. Runner provisioning failure is503 and prevents workflow persistence.
+
+Both AI and manual new-workflow authoring may explicitly select the planned runner; saved step assignments must reference the actual generated runner ID. Runtime creation based on inferred missing capabilities is not implemented by this UI correction.
+
+Governed channel sends and workflow notifications share lossless bounded multipart delivery. Preserve per-part authorization, aggregate acknowledged receipts and failed/unknown no-retry claims. No live verification performed.

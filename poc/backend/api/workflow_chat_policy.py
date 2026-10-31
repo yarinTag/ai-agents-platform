@@ -6,6 +6,8 @@ from integrations.tool_definitions import OPERATIONS, ensure_tools, require_cred
 from .workflow_chat_models import ChatWorkflow
 from integrations.tool_scopes import agent_tool_allowed
 
+PLANNED_RUNNER_ID = "__workflow_runner__"
+
 
 def workspace(db, claims, department_id=None):
     user = db.get_user(claims.get('sub')) if claims else None
@@ -50,8 +52,14 @@ def catalog(db, claims, department_id):
         executable = bool(tools) and configured and bool(repositories if connector.provider.lower() == 'github' else channels)
         connectors.append({'id': connector.id, 'name': connector.name, 'provider': connector.provider,
             'tools': sorted(tools), 'execution_supported': executable,
-            'repositories': repositories, 'channels': channels})
-    return {'agents': agents, 'connectors': connectors,
+            'repositories': repositories, 'channels': channels,
+            'channel_labels': {identifier: str(config.get('channel_labels', {}).get(identifier) or identifier)[:200]
+                               for identifier in channels}})
+    agents.append({'id': PLANNED_RUNNER_ID, 'name': 'Dedicated workflow runner',
+        'provision_on_create': True,
+        'connector_tools': {connector['id']: connector['tools'] for connector in connectors}})
+    from plugins.workflow_skills import skill_catalog
+    return {'agents': agents, 'connectors': connectors, 'skills': skill_catalog(db, user.organization_id),
         'note': 'Only these configured resource IDs are authorized. Discovery does not grant access. '
                 'Only implemented and granted runtime tools are listed. A connected catalog entry alone is not executable. '
                 'Channel display-name aliases are excluded; exact delivery IDs must be configured. '
@@ -73,7 +81,17 @@ def validate_candidate(candidate, resources):
             value = getattr(ref, field, None)
             if value and value not in connector[group]:
                 errors.append(f'{field} {value} is not allowed on {ref.connector_id}.')
+    approved_skills = {skill['id'] for skill in resources.get('skills', [])}
+    if set(candidate.skills) - approved_skills:
+        errors.append('Workflow selects a skill outside the configured plugin catalog.')
     for step in candidate.steps:
+        if set(step.skills) - approved_skills:
+            errors.append(f'Step {step.key} selects a skill outside the configured plugin catalog.')
+        if step.send_output_of:
+            if step.send_output_of not in step.depends_on or len(step.resources) != 1:
+                errors.append('A delivery step needs one explicit channel resource and its source as a dependency.')
+            elif not step.resources[0].channel_id or step.resources[0].repository:
+                errors.append('A delivery step must reference only its destination channel.')
         if any(marker in step.prompt_template.casefold() for marker in
                ('inactive preview', 'do not claim execution', 'you have no tools')):
             errors.append(f'Step {step.key} contains draft-only instructions. Remove them from its execution prompt.')
@@ -112,13 +130,20 @@ def validate_candidate(candidate, resources):
     return errors
 
 
-def native_definition(candidate: ChatWorkflow, resources):
+def native_definition(candidate: ChatWorkflow, resources, runner_agent_id=None):
     connectors = {c['id']: c for c in resources['connectors']}
     steps = []
     for step in candidate.steps:
-        data = step.model_dump(exclude={'resources'})
+        data = step.model_dump(exclude={'resources', 'send_output_of', 'skills'})
+        if step.agent_id == PLANNED_RUNNER_ID and runner_agent_id:
+            data['agent_id'] = runner_agent_id
         data['mcp_servers'] = sorted({r.connector_id for r in step.resources})
         data['params'] = {'authorized_resources': [r.model_dump(exclude_none=True) for r in step.resources]}
+        if step.send_output_of and len(step.resources) == 1:
+            ref = step.resources[0]
+            data['params']['channel_action'] = {'action': 'send_channel_message',
+                'connector_id': ref.connector_id, 'channel_id': ref.channel_id,
+                'source_step': step.send_output_of}
         # Carry exact IDs into executable instructions, not just display metadata.
         if step.resources:
             data['prompt_template'] += '\nUse only these configured resources: ' + json.dumps(data['params']['authorized_resources'])
@@ -129,7 +154,8 @@ def native_definition(candidate: ChatWorkflow, resources):
         connector = connectors.get(destination.connector_id, {})
         metadata['channel_binding'] = {'provider': connector.get('provider', ''),
             'connector_id': destination.connector_id, 'channel_id': destination.channel_id,
-            'channel_name': destination.channel_id, 'trigger_enabled': False, 'notify_mode': 'ON_COMPLETE'}
-    return {'name': candidate.name, 'description': candidate.description, 'steps': steps,
+            'channel_name': connector.get('channel_labels', {}).get(destination.channel_id, destination.channel_id), 'trigger_enabled': False, 'notify_mode': 'ON_COMPLETE'}
+    selected_skills = list(dict.fromkeys([*candidate.skills, *(value for step in candidate.steps for value in step.skills)]))
+    return {'name': candidate.name, 'description': candidate.description, 'steps': steps, 'skills': selected_skills,
         'mcp_servers': sorted({value for step in steps for value in step['mcp_servers']}),
         'cron_expression': candidate.cron_expression, 'webhook_enabled': False, 'metadata': metadata}

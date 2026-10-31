@@ -32,7 +32,6 @@ class WorkflowNotifier:
         if previous:
             return
         output = list(outputs.values())[-1] if outputs else ""
-        output = output[:2450] + "...\n(truncated)" if len(output) > 2500 else output
         template = binding.get("message_template")
         if template:
             text = template.replace("{{workflow_name}}", workflow.name).replace("{{status}}", status)

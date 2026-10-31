@@ -69,7 +69,7 @@ export const WorkflowCanvasGraph: React.FC<WorkflowCanvasGraphProps> = ({
 
   const isTelegram = channelBinding?.provider === 'telegram';
   const isSlack = channelBinding?.provider === 'slack';
-  const channelName = channelBinding?.channel_id || 'Hermes_test';
+  const channelName = channelBinding?.channel_name || channelBinding?.channel_id || '—';
 
   return (
     <div
@@ -438,7 +438,7 @@ export const WorkflowCanvasGraph: React.FC<WorkflowCanvasGraphProps> = ({
             <div style={{ background: '#090d13', borderRadius: '8px', padding: '8px 10px', marginTop: '8px', border: '1px solid #30363d' }}>
               <div style={{ fontSize: '11px', color: '#8b949e' }}>Delivery Destination:</div>
               <div style={{ fontSize: '12px', color: '#34d399', fontWeight: 700 }}>
-                {channelBinding && channelBinding.channel_id ? `Publish to #${channelBinding.channel_id}` : 'Platform Audit & Sandbox Log'}
+                {channelBinding && channelBinding.channel_id ? `Publish to ${channelName}` : 'Platform Audit & Sandbox Log'}
               </div>
               <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '4px' }}>
                 Mode: {channelBinding?.notify_mode || 'ON_COMPLETE'}

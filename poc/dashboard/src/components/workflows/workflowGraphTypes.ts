@@ -23,6 +23,7 @@ export interface WorkflowCanvasGraphProps {
   channelBinding?: {
     provider?: string;
     channel_id?: string;
+    channel_name?: string;
     trigger_enabled?: boolean;
     notify_mode?: string;
   };

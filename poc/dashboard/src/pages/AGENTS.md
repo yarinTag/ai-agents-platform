@@ -219,3 +219,5 @@ Telegram connector selection exposes **Find chat IDs**, showing discovered title
 Installed connectors expose Send test message beside each saved Telegram/Slack destination; Check connection remains separate. Tests pass connector_id and display safe backend errors. Telegram Find chats lists observed names and keeps selection values as exact IDs; save persists configuration.channel_labels (ID-to-name display metadata) alongside allowed_channels. Labels never authorize or resolve delivery. Configured tags retain names after reload and show IDs on hover.
 
 Connector save correction: useMcpConnectorActions explicitly includes/destructures discoveredResources from useMcpState before deriving configuration.channel_labels. Omitting this caused a ReferenceError before Telegram/Slack save HTTP requests. Static source review only; runtime verification remains unauthorized.
+
+Telegram discovered-chat selection displays names with canonical IDs available on hover; checkbox values remain the discovered IDs. Installed connector tags use persisted channel_labels. No arbitrary name-to-destination guessing is introduced.

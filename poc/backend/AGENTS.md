@@ -108,3 +108,5 @@ Queue availability correction: queue-api owns the /api/v1/queue HTTP module, whi
 
 ## New Workflows chat composition
 The existing workflows capability composes workflow_chat.router before the other workflow routes; no workflow-assistant capability or removed module is restored. Three small API modules own routes/jobs, strict chat contracts and policy/native-definition conversion. The runtime extension uses tool-free process inference through the configured provider. Workflow preview records are stored in workflow_builder_jobs and never dispatched as agent/Office tasks.
+
+get_skill_context(skill_ids, organization_id=None) supports scoped plugin resolution for workflow steps; omitted organization preserves the legacy non-workflow resolver.
