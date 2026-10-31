@@ -156,7 +156,12 @@ class InvitationsRepository:
         else:
             self.update_user(user.id, last_login_at=now_iso)
 
-        pending_invites = self.list_pending_invitations_for_email(clean_email)
+        # Only consume invitations of the organization being joined; another
+        # tenant's pending invitation must never link this user to its departments.
+        pending_invites = [
+            inv for inv in self.list_pending_invitations_for_email(clean_email)
+            if inv.organization_id == organization_id and user.organization_id == organization_id
+        ]
         joined_depts: List[DepartmentMember] = []
         for inv in pending_invites:
             if inv.department_id:

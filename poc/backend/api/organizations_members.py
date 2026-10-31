@@ -1,33 +1,55 @@
 """Organizations: members ownership."""
 
-from fastapi import HTTPException, Depends, status
+from fastapi import HTTPException, Depends, status, Request
 from typing import List
 from datetime import datetime
 from ..dependencies import get_db_manager, DatabaseManager
-from ..security import create_access_token, hash_password
+from ..security import create_access_token, hash_password, verify_password
 from .organizations_models import AcceptInviteRequest, AuthResponse, BulkInviteRequest, BulkInviteResponse, DepartmentMemberResponse, UserResponse
 from fastapi import APIRouter
 
 router = APIRouter()
+
+INVITABLE_ROLES = {"ORG_ADMIN", "MANAGER", "OPERATOR", "MEMBER"}
+MAX_INVITES_PER_REQUEST = 100
+MAX_INVITE_DAYS = 30
+MIN_PASSWORD_LENGTH = 8
+
+
+def _require_active_org_admin(request: Request, db: DatabaseManager, organization_id: str):
+    """Require a current, database-verified ORG_ADMIN of exactly this organization."""
+    claims = getattr(request.state, "user", None) or {}
+    user = db.get_user(claims.get("sub")) if claims.get("sub") else None
+    if (not user or user.status != "ACTIVE" or user.role != "ORG_ADMIN"
+            or user.organization_id != organization_id
+            or claims.get("org_id") != organization_id):
+        raise HTTPException(status_code=403, detail="An active administrator of this organization must send invitations.")
+    return user
 
 
 @router.post("/departments/{dept_id}/members/bulk-invite", response_model=BulkInviteResponse, status_code=status.HTTP_201_CREATED)
 def bulk_invite_department_members(
     dept_id: str,
     req: BulkInviteRequest,
+    request: Request,
     db: DatabaseManager = Depends(get_db_manager)
 ):
     """
     Bulk invite email addresses to a department.
-    Validates organization domain restrictions if configured, generates single-use
-    invitation tokens, and queues members for Just-In-Time (JIT) onboarding.
+    Only an active ORG_ADMIN of the department's organization may invite. The
+    single-use tokens are returned to that administrator for out-of-band delivery.
     """
     dept = db.get_department(dept_id)
-    if not dept:
+    if not dept or not dept.organization_id:
         raise HTTPException(status_code=404, detail=f"Department '{dept_id}' not found")
+    _require_active_org_admin(request, db, dept.organization_id)
 
-    if not dept.organization_id:
-        raise HTTPException(status_code=400, detail="Department is not associated with an enterprise organization")
+    if req.role not in INVITABLE_ROLES:
+        raise HTTPException(status_code=400, detail=f"Role must be one of: {', '.join(sorted(INVITABLE_ROLES))}")
+    if len(req.emails) > MAX_INVITES_PER_REQUEST:
+        raise HTTPException(status_code=400, detail=f"At most {MAX_INVITES_PER_REQUEST} invitations per request")
+    if not 1 <= req.expires_in_days <= MAX_INVITE_DAYS:
+        raise HTTPException(status_code=400, detail=f"expires_in_days must be between 1 and {MAX_INVITE_DAYS}")
 
     org = db.get_organization(dept.organization_id)
     if org and org.domain:
@@ -123,7 +145,21 @@ def accept_department_invitation(
     if not org:
         raise HTTPException(status_code=404, detail="Organization no longer exists")
 
-    pw_hash = hash_password(req.password) if req.password else None
+    # Holding an invite token never authenticates as an existing account.
+    password = (req.password or "").strip()
+    existing = db.get_user_by_email(inv.email)
+    if existing:
+        if existing.organization_id != inv.organization_id:
+            raise HTTPException(status_code=409, detail="This email already belongs to another organization")
+        if existing.status != "ACTIVE":
+            raise HTTPException(status_code=403, detail="This account is not active")
+        if not password or not existing.password_hash or not verify_password(password, existing.password_hash):
+            raise HTTPException(status_code=401, detail="Enter the existing account password to accept this invitation")
+        pw_hash = None
+    else:
+        if len(password) < MIN_PASSWORD_LENGTH:
+            raise HTTPException(status_code=400, detail=f"Password must be at least {MIN_PASSWORD_LENGTH} characters")
+        pw_hash = hash_password(password)
     user, joined_depts = db.onboard_user_by_email(
         organization_id=inv.organization_id,
         email=inv.email,
