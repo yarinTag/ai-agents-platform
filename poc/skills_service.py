@@ -138,6 +138,27 @@ def _parse_skill_file(file_path: Path) -> Dict[str, str]:
     }
 
 
+_UNSAFE_SKILL_CHARS = set("*?[]{}\\\0")
+
+
+def _is_safe_skill_name(name: str) -> bool:
+    """A glob-safe relative skill name such as 'review' or 'plugin/review'."""
+    if not name or name.startswith(("/", "~")) or any(c in _UNSAFE_SKILL_CHARS for c in name):
+        return False
+    return all(part not in ("", ".", "..") for part in name.split("/"))
+
+
+def _is_skill_file_in_roots(path: Path, roots: List[Path]) -> bool:
+    """True when path resolves to an existing Markdown file inside one of roots."""
+    try:
+        resolved = path.resolve(strict=True)
+    except (OSError, RuntimeError):
+        return False
+    if not resolved.is_file() or resolved.suffix.lower() != ".md":
+        return False
+    return any(resolved.is_relative_to(root.resolve()) for root in roots)
+
+
 def resolve_skill(skill_id_or_path: str, use_cache: bool = True) -> Optional[Dict[str, str]]:
     """
     Resolve a skill by ID or file path from DB, p-skills marketplace, or filesystem.
@@ -154,10 +175,12 @@ def resolve_skill(skill_id_or_path: str, use_cache: bool = True) -> Optional[Dic
     if use_cache and clean_id in _SKILL_CACHE:
         return _SKILL_CACHE[clean_id]
 
-    # 1. Direct file path check
+    # 1. Direct file path check: only Markdown files inside a configured skill
+    # root. A skill ID must never become an arbitrary host-file read.
+    roots = get_skills_search_roots()
     direct_path = Path(clean_id)
-    if direct_path.exists() and direct_path.is_file():
-        parsed = _parse_skill_file(direct_path)
+    if direct_path.is_absolute() and _is_skill_file_in_roots(direct_path, roots):
+        parsed = _parse_skill_file(direct_path.resolve())
         if parsed["content"]:
             _SKILL_CACHE[clean_id] = parsed
             return parsed
@@ -179,8 +202,11 @@ def resolve_skill(skill_id_or_path: str, use_cache: bool = True) -> Optional[Dic
     except Exception as e:
         logger.debug(f"DB check for skill '{clean_id}' returned: {e}")
 
-    # 3. Search marketplace roots
-    roots = get_skills_search_roots()
+    # 3. Search marketplace roots. The ID is interpolated into a glob, so it
+    # must be a plain relative name: no traversal, no absolute path, no wildcards.
+    if not _is_safe_skill_name(clean_id):
+        logger.warning("Rejected unsafe skill identifier")
+        return None
     for root in roots:
         # Check standard skill directory: **/skills/{clean_id}/SKILL.md
         cand_files = list(root.glob(f"**/skills/{clean_id}/SKILL.md"))
@@ -190,8 +216,9 @@ def resolve_skill(skill_id_or_path: str, use_cache: bool = True) -> Optional[Dic
             cand_files = list(root.glob(f"**/{clean_id}.md"))
 
         for file_match in cand_files:
-            if file_match.is_file():
-                parsed = _parse_skill_file(file_match)
+            # Re-check after symlink resolution so a link cannot escape the root.
+            if file_match.is_file() and _is_skill_file_in_roots(file_match, [root]):
+                parsed = _parse_skill_file(file_match.resolve())
                 if parsed["content"]:
                     _SKILL_CACHE[clean_id] = parsed
                     return parsed

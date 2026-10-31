@@ -70,6 +70,16 @@ class RuntimeCommandBuilder:
         env = providers.build_provider_env(
             provider_id, os.environ.copy(), gateway_base_url=gateway_url
         )
+        # Agents never inherit platform secrets (JWT key, API key, bot tokens,
+        # other providers' keys); only this run's provider credential survives.
+        from .direct_config import DIRECT_PROVIDERS as _DIRECT
+        from .env_hygiene import strip_secrets
+        keep = {"ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY"}
+        if provider_id in _DIRECT:
+            keep.add(_DIRECT[provider_id][1])
+        if provider_id == providers.PROVIDER_CLAUDE_CODE_NATIVE:
+            keep.add("CLAUDE_CODE_OAUTH_TOKEN")
+        env = strip_secrets(env, keep)
         env.pop('PLATFORM_CONNECTOR_DB', None)
         env.pop('PLATFORM_CONNECTOR_TASK', None)
         env["PLATFORM_RUNTIME_PROVIDER"] = provider_id

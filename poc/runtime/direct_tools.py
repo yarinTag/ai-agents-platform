@@ -6,6 +6,8 @@ import re
 from contextlib import AsyncExitStack
 from pathlib import Path
 
+from .env_hygiene import strip_secrets
+
 
 class DirectTools:
     def __init__(self, args):
@@ -47,7 +49,10 @@ class DirectTools:
 
     @staticmethod
     def _shell_env():
-        return {k: v for k, v in os.environ.items() if not any(x in k for x in ('API_KEY', 'AUTH_TOKEN', 'OAUTH_TOKEN'))}
+        # The shell gets no credentials at all (not even this run's provider key)
+        # and no pointer to the shared transcript store or connector context.
+        return {k: v for k, v in strip_secrets(os.environ).items()
+                if not k.startswith(('PLATFORM_API_SESSION_', 'PLATFORM_CONNECTOR_'))}
 
     def allowed(self):
         return set((self.args.allowedTools or '').split(','))
