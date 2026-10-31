@@ -19,6 +19,12 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 _validated_definition = validate_workflow_definition
 
+
+def _with_notification_status(db, record, **overrides):
+    from integrations.tool_scopes import execution_context
+    context = execution_context(db, record.id) or {}
+    return _execution_to_response(record, notification_error=context.get('notification_error'), **overrides)
+
 def _get_scoped_execution(execution_id: str, request: Request, db: DatabaseManager):
     """Authorize both the current workflow owner and execution department."""
     execution = db.get_workflow_execution(execution_id)
@@ -69,7 +75,7 @@ def list_executions(
         except HTTPException:
             continue
         visible.append(record)
-    return [_execution_to_response(record) for record in visible]
+    return [_with_notification_status(db, record) for record in visible]
 
 @router.get("/executions/{execution_id}", response_model=WorkflowExecutionResponse)
 def get_execution_status(
@@ -96,7 +102,7 @@ def get_execution_status(
         step["events"] = task.events[-500:] if task else []
         step["error"] = task.error if task else None
         step["task_status"] = task.status.value if task else None
-    return _execution_to_response(exec_record, step_runs=step_runs)
+    return _with_notification_status(db, exec_record, step_runs=step_runs)
 
 @router.post("/executions/{execution_id}/evaluate", status_code=status.HTTP_201_CREATED)
 def evaluate_execution(

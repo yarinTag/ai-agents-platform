@@ -20,6 +20,10 @@ CATALOG_MCP_SERVERS = [
             "branch": {"type": "text", "label": "Default Branch", "required": False, "default": "main"}
         },
         "default_tools": [
+            {"name": "get_repository_activity", "description": "Read recent commits, issues, pull requests and releases through the governed runtime"},
+            {"name": "list_commits", "description": "Read recent GitHub commits"},
+            {"name": "list_pull_requests", "description": "Read recent GitHub pull requests"},
+            {"name": "list_releases", "description": "Read recent GitHub releases"},
             {"name": "git_status", "description": "Check working directory status and branch info"},
             {"name": "git_diff", "description": "Inspect diff of staged or unstaged changes"},
             {"name": "git_commit", "description": "Commit staged changes with message"},

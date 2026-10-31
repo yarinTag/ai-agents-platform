@@ -31,7 +31,6 @@ ROUTERS = (
     ("teams", ".teams.router", "/api/v1/teams", False),
     ("filesystem", ".api.filesystem", "/api/v1/fs", False),
     ("workflows", ".api.workflows", "/api/v1/workflows", False),
-    ("workflow-assistant", ".workflow_assistant.router", "/api/v1/workflow-assistant", False),
     ("queue-api", ".queue.router", "/api/v1/queue", False),
     ("mcp", ".api.mcp", "/api/v1/mcp", False),
     ("organizations", ".api.organizations", "/api/v1", True),

@@ -4,7 +4,7 @@ import json
 import uuid
 from datetime import datetime
 from typing import Optional, Dict, Any
-from fastapi import APIRouter, HTTPException, Depends, Request, Query, status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Depends, Request, Query, status
 from ..dependencies import get_db_manager, get_workflow_engine, get_task_queue_publisher, DatabaseManager
 from ..security import get_authorized_scope
 from workflows.engine import (
@@ -13,6 +13,7 @@ from workflows.engine import (
 )
 from .workflows_models import WorkflowExecutionResponse
 from .workflows_mapping import _check_workflow_scope, _execution_to_response
+from .workflows_local_dispatch import dispatch_local
 
 router = APIRouter()
 
@@ -43,8 +44,10 @@ async def _queue_execution(database, workflow, payload, trigger_type, payload_ha
 
 @router.post("/{workflow_id}/execute", response_model=WorkflowExecutionResponse)
 async def execute_workflow(
-    workflow_id: str, request: Request, payload: Optional[Dict[str, Any]] = None,
+    workflow_id: str, request: Request, background_tasks: BackgroundTasks,
+    payload: Optional[Dict[str, Any]] = None,
     use_queue: bool = Query(True), force_rerun: bool = Query(False),
+    background: bool = Query(False),
     engine: WorkflowEngine = Depends(get_workflow_engine),
 ):
     """Execute the saved revision, optionally reusing a matching active/completed run."""
@@ -61,6 +64,8 @@ async def execute_workflow(
     user_context = getattr(request.state, "user", None)
     if use_queue:
         return await _queue_execution(engine.db, workflow, payload, "MANUAL", payload_hash, user_context)
+    if background:
+        return dispatch_local(engine, background_tasks, workflow, payload, payload_hash, user_context)
     try:
         execution = await asyncio.to_thread(
             engine.execute_workflow, workflow_id=workflow_id, trigger_type="MANUAL",

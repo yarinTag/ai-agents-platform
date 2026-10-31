@@ -31,10 +31,11 @@ export const executeWorkflow = (
   workflowId: string,
   payload?: Record<string, any>,
   useQueue: boolean = true,
-  forceRerun: boolean = false
+  forceRerun: boolean = false,
+  background: boolean = false
 ) =>
   api.post<WorkflowExecution>(
-    `/api/v1/workflows/${workflowId}/execute?use_queue=${useQueue}&force_rerun=${forceRerun}`,
+    `/api/v1/workflows/${workflowId}/execute?use_queue=${useQueue}&force_rerun=${forceRerun}&background=${background}`,
     payload || {}
   );
 

@@ -111,7 +111,7 @@ poc/dashboard/
 │   │   ├── AuthPage.tsx         # Sign-in, org register, invite accept
 │   │   ├── CalendarView.tsx     # Cron routines & schedules (/calendar)
 │   │   ├── Dashboard.tsx        # System metrics & node health (/dashboard)
-│   │   ├── McpHub.tsx           # MCP integrations & workflows (/mcp)
+│   │   ├── McpHub.tsx           # MCP integrations hub (/mcp)
 │   │   ├── OfficeView.tsx       # Live interactive workstation canvas (/)
 │   │   ├── OrganizationPage.tsx # Org & Teams governance (/organization)
 │   │   ├── Projects.tsx         # Workspace directory projects (/projects)
@@ -195,3 +195,21 @@ Workflow Assistant route /workflow-assistant uses existing auth and typed API wr
 
 ## Model-only YAML authoring and internal MCP
 Workflow Assistant selection must use context.authoring_models; never derive planning choices from catalog.agents. Agents in the proposal are execution assignments. Use server-provided definition_yaml for preview/download and validateAssistantYaml for native validation. Show draft-only behavior and server errors; do not silently replace an unsupported provider/model or activate downloaded YAML.
+
+## Runtime execution method UX
+Runtime settings is accessible from OfficeTopBar after first use or deferral. Provider availability is configuration-only, not a live authentication/model test. Direct API requires server credentials/prices and an explicit tool-capable model ID; frontend sends model_id alongside provider_id. Existing active job selection and conversation state must not be replaced when the default changes; current model context refreshes through platform:runtime-changed. Shared English/Hebrew setup copy lives in i18n/runtimeSetup.ts. No frontend build/type checking was run.
+
+## New workflow chat UI
+Use the Workflows → Create with AI modal, not the removed standalone Workflow Assistant. Keep the chat small: no YAML editor or provider setup form in the conversation. Exact allowed resource IDs are available under a collapsible list. API jobs are polled with cleanup; private-read denial clears preview/conversation and stops polling. Client retry reuses request IDs; creation retries rely on the server's stored preview/stable workflow ID. Creation is inactive and the workflow list refreshes after success. Localized domain text lives in workflowChat.ts with typed English/Hebrew parity. Current verification restriction still applies.
+
+Chat recovery uses the private workflowChat URL query parameter; successful polling clears transient network errors. A successful saved reply is not a provider failure simply because a later context read failed during development reload.
+
+Execution mode must be explicit. Local-server runs use background dispatch to avoid the shared HTTP timeout; queued mode retains broker errors and never silently retries locally. Neither dispatch mode supplies missing integrations. workflowRun.ts owns EN/HE explanatory copy.
+
+Do not auto-select invented Telegram/Slack destinations. Resource discovery provides candidates, never permissions. Telegram fetch uses the exact edited connector ID and a bounded20s client timeout; administrators explicitly select/save the intended ID. Workflow chat shows backend execution_supported status and receives per-agent connector_tools without secrets. No UI/build/type verification was run.
+
+Connector resource selection uses real discovered IDs and explicit selection/save. Telegram **Find chat IDs** performs read-only discovery; channel aliases are rejected on save and no default destinations are invented.
+
+Installed integration destination tests send exactly one explicit message via connector_id. Keep connection checks separate from message delivery; discovered names persist in channel_labels while allowlists retain canonical IDs.
+
+Connector channel-label persistence reads discoveredResources through the hook state contract; preserve this dependency when changing save logic. Missing state previously threw before the save request. No runtime checks were performed.

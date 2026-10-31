@@ -2,6 +2,7 @@
 
 import logging
 import os
+import sys
 from typing import Dict, List, Optional
 from config import AgentConfig, ProjectConfig
 import runtime_providers as providers
@@ -31,12 +32,20 @@ class RuntimeCommandBuilder:
         setup prompt's suggestion.
         """
         saved_choice = None
+        db = None
         try:
-            saved_choice = self.services.database().get_setting(RUNTIME_PROVIDER_SETTING_KEY)
+            db = self.services.database()
+            saved_choice = db.get_setting(RUNTIME_PROVIDER_SETTING_KEY)
         except Exception:
             logging.getLogger(__name__).debug("Saved runtime provider unavailable")
+        agent_provider = getattr(agent_config, "runtime_provider", None)
+        if not agent_provider and agent_config and getattr(agent_config, "model", None):
+            from .direct_config import provider_for_model, resolve_api_key
+            model_owner = provider_for_model(agent_config.model)
+            if model_owner and resolve_api_key(model_owner, db=db):
+                agent_provider = model_owner
         return providers.resolve_provider_selection(
-            getattr(agent_config, "runtime_provider", None), saved_choice,
+            agent_provider, saved_choice,
         )
 
     def _build_claude_env(
@@ -61,7 +70,15 @@ class RuntimeCommandBuilder:
         env = providers.build_provider_env(
             provider_id, os.environ.copy(), gateway_base_url=gateway_url
         )
+        env.pop('PLATFORM_CONNECTOR_DB', None)
+        env.pop('PLATFORM_CONNECTOR_TASK', None)
         env["PLATFORM_RUNTIME_PROVIDER"] = provider_id
+        from .direct_config import DIRECT_PROVIDERS
+        if provider_id in DIRECT_PROVIDERS:
+            from pathlib import Path
+            db = self.services.database()
+            env['PLATFORM_API_SESSION_DIR'] = str(Path(db.db_path).resolve().parent / 'runtime_sessions')
+            env['PLATFORM_API_SESSION_SCOPE'] = str(getattr(agent_config, 'organization_id', '') or '') + ':' + str(getattr(agent_config, 'id', '') or '')
         env.update({
             "CLAUDE_CODE_AUTO_COMPACT_WINDOW": os.getenv("CLAUDE_CODE_AUTO_COMPACT_WINDOW", "40000"),
             "DISABLE_AUTOUPDATER": "1",
@@ -131,7 +148,13 @@ class RuntimeCommandBuilder:
         Returns:
             List of command arguments
         """
-        cmd = ["claude"]
+        from .direct_config import DIRECT_PROVIDERS, resolve_model_for_provider
+        provider_id = self.resolve_runtime_provider(agent_config)
+        direct = provider_id in DIRECT_PROVIDERS
+        if session_id and not session_id.startswith(('pending_', 'sess_')):
+            if session_id.startswith('api_') != direct:
+                raise ValueError('This session belongs to a different execution method. Start a new session.')
+        cmd = [sys.executable, '-m', 'runtime.direct_worker'] if direct else ["claude"]
         # Resolve logical model tier (e.g. tier:architect, tier:worker) to runtime model
         resolved_model = agent_config.model
         try:
@@ -139,8 +162,14 @@ class RuntimeCommandBuilder:
         except Exception:
             pass
 
+        if direct:
+            resolved_model = resolve_model_for_provider(
+                provider_id, agent_config.model, db=self.services.database()
+            )
+            cmd.extend(['--max-tokens', str(agent_config.max_tokens)])
+
         if resolved_model and resolved_model.lower() != "default":
-            cmd.extend(["--model", resolved_model.lower()])
+            cmd.extend(["--model", resolved_model if direct else resolved_model.lower()])
 
         if playground:
             system_prompt = agent_config.system_prompt or ""

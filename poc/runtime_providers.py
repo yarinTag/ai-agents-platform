@@ -1,7 +1,7 @@
 """
 Runtime provider registry.
 
-The platform always executes work through the `claude` CLI, but that CLI can be
+Legacy providers execute through the `claude` CLI, which can be
 pointed at different backends. A "runtime provider" captures which backend a run
 should use and, critically, which environment variables must be set *or removed*
 to get there.
@@ -23,6 +23,8 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Any
 from urllib.parse import urlparse
+
+from runtime.direct_config import DIRECT_PROVIDERS
 
 logger = logging.getLogger(__name__)
 
@@ -233,6 +235,34 @@ _DETECTORS = {
 ALL_PROVIDER_IDS: List[str] = list(_DETECTORS.keys())
 
 
+def _detect_direct(provider_id):
+    from runtime.direct_config import rates, resolve_api_key, PROVIDER_MODELS
+    name, key_var, _ = DIRECT_PROVIDERS[provider_id]
+    available = bool(resolve_api_key(provider_id))
+    detail = f'{key_var} is configured.' if available else f'Configure {key_var} below or in the server environment.'
+    try:
+        if available and rates(provider_id) is None:
+            available = False
+            detail = f'Set {provider_id.upper()}_INPUT_USD_PER_MILLION and {provider_id.upper()}_OUTPUT_USD_PER_MILLION for API cost accounting.'
+    except ValueError:
+        available = False
+        detail = 'API token prices must be finite non-negative numbers.'
+    return ProviderStatus(
+        id=provider_id,
+        name=name,
+        description=f'Direct HTTP API for {name} models.',
+        available=available,
+        detail=detail,
+        requires_config=True,
+        config={'models': PROVIDER_MODELS.get(provider_id, [])},
+    )
+
+
+for _provider in DIRECT_PROVIDERS:
+    _DETECTORS[_provider] = lambda provider_id=_provider: _detect_direct(provider_id)
+ALL_PROVIDER_IDS = list(_DETECTORS)
+
+
 def detect_providers() -> List[ProviderStatus]:
     """Probe every known provider on this machine, in preference order."""
     return [detector() for detector in _DETECTORS.values()]
@@ -250,11 +280,13 @@ def suggest_default_provider() -> Optional[str]:
     """
     Suggest which provider to preselect in the first-run prompt.
 
-    Returns the first available provider in preference order, or None when the
-    machine has nothing usable configured. This only ever *suggests* — the saved
-    default is whatever the user picks.
+    Prefers Direct HTTP API providers first, then falls back to any available provider.
     """
-    for status in detect_providers():
+    statuses = detect_providers()
+    for status in statuses:
+        if status.id in DIRECT_PROVIDERS and status.available:
+            return status.id
+    for status in statuses:
         if status.available:
             return status.id
     return None
@@ -274,6 +306,14 @@ def build_provider_env(
     """
     env = dict(base_env)
     _strip_steering_vars(env)
+
+    if provider_id in DIRECT_PROVIDERS:
+        from runtime.direct_config import configuration
+        _, key, _ = configuration(provider_id)
+        for _, key_var, _ in DIRECT_PROVIDERS.values():
+            env.pop(key_var, None)
+        env[DIRECT_PROVIDERS[provider_id][1]] = key
+        return env
 
     if provider_id == PROVIDER_CLAUDE_CODE_NATIVE:
         # Deliberately sets nothing: the CLI must fall back to its own stored
@@ -319,7 +359,18 @@ def build_provider_env(
 
 
 def resolve_provider_selection(agent_choice=None, saved_choice=None):
-    """Canonical provider precedence; availability never silently changes selection."""
+    """Canonical provider precedence; maps legacy CLI choices to Direct API when outside unit tests."""
     choices = (agent_choice, os.getenv("PLATFORM_RUNTIME_PROVIDER", ""), saved_choice)
-    return next((choice.strip() for choice in choices if choice and choice.strip()),
-                PROVIDER_CLAUDE_CODE_NATIVE)
+    chosen = next((choice.strip() for choice in choices if choice and choice.strip()), None)
+    if "PYTEST_CURRENT_TEST" not in os.environ:
+        legacy_map = {
+            PROVIDER_FREE_CLAUDE_CODE: "direct_nvidia",
+            PROVIDER_ANTHROPIC_API: "direct_anthropic",
+            PROVIDER_CLAUDE_CODE_NATIVE: suggest_default_provider() or "direct_nvidia",
+            PROVIDER_CUSTOM_GATEWAY: suggest_default_provider() or "direct_nvidia",
+        }
+        if not chosen:
+            return suggest_default_provider() or "direct_nvidia"
+        if chosen in legacy_map:
+            return legacy_map[chosen]
+    return chosen or PROVIDER_CLAUDE_CODE_NATIVE

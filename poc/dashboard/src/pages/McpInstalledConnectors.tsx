@@ -1,3 +1,4 @@
+import { useConnectorResourceText } from '../i18n/connectorResources';
 import { ResourceSection } from './ResourceSection';
 import { Card, Row, Col, Tag, Button, Badge, Popconfirm } from 'antd';
 import { ApiOutlined, SettingOutlined, SafetyCertificateOutlined, DeleteOutlined, ToolOutlined, ThunderboltOutlined } from '@ant-design/icons';
@@ -13,6 +14,8 @@ export const McpInstalledConnectors = (model: Pick<
   | 'agents'
   | 'permissions'
   | 'testingMap'
+  | 'testingChannelMap'
+  | 'handleTestChannelMessage'
   | 'handleOpenConnect'
   | 'handleTestConnection'
   | 'handleUninstall'
@@ -28,7 +31,7 @@ export const McpInstalledConnectors = (model: Pick<
     connectors,
     agents,
     permissions,
-    testingMap,
+    testingMap, testingChannelMap, handleTestChannelMessage,
     handleOpenConnect,
     handleTestConnection,
     handleUninstall,
@@ -36,6 +39,7 @@ export const McpInstalledConnectors = (model: Pick<
     handleOpenPermissions,
     getProviderIcon,
   } = model;
+  const text = useConnectorResourceText();
   return (<>
     <ResourceSection error={resourceErrors.permissions || resourceErrors.agents} onRetry={loadData}><span /></ResourceSection>
               <div>
@@ -152,9 +156,17 @@ export const McpInstalledConnectors = (model: Pick<
                                   </div>
                                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                                     {allowedChannels.map((ch) => (
-                                      <Tag key={ch} color="gold" style={{ fontSize: '10px' }}>
-                                        {ch}
+                                      <div key={ch} title={ch}>
+                                      <Tag color="gold" style={{ fontSize: '10px' }}>
+                                        {conn.configuration?.channel_labels?.[ch] || ch}
                                       </Tag>
+                                      <Button size="small" loading={testingChannelMap[`${conn.id}:${ch}`]}
+                                        disabled={!isConnected}
+                                        onClick={() => void handleTestChannelMessage(conn.provider, ch, conn.id)}>
+                                        {text.sendTest}
+                                      </Button>
+                                      </div>
+
                                     ))}
                                   </div>
                                 </div>
@@ -171,7 +183,7 @@ export const McpInstalledConnectors = (model: Pick<
                                   onClick={() => handleTestConnection(conn)}
                                   style={{ background: '#064e3b', borderColor: '#059669', color: '#34d399' }}
                                 >
-                                  Test
+                                  {text.connectionTest}
                                 </Button>
                                 <Button
                                   size="small"

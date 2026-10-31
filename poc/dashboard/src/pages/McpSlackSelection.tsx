@@ -1,3 +1,4 @@
+import { useConnectorResourceText } from '../i18n/connectorResources';
 import { Tag, Button, Input } from 'antd';
 import { SlackOutlined, CheckCircleOutlined, PlusOutlined } from '@ant-design/icons';
 import type { useMcpPage } from './useMcpPage';
@@ -23,6 +24,7 @@ export const McpSlackSelection = (model: Pick<
     setCustomResourceInput,
     handleAddCustomResource,
   } = model;
+  const text = useConnectorResourceText();
   return (<>
             {/* Slack Channels Selection Section */}
             {selectedCatalogItem && selectedCatalogItem.provider === 'slack' && (
@@ -129,14 +131,11 @@ export const McpSlackSelection = (model: Pick<
 
                 {/* 3. Quick-toggle suggested Slack channels */}
                 <div style={{ color: '#8b949e', fontSize: '12px', marginBottom: '8px' }}>
-                  Suggested Slack channels (click to toggle):
+                  {text.availableSlack}
                 </div>
 
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                  {(discoveredResources.length > 0
-                    ? discoveredResources.map((c: any) => c.id || c.name)
-                    : ['#general', '#dev-team', '#alerts', '#pr-review', '#workflows-feed', '#deployments']
-                  ).map((chName: string) => {
+                  {discoveredResources.map((c: { id?: string }) => c.id || '').filter(Boolean).map((chName: string) => {
                     const isChecked = selectedResources.includes(chName);
                     return (
                       <Tag.CheckableTag

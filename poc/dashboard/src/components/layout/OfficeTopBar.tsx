@@ -1,3 +1,4 @@
+import { useRuntimeSetupText } from '../../i18n/runtimeSetup';
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Tooltip, Button, Tag, Popconfirm, Select } from 'antd';
@@ -16,7 +17,6 @@ interface OfficeTopBarProps {
 }
 
 const routeTitles: Record<string, { title: string; subtitle: string; icon: string }> = {
-  '/workflow-assistant': { title: 'WORKFLOW ASSISTANT', subtitle: 'Permission-aware workflow drafts', icon: '✦' },
   // '/': { title: 'OFFICE CANVAS', subtitle: 'Interactive Autonomous Workstation', icon: '🏢' },
   '/flow': { title: 'LIVE FLOW', subtitle: 'Execution Pipeline & Dag', icon: '⚡' },
   '/agents': { title: 'AGENTS ROSTER', subtitle: 'Autonomous Agent Fleet', icon: '🤖' },
@@ -31,6 +31,7 @@ const routeTitles: Record<string, { title: string; subtitle: string; icon: strin
 
 export const OfficeTopBar: React.FC<OfficeTopBarProps> = ({ collapsed = false, onToggleCollapse }) => {
   const [timeStr, setTimeStr] = useState('');
+  const runtimeText = useRuntimeSetupText();
   const navigate = useNavigate();
   const { organization, user, departments, activeDepartmentId, setActiveDepartmentId, logout } = useAuth();
   const location = useLocation();
@@ -166,6 +167,9 @@ export const OfficeTopBar: React.FC<OfficeTopBarProps> = ({ collapsed = false, o
 
       {/* Right: Org Info + User & Role + Logout + Clock */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <Button size="small" onClick={() => window.dispatchEvent(new Event('platform:configure-runtime'))}>
+          {runtimeText.settings}
+        </Button>
         {organization && (
           <Tooltip title="View Organization & Teams">
             <Tag

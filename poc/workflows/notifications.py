@@ -1,8 +1,6 @@
 """Best-effort notification adapter, separate from workflow execution outcome."""
 
-import json
 import logging
-from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -16,8 +14,13 @@ class WorkflowNotifier:
     def notify(self, workflow_id, execution_id, trigger_type, status, outputs,
                input_tokens, output_tokens, cost, error):
         workflow = self.database.get_workflow(workflow_id)
-        binding = json.loads(workflow.definition_json).get("metadata", {}).get("channel_binding") if workflow else None
+        from integrations.tool_scopes import execution_context
+        context = execution_context(self.database, execution_id)
+        binding = context.get('binding') if context else None
         if not binding:
+            return
+        if context.get('notification_error'):
+            logger.warning('Workflow notification blocked for %s: %s', execution_id, context['notification_error'])
             return
         mode = binding.get("notify_mode", "ON_COMPLETE")
         if not (mode == "ALWAYS" or mode == "ON_COMPLETE" and status == "COMPLETED"
@@ -28,9 +31,6 @@ class WorkflowNotifier:
         previous = self.database.get_mcp_tool_call(call_id)
         if previous:
             return
-        provider = binding.get("provider", "slack")
-        channel = binding.get("channel_id", "")
-        connector = self.connector_lookup(self.database, provider, workflow.organization_id)
         output = list(outputs.values())[-1] if outputs else ""
         output = output[:2450] + "...\n(truncated)" if len(output) > 2500 else output
         template = binding.get("message_template")
@@ -48,26 +48,10 @@ class WorkflowNotifier:
                 text += f"\n\n📋 *Result:*\n{output}"
             if error:
                 text += f"\n• Error: {error}"
-        if connector is None:
-            logger.warning("Workflow notification connector unavailable for execution %s", execution_id)
-            return
-        agents = self.database.list_agents(organization_id=workflow.organization_id)
-        if not agents:
-            logger.warning("Workflow notification has no audit actor for execution %s", execution_id)
-            return
-        record = {
-            "id": call_id, "connector_id": connector.id,
-            "tool_id": f"tool_{provider}_send_message", "agent_id": agents[0].id,
-            "task_id": None, "arguments": {"channel": channel, "text": text},
-            "status": "STARTED", "started_at": datetime.now().isoformat(),
-        }
-        self.database.save_mcp_tool_call(record)
+        from integrations.notification_guard import deliver_notification
         try:
-            self.deliver(connector, channel, text)
-        except Exception:
-            record.update(status="FAILED", error="Channel delivery failed")
-            logger.warning("Workflow notification failed for execution %s", execution_id)
-        else:
-            record.update(status="COMPLETED", result=f"Notification delivered to {channel}")
-        record["completed_at"] = datetime.now().isoformat()
-        self.database.save_mcp_tool_call(record)
+            deliver_notification(self.database, workflow, execution_id, text)
+        except ValueError as error:
+            from integrations.tool_scopes import record_notification_error
+            record_notification_error(self.database, execution_id, str(error))
+            logger.warning("Workflow notification denied/failed for %s: %s", execution_id, error)

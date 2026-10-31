@@ -1,6 +1,7 @@
 """Workflow step execution, policy gates and result capture."""
 import uuid
 import logging
+import re
 from datetime import datetime
 from typing import Dict, Optional, Any
 from runtime.models import AgentRun, TaskStatus
@@ -30,6 +31,10 @@ class WorkflowStepRunner:
     ) -> WorkflowStepResult:
         """Execute a single workflow step with dynamic substitutions, skill injection, and agent reuse."""
         formatted_prompt = step.prompt_template
+        if not playground_workspace:
+            # Compatibility for the exact known authoring disclaimer; saved revisions stay intact.
+            formatted_prompt = re.sub(re.escape('This is an inactive preview; do not claim execution.'),
+                '', formatted_prompt, flags=re.IGNORECASE).strip()
         for prev_key, prev_out in step_outputs.items():
             formatted_prompt = formatted_prompt.replace(f"{{{{{prev_key}.output}}}}", prev_out or "")
             formatted_prompt = formatted_prompt.replace(f"${{{prev_key}.output}}", prev_out or "")
@@ -152,6 +157,8 @@ class WorkflowStepRunner:
                     prompt=formatted_prompt, workspace=playground_workspace,
                 )
             else:
+                from integrations.tool_scopes import prepare_scope
+                prepare_scope(self.db, task_id, execution_id, step)
                 self.runtime.start_task(task_id=task_id, agent_id=actual_agent_id, prompt=formatted_prompt)
             import time
             deadline = time.monotonic() + min(step.timeout_seconds or 180, 300)

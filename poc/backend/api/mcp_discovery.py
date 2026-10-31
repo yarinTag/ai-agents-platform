@@ -67,55 +67,23 @@ def discover_resources(
             resp.raise_for_status()
             raw_repos = resp.json()
 
-            # Check if fine-grained token returns only public repos, and try gh cli token if so
-            if (
-                token 
-                and token.startswith("github_pat_") 
-                and raw_repos 
-                and not any(r.get("private") for r in raw_repos)
-            ):
-                import subprocess
-                gh_res = subprocess.run(["gh", "auth", "token"], capture_output=True, text=True, timeout=3)
-                if gh_res.returncode == 0 and gh_res.stdout.strip():
-                    gh_token = gh_res.stdout.strip()
-                    # Verify login matches
-                    user_resp = httpx.get(
-                        "https://api.github.com/user",
-                        headers={
-                            "Authorization": f"Bearer {token}",
-                            "Accept": "application/vnd.github+json",
-                            "User-Agent": "AI-Agents-Platform"
-                        },
-                        timeout=5.0
+            # For Fine-Grained PATs (github_pat_...), GitHub's /user/repos always includes all public
+            # repositories alongside the explicitly selected repositories. Filter to explicitly scoped
+            # repositories (private repos returned to the token, or public repos with granted permissions)
+            # when present, and never override the user's token with host `gh auth token`.
+            if token and token.startswith("github_pat_") and raw_repos:
+                scoped_repos = [
+                    r for r in raw_repos
+                    if r.get("private") or any((r.get("permissions") or {}).get(p) for p in ("push", "maintain", "admin", "triage"))
+                ]
+                if scoped_repos:
+                    raw_repos = scoped_repos
+                else:
+                    token_warning = (
+                        "Fine-Grained token (github_pat_...) returned only read-only public repositories. "
+                        "GitHub always exposes public repositories to fine-grained tokens; grant 'Contents: Read and write' "
+                        "or include private repositories on GitHub to scope discovery strictly to selected repositories."
                     )
-                    gh_user_resp = httpx.get(
-                        "https://api.github.com/user",
-                        headers={
-                            "Authorization": f"Bearer {gh_token}",
-                            "Accept": "application/vnd.github+json",
-                            "User-Agent": "AI-Agents-Platform"
-                        },
-                        timeout=5.0
-                    )
-                    if user_resp.status_code == 200 and gh_user_resp.status_code == 200:
-                        login1 = user_resp.json().get("login")
-                        login2 = gh_user_resp.json().get("login")
-                        if login1 and login2 and login1.lower() == login2.lower():
-                            # Fetch with gh_token
-                            gh_repos_resp = httpx.get(
-                                "https://api.github.com/user/repos?per_page=100&sort=updated&affiliation=owner,collaborator,organization_member",
-                                headers={
-                                    "Authorization": f"Bearer {gh_token}",
-                                    "Accept": "application/vnd.github+json",
-                                    "User-Agent": "AI-Agents-Platform"
-                                },
-                                timeout=15.0
-                            )
-                            if gh_repos_resp.status_code == 200:
-                                raw_repos = gh_repos_resp.json()
-
-                if not any(r.get("private") for r in raw_repos):
-                    token_warning = "Fine-Grained token (github_pat_...) has 'Public Repositories only' set on GitHub. Enable 'All repositories' + 'Metadata/Contents: Read' on GitHub for direct private repo access."
 
         except HTTPException:
             raise
@@ -223,103 +191,26 @@ def discover_resources(
         return {"provider": "local_git", "repositories": repos}
 
     elif provider == "slack":
-        default_channels = [
-            {"id": "#general", "name": "#general", "description": "General announcements & team feed"},
-            {"id": "#dev-team", "name": "#dev-team", "description": "Engineering team channel"},
-            {"id": "#alerts", "name": "#alerts", "description": "System alerts & automated agent notifications"},
-            {"id": "#pr-review", "name": "#pr-review", "description": "Code review & pull request gates"},
-            {"id": "#workflows-feed", "name": "#workflows-feed", "description": "Autonomous workflow execution logs"},
-            {"id": "#deployments", "name": "#deployments", "description": "Release & CI/CD pipeline events"},
-        ]
-        configured_channels = []
-        cfgs = []
-        if req.configuration and isinstance(req.configuration, dict):
-            cfgs.append(req.configuration)
-        try:
-            conns = db.list_mcp_connectors()
-            for conn in conns:
-                if conn.provider.lower() == "slack" and conn.configuration and isinstance(conn.configuration, dict):
-                    cfgs.append(conn.configuration)
-        except Exception:
-            pass
-
-        for cfg in cfgs:
-            allowed = cfg.get("allowed_channels", [])
-            if isinstance(allowed, str):
-                allowed = [allowed]
-            legacy = cfg.get("default_channel")
-            candidates = list(allowed)
-            if legacy and legacy not in candidates:
-                candidates.append(legacy)
-            for item in candidates:
-                if isinstance(item, dict):
-                    cid = str(item.get("id") or item.get("name") or "").strip()
-                    cname = str(item.get("name") or cid).strip()
-                    cdesc = item.get("description") or "Configured Slack channel"
-                else:
-                    cid = str(item).strip()
-                    cname = cid
-                    cdesc = f"Configured channel ({cid})"
-                if cid:
-                    configured_channels.append({"id": cid, "name": cname, "description": cdesc})
-
-        seen_ids = set()
-        channels = []
-        for ch in configured_channels + default_channels:
-            cid = ch.get("id")
-            if cid and cid not in seen_ids:
-                seen_ids.add(cid)
-                channels.append(ch)
-
-        return {"provider": "slack", "channels": channels}
+        from integrations.tool_definitions import resource_values, valid_channel
+        claims = getattr(request.state, 'user', None) or {}
+        user = db.get_user(claims.get('sub')) if claims else None
+        if not user or user.status != 'ACTIVE' or user.role != 'ORG_ADMIN' or user.organization_id != org_id:
+            raise HTTPException(403, 'An active organization administrator must inspect configured Slack channel IDs.')
+        cfgs = [req.configuration] if isinstance(req.configuration, dict) else []
+        connectors = db.list_mcp_connectors(organization_id=org_id)
+        if req.connector_id:
+            connector = next((c for c in connectors if c.id == req.connector_id and c.provider == 'slack'), None)
+            if not connector:
+                raise HTTPException(404, 'Slack connector not found in this organization.')
+            cfgs.append(connector.configuration or {})
+        else:
+            cfgs.extend(c.configuration or {} for c in connectors if c.provider == 'slack' and c.organization_id == org_id)
+        identifiers = sorted({v for cfg in cfgs for v in resource_values(cfg, 'channels') if valid_channel('slack', v)})
+        return {'provider': 'slack', 'channels': [{'id': v, 'name': v, 'description': 'Configured channel ID; not live-discovered.'} for v in identifiers]}
 
     elif provider == "telegram":
-        default_chats = [
-            {"id": "@agents_office_alerts", "name": "Agents Office Alerts", "description": "Real-time critical platform notifications"},
-            {"id": "@workflow_dev_channel", "name": "Dev Workflows Channel", "description": "Engineering pipeline trigger channel"},
-            {"id": "@pr_review_bot", "name": "PR Review Bot", "description": "Interactive pull request gate approvals"},
-        ]
-        configured_chats = []
-        cfgs = []
-        if req.configuration and isinstance(req.configuration, dict):
-            cfgs.append(req.configuration)
-        try:
-            conns = db.list_mcp_connectors()
-            for conn in conns:
-                if conn.provider.lower() == "telegram" and conn.configuration and isinstance(conn.configuration, dict):
-                    cfgs.append(conn.configuration)
-        except Exception:
-            pass
-
-        for cfg in cfgs:
-            allowed = cfg.get("allowed_channels", [])
-            if isinstance(allowed, str):
-                allowed = [allowed]
-            legacy = cfg.get("chat_id")
-            candidates = list(allowed)
-            if legacy and legacy not in candidates:
-                candidates.append(legacy)
-            for item in candidates:
-                if isinstance(item, dict):
-                    cid = str(item.get("id") or item.get("name") or "").strip()
-                    cname = str(item.get("name") or cid).strip()
-                    cdesc = item.get("description") or "Configured Telegram chat/channel"
-                else:
-                    cid = str(item).strip()
-                    cname = cid
-                    cdesc = f"Configured chat ({cid})"
-                if cid:
-                    configured_chats.append({"id": cid, "name": cname, "description": cdesc})
-
-        seen_ids = set()
-        chats = []
-        for ch in configured_chats + default_chats:
-            cid = ch.get("id")
-            if cid and cid not in seen_ids:
-                seen_ids.add(cid)
-                chats.append(ch)
-
-        return {"provider": "telegram", "chats": chats}
+        from .mcp_telegram_discovery import discover_telegram
+        return discover_telegram(req, request, db)
 
     return {"provider": provider, "items": []}
 

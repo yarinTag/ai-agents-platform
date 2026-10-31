@@ -28,3 +28,20 @@ Each test function appears in exactly one case module; test functions are not re
 The three execution cases in test_workflow_execution.py now exercise explicit missing-runtime failure with the real SQLite-backed engine. They assert a FAILED execution/step, rendered input and agent preservation, zero fabricated usage, and no dependent-stage launch. The original fixture had no runtime but expected invented COMPLETED results; those assertions contradicted the corrected execution contract. DAG fan-out/fan-in planning assertions remain. No test was run, no inference adapter was added, and these cases do not establish successful live execution or metrics accumulation.
 
 The runtime-unavailable execution cases now use a fresh tmp_path SQLite database and an explicit test-local agent capacity, so they do not depend on the application database contents or global capacity occupancy. This source change was not executed.
+
+## Direct API runtime source cases
+`test_direct_runtime.py` adds real-file private transcript persistence/fork/provider-model-tenant isolation, SQLite-backed Python-worker command routing/model selection, cross-method resume rejection, and local-tool inventory/workspace/symlink boundaries. `test_workflow_assistant*.py` have been removed alongside Workflow Assistant (2026-10-31). Use --noconftest when execution is authorized. These cases were not executed and do not establish live vendor HTTP, MCP tool inference, rendered setup behavior or budget/cancellation integration.
+
+## New workflow chat source cases
+test_workflow_chat.py uses real SQLite and FastAPI with signed JWTs, without calling a model. It covers credential-free allowed repo/channel/tool catalog projection, forbidden resources and cycles, inactive/idempotent creation plus dedicated runner/initial revision, revoked connector rejection, private draft isolation and department API-cost accounting. Persisted candidate fixtures test API/policy behavior, not model quality or live inference. These tests were added but not executed; use --noconftest only after execution is authorized.
+
+Workflow chat source cases also cover rejection of draft-only disclaimers in execution prompts and creation denial without a workflow write. Not executed.
+
+New test_workflow_local_dispatch.py uses real FastAPI/SQLite and a temporary sandbox to cover explicit broker-free local acceptance, reuse of the execution ID, and truthful FAILED state for missing inference. It makes no model calls or mock broker and was not executed under the current restriction.
+
+## Governed connector source cases
+test_connector_execution_security.py uses real SQLite, real FastAPI/JWT discovery authorization, actual runtime services and tool inventories, with no model/provider traffic. It covers credential-free narrowed schemas; forged repo/URL/token/identity/oversized arguments; denied-call audits; missing receipt completion; live department/tool/user/tenant/cancellation/expiry revocation; permission growth not widening scopes; agent skip flags not bypassing restrictions; atomic ambiguous channel-send suppression; hashed message audits; no local escape tools; task-bound transcript attachment; Playground exclusion; exact notification targets; and stale-admin/foreign-connector discovery denial. No mocked successful HTTP transport is introduced; actual vendor calls/receipts remain unverified. Updated workflow chat fixtures use implemented canonical tool names and real-format channel IDs. Tests were added/edited but not executed under the current restriction.
+
+Connector security source cases additionally cover invalid optional notification not blocking a GitHub-only explicit resource scope even when legacy mcp_servers contains Telegram; completion still requires a real receipt. No execution verification was run.
+
+Connector security source cases also cover manual channel-test rejection of aliases, foreign connectors and stale administrator claims without outbound I/O. These cases were not executed.

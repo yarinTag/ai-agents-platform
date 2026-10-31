@@ -49,7 +49,7 @@ The **AI Agents Platform Dashboard** (`poc/dashboard/`) is an enterprise-grade, 
      * Agents Roster (`/agents`): Agent fleet roster, templates, hierarchy, and mini-chats.
   2. **`TOOLS & PLUGINS`**:
      * Plugins Hub (`/skills`): Local directory vs Git repository scanner with collapsible plugin cards.
-     * MCP Hub (`/mcp`): Model Context Protocol connectors, multi-channel arrays, and workflow triggers.
+     * MCP Hub (`/mcp`): Model Context Protocol connectors, multi-channel arrays, and tool permissions.
      * Tasks Queue (`/tasks`): Hierarchical task trees, real-time logs, and human delegation.
   3. **`WORKSPACE & DATA`**:
      * Projects (`/projects`): Workspace directories linked via native folder picker.
@@ -148,3 +148,18 @@ WorkflowAssistant.tsx mounts at /workflow-assistant and appears under Operations
 
 ## Model-only YAML authoring and internal MCP
 WorkflowAssistant now selects an authoring model/provider from authenticated context rather than department agents. The model's execution agents remain per-step proposal data. The page loads the native YAML schema, displays/downloads canonical inactive YAML, validates it through /validate-yaml, shows actual MCP tool names and preserves source revision/history behavior. No local conversation or permission cache is added.
+
+## Direct API provider setup & provider-dependent models (2026-10-31)
+`RuntimeSetupModal` configures Direct HTTP API providers (`direct_nvidia`, `direct_anthropic`, `direct_openai`, `direct_openrouter`), optional API keys, enabled providers, and per-provider default models from each provider's model catalog. `OfficeTopBar` Runtime settings reopens it; successful saves emit `platform:runtime-changed` so `ModelSelector` and `useAgentsPage` reload the provider-filtered model list from `/api/v1/models/`.
+
+## Workflow Assistant UI route removal (2026-10-31)
+`/workflow-assistant` has been removed from `src/App.tsx`, `AppSidebar.tsx`, and `OfficeTopBar.tsx`. Workflow authoring and AI generation remain consolidated in `/workflows`.
+
+## Friendly workflow chat window
+Workflows has a Create with AI action opening WorkflowChatModal: a simple conversation, configured-model label, department selector, step preview and explicit Create workflow. An expandable resource list shows exact authorized repository/channel/tool IDs. useWorkflowChat owns typed context reads, job polling/cancellation, request ID reuse on retries and explicit creation. No removed Workflow Assistant route is restored. New English/Hebrew copy lives in i18n/workflowChat.ts. Runtime/settings changes refresh context; existing jobs keep their captured model. Nothing executes automatically. No build or runtime verification was run.
+
+The AI creation window can recover the authorized stored chat from ?workflowChat=<request-id>. Connection/timeout/HTTP details and transient-error clearing distinguish dev-server reloads from model failures.
+
+Manual Workflow Run now provides an explicit local-server/background option (UI default) and a separate message-queue option. Local mode removes only the broker requirement; it changes neither agent tools nor runtime/governance checks. Errors name unavailable capabilities.
+
+Governed connector resources now distinguish executable availability from a descriptive/connected catalog entry. The chat resource panel shows Available/Unavailable from the server. Telegram Fetch resources requests actual bot chat IDs, has no suggested phantom targets and requires explicit selection/save. Slack lists real-format configured IDs only. This task did not build/run the dashboard.

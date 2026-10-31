@@ -155,6 +155,7 @@ export interface WorkflowExecution {
   started_at?: string;
   completed_at?: string;
   error_message?: string;
+  notification_error?: string | null;
   created_at?: string;
   payload_hash?: string;
   is_deduplicated?: boolean;

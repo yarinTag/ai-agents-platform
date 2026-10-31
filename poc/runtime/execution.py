@@ -1,11 +1,13 @@
 """Subprocess execution and result-state interpretation behind the runtime facade."""
 
 import logging
+import os
 import queue
 import subprocess
 import threading
 import time
 from datetime import datetime
+from dataclasses import replace
 from collections import deque
 from typing import Optional
 from config import AgentConfig, ProjectConfig
@@ -84,6 +86,7 @@ class TaskExecutor:
         run = adapter._runs[run_id]
         stderr_tail = deque(maxlen=30)
         stderr_thread = None
+        connector_guard = None
 
         try:
             if adapter._shutting_down or run.status == TaskStatus.CANCELLED:
@@ -108,7 +111,17 @@ class TaskExecutor:
 
             # Determine provider cost source
             chosen_prov_id = adapter.resolve_runtime_provider(agent_config)
-            if chosen_prov_id in (providers.PROVIDER_ANTHROPIC_API, providers.PROVIDER_CUSTOM_GATEWAY):
+            # Pin command and environment to one selection if setup changes mid-start.
+            agent_config = replace(agent_config, runtime_provider=chosen_prov_id)
+            from .direct_config import DIRECT_PROVIDERS, resolve_model_for_provider
+            if chosen_prov_id in DIRECT_PROVIDERS:
+                try:
+                    run.model = resolve_model_for_provider(
+                        chosen_prov_id, agent_config.model, db=adapter.services.database()
+                    )
+                except Exception:
+                    pass
+            if chosen_prov_id in (*DIRECT_PROVIDERS, providers.PROVIDER_ANTHROPIC_API, providers.PROVIDER_CUSTOM_GATEWAY):
                 run.cost_source = "API_KEY"
             elif chosen_prov_id in (providers.PROVIDER_CLAUDE_CODE_NATIVE, providers.PROVIDER_FREE_CLAUDE_CODE):
                 run.cost_source = "SUBSCRIPTION_CLI"
@@ -128,6 +141,10 @@ class TaskExecutor:
                 agent_config=agent_config,
             )
 
+            from .connector_context import attach_connectors
+            connector_guard = attach_connectors(adapter, run, chosen_prov_id, cmd, env,
+                playground=playground_workspace is not None)
+
             # Determine working directory
             work_dir = playground_workspace or adapter._resolve_working_directory(project_config, agent_config)
 
@@ -140,9 +157,11 @@ class TaskExecutor:
                 cwd=work_dir,
                 text=True,
                 bufsize=1,
+                start_new_session=(chosen_prov_id in DIRECT_PROVIDERS and os.name == "posix"),
                 universal_newlines=True
             )
 
+            process._process_group = chosen_prov_id in DIRECT_PROVIDERS and os.name == 'posix'
             adapter._processes[run_id] = process
             # Drain stderr separately so a full pipe cannot deadlock inference.
             stderr_thread = threading.Thread(target=adapter._stderr_reader, args=(process, stderr_tail), daemon=True)
@@ -169,6 +188,8 @@ class TaskExecutor:
                 try:
                     # Get event with timeout to allow checking for cancellation
                     event = event_queue.get(timeout=0.1)
+                    if run.status == TaskStatus.CANCELLED:
+                        break  # A late model result cannot overwrite cancellation.
 
                     # Add event to run
                     run.events.append(event)
@@ -194,12 +215,13 @@ class TaskExecutor:
                             pass
 
                     # Check for explicit tool call for supervisor clarification or permission
-                    tool_q = extract_supervisor_question(event)
+                    # External tool data cannot become an orchestration/permission command.
+                    tool_q = None if connector_guard else extract_supervisor_question(event)
                     if tool_q and playground_workspace and event.get("type") != "result":
                         run.status = TaskStatus.FAILED
                         run.error = tool_q["question"]
                         break
-                    if tool_q and not playground_workspace:
+                    if tool_q and not playground_workspace and event.get("type") != "result":
                         self._handle_question(run, tool_q)
                         break
 
@@ -226,7 +248,15 @@ class TaskExecutor:
                         if model_reported:
                             run.model = str(model_reported)
 
-                        q_data = extract_supervisor_question(event) or extract_supervisor_question(res_val)
+                        if connector_guard and not event.get('is_error'):
+                            try:
+                                connector_guard.verify_completion()
+                            except ValueError as denied:
+                                run.status = TaskStatus.FAILED
+                                run.error = str(denied)
+                                break
+
+                        q_data = None if connector_guard else (extract_supervisor_question(event) or extract_supervisor_question(res_val))
                         if q_data and playground_workspace:
                             run.status = TaskStatus.FAILED
                             run.error = q_data["question"]

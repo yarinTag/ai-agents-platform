@@ -22,7 +22,7 @@ from runtime.command_builder import RuntimeCommandBuilder
 from runtime.execution import TaskExecutor
 from runtime.legacy_services import create_legacy_services
 from runtime.output_stream import parse_output_line, read_output, read_stderr_tail
-from runtime import authoring, playground
+from runtime import playground
 from runtime.processes import terminate_process
 from runtime.services import RuntimeServices
 from runtime.subscriptions import RuntimeSubscriptions, subscribe_to_events
@@ -62,7 +62,6 @@ class ClaudeCodeRuntimeAdapter:
         self._execution_threads = {}
         self._run_locks = {}
         self._stderr_threads = {}
-        self._authoring_lock = threading.Lock()
         self.on_task_completed: Optional[Callable[[AgentRun], None]] = None
 
         self.services = services or create_legacy_services(self)
@@ -164,16 +163,13 @@ class ClaudeCodeRuntimeAdapter:
 
     _stderr_reader = staticmethod(read_stderr_tail)
 
-    def _read_authoring_process(self, process, timeout_seconds, is_cancelled=None):
-        return authoring._read_authoring_process(self, process, timeout_seconds, is_cancelled)
+    def workflow_chat_selection(self):
+        from runtime.workflow_chat import selection
+        return selection(self)
 
-    def get_authoring_models(self):
-        return authoring.get_authoring_models(self)
-
-    def infer_authoring(self, selection, prompt, system_prompt, response_schema,
-                        timeout_seconds=120, max_budget_usd=None, is_cancelled=None, authoring_context=None):
-        return authoring.infer_authoring(self, selection, prompt, system_prompt, response_schema,
-            timeout_seconds, max_budget_usd, is_cancelled, authoring_context)
+    def infer_workflow_chat(self, selected, prompt, schema, budget, is_cancelled):
+        from runtime.workflow_chat import infer
+        return infer(self, selected, prompt, schema, budget, is_cancelled)
 
     def start_playground_task(self, agent_id, task_id, prompt, workspace):
         return playground.start_playground_task(self, agent_id, task_id, prompt, workspace)
@@ -443,6 +439,11 @@ class ClaudeCodeRuntimeAdapter:
         run.status = TaskStatus.CANCELLED
         run.ended_at = datetime.now()
         run.error = "Task cancelled"
+        try:
+            self.services.database().save_task_run(run)
+        except Exception:
+            logger.warning("Could not persist cancellation for %s", run_id)
+
         self._subscriptions.close_run(run_id)
 
         return True

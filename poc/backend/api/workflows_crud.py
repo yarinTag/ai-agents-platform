@@ -30,7 +30,11 @@ def create_workflow(
     request: Request,
     db: DatabaseManager = Depends(get_db_manager)
 ):
-    """Create a new workflow from YAML or JSON definition."""
+    return persist_workflow(req, request, db)
+
+
+def persist_workflow(req, request, db, workflow_id=None, initially_active=True):
+    """Shared creation/provisioning path; chat supplies a stable ID and starts inactive."""
     def_json = req.definition_json
     if not def_json and req.definition_yaml:
         try:
@@ -58,7 +62,7 @@ def create_workflow(
         if not is_org_admin and target_dept_id not in authorized_dept_ids:
             raise HTTPException(status_code=403, detail=f"Not authorized to assign workflow to department '{target_dept_id}'")
 
-    wf_id = f"wf_{uuid.uuid4().hex[:10]}"
+    wf_id = workflow_id or f"wf_{uuid.uuid4().hex[:10]}"
     runner_agent_id = f"wf-agent-{wf_id}"
 
     # Extract metadata, MCPs, skills, steps, and channel info for the dedicated runner agent
@@ -127,6 +131,7 @@ def create_workflow(
         cron_expression=req.cron_expression,
         webhook_enabled=req.webhook_enabled,
         organization_id=org_id,
+        is_active=initially_active,
         **_workflow_actor(request)
     )
 

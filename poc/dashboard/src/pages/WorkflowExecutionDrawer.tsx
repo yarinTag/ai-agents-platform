@@ -1,5 +1,6 @@
+import { useWorkflowRunText } from '../i18n/workflowRun';
 import { Link } from 'react-router-dom';
-import { Tag, Space, Card, Input, Drawer } from 'antd';
+import { Tag, Space, Card, Input, Drawer, Alert } from 'antd';
 import { EyeOutlined } from '@ant-design/icons';
 
 import type { useWorkflowsPage } from './useWorkflowsPage';
@@ -11,6 +12,7 @@ export const WorkflowExecutionDrawer = (model: Pick<
   | 'setDetailDrawerOpen'
   | 'selectedExecution'
 >) => {
+  const runText = useWorkflowRunText();
   const { workflows, detailDrawerOpen, setDetailDrawerOpen, selectedExecution } = model;
   return (<>
       {/* Execution Inspection Drawer */}
@@ -77,6 +79,8 @@ export const WorkflowExecutionDrawer = (model: Pick<
               </Card>
             )}
 
+            {selectedExecution.notification_error && <Alert type="warning" showIcon
+              message={runText.deliveryWarning} description={selectedExecution.notification_error} />}
             {selectedExecution.error_message && (
               <Card size="small" style={{ background: '#220808', borderColor: '#8b0000' }}>
                 <span style={{ color: '#ff7875', fontSize: 12 }}>ERROR DETAILS:</span>

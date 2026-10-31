@@ -121,3 +121,16 @@ Model-only authoring must not load/save a planning agent. Use the current runtim
 Master integration retains modular dependencies and isolated lifecycle. queue_lifecycle owns broker/worker shutdown; workflow_wiring owns firewall and ChatOps adapters. Source-only merge review: do not infer passing builds/tests from conflict resolution.
 
 Keep queue-api (HTTP monitoring) separate from queue (transport) and queue-worker (consumers). Broker initialization failure must not hide its status endpoint; transport-dependent mutations must still reject unavailable dispatch.
+
+## Workflow chat development contract
+The new chat uses current database user status, role and department membership, not JWT role alone. Its catalog must never contain connector configuration/credentials or treat remote discovery as authorization. Revalidate structured agent/repository/channel/tool references and DAG/cron at creation. Shared persist_workflow accepts internal stable workflow_id/initially_active options; generic creation retains its active default. Generation never invokes integrations. Review tests in test_workflow_chat.py with --noconftest only when the user authorizes execution.
+
+Manual execution can explicitly use process-local background dispatch (use_queue=false&background=true) without RabbitMQ. Do not turn queue 503 into an implicit retry: acceptance can be ambiguous and replay could duplicate external actions. The original synchronous API path and queue default remain compatible.
+
+Governed connectors use fixed vendor endpoints and a backend-only task scope, not arbitrary model-supplied URLs/configuration. Never enable shell/file tools in connector-backed workflow steps or treat remote content as supervisor commands. Discovery cannot grant permissions or invent channels. Telegram/Slack discovery for configuration is current-DB ORG_ADMIN-only; workflow runtime checks current department/agent/user policy independently. No live integration verification was authorized.
+
+Manual channel testing uses exact saved tenant connector/allowlist checks and persisted active administrator authorization. It uses the strict acknowledged channel adapter, never legacy alias resolution; no test message was sent during implementation.
+
+Telegram provider rejection diagnostics are fixed allowlisted messages. Never expose raw response bodies or token-bearing endpoint paths when reporting channel-test errors.
+
+Bot-to-bot and conversation-not-started Telegram rejections have separate safe setup hints; diagnose the saved receiving target independently of the sender token. No live calls were performed.

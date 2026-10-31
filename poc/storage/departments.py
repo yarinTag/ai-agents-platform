@@ -100,11 +100,11 @@ class DepartmentsRepository:
                   AND created_at LIKE ?
             """, (department_id, month_prefix))
             row = cursor.fetchone()
-            workflow_spend = float(row['total']) if row else 0.0
-            authoring = conn.execute("""SELECT COALESCE(SUM(cost_usd), 0.0) AS total
-                FROM workflow_assistant_generations WHERE department_id = ? AND created_at LIKE ?
-                AND cost_source = 'API_KEY'""", (department_id, month_prefix)).fetchone()
-            return workflow_spend + float(authoring['total'])
+            workflow_total = float(row['total']) if row else 0.0
+            chat = conn.execute("""SELECT COALESCE(SUM(cost_usd), 0) AS total
+                FROM workflow_builder_jobs WHERE department_id=? AND created_at LIKE ?
+                AND cost_source='API_KEY'""", (department_id, month_prefix)).fetchone()
+            return workflow_total + float(chat['total'])
 
     def check_department_budget(self, department_id: str, requested_cost: float = 0.0) -> Dict[str, Any]:
         """
