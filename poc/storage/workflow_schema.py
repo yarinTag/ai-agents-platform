@@ -144,6 +144,13 @@ def initialize(conn, insert_revision):
         execution_id TEXT PRIMARY KEY, context_json TEXT NOT NULL,
         FOREIGN KEY (execution_id) REFERENCES workflow_executions(id) ON DELETE CASCADE
     )""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS workflow_secrets (
+        id TEXT PRIMARY KEY, workflow_id TEXT NOT NULL, organization_id TEXT NOT NULL, name TEXT NOT NULL,
+        kind TEXT NOT NULL CHECK (kind IN ('encrypted', 'external')), ciphertext BLOB, nonce BLOB,
+        external_ref TEXT, created_by TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+        UNIQUE (workflow_id, name),
+        FOREIGN KEY (workflow_id) REFERENCES workflows(id) ON DELETE CASCADE
+    )""")
     conn.execute("""CREATE TABLE IF NOT EXISTS workflow_repo_workspaces (
         task_id TEXT PRIMARY KEY, execution_id TEXT NOT NULL, workspace_json TEXT NOT NULL,
         FOREIGN KEY (task_id) REFERENCES task_runs(run_id) ON DELETE CASCADE,

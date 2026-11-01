@@ -63,6 +63,10 @@ happens when the workflow is saved and again before execution.
    (success, failure, timeout or cancellation). The record is marked `RELEASED`, and a
    resumed task cannot reuse it.
 
+## Workflow settings
+
+Machine size, the network allowlist (via an egress proxy) and secrets come from the workflow's settings. See [workflow-settings.md](workflow-settings.md). That replaces the fixed 2 CPU / 2 GB and always-no-network defaults described above; with no allowlist, the container still has no network.
+
 ## Never done
 
 - Push to the base branch, any existing branch, or force-push.

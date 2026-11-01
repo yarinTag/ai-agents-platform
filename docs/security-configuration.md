@@ -11,6 +11,9 @@ integration, rather than falling back to an insecure default.
 | `PLATFORM_CORS_ORIGINS` | Any browser origin other than `http://localhost:5173` / `http://127.0.0.1:5173` | The browser blocks dashboard requests from that origin. `*` is ignored. |
 | `PLATFORM_API_KEY_ORG_ID` | `PLATFORM_API_KEY` is used | API-key requests are rejected (401). The key acts as ORG_ADMIN of this one organization only. |
 | `PLATFORM_DEV_ORG_ID` | `ALLOW_UNAUTHENTICATED_DEV=true` (which now also needs `PLATFORM_DEV_MODE=1`) | Open dev access is rejected. |
+| `PLATFORM_SECRETS_KEY` (base64, 32 bytes) | Encrypted workflow secrets | Storing or using encrypted secrets fails (API 503, step fails). |
+| `PLATFORM_EXTERNAL_SECRET_ARN_PREFIXES` | External (AWS) workflow secrets | External refs are rejected. |
+| `PLATFORM_SANDBOX_PROXY_IMAGE` (digest-pinned, has python3) | A workflow sets a network allowlist | Sandbox steps fail (no unproxied fallback). |
 | `TELEGRAM_WEBHOOK_SECRET` | Telegram approval buttons | `/api/v1/approvals/telegram-callback` returns 503. Register it with `setWebhook(secret_token=...)`. |
 | `SLACK_SIGNING_SECRET` | Slack approval buttons | `/api/v1/approvals/slack-callback` returns 503. Use the Slack app's signing secret. |
 

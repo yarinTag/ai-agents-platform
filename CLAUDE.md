@@ -179,3 +179,6 @@ Clone only for steps that run or change code: declare params.workspace on the st
 
 ## Security configuration (fail closed)
 The server requires JWT_SECRET_KEY (>= 32 chars) unless PLATFORM_DEV_MODE=1. API keys need PLATFORM_API_KEY_ORG_ID. Approval callbacks need TELEGRAM_WEBHOOK_SECRET / SLACK_SIGNING_SECRET. CORS uses PLATFORM_CORS_ORIGINS. SSE and stats are organization-scoped, and task resume never infers permission grants from text. See docs/security-configuration.md. No tests, builds or startup were run.
+
+## Workflow settings (model, machine size, network, secrets)
+Each workflow's definition.settings selects a model (default, tier or catalog ID; it overrides the agent model for step tasks), a sandbox machine size (small/medium/large) and an HTTPS egress allowlist enforced by a per-step proxy container. Write-only secrets are stored AES-GCM encrypted (PLATFORM_SECRETS_KEY) or as allowlisted AWS Secrets Manager ARNs, injected only into repository sandboxes as env vars and redacted from tool output. Managing them requires a DB-verified org admin or department manager. See docs/workflow-settings.md. No tests, builds, Docker or AWS calls were run.

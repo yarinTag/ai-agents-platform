@@ -18,5 +18,6 @@ from .workflows_queries import *
 
 
 from . import workflow_chat as _chat
+from . import workflows_settings as _settings
 
-router = compose_routers(_chat.router, _generation.router, _queries.router, _channels.router, _playground.router, _execution.router, _crud.router)
+router = compose_routers(_chat.router, _settings.router, _generation.router, _queries.router, _channels.router, _playground.router, _execution.router, _crud.router)
