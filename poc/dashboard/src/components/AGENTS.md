@@ -189,3 +189,6 @@ A new workflow exposes the explicitly planned __workflow_runner__ option. Defaul
 new steps select that option, not invented role IDs. Refresh clears stale options;
 loading failure blocks saving via the existing resource error path, with no fake
 agent fallback. Changing department/workflow reloads the source. No live checks.
+
+### StepEventTimeline (`workflows/StepEventTimeline.tsx`)
+Renders persisted runtime events (`Array<Record<string, unknown>>`) as compact rows: local time, kind tag and a one-line summary from `describeEvent`. Kinds are the exported string enum `EventKind`, and `describeEvent` switches over it exhaustively (a `never` check), so a new kind fails type checking until it has a branch. Unrecognized runtime types map to `EventKind.Unknown` but keep their original label. That function covers stderr/raw content, error.message, result text plus reported cost, direct tool_use/tool_result, CLI assistant/user message parts (text, tool_use, tool_result), system session IDs and end_of_output. Unknown shapes fall back to clipped JSON. Each row toggles full text (More) or the raw event (JSON). Event content is rendered as React text, never HTML. Used by `pages/WorkflowLogs.tsx`.
