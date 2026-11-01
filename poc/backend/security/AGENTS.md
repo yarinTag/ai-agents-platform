@@ -10,7 +10,9 @@ The **Security & Production Hardening Service** (`poc/backend/security/`) enforc
 * **JWT & Password Security Provider (`tokens.py`)**:
   * Pure standard-library implementation using HMAC-SHA256 and PBKDF2 for zero-dependency supply chain safety.
   * Issues and validates signed HS256 JWT access tokens (`create_access_token`, `decode_access_token`).
+  * Decoding rejects malformed segments, non-`HS256` headers and tokens without a numeric `exp` (returns `None`, never a 500).
   * Enforces salted password hashing (`hash_password`, `verify_password`).
+* **Account invariants**: `GET /api/v1/auth/me` resolves only by the signed `sub`, requires an ACTIVE user in the token's org and returns 401 otherwise; it never creates or revives users (service claims are rejected before lookup). `POST /departments/{id}/members/bulk-invite` requires a database-verified active ORG_ADMIN of the department's organization, an invitable role (`ORG_ADMIN`, `MANAGER`, `OPERATOR`, `MEMBER`), at most 100 emails and 1-30 day expiry; tokens are returned only to that administrator for out-of-band delivery. `POST /invitations/accept` never authenticates as an existing account by token alone: existing users must supply their current password and belong to the invite's organization; new users need a password of 8+ characters. Onboarding consumes only the joined organization's invitations.
 * **Multi-Tenant Authentication & Scoping (`auth.py`)**:
   * `authenticate_request`: Validates Bearer JWT tokens or API keys (`PLATFORM_API_KEY`). Unauthenticated requests are rejected with HTTP 401. Exempts public health, auth onboarding, and webhook endpoints.
   * `get_authorized_scope`: Computes authorized tenant organization and department IDs from user claims or database records.

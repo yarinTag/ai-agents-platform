@@ -96,8 +96,11 @@ def decode_access_token(token: str) -> Optional[Dict[str, Any]]:
     try:
         signing_input = f"{header_b64}.{payload_b64}".encode('ascii')
         actual_sig = _b64url_decode(sig_b64)
+        header = json.loads(_b64url_decode(header_b64).decode('utf-8'))
     except (ValueError, UnicodeError):
         return None  # Malformed token: reject instead of raising a 500.
+    if not isinstance(header, dict) or header.get("alg") != "HS256":
+        return None
     expected_sig = hmac.new(_get_jwt_secret(), signing_input, hashlib.sha256).digest()
 
     if not hmac.compare_digest(expected_sig, actual_sig):
@@ -109,8 +112,11 @@ def decode_access_token(token: str) -> Optional[Dict[str, Any]]:
     except Exception:
         return None
 
+    if not isinstance(payload, dict):
+        return None
+    # Tokens without a numeric expiry are rejected rather than treated as eternal.
     exp = payload.get("exp")
-    if exp and int(time.time()) > exp:
+    if isinstance(exp, bool) or not isinstance(exp, (int, float)) or int(time.time()) > exp:
         return None
 
     return payload
