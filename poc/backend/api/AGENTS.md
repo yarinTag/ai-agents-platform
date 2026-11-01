@@ -262,3 +262,6 @@ revalidation and idempotency checks remain. Generation with validation errors us
 a server-owned corrective message instead of a model's misleading ready claim.
 
 Manual POST workflow creation also resolves explicit __workflow_runner__ step assignments to its own generated wf-agent-{workflow_id} before persistence/provisioning. It creates no arbitrary role-based agent from dropdown labels. Other agent API behavior is unchanged.
+
+## Workflow settings and secrets (`workflows_settings.py`)
+Composed into the workflows router. GET /{workflow_id}/settings (workflow scope) returns revision, validated settings (or defaults plus settings_error), secret metadata {name, kind, external_ref, created_by, updated_at}, can_manage, machine_sizes and max_allowed_hosts. PUT /{workflow_id}/settings {settings, expected_revision, change_summary?} saves a revision through db.update_workflow (409 on conflict, 400 on invalid input). PUT /{workflow_id}/secrets/{name} {value | external_ref} returns 400 on validation and 503 when PLATFORM_SECRETS_KEY or the ARN prefixes are unset. DELETE /{workflow_id}/secrets/{name} returns 204 or 404. Every mutation requires a current-DB ACTIVE ORG_ADMIN of the workflow org, or a MANAGER of its department, and writes audit_logs (workflow.settings.update / workflow.secret.set / workflow.secret.delete) without secret values.

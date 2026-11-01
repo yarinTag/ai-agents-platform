@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Table, Button, Tag, Space, Tooltip, Popconfirm, Badge } from 'antd';
-import { ApartmentOutlined, PlayCircleOutlined, DeleteOutlined, CodeOutlined, EyeOutlined, ThunderboltOutlined, ClockCircleOutlined, SlackOutlined, SendOutlined, BranchesOutlined, EditOutlined, HistoryOutlined } from '@ant-design/icons';
+import { ApartmentOutlined, PlayCircleOutlined, DeleteOutlined, CodeOutlined, EyeOutlined, ThunderboltOutlined, ClockCircleOutlined, SlackOutlined, SendOutlined, BranchesOutlined, EditOutlined, HistoryOutlined, SettingOutlined } from '@ant-design/icons';
 import { PlatformWorkflow } from '../types/mcp';
 
 import type { useWorkflowsPage } from './useWorkflowsPage';
@@ -10,6 +10,8 @@ export const createWorkflowColumns = (model: Pick<
   | 'workflows'
   | 'setEditingWorkflow'
   | 'setHistoryWorkflow'
+  | 'setSettingsWorkflow'
+  | 'settingsText'
   | 'setCreateModalOpen'
   | 'setCanvasModalOpen'
   | 'setSelectedWorkflow'
@@ -23,6 +25,8 @@ export const createWorkflowColumns = (model: Pick<
     workflows,
     setEditingWorkflow,
     setHistoryWorkflow,
+    setSettingsWorkflow,
+    settingsText,
     setCreateModalOpen,
     setCanvasModalOpen,
     setSelectedWorkflow,
@@ -139,6 +143,7 @@ export const createWorkflowColumns = (model: Pick<
             setEditingWorkflow(record); setCreateModalOpen(true);
           }}>Edit</Button>
           <Button size="small" icon={<HistoryOutlined />} onClick={() => setHistoryWorkflow(record)}>History</Button>
+          <Button size="small" icon={<SettingOutlined />} onClick={() => setSettingsWorkflow(record)}>{settingsText.settingsAction}</Button>
           <Tooltip title="Execute Workflow">
             <Button
               type="primary"

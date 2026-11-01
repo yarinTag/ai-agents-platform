@@ -101,6 +101,12 @@ class TaskExecutor:
             except Exception:
                 pass
 
+            # A workflow's saved model setting overrides the agent's model for its step tasks.
+            from workflows.settings import model_for_task
+            workflow_model = model_for_task(adapter.services.database(), run_id)
+            if workflow_model:
+                agent_config = replace(agent_config, model=workflow_model)
+
             # Determine model and cost source
             resolved_model = getattr(agent_config, "model", None)
             try:

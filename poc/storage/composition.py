@@ -26,6 +26,7 @@ from .department_permissions import DepartmentPermissionsRepository
 from .users import UsersRepository
 from .invitations import InvitationsRepository
 from .workflows import WorkflowsRepository
+from .workflow_secrets import WorkflowSecretsRepository
 
 
 def configure_repositories(manager):
@@ -119,5 +120,8 @@ def configure_repositories(manager):
         update_user=lambda *args, **kwargs: manager.update_user(*args, **kwargs)
     )
     manager._workflows = WorkflowsRepository(
+        manager._get_connection
+    )
+    manager._workflow_secrets = WorkflowSecretsRepository(
         manager._get_connection
     )

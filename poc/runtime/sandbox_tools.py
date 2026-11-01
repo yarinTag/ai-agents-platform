@@ -6,6 +6,7 @@ extended regular expressions (grep -E) rather than Python regex syntax.
 """
 import asyncio
 import fnmatch
+import json
 import re
 
 CONTAINER_NAME = re.compile(r'repo_sbx_[0-9a-f]{24}')
@@ -14,10 +15,22 @@ READ_LIMIT = 1_000_000
 
 
 class SandboxTools:
-    def __init__(self, container, env):
+    def __init__(self, container, env, redactions_path=None):
         if not CONTAINER_NAME.fullmatch(container or ''):
             raise ValueError('Invalid repository sandbox container.')
         self.container, self.env = container, env
+        self.redactions = {}
+        if redactions_path:
+            with open(redactions_path) as handle:
+                # Longest first so a value containing another value is fully masked.
+                self.redactions = dict(sorted(json.load(handle).items(), key=lambda item: -len(item[1])))
+
+    def redact(self, text):
+        """Workflow secret values never reach the model, even when a command prints them."""
+        for name, value in self.redactions.items():
+            if len(value) >= 4:
+                text = text.replace(value, f'[REDACTED:{name}]')
+        return text
 
     async def _exec(self, argv, stdin=None, timeout=120):
         process = await asyncio.create_subprocess_exec(
@@ -49,6 +62,9 @@ class SandboxTools:
             raise ValueError('File could not be written in the sandbox.')
 
     async def call(self, name, inputs):
+        return self.redact(await self._call(name, inputs))
+
+    async def _call(self, name, inputs):
         if name == 'Bash':
             timeout = min(max(inputs.get('timeout', 120000) / 1000, 1), 600)
             code, output = await self._exec(['/bin/sh', '-c', inputs['command']], timeout=timeout)

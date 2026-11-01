@@ -175,10 +175,20 @@ def _finish(db, identifier, result=None, error=None):
 
 def open_workspace(db, task_id, execution_id, step, config):
     """Authorize, clone and start the sandbox container. Fails closed without Docker."""
-    from workflows.repo_sandbox import require_docker, sandbox_image, start_container, remove_container
+    from workflows.repo_sandbox import (proxy_image, remove_container, remove_egress, require_docker,
+                                        sandbox_image, start_container, start_egress)
+    from workflows.settings import MACHINE_SIZES, settings_for_workflow
+    from .workflow_secrets import resolve_workflow_secrets
     connector, agent = authorize_workspace(db, execution_id, step, config)
+    workflow = db.get_workflow(db.get_workflow_execution(execution_id).workflow_id)
+    try:
+        settings = settings_for_workflow(workflow)
+    except ValueError as exc:
+        raise ToolAccessError(f'Workflow settings are invalid: {exc}') from exc
     image = sandbox_image()
+    egress_image = proxy_image() if settings.network_allowlist else None
     require_docker()
+    secrets = resolve_workflow_secrets(db, workflow)  # Fails the step rather than starting without them.
     audit = _audit(db, task_id, agent.id, connector, CLONE_OPERATION,
                    {'repository': config.repository, 'ref': config.ref, 'mode': config.mode})
     _ROOT.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -186,7 +196,9 @@ def open_workspace(db, task_id, execution_id, step, config):
     workspace = {'task_id': task_id, 'execution_id': execution_id, 'step_key': step.key,
         'connector_id': connector.id, 'repository': config.repository, 'mode': config.mode,
         'pr_title': config.pr_title, 'root': str(root), 'worktree': str(root / 'repo'),
-        'gitdir': str(root / 'git'), 'cwd': str(root / 'cwd'), 'container': None, 'state': 'ACTIVE'}
+        'gitdir': str(root / 'git'), 'cwd': str(root / 'cwd'), 'container': None, 'state': 'ACTIVE',
+        'machine_size': settings.machine_size, 'egress': None, 'secret_names': sorted(secrets),
+        'redactions': None}
     try:
         # The worker's cwd is on its import path; it must never be the untrusted checkout.
         Path(workspace['cwd']).mkdir(mode=0o700)
@@ -204,7 +216,17 @@ def open_workspace(db, task_id, execution_id, step, config):
             workspace['base_branch'] = None  # A tag checkout is detached.
         if config.mode == 'write' and not workspace['base_branch']:
             raise ToolAccessError('Write workspaces need a branch ref as the pull request base, not a tag.')
-        workspace['container'] = start_container(root / 'repo', image)
+        if secrets:
+            # Host-only (never mounted) 0600 file so the worker can redact values from tool output.
+            redactions = root / 'redactions.json'
+            descriptor = os.open(redactions, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(descriptor, 'w') as handle:
+                json.dump(secrets, handle)
+            workspace['redactions'] = str(redactions)
+        if egress_image:
+            workspace['egress'] = start_egress(settings.network_allowlist, egress_image)
+        workspace['container'] = start_container(root / 'repo', image, MACHINE_SIZES[settings.machine_size],
+                                                 secrets, workspace['egress'])
         with db._get_connection() as conn:
             conn.execute('INSERT INTO workflow_repo_workspaces(task_id, execution_id, workspace_json) VALUES (?, ?, ?)',
                          (task_id, execution_id, json.dumps(workspace)))
@@ -215,6 +237,7 @@ def open_workspace(db, task_id, execution_id, step, config):
         _finish(db, audit, error=str(exc) if isinstance(exc, ToolAccessError) else 'Workspace preparation failed.')
         if workspace['container']:
             remove_container(workspace['container'])
+        remove_egress(workspace['egress'])
         shutil.rmtree(root, ignore_errors=True)
         raise
 
@@ -240,9 +263,10 @@ def step_requires_workspace(db, task_id):
 
 
 def close_workspace(db, workspace):
-    from workflows.repo_sandbox import remove_container
+    from workflows.repo_sandbox import remove_container, remove_egress
     if workspace.get('container'):
         remove_container(workspace['container'])
+    remove_egress(workspace.get('egress'))
     shutil.rmtree(workspace['root'], ignore_errors=True)
     workspace['state'] = 'RELEASED'
     with db._get_connection() as conn:
@@ -261,6 +285,25 @@ def _fenced(text):
     return f'{fence}text\n{text}\n{fence}'
 
 
+def _reject_secret_values(workspace, names):
+    """Never push a workflow secret: refuse if any changed file contains a secret value."""
+    if not workspace.get('redactions'):
+        return
+    with open(workspace['redactions']) as handle:
+        values = [(name, value.encode()) for name, value in json.load(handle).items() if len(value) >= 4]
+    worktree = Path(workspace['worktree']).resolve()
+    for name in names:
+        path = worktree / name
+        if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(worktree):
+            continue
+        if path.stat().st_size > 5_000_000:
+            raise ToolAccessError(f'{name} is too large to check for secrets; it was not published.')
+        content = path.read_bytes()
+        leaked = [secret for secret, value in values if value in content]
+        if leaked:
+            raise ToolAccessError(f'{name} contains the value of workflow secret(s) {", ".join(leaked)}; nothing was published.')
+
+
 def publish_workspace(db, step, workspace, summary):
     """Commit all sandbox changes, push a new branch and open a draft PR. Returns a receipt."""
     config = RepositoryWorkspace(connector_id=workspace['connector_id'], repository=workspace['repository'],
@@ -273,6 +316,7 @@ def publish_workspace(db, step, workspace, summary):
         raise ToolAccessError('Changes to CI workflows, actions or submodules are never published automatically.')
     if len(names) > MAX_CHANGED_FILES:
         raise ToolAccessError(f'The change touches more than {MAX_CHANGED_FILES} files; it was not published.')
+    _reject_secret_values(workspace, names)
     lines = 0
     for row in _git(workspace, 'diff', '--cached', '--numstat').splitlines():
         added, removed = row.split('\t')[:2]

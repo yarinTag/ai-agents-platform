@@ -71,6 +71,7 @@ class WorkflowDefinition:
     metadata: Dict[str, Any] = field(default_factory=dict)
     skills: List[Dict[str, Any]] = field(default_factory=list)
     mcp_servers: List[str] = field(default_factory=list)
+    settings: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         res: Dict[str, Any] = {
@@ -89,6 +90,8 @@ class WorkflowDefinition:
             res["mcp_servers"] = self.mcp_servers
         if self.skills:
             res["skills"] = self.skills
+        if self.settings:
+            res["settings"] = self.settings
         res["steps"] = [s.to_dict() for s in self.steps]
         if self.flow:
             res["flow"] = self.flow
@@ -203,7 +206,8 @@ class WorkflowParser:
             webhook_enabled=bool(data.get("webhook_enabled", True)),
             metadata=data.get("metadata", {}),
             skills=data.get("skills", []),
-            mcp_servers=data.get("mcp_servers", [])
+            mcp_servers=data.get("mcp_servers", []),
+            settings=data.get("settings") or {}
         )
 
     @classmethod
@@ -239,6 +243,8 @@ def validate_workflow_definition(data: Any) -> Dict[str, Any]:
     if not isinstance(data, dict) or not isinstance(data.get("steps", []), list):
         raise ValueError("Workflow definition must be an object with a steps array")
     parsed = WorkflowParser.from_dict(data)
+    from .settings import validate_settings
+    validate_settings(data.get("settings"))
     from .channel_action import action_configuration
     from integrations.repo_workspace import workspace_configuration
     for step in parsed.steps:

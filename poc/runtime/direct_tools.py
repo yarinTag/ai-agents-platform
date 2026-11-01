@@ -33,7 +33,8 @@ class DirectTools:
                 return self
             if getattr(self.args, 'sandbox_container', None):
                 from .sandbox_tools import SandboxTools
-                self.sandbox = SandboxTools(self.args.sandbox_container, self._shell_env())
+                self.sandbox = SandboxTools(self.args.sandbox_container, self._shell_env(),
+                                            getattr(self.args, 'sandbox_redactions', None))
             config = json.loads(self.args.mcp_config or '{"mcpServers":{}}')
             if config.get('mcpServers'):
                 raise ValueError('Unsupported MCP server in direct API runtime.')

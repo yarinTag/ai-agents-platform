@@ -17,7 +17,7 @@ def arguments():
     parser = argparse.ArgumentParser()
     for flag in ('model', 'system-prompt', 'add-dir', 'resume', 'mcp-config', 'allowedTools',
                  'tools', 'output-format', 'setting-sources', 'settings', 'permission-mode', 'json-schema',
-                 'sandbox-container'):
+                 'sandbox-container', 'sandbox-redactions'):
         parser.add_argument('--' + flag)
     parser.add_argument('-p', required=True)
     parser.add_argument('--max-tokens', type=int, default=8000)

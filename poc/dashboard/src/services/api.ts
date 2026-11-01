@@ -19,9 +19,14 @@ export * from './mcpApi';
 export * from './workflowsApi';
 export * from './organizationApi';
 export * from './capabilitiesApi';
-export type { DiscoveredModel } from '../types/model';
+export type { DiscoveredModel, ModelTierOption } from '../types/model';
 export type { FolderItem, QuickAccessItem, BrowseResponse, PickFolderResponse } from '../types/filesystem';
 export * from './queueApi';
 export type { QueueStatus } from '../types/queue';
 
 export * from './workflowChatApi';
+export * from './workflowSettingsApi';
+export type {
+  WorkflowMachineSize, WorkflowSettingsValues, WorkflowSecretSummary, WorkflowSettingsResponse,
+  WorkflowSettingsUpdateRequest, WorkflowSecretWriteRequest,
+} from '../types/workflowSettings';
