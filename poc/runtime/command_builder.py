@@ -11,6 +11,8 @@ from .services import RuntimeServices
 logger = logging.getLogger(__name__)
 RUNTIME_PROVIDER_SETTING_KEY = providers.SETTING_PROVIDER
 RUNTIME_GATEWAY_URL_SETTING_KEY = providers.SETTING_GATEWAY_URL
+# Workspace file tools without shell access; the default for workflow runners.
+SAFE_WORKSPACE_TOOLS = ("AskUserQuestion", "Edit", "Glob", "Grep", "Read", "Write")
 
 
 class RuntimeCommandBuilder:
@@ -112,27 +114,19 @@ class RuntimeCommandBuilder:
         project_config: Optional[ProjectConfig],
         agent_config: Optional[AgentConfig]
     ) -> str:
-        """Resolve a robust, cross-platform working directory, avoiding invalid macOS paths."""
+        """Resolve the run's working directory inside an approved workspace root.
+
+        Paths outside PLATFORM_WORKSPACE_ROOTS fail the run (WorkspacePolicyError)
+        instead of silently falling back; runs without a path use the platform's
+        default workspace, never the server's own working directory.
+        """
+        from .workspace_policy import resolve_workspace
         candidate = None
         if project_config and getattr(project_config, "working_directory", None) and project_config.working_directory.strip():
             candidate = project_config.working_directory.strip()
         elif agent_config and getattr(agent_config, "repo_path", None) and agent_config.repo_path.strip():
             candidate = agent_config.repo_path.strip()
-
-        if candidate:
-            # Detect invalid macOS/Unix paths on Windows
-            if os.name == "nt" and (candidate.startswith("/Users/") or candidate.startswith("/home/")):
-                local_poc_lms = os.path.abspath(os.path.join(os.path.dirname(os.path.dirname(__file__)), "lms"))
-                if os.path.exists(local_poc_lms):
-                    return local_poc_lms
-                return os.getcwd()
-            try:
-                abs_path = os.path.abspath(candidate)
-                os.makedirs(abs_path, exist_ok=True)
-                return abs_path
-            except Exception:
-                pass
-        return os.getcwd()
+        return resolve_workspace(candidate)
 
     def _build_claude_command(
         self,
@@ -213,11 +207,12 @@ class RuntimeCommandBuilder:
             "--verbose"
         ])
 
-        # Make --dangerously-skip-permissions configurable per-agent, per-run, or per-environment
+        # Permission bypass is opt-in: per-agent flag or an explicit environment
+        # setting. By default only tools in allowed_tools are auto-approved.
         skip_permissions = (
             dangerously_skip_permissions or
             getattr(agent_config, "dangerously_skip_permissions", False) or
-            os.getenv("PLATFORM_DANGEROUSLY_SKIP_PERMISSIONS", "true").lower() in ("true", "1")
+            os.getenv("PLATFORM_DANGEROUSLY_SKIP_PERMISSIONS", "false").lower() in ("true", "1")
         )
         if skip_permissions:
             cmd.append("--dangerously-skip-permissions")
@@ -305,9 +300,17 @@ class RuntimeCommandBuilder:
         if prompt_parts:
             cmd.extend(["--system-prompt", "\n\n".join(prompt_parts)])
 
-        # Enforce agent tool restrictions if configured
-        if getattr(agent_config, "allowed_tools", None) and len(agent_config.allowed_tools) > 0:
+        # Enforce agent tool restrictions. Managers/orchestrators always get Bash
+        # (delegation runs `python -m orchestration.delegate`) on top of the
+        # workspace file tools, even when no explicit list is configured.
+        configured_tools = list(getattr(agent_config, "allowed_tools", None) or [])
+        is_manager = bool(allowed_children) or role_type in ("ROOT_ORCHESTRATOR", "MANAGER")
+        if not configured_tools and is_manager:
+            configured_tools = list(SAFE_WORKSPACE_TOOLS)
+        if configured_tools:
             tool_mapping = {
+                # Legacy workflow runners stored ["*"]; it never means "every tool".
+                "*": list(SAFE_WORKSPACE_TOOLS),
                 "read": ["Read", "View"], "view": ["Read", "View"],
                 "write": ["Write", "Edit", "FileEdit"], "edit": ["Edit", "Write", "FileEdit"],
                 "grep": ["Grep"], "glob": ["Glob"],
@@ -317,7 +320,7 @@ class RuntimeCommandBuilder:
                 "ask_human": ["AskUserQuestion"], "AskUserQuestion": ["AskUserQuestion"]
             }
             mapped_tools = set()
-            for t in agent_config.allowed_tools:
+            for t in configured_tools:
                 if t in tool_mapping:
                     mapped = tool_mapping[t]
                     if isinstance(mapped, list):
@@ -326,7 +329,7 @@ class RuntimeCommandBuilder:
                         mapped_tools.add(mapped)
                 else:
                     mapped_tools.add(t)
-            if allowed_children or role_type in ("ROOT_ORCHESTRATOR", "MANAGER"):
+            if is_manager:
                 mapped_tools.add("Bash")
             cmd.extend(["--allowedTools", ",".join(sorted(mapped_tools))])
 

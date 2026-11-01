@@ -32,6 +32,12 @@ The **Runtime & Execution Service** (`poc/runtime/`, `poc/runtime_adapter.py`, a
   * Intercepts `ask_supervisor` tool calls or unresolved questions in the model's output.
   * Rather than closing the task with exit code 0 as a false `COMPLETED`, it suspends execution into `WAITING_INPUT`.
   * Re-activates suspended tasks using `resume_task` with full conversational memory and file edit history.
+* **Execution defaults (command_builder.py, workspace_policy.py)**:
+  * `PLATFORM_DANGEROUSLY_SKIP_PERMISSIONS` defaults to `false`; the bypass is opt-in per environment or per agent. Without it, CLI runs auto-approve only the mapped `allowed_tools`.
+  * Managers/orchestrators (`allowed_child_ids` or role `ROOT_ORCHESTRATOR`/`MANAGER`) always receive Bash for delegation; with an empty list they get `SAFE_WORKSPACE_TOOLS` (Read, Write, Edit, Glob, Grep, AskUserQuestion) plus Bash.
+  * A legacy `"*"` entry maps to `SAFE_WORKSPACE_TOOLS`, never to every tool. New workflow runners are created with that explicit set and no Bash.
+  * The direct worker's Bash runs when `Bash` is in `--allowedTools` or the bypass is set, matching CLI approval semantics.
+  * Working directories resolve through `workspace_policy.resolve_workspace`: absolute paths inside `PLATFORM_WORKSPACE_ROOTS` (os.pathsep-separated) or the always-allowed `poc/workspaces`; `/` and the home folder itself are refused as roots. Out-of-root paths raise `WorkspacePolicyError` and fail the run; directories are created only inside a root. Runs without a path use `poc/workspaces/default`, never the server's cwd.
 
 ---
 

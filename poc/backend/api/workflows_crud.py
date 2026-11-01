@@ -111,7 +111,8 @@ def persist_workflow(req, request, db, workflow_id=None, initially_active=True):
             organization_id=org_id,
             department_id=target_dept_id,
             mcp_permissions=mcps,
-            allowed_tools=["*"],
+            # Workspace file tools only; no host shell for workflow runners.
+            allowed_tools=["Read", "Grep", "Glob", "Write", "Edit", "AskUserQuestion"],
             avatar=f"https://api.dicebear.com/7.x/bottts/svg?seed={wf_id}",
             temperature=0.3
         )

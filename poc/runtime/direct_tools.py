@@ -89,8 +89,12 @@ class DirectTools:
             session, tool = self.sessions[name]
             response = await session.call_tool(tool, inputs)
             return json.dumps(response.model_dump(mode='json'), ensure_ascii=False)
-        if name == 'Bash' and not self.args.dangerously_skip_permissions:
-            raise PermissionError('Shell execution requires operator permission.')
+        if name == 'Bash':
+            # Same contract as the CLI: an explicit allowedTools entry approves the
+            # tool; otherwise only the opt-in permission bypass enables the shell.
+            explicitly_allowed = self.args.allowedTools is not None and 'Bash' in self.allowed()
+            if not (explicitly_allowed or self.args.dangerously_skip_permissions):
+                raise PermissionError('Shell execution requires operator permission.')
         if self.sandbox is not None:
             return await self.sandbox.call(name, inputs)  # Never touch the host filesystem.
         if name == 'Bash':
