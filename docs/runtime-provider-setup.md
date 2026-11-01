@@ -68,8 +68,10 @@ enabled. It is not an OS sandbox.
 | `PLATFORM_DANGEROUSLY_SKIP_PERMISSIONS` | `false` | `true` restores unattended approval of every tool for all CLI runs. Prefer per-agent `allowed_tools` or the per-agent flag. |
 | `PLATFORM_WORKSPACE_ROOTS` | unset | Approved parent folders for project/agent working directories, separated by `:`. Paths outside them fail the run. `poc/workspaces` is always allowed and hosts the default workspace. `/` and your home folder itself are rejected as roots. |
 | `PLATFORM_AGENT_ENV_PASSTHROUGH` | unset | Comma-separated variable names that may reach agent processes despite looking like credentials. |
-| `JWT_SECRET_KEY` | unset (random per process) | Session signing key, 32+ characters. Set it for any real deployment. |
-| `SLACK_SIGNING_SECRET` / `TELEGRAM_WEBHOOK_SECRET` | unset (callbacks refused) | Required to accept Slack/Telegram approval button callbacks. |
+
+Authentication and callback secrets (`JWT_SECRET_KEY`, `SLACK_SIGNING_SECRET`,
+`TELEGRAM_WEBHOOK_SECRET` and others) are listed in
+[security configuration](security-configuration.md).
 
 With the default, an agent with an empty tool list is effectively read-only in
 CLI runs (tools needing approval are denied). Workflow runners are created with
