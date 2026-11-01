@@ -1,13 +1,21 @@
 """
 Model discovery and provider configuration API endpoints.
-Provides dynamic list of available AI models and logical capability tiers for agent assignment.
+Provides dynamic list of available AI models filtered by the configured API providers.
 """
 
-from fastapi import APIRouter
-from typing import List, Optional, Dict, Any
+from fastapi import APIRouter, Query
+from typing import List, Optional
 from pydantic import BaseModel
 
 from runtime.model_policy import model_policy_resolver
+from runtime.direct_config import (
+    DIRECT_PROVIDERS,
+    DEFAULT_PROVIDER_MODEL,
+    PROVIDER_MODELS,
+    enabled_setting,
+    model_setting,
+    resolve_api_key,
+)
 
 router = APIRouter()
 
@@ -37,65 +45,19 @@ class ModelTierOption(BaseModel):
     requires_tools: bool
 
 
-# Available model catalogue supported by platform runtimes
+# Legacy fallback catalog for unit tests using non-direct provider IDs
 AVAILABLE_MODELS: List[ModelOption] = [
     ModelOption(
         id="default",
-        name="Claude Code Default",
+        name="Platform Default",
         provider="Anthropic",
-        description="System configured default Claude model for CLI runner",
+        description="System configured default model",
         context_window=200000,
         is_default=True,
-        tier="default"
+        tier="default",
     ),
-    ModelOption(
-        id="claude-3-7-sonnet-20250219",
-        name="Claude 3.7 Sonnet",
-        provider="Anthropic",
-        description="Hybrid reasoning model combining instant answers with step-by-step thinking",
-        context_window=200000,
-        tier="executive"
-    ),
-    ModelOption(
-        id="claude-3-5-sonnet-20241022",
-        name="Claude 3.5 Sonnet",
-        provider="Anthropic",
-        description="High-intelligence flagship model optimized for software engineering and coding",
-        context_window=200000,
-        tier="developer"
-    ),
-    ModelOption(
-        id="claude-3-5-haiku-20241022",
-        name="Claude 3.5 Haiku",
-        provider="Anthropic",
-        description="Ultra-fast, lightweight model ideal for quick subtasks and high throughput",
-        context_window=200000,
-        tier="worker"
-    ),
-    ModelOption(
-        id="claude-3-opus-20240229",
-        name="Claude 3 Opus",
-        provider="Anthropic",
-        description="Deep contextual synthesis and high-level architectural planning",
-        context_window=200000,
-        tier="architect"
-    ),
-    ModelOption(
-        id="nvidia_nim/nvidia/nemotron-3-super-120b-a12b",
-        name="Nemotron 3 Super 120B",
-        provider="NVIDIA NIM",
-        description="Enterprise grade open-weights model hosted on NVIDIA NIM infrastructure",
-        context_window=128000,
-        tier="executive"
-    ),
-    ModelOption(
-        id="nvidia_nim/meta/llama-3.3-70b-instruct",
-        name="Llama 3.3 70B Instruct",
-        provider="NVIDIA NIM",
-        description="High-performance general instruction tuned model via NIM gateway",
-        context_window=128000,
-        tier="worker"
-    ),
+    *[ModelOption(**m) for m in PROVIDER_MODELS["direct_anthropic"]],
+    *[ModelOption(**m) for m in PROVIDER_MODELS["direct_nvidia"]],
 ]
 
 
@@ -105,8 +67,78 @@ async def list_model_tiers():
     return [ModelTierOption(**t) for t in model_policy_resolver.list_tiers()]
 
 
+def _models_for_provider(provider_id: str, db_manager) -> List[ModelOption]:
+    provider_name = DIRECT_PROVIDERS[provider_id][0]
+    catalog = PROVIDER_MODELS.get(provider_id, [])
+    items: List[ModelOption] = [ModelOption(**m) for m in catalog]
+    saved_model = (db_manager.get_setting(model_setting(provider_id)) or "").strip()
+    if saved_model and not any(m.id == saved_model for m in items):
+        items.insert(
+            0,
+            ModelOption(
+                id=saved_model,
+                name=saved_model,
+                provider=provider_name,
+                description="Configured direct API model; availability depends on provider access",
+                context_window=0,
+                tier="developer",
+            ),
+        )
+    return items
+
+
 @router.get("/", response_model=List[ModelOption])
 @router.get("", response_model=List[ModelOption])
-async def list_models():
-    """List all available models discovered across supported providers."""
-    return AVAILABLE_MODELS
+async def list_models(provider: Optional[str] = Query(default=None)):
+    """List available models based on the configured runtime provider(s)."""
+    from ..dependencies import db_manager, runtime_providers as providers
+
+    if provider and provider in DIRECT_PROVIDERS:
+        default_model = db_manager.get_setting(model_setting(provider)) or DEFAULT_PROVIDER_MODEL.get(provider, "")
+        provider_name = DIRECT_PROVIDERS[provider][0]
+        return [
+            ModelOption(
+                id="default",
+                name=f"Platform API default ({default_model})" if default_model else "Platform API default",
+                provider=provider_name,
+                description="Uses the model selected in Runtime settings",
+                context_window=0,
+                is_default=True,
+                tier="default",
+            ),
+            *_models_for_provider(provider, db_manager),
+        ]
+
+    active_provider = providers.resolve_provider_selection(
+        saved_choice=db_manager.get_setting(providers.SETTING_PROVIDER)
+    )
+    if active_provider in DIRECT_PROVIDERS:
+        active_name = DIRECT_PROVIDERS[active_provider][0]
+        default_model = db_manager.get_setting(model_setting(active_provider)) or DEFAULT_PROVIDER_MODEL.get(active_provider, "")
+        result: List[ModelOption] = [
+            ModelOption(
+                id="default",
+                name="Platform API default",
+                provider=active_name,
+                description=f"Uses the model selected in Runtime settings ({default_model})" if default_model else "Uses the model selected in Runtime settings",
+                context_window=0,
+                is_default=True,
+                tier="default",
+            )
+        ]
+
+        enabled_providers = [active_provider]
+        for pid in DIRECT_PROVIDERS:
+            if pid != active_provider:
+                if db_manager.get_setting(enabled_setting(pid)) == "true" and resolve_api_key(pid, db=db_manager):
+                    enabled_providers.append(pid)
+
+        seen_ids = {"default"}
+        for pid in enabled_providers:
+            for item in _models_for_provider(pid, db_manager):
+                if item.id not in seen_ids:
+                    seen_ids.add(item.id)
+                    result.append(item)
+        return result
+
+    return list(AVAILABLE_MODELS)

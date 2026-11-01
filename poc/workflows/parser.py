@@ -239,6 +239,9 @@ def validate_workflow_definition(data: Any) -> Dict[str, Any]:
     if not isinstance(data, dict) or not isinstance(data.get("steps", []), list):
         raise ValueError("Workflow definition must be an object with a steps array")
     parsed = WorkflowParser.from_dict(data)
+    from .channel_action import action_configuration
+    for step in parsed.steps:
+        action_configuration(step)
     keys = [step.get("key") or step.get("id") or item.key
             for step, item in zip(data.get("steps", []), parsed.steps)]
     if len(set(keys)) != len(keys):

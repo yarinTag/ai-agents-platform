@@ -1,5 +1,8 @@
-import React from 'react';
-import { Table, Button, Modal, Space, Card, Row, Col, Statistic, Tabs, Input, message, Switch, Form, Alert } from 'antd';
+import React, { useState } from 'react';
+import { WorkflowChatModal } from '../components/workflows/WorkflowChatModal';
+import { useWorkflowChatText } from '../i18n/workflowChat';
+import { useSearchParams } from 'react-router-dom';
+import { Table, Button, Modal, Space, Card, Row, Col, Statistic, Tabs, Input, message, Switch, Form, Alert, Select } from 'antd';
 import { ApartmentOutlined, PlayCircleOutlined, PlusOutlined, ReloadOutlined, CodeOutlined, ThunderboltOutlined, CheckCircleOutlined, SyncOutlined, SafetyCertificateOutlined, CopyOutlined } from '@ant-design/icons';
 import { WorkflowHistoryDrawer } from '../components/workflows/WorkflowHistoryDrawer';
 import { CreateWorkflowModal } from '../components/workflows/CreateWorkflowModal';
@@ -13,6 +16,13 @@ import { WorkflowExecutionDrawer } from './WorkflowExecutionDrawer';
 
 export const WorkflowsPage: React.FC = () => {
   const model = useWorkflowsPage();
+  const [chatSearch, setChatSearch] = useSearchParams();
+  const [chatOpen, setChatOpen] = useState(() => chatSearch.has('workflowChat'));
+  const closeChat = () => {
+    setChatOpen(false);
+    setChatSearch(previous => { const next = new URLSearchParams(previous); next.delete('workflowChat'); return next; }, { replace: true });
+  };
+  const chatText = useWorkflowChatText();
   const {
     workflows,
     executions,
@@ -38,6 +48,7 @@ export const WorkflowsPage: React.FC = () => {
     setViewDefModalOpen,
     loadData,
     handleExecute,
+    runText,
     copyToClipboard,
     getParsedWorkflowSteps,
     handleDeleteStepFromCanvas,
@@ -82,6 +93,7 @@ export const WorkflowsPage: React.FC = () => {
         </div>
 
         <Space size={10}>
+          <Button onClick={() => setChatOpen(true)}>{chatText.entry}</Button>
           <Button
             icon={<ReloadOutlined spin={loading} />}
             onClick={() => loadData()}
@@ -254,6 +266,11 @@ export const WorkflowsPage: React.FC = () => {
           description="Runs the same DAG with real model calls and normal token costs. MCP, file and shell tools, channel notifications, and external approvals are disabled. Supply all required data in the JSON input. Each run starts fresh; results may differ from workflows using live tools."
         />}
         <Form form={runForm} layout="vertical">
+          {!playgroundMode && <Form.Item name="dispatch_mode" label={runText.mode} initialValue="local">
+            <Select options={[{ value: 'local', label: runText.local }, { value: 'queue', label: runText.queue }]} />
+          </Form.Item>}
+          {!playgroundMode && <Alert type="info" showIcon message={runText.help} style={{ marginBottom: 16 }} />}
+
           <Form.Item
             name="payload"
             label={<span style={{ color: '#c9d1d9' }}>Execution Trigger Payload (JSON)</span>}
@@ -350,6 +367,7 @@ export const WorkflowsPage: React.FC = () => {
         </pre>
       </Modal>
 
+      {chatOpen && <WorkflowChatModal onClose={closeChat} onCreated={() => { void loadData(); }} />}
       <WorkflowExecutionDrawer {...model} />
 
       {/* Create Workflow Modal */}

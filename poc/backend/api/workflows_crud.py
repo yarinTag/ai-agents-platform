@@ -30,7 +30,11 @@ def create_workflow(
     request: Request,
     db: DatabaseManager = Depends(get_db_manager)
 ):
-    """Create a new workflow from YAML or JSON definition."""
+    return persist_workflow(req, request, db)
+
+
+def persist_workflow(req, request, db, workflow_id=None, initially_active=True):
+    """Shared creation/provisioning path; chat supplies a stable ID and starts inactive."""
     def_json = req.definition_json
     if not def_json and req.definition_yaml:
         try:
@@ -58,7 +62,7 @@ def create_workflow(
         if not is_org_admin and target_dept_id not in authorized_dept_ids:
             raise HTTPException(status_code=403, detail=f"Not authorized to assign workflow to department '{target_dept_id}'")
 
-    wf_id = f"wf_{uuid.uuid4().hex[:10]}"
+    wf_id = workflow_id or f"wf_{uuid.uuid4().hex[:10]}"
     runner_agent_id = f"wf-agent-{wf_id}"
 
     # Extract metadata, MCPs, skills, steps, and channel info for the dedicated runner agent
@@ -71,6 +75,9 @@ def create_workflow(
     skills_raw = def_dict.get("skills") or []
     skill_names = [s.get("name", s.get("id", str(s))) if isinstance(s, dict) else str(s) for s in skills_raw]
     steps = def_dict.get("steps") or []
+    for step in steps:
+        if step.get('agent_id') == '__workflow_runner__':
+            step['agent_id'] = runner_agent_id
     cb = def_dict.get("metadata", {}).get("channel_binding") or {}
     channel_info = f"{cb.get('provider')}:{cb.get('channel_id')}" if cb.get("channel_id") else "API/Webhook/Manual"
     cron = req.cron_expression or def_dict.get("trigger", {}).get("cron_expression") or def_dict.get("trigger", {}).get("cron") or "None"
@@ -110,7 +117,8 @@ def create_workflow(
         )
         db.save_agent(runner_agent)
     except Exception as e:
-        logger.warning(f"Could not auto-create runner agent: {e}")
+        logger.warning("Could not provision dedicated workflow runner")
+        raise HTTPException(503, "Could not provision the dedicated workflow runner. Retry creation after checking agent capacity.") from e
 
     # Inject runner agent ID and status into definition
     def_dict["id"] = wf_id
@@ -127,6 +135,7 @@ def create_workflow(
         cron_expression=req.cron_expression,
         webhook_enabled=req.webhook_enabled,
         organization_id=org_id,
+        is_active=initially_active,
         **_workflow_actor(request)
     )
 

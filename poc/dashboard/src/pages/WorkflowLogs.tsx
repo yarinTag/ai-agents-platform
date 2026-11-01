@@ -1,3 +1,4 @@
+import { useWorkflowRunText } from '../i18n/workflowRun';
 import React, { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { Alert, Button, Card, Col, Collapse, Empty, Input, Row, Select, Space, Spin, Tag, Typography } from 'antd';
@@ -12,6 +13,7 @@ const statusColor = (status: string) => status === 'FAILED' ? 'error' : status =
 const preStyle: React.CSSProperties = { whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 420, overflow: 'auto', fontSize: 12 };
 
 export const WorkflowLogsPage: React.FC = () => {
+  const runText = useWorkflowRunText();
   const { workflowId } = useParams<{ workflowId: string }>();
   const [params, setParams] = useSearchParams();
   const selectedId = params.get('execution');
@@ -94,6 +96,8 @@ export const WorkflowLogsPage: React.FC = () => {
                 <Text>Cost: ${(execution.total_cost_usd || 0).toFixed(4)}</Text>
                 <Text>Tokens: {execution.total_input_tokens} in / {execution.total_output_tokens} out</Text></Space>
               <div><Text type="secondary">Started: {execution.started_at || 'Pending'} · Finished: {execution.completed_at || '—'}</Text></div>
+              {execution.notification_error && <Alert style={{ marginTop: 12 }} type="warning" showIcon
+                message={runText.deliveryWarning} description={execution.notification_error} />}
               {execution.error_message && <Alert style={{ marginTop: 12 }} type="error" showIcon message="Run failed" description={<pre style={preStyle}>{execution.error_message}</pre>} />}
               <details style={{ marginTop: 12 }}><summary>Run input</summary><pre style={preStyle}>{execution.trigger_payload || '{}'}</pre></details>
             </Card>

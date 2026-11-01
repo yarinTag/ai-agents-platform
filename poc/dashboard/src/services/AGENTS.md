@@ -222,4 +222,17 @@ Completed generation results may include validation_id: the opaque, generation-s
 
 `skillsApi.ts` retains the incoming bounded session-memory requestCache: scan/repositories TTL 60 seconds, configuration TTL 30 seconds, shared pending promises and no failed-response caching. Session changes and protected 401s invalidate plugin entries; saving config invalidates before/after write. `scanPlugins(params, forceRefresh=false)` passes refresh to the server and bypasses the client cache on manual refresh. No catalog data or credentials are written to browser storage.
 
-`workflowsApi.ts` retains expected_revision/change_summary, revision history pagination, production execution use_queue/force_rerun, tool-free playground and scoped execution list/detail. `assistantApi.ts` owns the uncached permission-aware authoring context/catalog/schema/validation/draft/history/generation/save/cancel wrappers, including Idempotency-Key on generation. The facade re-exports all incoming functions alongside existing domain clients; only httpClient creates Axios/interceptors. workflowDefinitions.ts supplies shared pure DAG deletion reconciliation without making HTTP calls or granting permissions.
+`workflowsApi.ts` retains expected_revision/change_summary, revision history pagination, production execution use_queue/force_rerun, tool-free playground and scoped execution list/detail. `assistantApi.ts` and `types/assistant.ts` have been removed (2026-10-31). The facade re-exports all active domain clients; only httpClient creates Axios/interceptors. workflowDefinitions.ts supplies shared pure DAG deletion reconciliation without making HTTP calls or granting permissions.
+
+## New workflow chat client
+workflowChatApi.ts (re-exported by api.ts) supplies getWorkflowChatContext/startWorkflowChat/getWorkflowChat/cancelWorkflowChat/createWorkflowFromChat for the /api/v1/workflows/ai endpoints. Context/job/request/resource/preview types live in types/workflowChat.ts. No separate HTTP client/interceptor or browser credential/catalog cache is added. Async jobs avoid extending the shared 10-second request timeout.
+
+WorkflowChatJob now includes messages and previous_workflow for authenticated recovery of an existing job; no model request is made during recovery.
+
+executeWorkflow adds a fifth optional background=false argument and includes its query parameter. Existing callers retain queued dispatch by default. The manual Run modal explicitly chooses local background or queue mode.
+
+discoverMCPResources adds optional fourth connectorId and sends connector_id; Telegram requests use a20s client timeout for bounded bot updates. No message is sent during discovery. WorkflowChatContext connectors include execution_supported and agents include connector_tools.
+
+WorkflowExecution adds notification_error?:string|null for the scoped list/detail delivery warning. It is separate from the primary execution error_message and status.
+
+ testChannelMessage accepts optional connector_id and returns provider acknowledgement delivery, delivered_channel_id and provider_message_id. Installed integration sends always pass the selected connector ID.

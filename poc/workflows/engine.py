@@ -187,6 +187,16 @@ class WorkflowEngine:
             raise
 
         # Tool-free exercises never connect to declared MCP servers.
+        if not playground:
+            from integrations.tool_scopes import prepare_execution_context
+            try:
+                prepare_execution_context(self.db, wf_exec, workflow, wf_def, user_context)
+            except ValueError as error:
+                self.db.update_workflow_execution(execution_id, status="FAILED", error_message=str(error),
+                    completed_at=datetime.now().isoformat())
+                sandbox.cleanup()
+                raise MCPGovernanceViolationError(department_id=dept_id, connector_id="workflow_scope", reason=str(error)) from error
+
         # Live executions still require department connector grants.
         # 4b. Pre-flight MCP Governance check
         if dept_id and not playground:

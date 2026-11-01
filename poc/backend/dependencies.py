@@ -277,9 +277,12 @@ def get_team_coordinator() -> Any:
 _workflow_engine = None
 
 
-def get_skill_context(skill_ids):
+def get_skill_context(skill_ids, organization_id=None):
     """Resolve optional skill context only for work that explicitly needs it."""
     capabilities.require("skills")
+    if organization_id:
+        from plugins.workflow_skills import skill_context
+        return skill_context(get_db_manager(), organization_id, skill_ids)
     from skills_service import build_skills_system_prompt
     return build_skills_system_prompt(skill_ids)
 

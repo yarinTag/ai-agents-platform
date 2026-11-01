@@ -67,7 +67,6 @@ The **AI Agents Platform** is an enterprise multi-tenant autonomous agent orches
 * [**REST API Routers**](poc/backend/api/AGENTS.md): Complete guide to all backend REST API routes, models, and endpoints.
 * [**Security & Hardening**](poc/backend/security/AGENTS.md): HS256 JWT, PBKDF2 hashing, RateLimiterMiddleware (2000 req/min), tenant scoping.
 * [**Workflows Engine**](poc/workflows/AGENTS.md): WorkflowEngine, WorkflowParser, SandboxManager, DAG execution, and budgets.
-* [**Workflow Assistant Authoring**](poc/backend/workflow_assistant/AGENTS.md): Shared permission-aware catalog, proposal validation, non-executable drafts and revision history for future chat/MCP clients.
 * [**Runtime Abstraction**](poc/runtime/AGENTS.md): RuntimeAdapter protocol, model tiers, and curated `MODEL_CATALOG`.
 * [**Orchestration & Hierarchy**](poc/orchestration/AGENTS.md): Multi-agent task trees, supervisor chain resolution, and department MCP checks.
 * [**Agent-to-Agent Messaging**](poc/backend/messages/AGENTS.md): Peer communication, structured message types, and thread tracking.
@@ -149,3 +148,29 @@ The model returns a generation-scoped validation_id for a server-stored YAML can
 
 ## Master merge composition (2026-10-29)
 The refactor now includes master 523913e. Workflow revision/history, assistant/internal MCP, playground, queue, Office task-origin scoping and plugin cache remain available through extracted modules. backend/queue_lifecycle owns independent broker/worker startup; backend/workflow_wiring injects policy/output and optional human-approval delivery into workflow execution. No tests/build/application were executed during integration.
+
+## Direct HTTP API providers and provider-scoped models (2026-10-31)
+Runtime execution now uses Direct HTTP API calls (`runtime.direct_worker` across `direct_nvidia`, `direct_anthropic`, `direct_openai`, and `direct_openrouter`) instead of spawning the `claude` CLI binary. `RuntimeSetupModal` allows configuring API providers, API keys, and per-provider default models, and `GET /api/v1/models` dynamically returns only the models belonging to the configured/enabled provider(s).
+
+## Workflow Assistant full removal (2026-10-31)
+All Workflow Assistant modules, routes, and schemas (`poc/backend/workflow_assistant/`, `poc/runtime/authoring.py`, `poc/workflows/authoring_schema.py`, `poc/workflows/workflow-authoring.schema.yaml`, `poc/dashboard/src/pages/WorkflowAssistant.tsx`, `poc/dashboard/src/services/assistantApi.ts`, `poc/dashboard/src/types/assistant.ts`, `assistant.*` i18n keys, `workflow_assistant_*` SQLite tables, and `poc/tests/test_workflow_assistant*.py`) have been completely removed so all workflow creation and AI generation are consolidated in `/workflows`.
+
+## Friendly workflow creation chat (2026-10-31)
+The new workflow chat lives inside the Workflows hub (Create with AI), independently of the removed Workflow Assistant. Backend contracts, policy and strict reply models live in backend/api/workflow_chat*.py; model-only transport lives in runtime/workflow_chat.py. The configured model receives only current department-authorized resource IDs (repositories/channels/tools/agents). Human-confirmed creation revalidates the stored preview and provisions an inactive workflow through shared creation logic. See the [REST API guide](poc/backend/api/AGENTS.md) and [chat implementation notes](docs/workflow-chat.md). The removed assistant, internal MCP transport and schema are not restored. Runtime verification remains unauthorized.
+
+Workflow chat recovery uses a private workflowChat query ID to restore stored conversation/results after refresh. Polling HTTP success is distinct from job completion; transient reconnect errors clear on success. See docs/workflow-chat.md.
+
+Manual workflow execution now offers explicit local-server background dispatch alongside RabbitMQ dispatch. The /execute API adds background=false; use_queue=false&background=true creates a real queued record and invokes the same governed workflow engine without a broker. It is process-local, not durable, and supplies no additional MCP tools.
+
+## Governed connector execution (2026-10-31)
+Production workflow steps now use server-owned tool scopes for GitHub.com read operations and exact-ID Telegram/Slack sends through Direct API workers. Each actual call intersects its frozen step resources with current tenant/department/agent permissions, user status, budget and run lifetime. Connector-backed workflows (including analysis steps and reviews) have no shell/file/delegation tools; Playground and workflow chat receive no live connectors. Successful audited receipts are required for completion. The known exact legacy preview sentence is removed from production step input without rewriting saved workflow revisions. See [connector execution](docs/connector-execution.md) and integrations/runtime/workflow guides. No tests, live connector/model calls or message sends were executed.
+
+Optional completion delivery is separate from required workflow work: invalid Telegram/Slack targets are blocked and surfaced as notification_error warnings, while authorized data steps can continue. Explicit channel-send steps remain required and fail closed.
+
+Explicit workflow channel delivery uses params.channel_action (send_channel_message, connector_id, channel_id, source_step) and the governed tool executor rather than model-selected calls. Chat proposals expose send_output_of. See workflow/API guides; Playground performs no sends.
+
+AI workflow chat now catalogs current organization plugin skills, validates and preserves ChatStep.skills, and shows selected skills in preview. Workflow execution resolves full skill instructions within the organization source, without global skill-cache fallback. See plugin/API/workflow guides.
+
+Workflow Skills is now a single shared selection inherited by every AI step. Legacy step skills are promoted/deduplicated; deterministic delivery actions do not load skills. AI chat and the visual builder save shared root skills. See workflow/API/dashboard component guides.
+
+Workflow AI chat exposes an explicit planned dedicated-runner option, materialized only during confirmed creation. It does not require an Office agent or reuse other workflow runners. Current department/resource grants still govern all steps; unknown IDs are rejected.

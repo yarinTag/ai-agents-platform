@@ -1,3 +1,4 @@
+import { useConnectorResourceText } from '../i18n/connectorResources';
 import { Tag, Button, Input } from 'antd';
 import { SendOutlined, CheckCircleOutlined, PlusOutlined } from '@ant-design/icons';
 import type { useMcpPage } from './useMcpPage';
@@ -12,6 +13,10 @@ export const McpTelegramSelection = (model: Pick<
   | 'customResourceInput'
   | 'setCustomResourceInput'
   | 'handleAddCustomResource'
+  | 'handleFetchResources'
+  | 'fetchingResources'
+  | 'form'
+  | 'editingConnector'
 >) => {
   const {
     workflows,
@@ -22,7 +27,9 @@ export const McpTelegramSelection = (model: Pick<
     customResourceInput,
     setCustomResourceInput,
     handleAddCustomResource,
+    handleFetchResources, fetchingResources, form, editingConnector,
   } = model;
+  const text = useConnectorResourceText();
   return (<>
             {/* Telegram Chats Selection Section */}
             {selectedCatalogItem && selectedCatalogItem.provider === 'telegram' && (
@@ -47,11 +54,17 @@ export const McpTelegramSelection = (model: Pick<
                   Manage authorized Telegram channels and chats array for workflows and alerting:
                 </div>
 
+                <Button loading={fetchingResources} style={{ marginBottom: 8 }}
+                  onClick={() => void handleFetchResources('telegram', form.getFieldValue('bot_token') || editingConnector?.configuration?.bot_token, selectedResources, true)}>
+                  {text.findChats}
+                </Button>
+                <div style={{ color: '#8b949e', fontSize: 12, marginBottom: 12 }}>{text.findHint}</div>
+                <div style={{ color: '#8b949e', fontSize: 12, marginBottom: 12 }}>{text.testHint}</div>
                 {/* 1. Add Custom Channel Input & Button at TOP */}
                 <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
                   <Input
                     size="middle"
-                    placeholder="Add channel or chat ID to array (e.g. Hermes_test, @my_channel, -100123456789)"
+                    placeholder={text.telegramPlaceholder}
                     value={customResourceInput}
                     onChange={(e) => setCustomResourceInput(e.target.value)}
                     onPressEnter={handleAddCustomResource}
@@ -123,7 +136,8 @@ export const McpTelegramSelection = (model: Pick<
                           }}
                         >
                           <span style={{ opacity: 0.65, fontSize: '10px' }}>#{idx + 1}</span>
-                          <span>{chatName}</span>
+                          <span>{discoveredResources.find((chat: { id?: string }) => chat.id === chatName)?.name
+                            || editingConnector?.configuration?.channel_labels?.[chatName] || chatName}</span>
                         </Tag>
                       ))}
                     </div>
@@ -132,18 +146,18 @@ export const McpTelegramSelection = (model: Pick<
 
                 {/* 3. Quick-toggle suggested Telegram channels */}
                 <div style={{ color: '#8b949e', fontSize: '12px', marginBottom: '8px' }}>
-                  Suggested Telegram channels (click to toggle):
+                  {text.availableChats}
                 </div>
 
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                  {(discoveredResources.length > 0
-                    ? discoveredResources.map((c: any) => c.id || c.name)
-                    : ['@agents_office_alerts', '@workflow_dev_channel', '@pr_review_bot']
-                  ).map((chatName: string) => {
+                  {discoveredResources.map((chat: { id?: string; name?: string }) => {
+                    const chatName = chat.id || '';
+                    if (!chatName) return null;
                     const isChecked = selectedResources.includes(chatName);
                     return (
                       <Tag.CheckableTag
                         key={chatName}
+                        title={chatName}
                         checked={isChecked}
                         onChange={(checked) => {
                           if (checked) {
@@ -161,7 +175,7 @@ export const McpTelegramSelection = (model: Pick<
                           border: '1px solid #30363d',
                         }}
                       >
-                        {chatName}
+                        {chat.name || chatName}
                       </Tag.CheckableTag>
                     );
                   })}

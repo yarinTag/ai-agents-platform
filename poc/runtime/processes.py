@@ -6,8 +6,8 @@ import signal
 
 
 def terminate_process(process, timeout: float = 5):
-    authoring_group = getattr(process, "_authoring_process_group", False)
-    if authoring_group:
+    process_group = getattr(process, "_process_group", False)
+    if process_group:
         try:
             os.killpg(process.pid, signal.SIGTERM)
         except ProcessLookupError:
@@ -17,7 +17,7 @@ def terminate_process(process, timeout: float = 5):
             process.terminate()
             process.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
-            if authoring_group:
+            if process_group:
                 try:
                     os.killpg(process.pid, signal.SIGKILL)
                 except ProcessLookupError:

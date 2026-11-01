@@ -124,6 +124,17 @@ export const useAgentsPage = () => {
   useEffect(() => {
     fetchAgents();
     fetchSkillsAndModels();
+    const handleRuntimeChanged = () => {
+      getAvailableModels()
+        .then((res) => {
+          if (res?.data && Array.isArray(res.data)) {
+            setAvailableModels(res.data);
+          }
+        })
+        .catch(() => {});
+    };
+    window.addEventListener('platform:runtime-changed', handleRuntimeChanged);
+    return () => window.removeEventListener('platform:runtime-changed', handleRuntimeChanged);
   }, []);
 
   const handleCreate = () => {

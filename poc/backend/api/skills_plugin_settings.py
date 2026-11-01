@@ -105,50 +105,19 @@ async def get_plugin_git_repos(
             resp.raise_for_status()
             data = resp.json()
 
-        if provider == "github" and effective_token and effective_token.startswith("github_pat_") and data and not any(r.get("private") for r in data):
-            import subprocess
-            try:
-                gh_res = subprocess.run(["gh", "auth", "token"], capture_output=True, text=True, timeout=3)
-                if gh_res.returncode == 0 and gh_res.stdout.strip():
-                    gh_token = gh_res.stdout.strip()
-                    # Verify login matches
-                    async with httpx.AsyncClient(timeout=5.0) as verify_client:
-                        user_resp = await verify_client.get(
-                            "https://api.github.com/user",
-                            headers={
-                                "Authorization": f"Bearer {effective_token}",
-                                "Accept": "application/vnd.github+json",
-                                "User-Agent": "AI-Agents-Platform"
-                            }
-                        )
-                        gh_user_resp = await verify_client.get(
-                            "https://api.github.com/user",
-                            headers={
-                                "Authorization": f"Bearer {gh_token}",
-                                "Accept": "application/vnd.github+json",
-                                "User-Agent": "AI-Agents-Platform"
-                            }
-                        )
-                        if user_resp.status_code == 200 and gh_user_resp.status_code == 200:
-                            login1 = user_resp.json().get("login")
-                            login2 = gh_user_resp.json().get("login")
-                            if login1 and login2 and login1.lower() == login2.lower():
-                                async with httpx.AsyncClient(timeout=12.0) as gh_client:
-                                    gh_repos_resp = await gh_client.get(
-                                        url,
-                                        headers={
-                                            "Authorization": f"Bearer {gh_token}",
-                                            "Accept": "application/vnd.github+json",
-                                            "User-Agent": "AI-Agents-Platform"
-                                        }
-                                    )
-                                    if gh_repos_resp.status_code == 200:
-                                        data = gh_repos_resp.json()
-            except Exception:
-                pass
-
-            if not any(r.get("private") for r in data):
-                token_warning = "Fine-Grained token (github_pat_...) has 'Public Repositories only' set on GitHub. Enable 'All repositories' + 'Metadata/Contents: Read' on GitHub for direct private repo access."
+        if provider == "github" and effective_token and effective_token.startswith("github_pat_") and data:
+            scoped_repos = [
+                r for r in data
+                if r.get("private") or any((r.get("permissions") or {}).get(p) for p in ("push", "maintain", "admin", "triage"))
+            ]
+            if scoped_repos:
+                data = scoped_repos
+            else:
+                token_warning = (
+                    "Fine-Grained token (github_pat_...) returned only read-only public repositories. "
+                    "GitHub always exposes public repositories to fine-grained tokens; grant 'Contents: Read and write' "
+                    "or include private repositories on GitHub to scope discovery strictly to selected repositories."
+                )
 
         repos = []
         if provider == "gitlab":

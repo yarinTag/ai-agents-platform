@@ -1,7 +1,7 @@
+import { useWorkflowChatText } from '../../i18n/workflowChat';
 import { Form, Input, Button, Select, Checkbox, Tag, Row, Col, Card, Space } from 'antd';
 import { PlusOutlined, DeleteOutlined, FileTextOutlined, GithubOutlined, FolderOpenOutlined, GlobalOutlined, LinkOutlined } from '@ant-design/icons';
 
-import { AVAILABLE_AGENTS } from './workflowBuilderDefaults';
 
 import { useWorkflowBuilder } from './useWorkflowBuilder';
 
@@ -10,10 +10,11 @@ export function WorkflowStepsPanel({ model }: { model: ReturnType<typeof useWork
     workflowName, setWorkflowName, description, setDescription, cronExpression,
     setCronExpression, webhookEnabled, channelProvider, setChannelProvider, channelId,
     setChannelId, triggerEnabled, setTriggerEnabled, notifyMode, setNotifyMode,
-    telegramChannels, slackChannels, allowedMcps, workflowSkills, catalogSkills,
+    agentOptions, getChannelLabel, telegramChannels, slackChannels, allowedMcps, workflowSkills, catalogSkills,
     setCreateSkillModalOpen, steps, syncToYaml, handleAddStep, handleUpdateStep,
     handleDeleteStep, handleAttachExistingSkill, handleRemoveSkill,
   } = model;
+  const text = useWorkflowChatText();
   return (
 <div style={{ maxHeight: '480px', overflowY: 'auto', paddingRight: '4px' }}>
                 {/* Basic Meta */}
@@ -144,7 +145,7 @@ export function WorkflowStepsPanel({ model }: { model: ReturnType<typeof useWork
                           : channelProvider === 'slack'
                           ? slackChannels
                           : []
-                        ).map((ch) => ({ label: ch, value: ch }))}
+                        ).map((ch) => ({ label: getChannelLabel(channelProvider, ch), value: ch }))}
                       />
                     </Col>
                     <Col span={6}>
@@ -218,7 +219,7 @@ export function WorkflowStepsPanel({ model }: { model: ReturnType<typeof useWork
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <FileTextOutlined style={{ color: '#f59e0b' }} />
                         <span style={{ color: '#f0f6fc', fontWeight: 700, fontSize: '13px' }}>
-                          Connected Skills ({workflowSkills.length}) - Skills Connected to Workflow
+                          {text.workflowSkills} ({workflowSkills.length})
                         </span>
                       </div>
                       <Space>
@@ -246,6 +247,7 @@ export function WorkflowStepsPanel({ model }: { model: ReturnType<typeof useWork
                     </div>
                   }
                 >
+                  <div style={{ color: '#8b949e', marginBottom: 12 }}>{text.skillInheritance}</div>
                   {workflowSkills.length === 0 ? (
                     <div style={{ color: '#8b949e', fontSize: '12px', textAlign: 'center', padding: '12px 0' }}>
                       No skills attached yet. Attach an existing skill or create a new one with a Git/Local repo location.
@@ -359,7 +361,7 @@ export function WorkflowStepsPanel({ model }: { model: ReturnType<typeof useWork
                             style={{ width: '100%' }}
                             value={st.agent_id}
                             onChange={(val) => handleUpdateStep(idx, { agent_id: val })}
-                            options={AVAILABLE_AGENTS}
+                            options={agentOptions.map(option => option.value === '__workflow_runner__' ? { ...option, label: text.plannedRunner } : option)}
                           />
                         </Col>
                       </Row>
@@ -378,18 +380,7 @@ export function WorkflowStepsPanel({ model }: { model: ReturnType<typeof useWork
                             placeholder="Select step MCPs..."
                           />
                         </Col>
-                        <Col span={12}>
-                          <span style={{ fontSize: '11px', color: '#8b949e' }}>Step Skills:</span>
-                          <Select
-                            mode="multiple"
-                            size="small"
-                            style={{ width: '100%' }}
-                            value={st.skills || []}
-                            onChange={(val) => handleUpdateStep(idx, { skills: val })}
-                            options={workflowSkills.map((s) => ({ label: s.name, value: s.id }))}
-                            placeholder="Assign attached skills..."
-                          />
-                        </Col>
+
                       </Row>
 
                       <div style={{ marginBottom: '8px' }}>

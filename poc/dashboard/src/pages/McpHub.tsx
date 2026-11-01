@@ -1,15 +1,12 @@
 import React from 'react';
-import { Tag, Button, Select } from 'antd';
+import { Tag, Button } from 'antd';
 import { ApiOutlined, SyncOutlined, PlusOutlined } from '@ant-design/icons';
 import { useMcpPage } from './useMcpPage';
 import { McpConnectorModal } from './McpConnectorModal';
 import { McpHubTabs } from './McpHubTabs';
-import { McpBindingModal } from './McpBindingModal';
 import { McpCustomConnectorModal } from './McpCustomConnectorModal';
 import { McpToolsDrawer } from './McpToolsDrawer';
 import { McpPermissionsModal } from './McpPermissionsModal';
-import { McpWorkflowCanvasModal } from './McpWorkflowCanvasModal';
-import { McpWorkflowBuilder } from './McpWorkflowBuilder';
 
 export const McpHubPage: React.FC = () => {
   const model = useMcpPage();
@@ -44,14 +41,14 @@ export const McpHubPage: React.FC = () => {
               <ApiOutlined />
             </span>
             <h1 style={{ margin: 0, fontSize: '26px', fontWeight: 800, color: '#f0f6fc' }}>
-              MCP Integrations & Workflow Channels
+              MCP Integrations Hub
             </h1>
             <Tag color="#10b981" style={{ borderRadius: '12px', fontWeight: 600 }}>
               Model Context Protocol
             </Tag>
           </div>
           <p style={{ margin: 0, color: '#8b949e', fontSize: '14px', maxWidth: '720px' }}>
-            Connect <strong>Git Repositories</strong>, <strong>Slack Channels</strong>, and <strong>Telegram Chats</strong>. Select authorized repositories and bind specific channels directly to autonomous workflows for triggering and real-time execution reporting.
+            Connect <strong>Git Repositories</strong>, <strong>Slack Channels</strong>, <strong>Telegram Chats</strong>, and custom MCP servers to equip your autonomous agents with external tools and authorized resources.
           </p>
         </div>
 
@@ -84,12 +81,9 @@ export const McpHubPage: React.FC = () => {
       </div>
       <McpHubTabs {...model} />
       <McpConnectorModal {...model} />
-      <McpBindingModal {...model} />
       <McpCustomConnectorModal {...model} />
       <McpToolsDrawer {...model} />
       <McpPermissionsModal {...model} />
-      <McpWorkflowCanvasModal {...model} />
-      <McpWorkflowBuilder {...model} />
     </div>
   );
 };

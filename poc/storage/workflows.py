@@ -50,7 +50,8 @@ class WorkflowsRepository:
         webhook_enabled: bool = True,
         organization_id: Optional[str] = None,
         actor_id: Optional[str] = None,
-        actor_label: str = "System"
+        actor_label: str = "System",
+        is_active: bool = True
     ) -> Workflow:
         """Create a workflow definition."""
         now = datetime.now().isoformat()
@@ -58,8 +59,8 @@ class WorkflowsRepository:
         with self._get_connection() as conn:
             conn.execute("""
                 INSERT INTO workflows (id, name, description, department_id, definition_json, webhook_enabled, webhook_token, cron_expression, is_active, created_at, updated_at, organization_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
-            """, (id, name, description, department_id, definition_json, 1 if webhook_enabled else 0, webhook_token, cron_expression, now, now, organization_id))
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (id, name, description, department_id, definition_json, 1 if webhook_enabled else 0, webhook_token, cron_expression, int(is_active), now, now, organization_id))
             row = dict(conn.execute("SELECT * FROM workflows WHERE id = ?", (id,)).fetchone())
             self._insert_workflow_revision(conn, row, list(self._WORKFLOW_VERSION_FIELDS),
                 actor_id, actor_label, "Workflow created", now)

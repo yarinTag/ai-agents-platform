@@ -1,3 +1,5 @@
+import axios from 'axios';
+import { useWorkflowRunText } from '../i18n/workflowRun';
 import { removeWorkflowStep } from '../services/workflowDefinitions';
 import { useState, useEffect, useCallback } from 'react';
 import { Table, Modal, Input, message, Drawer, Form } from 'antd';
@@ -6,6 +8,7 @@ import { PlatformWorkflow, WorkflowExecution, MCPConnector } from '../types/mcp'
 import { WorkflowCanvasStep } from '../components/workflows/WorkflowCanvasGraph';
 
 export const useWorkflowsPage = () => {
+  const runText = useWorkflowRunText();
   const [workflows, setWorkflows] = useState<PlatformWorkflow[]>([]);
   const [executions, setExecutions] = useState<WorkflowExecution[]>([]);
   const [connectors, setConnectors] = useState<MCPConnector[]>([]);
@@ -109,6 +112,7 @@ export const useWorkflowsPage = () => {
     runForm.setFieldsValue({
       payload: '{}',
       force_rerun: false,
+      dispatch_mode: 'local',
     });
     setRunModalOpen(true);
   };
@@ -138,8 +142,9 @@ export const useWorkflowsPage = () => {
         : await executeWorkflow(
         runningWorkflow.id,
         parsedPayload,
-        true,
-        values.force_rerun ?? false
+        values.dispatch_mode === 'queue',
+        values.force_rerun ?? false,
+        values.dispatch_mode !== 'queue'
       );
 
       const execData = res.data;
@@ -164,7 +169,12 @@ export const useWorkflowsPage = () => {
       }
       loadData();
     } catch (err: any) {
-      message.error(err.response?.data?.detail || 'Execution failed');
+      if (axios.isAxiosError(err)) {
+        const detail = err.response?.data?.detail;
+        if (detail?.code === 'CAPABILITY_UNAVAILABLE' && detail.capability === 'queue') message.error(runText.queueUnavailable);
+        else if (detail?.code === 'CAPABILITY_UNAVAILABLE') message.error(runText.capabilityUnavailable.replace('{name}', String(detail.capability)));
+        else message.error(typeof detail === 'string' ? detail : detail?.message || runText.failed);
+      } else message.error(runText.failed);
     } finally {
       setExecuting(false);
     }
@@ -270,6 +280,7 @@ export const useWorkflowsPage = () => {
     handleDelete,
     openRunModal,
     handleExecute,
+    runText,
     copyToClipboard,
     getParsedWorkflowSteps,
     handleDeleteStepFromCanvas,

@@ -61,37 +61,6 @@ def _find_git_token(db_manager, org_id: Optional[str] = None) -> tuple[Optional[
     if org_id:
         return connector_token, connector_provider
 
-    # Check gh CLI auth token
-    gh_token = None
-    try:
-        import subprocess
-        import httpx
-        gh_res = subprocess.run(["gh", "auth", "token"], capture_output=True, text=True, timeout=3)
-        if gh_res.returncode == 0 and gh_res.stdout.strip():
-            gh_token = gh_res.stdout.strip()
-    except Exception:
-        pass
-
-    if gh_token:
-        if not connector_token or connector_provider == "gitlab":
-            return gh_token, "github"
-        
-        # If we have a connector token (e.g. github_pat_), check if it matches gh_token owner
-        if connector_token.startswith("github_pat_") or connector_token.startswith("ghp_"):
-            try:
-                import httpx
-                # We can check login via synchronous request or just use gh_token if both are valid and belong to same user
-                # To be robust, let's verify logins match
-                r1 = httpx.get("https://api.github.com/user", headers={"Authorization": f"Bearer {connector_token}", "Accept": "application/vnd.github+json", "User-Agent": "AI-Agents-Platform"}, timeout=3.0)
-                r2 = httpx.get("https://api.github.com/user", headers={"Authorization": f"Bearer {gh_token}", "Accept": "application/vnd.github+json", "User-Agent": "AI-Agents-Platform"}, timeout=3.0)
-                if r1.status_code == 200 and r2.status_code == 200:
-                    l1 = r1.json().get("login")
-                    l2 = r2.json().get("login")
-                    if l1 and l2 and l1.lower() == l2.lower():
-                        return gh_token, "github"
-            except Exception:
-                pass
-
     if connector_token:
         return connector_token, connector_provider
 

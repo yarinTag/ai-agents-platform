@@ -59,17 +59,14 @@ The `src/pages/` directory contains top-level page components mounted by React R
   * Modal for viewing skill implementation code or markdown prompt instructions.
 
 ### 2.5 `McpHub.tsx` (`/mcp`)
-* **Purpose**: Model Context Protocol (MCP) integrations and workflow trigger channels hub.
-* **Key Components**:
-  * [`CreateWorkflowModal`](file:///Users/yarintag/Desktop/Projects/ai-agents-platform/poc/dashboard/src/components/workflows/CreateWorkflowModal.tsx): Multi-step workflow builder with channel bindings.
-  * [`WorkflowCanvasGraph`](file:///Users/yarintag/Desktop/Projects/ai-agents-platform/poc/dashboard/src/components/workflows/WorkflowCanvasGraph.tsx): DAG visualization of configured workflow steps.
+* **Purpose**: Model Context Protocol (MCP) integrations hub.
 * **State & Features**:
   * **Live Repository Discovery**: Fetches public and private GitHub and GitLab repositories using MCP connector tokens.
   * **Multi-Channel Array Configuration**: Configures `allowed_channels` array for Slack channels and Telegram chats.
   * **Department MCP Access Permissions**: Grants or revokes MCP connector tools on a per-department or per-agent basis.
-  * **Workflow Channel Binding Table & Modals**: Displays active workflows with bound channel provider (Slack/Telegram), trigger event, and target repository.
   * Connector installation modal supporting standard providers (`github`, `gitlab`, `slack`, `telegram`, `postgres`, `filesystem`, `brave-search`) and custom stdio/SSE commands.
   * Connector connection tester with real-time tool discovery verification.
+  * Note: The legacy Workflow Channels tab has been removed from MCP Hub as workflows and channel bindings are managed in the dedicated `/workflows` hub.
 
 ### 2.6 `OrganizationPage.tsx` (`/organization`)
 * **Purpose**: Enterprise multi-tenant governance, department hierarchy, budgets, and user access.
@@ -147,7 +144,7 @@ Routes, endpoint signatures and existing API facade imports are unchanged. The f
 | Skills.tsx | useSkillsPage.tsx: source configuration, scans, repository discovery, skill CRUD, content loading and collapse state | PluginSourceConfiguration.tsx renders local/Git source selection and token discovery; SkillsCatalogTabs.tsx renders plugin browsing/custom skill registry; shell retains skill/content/folder modals |
 | Tasks.tsx | useTasksPage.tsx: one useOfficeEvents subscription, task CRUD, delegation, tree loading, row actions and tree projection | Tasks.tsx retains table and action/detail dialogs; no new polling or streaming client |
 | CalendarView.tsx | useCalendarViewPage.tsx: schedule/task/approval loading, existing 10-second refresh and cleanup, schedule actions, date-cell rendering and schedule columns | Shell retains calendar/tabs/date inspection and cron/approval modal composition; calendarDates.ts owns the shared Dayjs relative-time configuration |
-| McpHub.tsx | useMcpState.tsx owns auth context, form instances, shared UI state and initial fetch; useMcpConnectorActions.tsx owns connector discovery/configuration/tools/permissions; useMcpWorkflowActions.tsx owns channel bindings and workflow actions; useMcpPage.tsx composes these and derives channels/catalog filtering | McpHubTabs, McpMarketplace, McpInstalledConnectors and McpWorkflowChannels own tab content. McpConnectorModal composes McpRepositorySelection, McpSlackSelection and McpTelegramSelection within the same Form. McpBindingModal, McpCustomConnectorModal, McpToolsDrawer, McpPermissionsModal, McpWorkflowCanvasModal and McpWorkflowBuilder own existing dialogs. mcpProviderIcon.tsx owns provider icon mapping. |
+| McpHub.tsx | useMcpState.tsx owns auth context, form instances, shared UI state and initial fetch; useMcpConnectorActions.tsx owns connector discovery/configuration/tools/permissions; useMcpWorkflowActions.tsx owns channel bindings and workflow actions; useMcpPage.tsx composes these and derives channels/catalog filtering | McpHubTabs renders Integrations Marketplace (McpMarketplace) and Installed Connectors (McpInstalledConnectors). McpConnectorModal composes McpRepositorySelection, McpSlackSelection and McpTelegramSelection within the same Form. McpCustomConnectorModal, McpToolsDrawer and McpPermissionsModal own existing connector dialogs. mcpProviderIcon.tsx owns provider icon mapping. |
 
 Selected-resource updates, inline editing, notifications, form validation and modal close handlers are preserved by relocation. `resourceLoading.ts` supplies `readResource`, which records read failure independently from successful empty results. `ResourceSection.tsx` renders scoped unavailable/retry states. MCP catalog/connectors/workflows load independently; unavailable permissions disable Access mutations and render an explicit warning. Connector and binding save handlers also guard dialogs left open during a failed refresh. Channel suggestions come only from configured connector arrays, without invented fallback channel names. Calendar schedule/history/approval reads remain independent, with unavailable sections and disabled dependent schedule actions rather than false empty-success states. Skills initial source configuration failure stops scanning and exposes retry; neither manual rescan nor source overrides bypass a missing initial configuration. The custom skills tab remains separate from plugin source/scan availability. Workflow quick-add channel mutation is owned once by `useMcpWorkflowActions.handleQuickAddBindingChannel` and reused by Enter and Add.
 
@@ -199,3 +196,28 @@ No tests, build, lint, type checking, import execution or application startup we
 
 ## MCP page render correction (2026-10-30)
 McpHubPage reads resourceErrors from useMcpPage before using connectors availability to disable Add Custom MCP. The resource state remains owned by useMcpState; the page must not reference an undeclared local. This fixes the reported resourceErrors ReferenceError. No tests/build were run.
+
+## MCP Hub workflow tab removal and GitHub token discovery (2026-10-31)
+McpHubTabs removes the duplicate Workflow Channels tab (`McpWorkflowChannels`) and McpHubPage removes the workflow binding/canvas/builder modals, as workflow management lives under `/workflows`. In `useMcpConnectorActions.handleFetchResources`, manual token repository fetches (`isManual=true`) replace `discoveredResources` strictly with the repositories returned for the token and update `selectedResources` to valid repositories from that token instead of merging stale or default repository names.
+
+## Workflow Assistant removal (2026-10-31)
+The `/workflow-assistant` route has been removed from `src/App.tsx` and the sidebar navigation. Workflow creation and AI playbook generation are consolidated under `/workflows` (`Workflows.tsx` and `CreateWorkflowModal.tsx`).
+
+## New friendly AI creation window
+Workflows.tsx owns a chatOpen flag and mounts WorkflowChatModal from Create with AI. Successful inactive creation reloads the existing workflow list; manual creation, editing, logs and history remain separate existing actions. This new window replaces no removed route and restores none of the deleted assistant files.
+
+Workflows initializes the AI modal from ?workflowChat=<private-request-id> to recover an existing conversation after reload. Explicit close removes only this query parameter; other route query parameters are preserved.
+
+The workflow Run modal exposes Run location: Run on this server (manual UI default) or Send to message queue. The former sends use_queue=false&background=true and returns promptly without the broker; the latter sends use_queue=true. Playground retains its separate tool-free path. Structured CAPABILITY_UNAVAILABLE errors now render a useful queue-specific or capability-specific message instead of passing an object to message.error. No automatic fallback/retry occurs.
+
+MCP connector actions now pass editingConnector.id to resource discovery. Telegram displays actual recent bot chats or valid configured IDs and removes phantom defaults/implicit selection; empty discovery explains real numeric IDs/@usernames and webhook limitations. Slack displays only returned configured channel IDs without inserting #general/#dev-team defaults. Selection/save remains explicit. Existing invalid aliases are not silently mapped to other recipients.
+
+WorkflowExecutionDrawer and WorkflowLogs render notification_error as a separate warning from run failure. This distinguishes a completed GitHub summary from a blocked optional Telegram/Slack delivery.
+
+Telegram connector selection exposes **Find chat IDs**, showing discovered titles beside exact IDs without automatically selecting or granting destinations. Telegram/Slack destination saving rejects display-name aliases; no suggested channel defaults are fabricated.
+
+Installed connectors expose Send test message beside each saved Telegram/Slack destination; Check connection remains separate. Tests pass connector_id and display safe backend errors. Telegram Find chats lists observed names and keeps selection values as exact IDs; save persists configuration.channel_labels (ID-to-name display metadata) alongside allowed_channels. Labels never authorize or resolve delivery. Configured tags retain names after reload and show IDs on hover.
+
+Connector save correction: useMcpConnectorActions explicitly includes/destructures discoveredResources from useMcpState before deriving configuration.channel_labels. Omitting this caused a ReferenceError before Telegram/Slack save HTTP requests. Static source review only; runtime verification remains unauthorized.
+
+Telegram discovered-chat selection displays names with canonical IDs available on hover; checkbox values remain the discovered IDs. Installed connector tags use persisted channel_labels. No arbitrary name-to-destination guessing is introduced.

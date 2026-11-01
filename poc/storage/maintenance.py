@@ -66,4 +66,7 @@ class MaintenanceRepository:
             self._seed_default_templates(conn)
             if seed_baseline:
                 self._seed_default_agents(conn)
+            org_row = conn.execute("SELECT id FROM organizations ORDER BY created_at ASC LIMIT 1").fetchone()
             conn.commit()
+        if seed_baseline and org_row:
+            self.claim_orphaned_records(org_row["id"])

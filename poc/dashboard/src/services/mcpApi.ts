@@ -43,12 +43,13 @@ export const grantMCPPermission = (data: { agent_id: string; connector_id: strin
 export const revokeMCPPermission = (data: { agent_id: string; connector_id: string; tool_id?: string | null }) =>
   api.post('/api/v1/mcp/permissions/revoke', data);
 
-export const discoverMCPResources = (provider: string, token?: string, configuration?: any) =>
+export const discoverMCPResources = (provider: string, token?: string, configuration?: any, connectorId?: string) =>
   api.post<{ provider: string; repositories?: any[]; channels?: any[]; chats?: any[]; requires_token?: boolean; message?: string }>('/api/v1/mcp/discover-resources', {
     provider,
     token,
     configuration,
-  });
+    connector_id: connectorId,
+  }, provider === 'telegram' ? { timeout: 20000 } : undefined);
 
-export const testChannelMessage = (data: { provider: string; channel_id: string; message: string }) =>
-  api.post<{ status: string; channel_id: string; message: string; timestamp: string }>('/api/v1/mcp/test-channel-message', data);
+export const testChannelMessage = (data: { provider: string; connector_id?: string; channel_id: string; message: string }) =>
+  api.post<{ status: string; delivery: string; channel_id: string; delivered_channel_id: string; provider_message_id: string; timestamp: string }>('/api/v1/mcp/test-channel-message', data);

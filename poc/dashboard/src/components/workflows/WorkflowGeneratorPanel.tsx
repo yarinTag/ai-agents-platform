@@ -8,7 +8,7 @@ export function WorkflowGeneratorPanel({ model }: { model: ReturnType<typeof use
     generating, promptText, setPromptText, workflowName, description,
     cronExpression, webhookEnabled, targetRepo, setTargetRepo, channelProvider,
     setChannelProvider, channelId, setChannelId, triggerEnabled, notifyMode,
-    telegramChannels, slackChannels, githubRepos, installedMcps, allowedMcps,
+    getChannelLabel, telegramChannels, slackChannels, githubRepos, installedMcps, allowedMcps,
     setAllowedMcps, workflowSkills, steps, syncToYaml, handleGenerateTemplate,
   } = model;
   return (
@@ -240,7 +240,7 @@ export function WorkflowGeneratorPanel({ model }: { model: ReturnType<typeof use
                           : channelProvider === 'slack'
                           ? slackChannels
                           : []
-                        ).map((ch) => ({ label: ch, value: ch }))}
+                        ).map((ch) => ({ label: getChannelLabel(channelProvider, ch), value: ch }))}
                       />
                     </Col>
                     <Col span={8}>

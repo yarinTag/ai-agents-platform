@@ -44,13 +44,17 @@ class PermissionRevokeRequest(BaseModel):
 
 class ResourceDiscoveryRequest(BaseModel):
     provider: str
+    connector_id: Optional[str] = None
     token: Optional[str] = None
     configuration: Optional[Dict[str, Any]] = None
 
 
 
 class ChannelTestMessageRequest(BaseModel):
-    provider: str
-    channel_id: str
-    message: str = "Test notification from AI Agents Platform"
+    model_config = ConfigDict(extra="forbid")
+
+    provider: str = Field(pattern="^(telegram|slack)$")
+    connector_id: Optional[str] = None
+    channel_id: str = Field(min_length=1, max_length=200)
+    message: str = Field(default="Test notification from AI Agents Platform", min_length=1, max_length=3500)
 

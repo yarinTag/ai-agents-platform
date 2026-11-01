@@ -87,8 +87,26 @@ Both dictionaries define `featureAvailability`: unavailable, renderFailure, navi
 > 2. NEVER introduce hardcoded Hebrew strings into UI components or pages.
 > 3. Document any new translation domains or context helper utilities in this file.
 
-## Workflow Assistant model generation
-EN and HE dictionaries include assistant.* for the workflow authoring page, navigation, planning profiles, clarification, explicit ready/blocked saves, stale versions and provider errors. WorkflowAssistant uses the existing locale and dir values. Backend resource labels and structured error codes remain server data.
+## Runtime setup copy
+`runtimeSetup.ts` exports `useRuntimeSetupText` and aligned typed English/Hebrew setup dictionaries for Direct API provider selection, API key configuration, multi-provider model enabling (`enableModels`), and per-provider default model selection. The `assistant.*` dictionary section in `en.ts` and `he.ts` was removed on 2026-10-31 alongside Workflow Assistant.
 
-## Model-only YAML authoring and internal MCP
-assistant.model replaces the planning-profile/agent label. EN/HE add noModels/downloadYaml/yamlSchema/yamlDraft and clarify that missing execution agents block executable step assignment, not discussion with the authoring model. The intro describes schema-driven inactive drafts. Runtime/provider/model/resource names remain server data.
+## Friendly workflow chat copy
+workflowChat.ts exports useWorkflowChatText with aligned typed English/Hebrew domain dictionaries. It covers Create with AI, example prompts, conversation/preview, configured-model/runtime settings, resource categories/missing access, generation/stop/retry and inactive creation. It reads the existing locale context and does not modify the large legacy dictionaries or locale persistence.
+
+Workflow chat EN/HE also distinguishes connection loss, server timeout and HTTP status errors. Successful reconnects clear transient banners without clearing real model errors.
+
+workflowRun.ts adds aligned EN/HE copy for explicit local/queued execution, restart durability limits, queue outages and structured capability errors. It uses the existing locale context.
+
+workflowChat.ts adds typed EN/HE available/unavailable resource status labels; backend identifiers and runtime policy errors remain server data.
+
+workflowRun EN/HE adds the separate optional-delivery warning label for execution inspection/logs.
+
+`connectorResources.ts` owns English/Hebrew chat-ID discovery labels, target input guidance and invalid delivery-target validation messages.
+
+connectorResources also supplies Find chats, Send test message, Check connection and save-before-testing guidance in English/Hebrew.
+
+workflowChat supplies the plugin-skills resource label in English/Hebrew.
+
+workflowChat includes Workflow Skills and inheritance/direct-action guidance in English/Hebrew, shared by the builder and AI preview.
+
+workflowChat plannedRunner describes dedicated workflow runner provisioning on confirmation in English/Hebrew.

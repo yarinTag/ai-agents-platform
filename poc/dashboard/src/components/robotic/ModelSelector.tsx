@@ -54,10 +54,14 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                 ? 'Anthropic Claude'
                 : m.provider === 'NVIDIA NIM'
                 ? 'NVIDIA NIM'
+                : m.provider === 'OpenAI'
+                ? 'OpenAI'
+                : m.provider === 'OpenRouter'
+                ? 'OpenRouter'
                 : m.provider || 'AI Provider';
 
             const tier = (m.tier || matchedStatic?.tier || 'worker') as any;
-            const contextWindow = m.context_window || matchedStatic?.contextWindow || 200000;
+            const contextWindow = m.context_window || matchedStatic?.contextWindow || 128000;
 
             return {
               label: m.name,
@@ -89,9 +93,14 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     };
 
     fetchModels();
+    const handleRuntimeChanged = () => {
+      fetchModels();
+    };
+    window.addEventListener('platform:runtime-changed', handleRuntimeChanged);
 
     return () => {
       isMounted = false;
+      window.removeEventListener('platform:runtime-changed', handleRuntimeChanged);
     };
   }, []);
 

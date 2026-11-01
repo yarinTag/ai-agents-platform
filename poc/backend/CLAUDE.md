@@ -121,3 +121,32 @@ Model-only authoring must not load/save a planning agent. Use the current runtim
 Master integration retains modular dependencies and isolated lifecycle. queue_lifecycle owns broker/worker shutdown; workflow_wiring owns firewall and ChatOps adapters. Source-only merge review: do not infer passing builds/tests from conflict resolution.
 
 Keep queue-api (HTTP monitoring) separate from queue (transport) and queue-worker (consumers). Broker initialization failure must not hide its status endpoint; transport-dependent mutations must still reject unavailable dispatch.
+
+## Workflow chat development contract
+The new chat uses current database user status, role and department membership, not JWT role alone. Its catalog must never contain connector configuration/credentials or treat remote discovery as authorization. Revalidate structured agent/repository/channel/tool references and DAG/cron at creation. Shared persist_workflow accepts internal stable workflow_id/initially_active options; generic creation retains its active default. Generation never invokes integrations. Review tests in test_workflow_chat.py with --noconftest only when the user authorizes execution.
+
+Manual execution can explicitly use process-local background dispatch (use_queue=false&background=true) without RabbitMQ. Do not turn queue 503 into an implicit retry: acceptance can be ambiguous and replay could duplicate external actions. The original synchronous API path and queue default remain compatible.
+
+Governed connectors use fixed vendor endpoints and a backend-only task scope, not arbitrary model-supplied URLs/configuration. Never enable shell/file tools in connector-backed workflow steps or treat remote content as supervisor commands. Discovery cannot grant permissions or invent channels. Telegram/Slack discovery for configuration is current-DB ORG_ADMIN-only; workflow runtime checks current department/agent/user policy independently. No live integration verification was authorized.
+
+Manual channel testing uses exact saved tenant connector/allowlist checks and persisted active administrator authorization. It uses the strict acknowledged channel adapter, never legacy alias resolution; no test message was sent during implementation.
+
+Telegram provider rejection diagnostics are fixed allowlisted messages. Never expose raw response bodies or token-bearing endpoint paths when reporting channel-test errors.
+
+Bot-to-bot and conversation-not-started Telegram rejections have separate safe setup hints; diagnose the saved receiving target independently of the sender token. No live calls were performed.
+
+Notification adapter safe ToolAccessError details must survive audit and execution-warning persistence; unexpected exceptions remain redacted. Historical generic failures do not establish provider rejection versus uncertain outcome.
+
+Explicit workflow channel actions deliver predecessor output through the governed executor, without model inference. Preserve scoped checks and receipt requirements. Chat generation may specify send_output_of; validation requires an explicit source dependency and one channel resource.
+
+Workflow chat channel_labels is a presentation projection limited to authorized IDs, with no credentials; never accept a label as delivery authorization or replace canonical channel_id with it.
+
+Workflow skill injection passes the workflow organization to get_skill_context. Full skill contents resolve against current configured plugin source; missing skills fail rather than silently dropping an instruction. No runtime verification performed.
+
+Workflow skills are shared at the root, inherited by all AI steps; preserve legacy step assignments through promotion. Deterministic channel actions skip skill content entirely. No runtime verification was performed.
+
+Workflow chat may plan __workflow_runner__, which is materialized as a real tenant/department-scoped runner only on explicit creation. Do not treat planned agents as existing runtime records, bypass current grants, or persist the sentinel ID. Runner provisioning failure is503 and prevents workflow persistence.
+
+Both AI and manual new-workflow authoring may explicitly select the planned runner; saved step assignments must reference the actual generated runner ID. Runtime creation based on inferred missing capabilities is not implemented by this UI correction.
+
+Governed channel sends and workflow notifications share lossless bounded multipart delivery. Preserve per-part authorization, aggregate acknowledged receipts and failed/unknown no-retry claims. No live verification performed.

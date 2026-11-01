@@ -22,7 +22,6 @@ class RuntimeCapabilities:
     max_concurrent: Optional[int]
     supported_models: List[str]
     supports_playground: bool = False
-    supports_authoring: bool = False
 
 
 @runtime_checkable
@@ -124,34 +123,13 @@ class PlaygroundRuntimeAdapter(RuntimeAdapter, Protocol):
         ...
 
 
-@dataclass
-class AuthoringInferenceResult:
-    output: Any = None
-    input_tokens: int = 0
-    output_tokens: int = 0
-    cost_usd: Optional[float] = None
-    cost_source: str = "ESTIMATED"
-    model: Optional[str] = None
-    error_code: Optional[str] = None
-    error_message: Optional[str] = None
-
-
-@dataclass(frozen=True)
-class AuthoringModelSelection:
-    model_id: str
-    provider_id: str
-
-
 @runtime_checkable
-class AuthoringRuntimeAdapter(RuntimeAdapter, Protocol):
-    def get_authoring_models(self) -> List[Dict[str, str]]:
-        """Model options for the currently configured provider; no agent profile is read."""
+class WorkflowChatRuntimeAdapter(RuntimeAdapter, Protocol):
+    def workflow_chat_selection(self) -> Dict[str, str]:
+        """Return the configured provider/model; callers cannot override the selection."""
         ...
 
-    def infer_authoring(self, selection: AuthoringModelSelection, prompt: str, system_prompt: str,
-                        response_schema: Dict[str, Any], timeout_seconds: float = 120,
-                        max_budget_usd: Optional[float] = None,
-                        is_cancelled: Optional[Callable[[], bool]] = None,
-                        authoring_context: Optional[Dict[str, Any]] = None) -> AuthoringInferenceResult:
-        """Isolated tool-free inference, without normal tasks, sessions, or agent callbacks."""
+    def infer_workflow_chat(self, selected: Dict[str, str], prompt: str,
+                            schema: Dict[str, Any], budget: float, is_cancelled: Callable[[], bool]) -> Dict[str, Any]:
+        """Tool-free planning with bounded lifetime and explicit usage/error output."""
         ...

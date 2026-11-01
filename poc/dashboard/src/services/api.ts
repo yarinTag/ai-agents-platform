@@ -22,5 +22,6 @@ export * from './capabilitiesApi';
 export type { DiscoveredModel } from '../types/model';
 export type { FolderItem, QuickAccessItem, BrowseResponse, PickFolderResponse } from '../types/filesystem';
 export * from './queueApi';
-export * from './assistantApi';
 export type { QueueStatus } from '../types/queue';
+
+export * from './workflowChatApi';

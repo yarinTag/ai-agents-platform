@@ -1,3 +1,4 @@
+import { useConnectorResourceText } from '../i18n/connectorResources';
 import { Modal, Form, message, Drawer } from 'antd';
 import { installMCPConnector, updateMCPConnector, deleteMCPConnector, testMCPConnector, getMCPTools, getMCPPermissions, grantMCPPermission, revokeMCPPermission, discoverMCPResources, testChannelMessage } from '../services/api';
 import { MCPCatalogItem, MCPConnector } from '../types/mcp';
@@ -18,6 +19,7 @@ export const useMcpConnectorActions = (state: Pick<
   | 'setEditingConnector'
   | 'setSubmitting'
   | 'form'
+  | 'discoveredResources'
   | 'setDiscoveredResources'
   | 'selectedResources'
   | 'setSelectedResources'
@@ -39,6 +41,7 @@ export const useMcpConnectorActions = (state: Pick<
   | 'setTestingChannelMap'
   | 'loadData'
 >) => {
+  const resourceText = useConnectorResourceText();
   const {
     resourceErrors,
     catalog,
@@ -52,6 +55,7 @@ export const useMcpConnectorActions = (state: Pick<
     setEditingConnector,
     setSubmitting,
     form,
+    discoveredResources,
     setDiscoveredResources,
     selectedResources,
     setSelectedResources,
@@ -96,7 +100,7 @@ export const useMcpConnectorActions = (state: Pick<
 
     try {
       const allFormValues = form.getFieldsValue();
-      const res = await discoverMCPResources(provider, trimmedToken || undefined, allFormValues);
+      const res = await discoverMCPResources(provider, trimmedToken || undefined, allFormValues, editingConnector?.id);
 
       if (res.data?.requires_token && isManual) {
         const errMsg = res.data.message || 'Please enter a valid Personal Access Token to view accessible repositories.';
@@ -109,7 +113,7 @@ export const useMcpConnectorActions = (state: Pick<
       if (isGitProvider) {
         const repos = res.data?.repositories || [];
         const mergedRepos = [...repos];
-        if (currentSelected) {
+        if (currentSelected && !isManual) {
           currentSelected.forEach((rName) => {
             if (!mergedRepos.some((r: any) => (r.name || r.full_name) === rName)) {
               mergedRepos.push({ name: rName, full_name: rName, description: 'Configured repository', is_local: false });
@@ -117,7 +121,11 @@ export const useMcpConnectorActions = (state: Pick<
           });
         }
         setDiscoveredResources(mergedRepos);
-        if (selectedResources.length === 0 && (!currentSelected || currentSelected.length === 0) && mergedRepos.length > 0) {
+        if (isManual) {
+          const validRepoNames = new Set(repos.flatMap((r: any) => [r.full_name, r.name].filter(Boolean)));
+          const filteredSelected = (currentSelected || []).filter((rName) => validRepoNames.has(rName));
+          setSelectedResources(filteredSelected.length > 0 ? filteredSelected : repos.map((r: any) => r.full_name || r.name));
+        } else if (selectedResources.length === 0 && (!currentSelected || currentSelected.length === 0) && mergedRepos.length > 0) {
           const mainRepo = mergedRepos.find((r: any) => (r.name || r.full_name) === 'ai-agents-platform') || mergedRepos[0];
           setSelectedResources([mainRepo.full_name || mainRepo.name]);
         }
@@ -126,47 +134,26 @@ export const useMcpConnectorActions = (state: Pick<
         }
       } else if (provider === 'slack') {
         const channels = res.data?.channels || [];
-        const mergedChannels = [...channels];
-        if (currentSelected) {
-          currentSelected.forEach((cName) => {
-            if (!mergedChannels.some((c: any) => (c.name || c.id) === cName)) {
-              mergedChannels.push({ id: cName, name: cName, description: 'Configured channel' });
-            }
-          });
-        }
-        setDiscoveredResources(mergedChannels);
-        if (selectedResources.length === 0 && (!currentSelected || currentSelected.length === 0) && mergedChannels.length > 0) {
-          setSelectedResources(['#general', '#dev-team', '#pr-review']);
-        }
-        if (isManual) {
-          message.success(`Discovered ${channels.length} Slack channels`);
-        }
+        setDiscoveredResources(channels);
+        if (isManual) message.success(`Found ${channels.length} configured Slack channel IDs`);
       } else if (provider === 'telegram') {
         const chats = res.data?.chats || [];
-        const mergedChats = [...chats];
-        if (currentSelected) {
-          currentSelected.forEach((cName) => {
-            if (!mergedChats.some((c: any) => (c.id || c.name) === cName)) {
-              mergedChats.push({ id: cName, name: cName, description: 'Configured chat / channel' });
-            }
-          });
-        }
-        setDiscoveredResources(mergedChats);
-        if (selectedResources.length === 0 && (!currentSelected || currentSelected.length === 0) && mergedChats.length > 0) {
-          setSelectedResources(['@agents_office_alerts']);
-        }
+        setDiscoveredResources(chats);
+        // Discovery suggests IDs; only an explicit selection/save grants a destination.
         if (isManual) {
-          message.success(`Discovered ${chats.length} Telegram chats`);
+          if (chats.length) message.success(`Discovered ${chats.length} Telegram chat IDs. Select and save the intended target.`);
+          else message.info('No recent bot chats were found. Enter a real numeric ID or public @channel username. Webhook bots cannot use getUpdates.');
         }
       }
     } catch (err: any) {
-      console.error('Resource discovery failed', err);
+      console.error('Resource discovery failed');
+      setDiscoveredResources([]);
       const detail = err.response?.data?.detail || err.message || `Failed to discover ${provider} resources`;
       if (isManual) {
         setResourceDiscoveryError(detail);
         message.error(detail);
       } else {
-        message.warning('Using default resource catalog');
+        message.warning('Resource discovery is unavailable. No default destination was selected.');
       }
     } finally {
       setFetchingResources(false);
@@ -205,7 +192,7 @@ export const useMcpConnectorActions = (state: Pick<
         } else if (typeof existingConn.configuration?.chat_id === 'string' && existingConn.configuration.chat_id.trim()) {
           initialSelected = [existingConn.configuration.chat_id.trim()];
         } else {
-          initialSelected = ['@agents_office_alerts'];
+          initialSelected = [];
         }
       } else if (provider === 'slack') {
         if (Array.isArray(existingConn.configuration?.allowed_channels) && existingConn.configuration.allowed_channels.length > 0) {
@@ -213,7 +200,7 @@ export const useMcpConnectorActions = (state: Pick<
         } else if (typeof existingConn.configuration?.default_channel === 'string' && existingConn.configuration.default_channel.trim()) {
           initialSelected = [existingConn.configuration.default_channel.trim()];
         } else {
-          initialSelected = ['#general'];
+          initialSelected = [];
         }
       }
     } else {
@@ -227,9 +214,9 @@ export const useMcpConnectorActions = (state: Pick<
       if (provider === 'github' || provider === 'git' || provider === 'gitlab') {
         initialSelected = ['ai-agents-platform'];
       } else if (provider === 'telegram') {
-        initialSelected = ['@agents_office_alerts'];
+        initialSelected = [];
       } else if (provider === 'slack') {
-        initialSelected = ['#general'];
+        initialSelected = [];
       }
     }
 
@@ -275,12 +262,25 @@ export const useMcpConnectorActions = (state: Pick<
       });
 
       const provider = (selectedCatalogItem?.provider || editingConnector?.provider || '').toLowerCase();
+      const validTarget = (value: string) => provider === 'telegram'
+        ? /^(-?[1-9][0-9]{0,19}|@[A-Za-z][A-Za-z0-9_]{4,31})$/.test(value)
+        : /^[CG][A-Z0-9]{7,30}$/.test(value);
+      if (['telegram', 'slack'].includes(provider) && selectedResources.some(value => !validTarget(value))) {
+        message.error(resourceText.invalidTarget);
+        return;
+      }
+
 
       // Attach selected repos or channels
       if (provider === 'github' || provider === 'git' || provider === 'gitlab') {
         config.allowed_repos = selectedResources;
       } else if (provider === 'slack' || provider === 'telegram') {
         config.allowed_channels = selectedResources;
+        const previousLabels = editingConnector?.configuration?.channel_labels || {};
+        config.channel_labels = Object.fromEntries(selectedResources.map(id => {
+          const observed = discoveredResources.find((item: { id?: string; name?: string }) => item.id === id);
+          return [id, observed?.name || previousLabels[id] || id];
+        }));
         if (provider === 'telegram') {
           config.chat_id = selectedResources[0] || '';
         }
@@ -361,18 +361,19 @@ export const useMcpConnectorActions = (state: Pick<
   };
 
   // Test Channel Message
-  const handleTestChannelMessage = async (provider: string, channelId: string) => {
-    const key = `${provider}:${channelId}`;
+  const handleTestChannelMessage = async (provider: string, channelId: string, connectorId?: string) => {
+    const key = `${connectorId || provider}:${channelId}`;
     setTestingChannelMap((prev) => ({ ...prev, [key]: true }));
     try {
       await testChannelMessage({
         provider,
+        connector_id: connectorId,
         channel_id: channelId,
         message: `🔔 Test notification from AI Agents Platform to ${channelId}`,
       });
       message.success(`Sent test message to ${channelId} (${provider})`);
-    } catch (err) {
-      message.error(`Failed to send test message to ${channelId}`);
+    } catch (err: any) {
+      message.error(err?.response?.data?.detail || `Failed to send test message to ${channelId}`);
     } finally {
       setTestingChannelMap((prev) => ({ ...prev, [key]: false }));
     }

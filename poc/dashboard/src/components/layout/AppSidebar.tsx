@@ -58,11 +58,6 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ collapsed, onToggleColla
           badgeColor: '#8b5cf6',
         },
         {
-          to: '/workflow-assistant',
-          label: t('assistant.title'),
-          icon: <ApartmentOutlined style={{ fontSize: '15px' }} />,
-        },
-        {
           to: '/flow',
           label: 'Live Flow',
           icon: <DeploymentUnitOutlined style={{ fontSize: '15px' }} />,
