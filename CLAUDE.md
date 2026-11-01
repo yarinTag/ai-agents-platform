@@ -182,3 +182,27 @@ The server requires JWT_SECRET_KEY (>= 32 chars) unless PLATFORM_DEV_MODE=1. API
 
 ## Workflow settings (model, machine size, network, secrets)
 Each workflow's definition.settings selects a model (default, tier or catalog ID; it overrides the agent model for step tasks), a sandbox machine size (small/medium/large) and an HTTPS egress allowlist enforced by a per-step proxy container. Write-only secrets are stored AES-GCM encrypted (PLATFORM_SECRETS_KEY) or as allowlisted AWS Secrets Manager ARNs, injected only into repository sandboxes as env vars and redacted from tool output. Managing them requires a DB-verified org admin or department manager. See docs/workflow-settings.md. No tests, builds, Docker or AWS calls were run.
+
+
+Provider-visible reasoning summaries are recorded per completed API response and shown in Workflow Logs events; missing summaries are explicit. Encrypted continuation stays in private session transcripts. OpenAI reasoning families use Responses; known Claude families request thinking. Exact contracts: poc/runtime/AGENTS.md. No tests/build/typecheck/startup/provider calls performed.
+
+
+Workflow/session pricing uses explicit per-call usage events, recorded provenance, additive API cost_summary and private session ledgers. Unknown is not free; actual/reference estimates remain distinct; department accounting retains API_KEY cost_source. NVIDIA hosted prototyping free rates are sourced in runtime/direct_pricing.py. No tests/build/typecheck/startup/inference run.
+
+
+PR workflow correction: author typed workspace + required_outcome=pull_request, require explicit department write grants and pinned sandbox configuration, and retain receipt-based publication. Governed connector finals use a completed/blocked envelope and blocked work fails rather than triggering success notifications. No tests/build/startup/PRs/message sends performed.
+
+
+Repository workflow implementation includes manual step mode/connector/repository/ref/PR-title controls, department-scoped catalog loading and static sandbox readiness warnings. Source review only: user explicitly reiterated not to run tests; no tests/build/typecheck/startup or Docker commands were executed.
+
+
+Workflow authoring is generic and follows the current user request: changes, deliverables, acceptance criteria, dependencies and requested notifications. No version-bump defaults, release policies or fixed notification sequence are imposed. Execution inspects real files and repository instructions, preserves unrelated work and clarifies material missing requirements. Changes sharing a checkout remain in one workspace step because separate steps use independent clones; dependencies do not transfer uncommitted files. Requested PRs use write workspaces with required PR receipts and remain drafts. Notifications report actual exposed milestones and returned URLs. Workspace repository references stay separate from connector resources. This supersedes the earlier version-bump-specific guidance. No saved workflow/grants were modified and no tests/build/typecheck/startup/model calls were performed.
+
+
+Channel action configuration now requires exactly one matching step mcp_servers connector and authorized_resources destination/tool (send_message or post_chat_message), in addition to its explicit source dependency. Workflow execution preflight checks every channel action before any steps, preventing a malformed final notification from being discovered only after a PR is published. The saved Core plugin patch PR workflow notify_done scope was repaired with an immutable configuration revision; historical failed execution status/PR receipts were retained and nothing was retried. No tests/build/startup/provider calls or messages were performed. Repository workspaces still use per-step shallow clones cleaned up afterward; a shared Git-object cache is not implemented by this repair.
+
+
+Repository cache implementation: integrations/repo_cache.py, default database-adjacent repo_cache, configurable path/TTL/entry count/retained entry size. Each workflow still gets a fresh independent checkout; no offline stale fallback, shared edits or cached credentials. Existing policy rechecks and audit contracts remain. User prohibits tests: only source review and diff whitespace checks were performed; no runtime/application/Docker/Git/model execution.
+
+
+Notification configuration change: use existing Channel Binding cadence, not synthetic start/middle/done work stages. Engine lifecycle hooks, per-event audit claims, best-effort delivery warnings and typed chat/UI modes are implemented. Existing workflow revision migration preserves historical run failures and PR receipts. No tests/build/typecheck/startup or message sends performed.

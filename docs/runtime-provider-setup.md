@@ -31,8 +31,8 @@ saved in the settings database.
 | NVIDIA NIM | `NVIDIA_API_KEY` | `DIRECT_NVIDIA_INPUT_USD_PER_MILLION` | `DIRECT_NVIDIA_OUTPUT_USD_PER_MILLION` |
 
 Use the actual prices for your chosen model/account. Prices must be finite and
-non-negative; zero must mean an actual zero price. Missing prices prevent direct
-inference instead of recording unknown API usage as free. These configured rates
+non-negative; zero must mean an actual zero price. Missing prices prevent budget-limited direct
+inference; unbudgeted calls record unavailable cost rather than free usage. These configured rates
 produce an estimate for platform accounting; upstream invoices, cache discounts,
 service tiers and concurrent spend can differ. Authoring checks its remaining
 budget before each request; this is not a cross-process spending reservation.
@@ -93,3 +93,16 @@ Source and whitespace were reviewed. Tests, type checking, build, application
 startup and live provider calls were not run because repository instructions
 prohibit runtime verification for this task. The new source cases are in
 `poc/tests/test_direct_runtime.py`; when authorized, run them with `--noconftest`.
+
+## Session pricing and free endpoints
+Each model response records input/output tokens, cost provenance and a running session total in Usage & cost events. Workflow list, Logs and inspection distinguish free, estimated, provider-reported and unavailable costs. Resume preserves spend history; fork copies context with a new spend ledger. Old unpriced sessions cannot be retroactively priced reliably.
+
+The fixed NVIDIA hosted prototyping endpoints have a documented free default ([NVIDIA FAQ](https://docs.api.nvidia.com/nim/docs/product)); this is not a claim about self-hosted NIM infrastructure costs. Explicit configured model/provider prices override that default. OpenRouter-reported usage.cost takes precedence over a configured estimate for each call, including a zero cost.
+
+For multiple models, set PLATFORM_MODEL_PRICING_JSON to a JSON object of provider -> exact requested model ID -> rate record. Fields input/output are USD per million tokens. Optional reference_input/reference_output define a separate comparison value even if actual API use is free. Both fields in each pair must be finite and non-negative. A reference estimate never increases billed cost or department spend. Example structure (substitute verified rates for the placeholders):
+
+```text
+{"direct_nvidia":{"<exact-model-id>":{"input":0,"output":0,"reference_input":<verified-input-rate>,"reference_output":<verified-output-rate>}}}
+```
+
+Without a published/configured reference rate we show no invented equivalent commercial price. Flat token-rate estimates may differ from invoices due to caches, service tiers and other provider billing rules. Changing environment pricing requires restarting the backend; no restart was performed during implementation.

@@ -113,3 +113,15 @@ workflowChat plannedRunner describes dedicated workflow runner provisioning on c
 
 ## Workflow settings copy
 `workflowSettings.ts` exports `useWorkflowSettingsText`, the `WorkflowSettingsText` type, and `formatWorkflowSettingsText(template, params)` for `{name}`-style placeholders. It holds typed English/Hebrew dictionaries (Hebrew is `typeof en`, so keys stay in parity) for the Workflows **Settings** action, the settings drawer (model/tiers/catalog, machine size, network allowlist, save/409 conflict/validation/permission messages, read-only and invalid-settings notices) and the secrets section (table, add/replace form, name/value/ARN validation, 503 storage-not-configured). It reads the existing locale context; the legacy `en.ts`/`he.ts` dictionaries are unchanged. Server-provided details (validation text, tier/model names) are shown as returned.
+
+
+workflowChat.ts adds matching EN/HE workspace, draftPr and readWorkspace labels for typed repository workspace previews and permission catalog display. No locale-state changes or runtime verification.
+
+
+workflowChat EN/HE adds executionMode, connectorMode, workspaceConnector, workspaceRef, workspacePrTitle, workspacePermissionHint, workspaceCatalogError, workspaceIsolation and workspaceSetupRequired for manual workspace editing and readiness warnings. No tests or build performed.
+
+
+workflowChat EN/HE adds notifyEachStep, notifyStartComplete, notifyCompletion and notifyNone labels, shared by Channel Binding mode selection and AI preview. No locale changes or runtime checks.
+
+
+Notification cadence labels simplified in matching EN/HE: Every step / בכל שלב; Start and finish / בתחילה ובסיום; Finish only / בסיום בלבד; Off / כבוי. Shared labels also update AI preview. No runtime checks performed.

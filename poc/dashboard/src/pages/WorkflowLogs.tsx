@@ -1,4 +1,5 @@
 import { useWorkflowRunText } from '../i18n/workflowRun';
+import { formatCost } from '../services/workflowCosts';
 import React, { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { Alert, Button, Card, Col, Collapse, Empty, Input, Row, Select, Space, Spin, Tag, Typography } from 'antd';
@@ -93,6 +94,7 @@ export const WorkflowLogsPage: React.FC = () => {
                 <div><Tag color={statusColor(run.status)}>{run.status}</Tag><Tag>{run.trigger_type}</Tag></div>
                 <div style={{ fontFamily: 'monospace', fontSize: 11 }}>{run.id}</div>
                 <div>{formatTime(run.created_at)}{run.completed_at && <Text type="secondary"> · {duration(run.started_at, run.completed_at)}</Text>}</div>
+                <Text type="secondary">{formatCost(run.cost_summary, run.total_cost_usd)}</Text>
                 {run.error_message && <Text type="danger" style={clamp}>{run.error_message}</Text>}
               </Button>)}
             </Space>
@@ -103,7 +105,7 @@ export const WorkflowLogsPage: React.FC = () => {
           {!execution ? <Empty description="Select a run to inspect its logs" /> : <Space direction="vertical" size="middle" style={{ width: '100%' }}>
             <Card title={execution.id} extra={<Button icon={<DownloadOutlined />} onClick={download}>Export JSON</Button>}>
               <Space wrap><Tag color={statusColor(execution.status)}>{execution.status}</Tag><Tag>{execution.trigger_type}</Tag>
-                <Text>Cost: ${(execution.total_cost_usd || 0).toFixed(4)}</Text>
+                <Text>Cost: {formatCost(execution.cost_summary, execution.total_cost_usd)}</Text>
                 <Text>Tokens: {execution.total_input_tokens} in / {execution.total_output_tokens} out</Text></Space>
               <div><Text type="secondary">Started: {execution.started_at ? formatTime(execution.started_at) : 'Pending'} · Finished: {formatTime(execution.completed_at)}
                 {execution.started_at && ` · Duration: ${duration(execution.started_at, execution.completed_at)}`}</Text></div>
@@ -119,15 +121,17 @@ export const WorkflowLogsPage: React.FC = () => {
             {/* Only failed or still-running steps open by default; finished steps stay one line. */}
             <Collapse key={execution.id} defaultActiveKey={steps.filter(step => step.status === 'FAILED' || active(step.status)).map(step => step.id)} items={steps.filter(step => JSON.stringify(step).toLowerCase().includes(search.toLowerCase())).map(step => ({
               key: step.id,
-              label: <Space wrap><Tag color={statusColor(step.status)}>{step.task_status || step.status}</Tag><strong>{step.step_key}</strong><Text type="secondary">{step.agent_id}</Text>
+              label: <Space wrap><Tag color={statusColor(step.status)}>{step.task_status || step.status}</Tag><strong>{step.step_key}</strong>
+                {(step.events || []).some(event => event.type === 'reasoning_summary' && event.status === 'available') && <Tag color="geekblue">Reasoning ({(step.events || []).filter(event => event.type === 'reasoning_summary' && event.status === 'available').length})</Tag>}<Text type="secondary">{step.agent_id}</Text>
                 {step.started_at && <Text type="secondary">{duration(step.started_at, step.completed_at)}</Text>}
-                {step.cost_usd > 0 && <Text type="secondary">${step.cost_usd.toFixed(4)}</Text>}</Space>,
+                <Text type="secondary">{formatCost(step.cost_summary, step.cost_usd)}</Text></Space>,
               children: <Space direction="vertical" style={{ width: '100%' }}>
                 <Text type="secondary">Started: {formatTime(step.started_at)} · Finished: {formatTime(step.completed_at)}</Text>
+                {step.session_cost_summary && <Text>Session total: {formatCost(step.session_cost_summary)}</Text>}
                 {step.error && <Alert type="error" showIcon message="Step failed" description={<pre style={preStyle}>{step.error}</pre>} />}
                 <div><Text strong>Output</Text><pre style={preStyle}>{step.output_data || (active(step.status) ? 'Running…' : 'No output')}</pre></div>
                 <details><summary>Step input</summary><pre style={preStyle}>{step.input_data}</pre></details>
-                <details open={step.status === 'FAILED'}><summary>Runtime events ({step.events?.length || 0})</summary>
+                <details open={step.status === 'FAILED' || (step.events || []).some(event => event.type === 'reasoning_summary')}><summary>Runtime events ({step.events?.length || 0})</summary>
                   <StepEventTimeline events={step.events || []} /></details>
               </Space>
             }))} />

@@ -2,6 +2,8 @@
 import json
 import httpx
 from .direct_config import configuration
+from .direct_reasoning import (anthropic_thinking, compatible_reasoning,
+                               openai_reasoning_model, responses_body, responses_result)
 
 
 class DirectAPIError(ValueError):
@@ -11,10 +13,14 @@ class DirectAPIError(ValueError):
 def request(provider, model, system, messages, tools, max_tokens):
     _, key, base = configuration(provider)
     anthropic = provider == 'direct_anthropic'
+    responses = provider == 'direct_openai' and openai_reasoning_model(model)
     headers = {'x-api-key': key, 'anthropic-version': '2023-06-01'} if anthropic else {'Authorization': 'Bearer ' + key}
     body = {'model': model, 'messages': messages, 'stream': False}
     if anthropic:
         body.update(system=system, max_tokens=max_tokens)
+        thinking = anthropic_thinking(model, max_tokens)
+        if thinking:
+            body['thinking'] = thinking
         if tools:
             body['tools'] = tools
     else:
@@ -23,10 +29,15 @@ def request(provider, model, system, messages, tools, max_tokens):
         if tools:
             body['tools'] = [{'type': 'function', 'function': {'name': t['name'],
                 'description': t['description'], 'parameters': t['input_schema']}} for t in tools]
+    if responses:
+        body = responses_body(model, system, messages, tools, max_tokens)
+    elif provider == 'direct_openrouter':
+        body['reasoning'] = {'enabled': True, 'exclude': False}
+    endpoint = '/responses' if responses else '/messages' if anthropic else '/chat/completions'
     try:
         # No implicit retries: retries can duplicate paid work or external actions.
         with httpx.Client(timeout=httpx.Timeout(120, connect=15), follow_redirects=False) as client:
-            response = client.post(base + ('/messages' if anthropic else '/chat/completions'), headers=headers, json=body)
+            response = client.post(base + endpoint, headers=headers, json=body)
     except httpx.TimeoutException as exc:
         raise DirectAPIError('The API request timed out. Check the provider status or try again.') from exc
     except httpx.HTTPError as exc:
@@ -38,24 +49,28 @@ def request(provider, model, system, messages, tools, max_tokens):
         # Never persist a provider body which may echo credentials or request content.
         raise DirectAPIError(f'API HTTP {response.status_code}: ' + reasons.get(response.status_code, 'Provider request failed.'))
     data = response.json()
+    if responses:
+        return responses_result(data, model)
     usage = data.get('usage') or {}
+    reasoning = []
     if anthropic:
         blocks = data.get('content') or []
         calls = [b for b in blocks if b.get('type') == 'tool_use']
         text = '\n'.join(b.get('text', '') for b in blocks if b.get('type') == 'text')
+        reasoning = [b['thinking'] for b in blocks if b.get('type') == 'thinking' and b.get('thinking')]
         message = {'role': 'assistant', 'content': blocks}
         truncated = data.get('stop_reason') == 'max_tokens'
     else:
         choice = data['choices'][0]
         raw = choice['message']
-        message = {k: raw[k] for k in ('role', 'content', 'tool_calls') if k in raw}
-        text = raw.get('content') or raw.get('reasoning_content') or ''
-        if not message.get('content') and text:
-            message['content'] = text
+        message = {k: raw[k] for k in ('role', 'content', 'tool_calls', 'reasoning_content', 'reasoning_details') if k in raw}
+        text = raw.get('content') or ''
+        reasoning = compatible_reasoning(raw)
         calls = [{'id': c['id'], 'name': c['function']['name'],
             'input': json.loads(c['function']['arguments']), 'type': 'tool_use'} for c in raw.get('tool_calls') or []]
         truncated = choice.get('finish_reason') in ('length', 'content_filter')
-    return {'text': text, 'calls': calls, 'message': message, 'truncated': truncated,
+    return {'text': text, 'calls': calls, 'message': message, 'truncated': truncated, 'reasoning': reasoning,
+        'provider_cost_usd': usage.get('cost') if provider == 'direct_openrouter' else None,
         'model': data.get('model', model),
         'input_tokens': int(usage.get('input_tokens', usage.get('prompt_tokens', 0))),
         'output_tokens': int(usage.get('output_tokens', usage.get('completion_tokens', 0)))}

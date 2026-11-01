@@ -104,7 +104,7 @@ export interface WorkflowChannelBinding {
   channel_id: string;
   channel_name?: string;
   trigger_enabled: boolean;
-  notify_mode: 'ON_COMPLETE' | 'ON_FAILURE' | 'ALWAYS' | 'NONE';
+  notify_mode: 'COMPLETION_ONLY' | 'START_AND_COMPLETE' | 'EACH_STEP' | 'ON_COMPLETE' | 'ON_FAILURE' | 'ALWAYS' | 'NONE';
   message_template?: string;
 }
 
@@ -125,7 +125,19 @@ export interface PlatformWorkflow {
   updated_at?: string;
 }
 
+export interface CostSummary {
+  cost_usd: number | null;
+  status: string;
+  reference_cost_usd?: number | null;
+  known_cost_usd?: number;
+  complete?: boolean;
+  calls?: number;
+  input_tokens?: number;
+  output_tokens?: number;
+}
+
 export interface WorkflowExecution {
+  cost_summary?: CostSummary | null;
   step_runs?: Array<{
     id: string;
     step_key: string;
@@ -140,6 +152,8 @@ export interface WorkflowExecution {
     input_data?: string;
     output_data?: string;
     cost_usd: number;
+    cost_summary?: CostSummary | null;
+    session_cost_summary?: CostSummary | null;
   }>;
 
   id: string;

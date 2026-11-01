@@ -1,6 +1,7 @@
 import { Button, Tag, Space } from 'antd';
 import { EyeOutlined, CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined, SyncOutlined } from '@ant-design/icons';
 import { WorkflowExecution } from '../types/mcp';
+import { formatCost } from '../services/workflowCosts';
 
 import type { useWorkflowsPage } from './useWorkflowsPage';
 
@@ -89,7 +90,7 @@ export const createWorkflowExecutionColumns = (model: Pick<
             {(record.total_input_tokens + record.total_output_tokens).toLocaleString()} tokens
           </span>
           <div style={{ color: '#58a6ff', fontSize: 11 }}>
-            ${record.total_cost_usd?.toFixed(4) || '0.0000'}
+            {formatCost(record.cost_summary, record.total_cost_usd)}
           </div>
         </div>
       ),

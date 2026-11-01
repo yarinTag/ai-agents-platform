@@ -7,10 +7,13 @@ import argparse
 import asyncio
 import json
 import os
-from .direct_config import rates, validate_model
+from .direct_config import validate_model
+from .direct_pricing import call_cost, pricing, totals
 from .direct_http import DirectAPIError, add_tool_results, request
 from .direct_sessions import DirectSession
+from .direct_reasoning import reasoning_event
 from .direct_tools import DirectTools
+from .direct_outcomes import OUTCOME_PROMPT, final_outcome
 
 
 def arguments():
@@ -44,24 +47,30 @@ async def run(args):
     system = args.system_prompt or ''
     if args.json_schema:
         system += '\nReturn your final answer as JSON matching this schema: ' + args.json_schema
-    pricing = rates(provider)
-    if pricing is None:
+    price_policy = pricing(provider, model)
+    token_rates = price_policy['rates']
+    if token_rates is None and args.max_budget_usd is not None:
         raise DirectAPIError('Configure ' + provider.upper() +
             '_INPUT_USD_PER_MILLION and _OUTPUT_USD_PER_MILLION on the server to enforce this API budget.')
     input_tokens = output_tokens = 0
-    total_cost = 0.0 if pricing else None
+    run_calls = []
 
     def result(text, **extra):
         event = {'type': 'result', 'is_error': False, 'result': text, 'model': model,
-            'usage': {'input_tokens': input_tokens, 'output_tokens': output_tokens}}
+            'usage': {'input_tokens': input_tokens, 'output_tokens': output_tokens},
+            'cost_summary': totals(run_calls), 'session_cost_summary': totals(
+                session.usage_calls, prior_unknown=session.prior_usage_unknown),
+            'pricing_status': totals(run_calls)['status']}
         if not args.no_session_persistence:
             event['session_id'] = session.id
-        if total_cost is not None:
-            event['total_cost_usd'] = total_cost
+        if run_calls and totals(run_calls)['cost_usd'] is not None:
+            event['total_cost_usd'] = totals(run_calls)['cost_usd']
         emit({**event, **extra})
 
     async with DirectTools(args) as tools:
-        for _ in range(40):
+        if tools.connector is not None:
+            system += OUTCOME_PROMPT
+        for turn in range(1, 41):
             if tools.connector is not None:
                 try:
                     tools.connector.inventory()  # Recheck authority before another model request.
@@ -71,8 +80,8 @@ async def run(args):
             if args.max_budget_usd is not None:
                 # Conservative UTF-8 byte upper bound for text tokens, plus framing.
                 upper = len(json.dumps([system, messages, tools.inventory], ensure_ascii=False).encode()) + 4096
-                reservation = (upper * pricing[0] + args.max_tokens * pricing[1]) / 1_000_000
-                if total_cost + reservation > args.max_budget_usd:
+                reservation = (upper * token_rates[0] + args.max_tokens * token_rates[1]) / 1_000_000
+                if totals(run_calls)['known_cost_usd'] + reservation > args.max_budget_usd:
                     result('The remaining API budget is too small for another model request.', is_error=True)
                     return
             try:
@@ -82,9 +91,18 @@ async def run(args):
                 return
             input_tokens += response['input_tokens']
             output_tokens += response['output_tokens']
-            if pricing:
-                total_cost = (input_tokens * pricing[0] + output_tokens * pricing[1]) / 1_000_000
+            usage_call = call_cost(response, price_policy)
+            run_calls.append(usage_call)
+            session.usage_calls.append(usage_call)
+            emit({'type': 'usage', 'provider': provider, 'model': model, 'turn': turn,
+                  **usage_call, 'cost_summary': totals(run_calls), 'session_cost_summary': totals(
+                      session.usage_calls, prior_unknown=session.prior_usage_unknown)})
             messages.append(response['message'])
+            event = reasoning_event(response, provider, turn)
+            if tools.sandbox is not None:
+                event['content'] = tools.sandbox.redact(event['content'])
+            emit(event)
+            session.save()
             if response['truncated']:
                 session.save()
                 result('The API response was truncated or filtered. Increase the output token limit or refine the request.', is_error=True)
@@ -93,6 +111,11 @@ async def run(args):
                 if not response['text']:
                     raise DirectAPIError('The API returned an empty response.')
                 if tools.connector is not None:
+                    output, blocked = final_outcome(response['text'])
+                    if blocked:
+                        result(blocked, is_error=True)
+                        return
+                    response['text'] = output
                     try:
                         tools.connector.verify_completion()
                     except ValueError as exc:

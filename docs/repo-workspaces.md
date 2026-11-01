@@ -37,7 +37,7 @@ happens when the workflow is saved and again before execution.
 
 ## Lifecycle
 
-1. The backend checks policy, then clones on the host: shallow, single branch, no
+1. The backend checks policy, refreshes a private object cache, then creates an isolated shallow checkout on the host: no
    tags or submodules, `core.symlinks=false`, hooks disabled, system/global git
    config ignored. The token goes only in that git process's environment
    (`GIT_CONFIG_*` extra header), never in a URL, `.git/config`, the model prompt or
@@ -87,13 +87,56 @@ automatically. Git output is never surfaced because it can echo remote URLs.
   before a human looks. Agent edits to workflow files are blocked, but existing CI
   still runs agent-modified code (tests, build scripts). Use CI that does not expose
   secrets to `agent/*` branches, or require approval for those runs.
-- Each workspace step gets its own clone. Steps do not share a checkout yet.
+- Each workspace step gets its own isolated checkout from a freshly refreshed object cache. Steps do not share a checkout yet.
 - Step runtime is still capped at 300 seconds by the workflow step runner.
 - The clone happens on the host. Keep host git current, because checkout-time git
   CVEs affect any clone of untrusted repositories.
 - Processes a command leaves behind inside the container survive until the
   container is removed at step end.
-- The workflow editor UI has no workspace form yet. Edit the YAML/JSON directly.
+- The visual step editor supports connector tools, read workspace, and code changes with a required draft PR. YAML/JSON editing remains available.
 
 No tests, builds, application startup, Docker runs or live GitHub calls were
 performed for this change.
+
+## AI creation and required PR outcomes
+Create with AI can now propose a typed repository workspace with required_outcome=pull_request. The chat lists workspace operations separately from GitHub activity tools. A PR request needs clone_repository and an explicit open_pull_request department grant; a wildcard grant does not authorize publishing. Existing workflow definitions and grants are not automatically migrated.
+
+Native step example (replace IDs with authorized values):
+```yaml
+key: create_pr
+agent_id: <workflow-runner-id>
+prompt_template: Locate the version manifest and make the requested version bump.
+mcp_servers: []
+params:
+  required_outcome: pull_request
+  workspace:
+    connector_id: <github-connector-id>
+    repository: <owner/repository>
+    mode: write
+    pr_title: Bump core plugin version
+```
+
+The backend edits in an isolated workspace and publishes a draft PR only after existing policy checks. A required PR step fails if there are no changes/no PR receipt; dependent success messages do not run. Workspace mode and pinned sandbox image are checked before any steps. Configure Docker and PLATFORM_SANDBOX_IMAGE=name@sha256:<verified-digest> on the backend before execution; this change does not install/start Docker, choose an unverified image digest or grant permissions. Configure the proxy image only if using the optional network allowlist.
+
+Governed connector-only model steps now return a final completed/blocked envelope. Invalid or blocked outcomes fail instead of treating explanatory prose as task completion. This is separate from actual connector receipt validation. No historical results or previously sent notifications are rewritten or resent.
+
+## Visual editing
+Open Workflows → Edit → Visual Step & Skill Builder. Under Step execution choose Read files or Code changes → draft PR, then select the authorized GitHub connector and repository, optional base branch/tag and optional draft PR title. Write mode sets params.required_outcome=pull_request and removes incompatible per-step connector/channel scopes. The MCP selector is disabled for workspace steps. Save Changes uses the existing optimistic workflow revision contract; no run is started by the editor.
+
+The editor shares one department-authorized catalog fetch across all step controls. Missing explicit workspace permissions disable unavailable mode choices; failed permission reads do not invent repository options. Sandbox setup warnings are configuration-only (Docker binary and pinned image syntax); no daemon, container, provider or token permissions are tested by viewing this form. Actual run-time checks remain mandatory. AI preview shows the same setup warning. No existing workflow, grant or host environment was automatically modified during implementation.
+
+## Shared repository object cache
+Repository workspaces automatically reuse a persistent backend-only Git object cache. The first run initializes an entry; later workflows in the same organization using the same connector/repository reuse downloaded objects. Every run resolves and fetches the current requested remote branch/tag using current credentials. A cache hit never bypasses permissions or allows an unavailable/deleted ref to run from stale content.
+
+The default location is `repo_cache` beside the SQLite database (normally `poc/data/repo_cache`). Optional backend environment settings:
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| PLATFORM_REPO_CACHE_DIR | Database-adjacent repo_cache | Persistent host cache directory |
+| PLATFORM_REPO_CACHE_TTL_SECONDS | 604800 | Seven idle days before lazy expiry |
+| PLATFORM_REPO_CACHE_MAX_ENTRIES | 8 | Retained entries per tenant; active entries can temporarily exceed this |
+| PLATFORM_REPO_CACHE_MAX_ENTRY_BYTES | 536870912 | 512MiB retained-entry threshold; larger entries are discarded after checkout |
+
+Retention runs on cache use, not a timer. Fetch-time disk usage is not capped by these retention settings. The cache may contain private source objects, so keep its directory private to the backend user and on persistent storage if it should survive container/server replacement. The normal database-adjacent location is already covered by the repository's data-directory ignore rule.
+
+A per-entry cross-process lock serializes refresh/materialization. Each run receives independent object files and Git metadata, without hard links, alternates or shared working directories. The container only sees its worktree. Cache eviction does not invalidate active runs, and run edits/commits never enter the cache. Each step's clone_repository audit receipt and retained workspace JSON expose hit/refreshed/retained/commit/base_branch; hit reports an existing entry, not a measured download saving. Workspace cleanup removes run-owned files while cached objects remain. No live cache warming or workflow execution was performed during implementation.

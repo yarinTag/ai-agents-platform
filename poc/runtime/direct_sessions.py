@@ -14,6 +14,8 @@ class DirectSession:
         self.scope = os.environ.get('PLATFORM_API_SESSION_SCOPE', '')
         self.id = 'api_' + uuid.uuid4().hex
         self.messages = []
+        self.usage_calls = []
+        self.prior_usage_unknown = False
         self.directory = Path(os.environ.get('PLATFORM_API_SESSION_DIR', '.runtime_sessions'))
         if resume:
             if not re.fullmatch(r'api_[0-9a-f]{32}', resume):
@@ -24,6 +26,8 @@ class DirectSession:
             self.messages = record['messages']
             if not fork:
                 self.id = resume
+                self.usage_calls = record.get('usage_calls', [])
+                self.prior_usage_unknown = bool(record.get('prior_usage_unknown') or 'usage_calls' not in record)
 
     def path(self, session_id):
         scope = hashlib.sha256(self.scope.encode()).hexdigest()
@@ -38,7 +42,8 @@ class DirectSession:
         try:
             with open(temporary, 'x', opener=lambda p, flags: os.open(p, flags, 0o600)) as stream:
                 json.dump({'provider': self.provider, 'model': self.model, 'scope': self.scope,
-                    'messages': self.messages}, stream, ensure_ascii=False)
+                    'messages': self.messages, 'usage_calls': self.usage_calls,
+                    'prior_usage_unknown': self.prior_usage_unknown}, stream, ensure_ascii=False)
             os.replace(temporary, path)
         finally:
             temporary.unlink(missing_ok=True)

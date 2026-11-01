@@ -9,6 +9,11 @@ def summarize_runtime_event(event: Optional[Dict[str, Any]]) -> Optional[str]:
     if not event:
         return None
     event_type = event.get("type", "event")
+    if event_type == 'usage':
+        return f"Model usage: {event.get('input_tokens', 0)} input / {event.get('output_tokens', 0)} output tokens"
+    if event_type == 'reasoning_summary':
+        content = (event.get('content') or '').strip()
+        return ('Reasoning summary: ' + content[:120]) if content else 'Provider did not return a reasoning summary'
     if event_type == "assistant":
         msg = event.get("message", {})
         content = msg.get("content", []) if isinstance(msg, dict) else []

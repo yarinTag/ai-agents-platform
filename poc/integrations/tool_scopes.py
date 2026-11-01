@@ -174,7 +174,8 @@ def prepare_execution_context(db, execution, workflow, definition, user_context=
         raise ToolAccessError('Authenticated workflow initiator identity is missing.')
     require_initiator(db, identity, workflow.organization_id, workflow.department_id)
     context = {'organization_id': workflow.organization_id, 'department_id': workflow.department_id,
-               'initiator_id': identity, 'binding': binding}
+               'initiator_id': identity, 'binding': binding,
+               'notification_agent_id': definition.steps[0].agent_id if definition.steps else None}
     with db._get_connection() as conn:
         conn.execute('INSERT INTO workflow_execution_tool_contexts(execution_id,context_json) VALUES (?,?)',
                      (execution.id, json.dumps(context)))
@@ -185,11 +186,19 @@ def prepare_execution_context(db, execution, workflow, definition, user_context=
         except ToolAccessError as error:
             record_notification_error(db, execution.id, str(error))
     from .repo_workspace import authorize_workspace, workspace_configuration
+    from workflows.channel_action import action_configuration
     for step in definition.steps:
+        action_configuration(step)  # Reject malformed later delivery steps before any side effects.
         prepare_scope(db, None, execution.id, step, persist=False)
         workspace = workspace_configuration(step)
         if workspace is not None:
             authorize_workspace(db, execution.id, step, workspace)  # Fail before any step runs.
+            from workflows.repo_sandbox import sandbox_image
+            sandbox_image()  # Validate static sandbox configuration before start notifications.
+            from workflows.settings import settings_for_workflow
+            if settings_for_workflow(workflow).network_allowlist:
+                from workflows.repo_sandbox import proxy_image
+                proxy_image()
 
 
 def record_notification_error(db, execution_id, error):

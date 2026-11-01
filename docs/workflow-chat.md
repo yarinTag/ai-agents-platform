@@ -129,3 +129,8 @@ revalidation and idempotency checks remain. Generation with validation errors us
 a server-owned corrective message instead of a model's misleading ready claim.
 
 Existing invalid drafts keep their original errors; send a follow-up selecting the dedicated workflow runner to generate an updated proposal. No saved draft is automatically marked valid or created by this correction. No tests/build/app startup/live inference was run.
+
+## Progress notification configuration
+AI workflow creation writes progress updates to `destination.notify_mode` and native `metadata.channel_binding`, not to notify_start/middle/done DAG stages. Set EACH_STEP for start, each executed step outcome and terminal completion; START_AND_COMPLETE for just the start and terminal report; COMPLETION_ONLY for a terminal report only; NONE for no lifecycle messages. Terminal reports cover success, failure and cancellation. The existing visual Channel Binding → Notification Mode control edits the same configuration. ON_COMPLETE/ON_FAILURE/ALWAYS remain supported for legacy definitions.
+
+The engine sends these messages directly through governed Telegram/Slack delivery, with no LLM or agent task. Step progress is factual status/error, and final reports use existing output/template semantics with actual PR receipts in step output. A notification failure is surfaced separately and cannot turn successful code work into a failed workflow. Each run/event has its own atomic audit claim, with no automatic resend; a failed progress update does not prevent a later independent terminal report. Explicit business message-delivery tasks remain valid, separate from progress. No live messages or tests were performed during implementation.

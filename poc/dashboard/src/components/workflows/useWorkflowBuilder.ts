@@ -38,7 +38,7 @@ export function useWorkflowBuilder({ open, onClose, onSuccess, defaultChannelPro
   const [channelProvider, setChannelProvider] = useState<string>(defaultChannelProvider);
   const [channelId, setChannelId] = useState<string>(defaultChannelId);
   const [triggerEnabled, setTriggerEnabled] = useState<boolean>(true);
-  const [notifyMode, setNotifyMode] = useState<string>('ON_COMPLETE');
+  const [notifyMode, setNotifyMode] = useState<string>('COMPLETION_ONLY');
   const [allowedMcps, setAllowedMcps] = useState<string[]>([]);
   const [workflowSkills, setWorkflowSkills] = useState<AttachedSkill[]>([]);
   const resources = useWorkflowResources({ open, editing: Boolean(workflow), channelProvider, channelId, setChannelId, setAllowedMcps, setTargetRepo, departmentId: effectiveDepartmentId, workflowId: workflow?.id });
@@ -120,7 +120,8 @@ export function useWorkflowBuilder({ open, onClose, onSuccess, defaultChannelPro
       name: curName,
       description: curDesc,
       department_id: effectiveDepartmentId || null,
-      mcp_servers: curMcps,
+      mcp_servers: Array.from(new Set([...curMcps,
+        ...curSteps.map(step => step.params?.workspace?.connector_id).filter((id): id is string => Boolean(id))])),
       skills: curSkills,
       steps: curSteps.map(({ skills: _legacySkills, ...step }) => step),
       ...(baseDefinition.current.flow ? { flow: baseDefinition.current.flow.filter((edge: { from: string; to: string }) =>
@@ -447,6 +448,7 @@ export function useWorkflowBuilder({ open, onClose, onSuccess, defaultChannelPro
   };
 
   return {
+    workspaceCatalog: resources.workspaceCatalog, workspaceCatalogError: resources.workspaceCatalogError,
     workflow, formatting, definitionError, changeSummary, setChangeSummary, handleDeleteStepByKey,
     resourcesLoading, connectorError, skillsError, repositoryError, reloadResources, resourcesUnavailable,
     open, onClose, onSuccess, defaultChannelProvider, defaultChannelId,

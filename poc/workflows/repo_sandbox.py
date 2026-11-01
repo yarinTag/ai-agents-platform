@@ -48,6 +48,18 @@ def proxy_image():
     return _pinned(PROXY_IMAGE_SETTING, 'allowing sandbox network access')
 
 
+def configuration_status():
+    """Static authoring diagnostics only; never starts Docker or contacts its daemon."""
+    errors = []
+    if os.name != 'posix' or shutil.which('docker') is None:
+        errors.append('Install Docker on a POSIX host for isolated repository execution.')
+    try:
+        sandbox_image()
+    except ToolAccessError as exc:
+        errors.append(str(exc))
+    return {'configured': not errors, 'errors': errors, 'verification': 'configuration_only'}
+
+
 def _docker(args, timeout=60, env=None):
     base = {key: os.environ[key] for key in _DOCKER_ENV if key in os.environ}
     return subprocess.run(['docker', *args], capture_output=True, text=True, timeout=timeout, check=False,

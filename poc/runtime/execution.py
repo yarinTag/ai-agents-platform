@@ -203,8 +203,13 @@ class TaskExecutor:
 
                     # Add event to run
                     run.events.append(event)
+                    if event.get('type') == 'usage' and isinstance(event.get('cost_summary'), dict):
+                        summary = event['cost_summary']
+                        run.input_tokens = summary['input_tokens']
+                        run.output_tokens = summary['output_tokens']
+                        run.cost_usd = summary['known_cost_usd']
                     adapter._subscriptions.publish(run_id, event)
-                    if playground_workspace and time.monotonic() - last_checkpoint >= 1:
+                    if event.get('type') in ('reasoning_summary', 'usage') or (playground_workspace and time.monotonic() - last_checkpoint >= 1):
                         adapter.services.database().save_task_run(run)
                         last_checkpoint = time.monotonic()
 
@@ -247,7 +252,9 @@ class TaskExecutor:
                             run.cache_read_tokens = usage_dict.get("cache_read_input_tokens", 0) or usage_dict.get("cache_read_tokens", 0) or run.cache_read_tokens
                             run.cache_write_tokens = usage_dict.get("cache_creation_input_tokens", 0) or usage_dict.get("cache_write_tokens", 0) or run.cache_write_tokens
 
-                        reported_cost = event.get("total_cost_usd") or event.get("cost_usd") or event.get("data", {}).get("total_cost_usd")
+                        reported_cost = event.get('total_cost_usd')
+                        if reported_cost is None:
+                            reported_cost = event.get('cost_usd', event.get('data', {}).get('total_cost_usd'))
                         if reported_cost is not None:
                             try:
                                 run.cost_usd = float(reported_cost)

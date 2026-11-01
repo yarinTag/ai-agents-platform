@@ -225,3 +225,27 @@ Use one Workflow Skills selection; never require assigning it to each step. Prom
 Planned workflow runners are labeled as created on confirmation, not existing agents. Unknown agent IDs stay invalid; previews must retain backend validation errors. Runtime verification remains unauthorized.
 
 Never populate workflow agent selectors from static/demo roles. Use authorized live records with department/current-workflow filtering and distinguish planned provisioning from existing agents. No runtime checks performed.
+
+Reasoning logs: preserve reasoning_summary available/not_returned status and full text expansion separately from final answers. Opaque continuation stays private. Events arrive per completed response. No build/test/typecheck performed under current restriction.
+
+
+Keep reasoning summaries discoverable outside the collapsed Runtime Events section: WorkflowLogs exposes a per-step count badge and dedicated panel above output. No tests/build/startup performed.
+
+WorkflowLogs displays reasoning_summary events only in the dedicated reasoning panel; Runtime Events filters them out and counts only remaining events. Persisted event records and JSON export retain the complete trace. This supersedes the earlier duplicate chronological display. Source review only; no runtime checks performed.
+
+WorkflowLogs reasoning presentation follows the user preference: reasoning_summary appears once in the chronological Runtime Events timeline alongside tools/results. The separate reasoning panel is removed; Runtime Events defaults open when reasoning events exist (or the step failed). The Reasoning (N) header badge remains for discoverability. This supersedes the earlier panel/filter notes. Persistence and JSON export are unchanged. Source review only; no runtime checks performed.
+
+
+Workflow costs must use formatCost(cost_summary, legacy_cost), not truthy zero hiding or a fabricated zero fallback. Preserve free/unavailable/estimated/reported distinction and separate reference price; usage timeline and inspection expose session totals. No runtime checks performed.
+
+
+AI creation must preserve workspace and required_outcome DTO fields and distinguish granted workspace operations from read-only connector tools in preview. No build/typecheck executed.
+
+
+When editing repository steps preserve unknown params, workspace and required_outcome. Use only department catalog repository/operation options, separate workspace mode from connector tools, and display static setup warnings. No tests/build/typecheck/startup performed.
+
+
+Use Channel Binding for workflow lifecycle update cadence; preserve legacy modes while generating canonical notification configuration. No progress-only DAG stages or model inference for engine notifications. No runtime checks performed.
+
+
+Keep the Channel Binding notification dropdown at four canonical choices; older persisted modes must not add visible legacy options. Friendly labels live in workflowChat.ts. No tests/build/typecheck performed.

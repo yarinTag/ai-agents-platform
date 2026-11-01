@@ -1,4 +1,5 @@
 import { useWorkflowRunText } from '../i18n/workflowRun';
+import { formatCost } from '../services/workflowCosts';
 import { Link } from 'react-router-dom';
 import { Tag, Space, Card, Input, Drawer, Alert } from 'antd';
 import { EyeOutlined } from '@ant-design/icons';
@@ -65,7 +66,7 @@ export const WorkflowExecutionDrawer = (model: Pick<
                   • Output Tokens: {selectedExecution.total_output_tokens?.toLocaleString()}
                 </div>
                 <div style={{ color: '#58a6ff', fontSize: 13, fontWeight: 600 }}>
-                  • Total Cost: ${selectedExecution.total_cost_usd?.toFixed(4) || '0.0000'}
+                  • Total Cost: {formatCost(selectedExecution.cost_summary, selectedExecution.total_cost_usd)}
                 </div>
               </Space>
             </Card>
@@ -101,7 +102,8 @@ export const WorkflowExecutionDrawer = (model: Pick<
             {selectedExecution.trigger_type === 'PLAYGROUND' && <Tag color="magenta">PLAYGROUND · TOOLS DISABLED</Tag>}
             {selectedExecution.step_runs?.map(step => (
               <Card key={step.id} size="small" title={`${step.step_key} · ${step.status}`}>
-                <div>Cost: ${step.cost_usd.toFixed(4)}</div>
+                <div>Cost: {formatCost(step.cost_summary, step.cost_usd)}</div>
+                {step.session_cost_summary && <div>Session total: {formatCost(step.session_cost_summary)}</div>}
                 <details><summary>Step input</summary><pre style={{ whiteSpace: 'pre-wrap' }}>{step.input_data}</pre></details>
                 <pre style={{ whiteSpace: 'pre-wrap', maxHeight: 300, overflow: 'auto' }}>{step.output_data}</pre>
               </Card>

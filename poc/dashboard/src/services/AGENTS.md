@@ -239,3 +239,12 @@ WorkflowExecution adds notification_error?:string|null for the scoped list/detai
 
 ## Workflow settings and secrets client
 `workflowSettingsApi.ts` (re-exported by `api.ts`, together with its DTO types from `types/workflowSettings.ts`) wraps: GET `/api/v1/workflows/{id}/settings` -> `WorkflowSettingsResponse` (`getWorkflowSettings`); PUT `/api/v1/workflows/{id}/settings` with `{ settings: { model?, machine_size, network_allowlist }, expected_revision, change_summary? }` (`updateWorkflowSettings`; 409 stale revision, 400 validation, 403 not manager); PUT `/api/v1/workflows/{id}/secrets/{name}` with exactly one of `{ value }` or `{ external_ref }` -> `WorkflowSecretSummary` (`putWorkflowSecret`; 400 validation, 503 server secret storage not configured); DELETE `/api/v1/workflows/{id}/secrets/{name}` -> 204 (`deleteWorkflowSecret`). Path segments are URI-encoded. `WorkflowSecretWriteRequest` is a union that forbids sending both fields. Responses never contain secret values, and nothing is cached client-side. `modelsApi.ts` adds `getModelTiers()` for GET `/api/v1/models/tiers` (`ModelTierOption` in `types/model.ts`); `DiscoveredModel` gains optional `tier`.
+
+
+workflowCosts.ts owns CostSummary formatting and unknown-event parsing. It distinguishes Price unavailable, free, estimated, reported and no model usage; displays up to six decimal places (a positive sub-micro-dollar value is shown as <$0.000001), and appends a separately configured reference estimate. No endpoint or network requests in this module. DTO additions in types/mcp.ts: WorkflowExecution.cost_summary and step cost_summary/session_cost_summary. Existing workflow API wrappers need no signature changes. No build/typecheck performed.
+
+
+Existing getWorkflowChatContext is reused once by useWorkflowResources for all manual step editors. WorkflowChatContext.catalog gains optional workspace_readiness {configured:boolean,errors:string[],verification:configuration_only}; no new endpoint or per-step request. No runtime verification.
+
+
+WorkflowChannelBinding.notify_mode union adds COMPLETION_ONLY, START_AND_COMPLETE and EACH_STEP. ChatWorkflow.destination adds the canonical optional notify_mode field. Existing service routes/signatures remain compatible. No new requests or tests.

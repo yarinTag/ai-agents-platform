@@ -1,6 +1,5 @@
 """Direct HTTP provider metadata and model catalog; credentials remain on the server."""
 import os
-import math
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -331,14 +330,6 @@ def configured_models(adapter, provider: str):
             if model else [])
 
 
-def rates(provider: str):
-    values = [os.getenv(provider.upper() + suffix) for suffix in
-        ('_INPUT_USD_PER_MILLION', '_OUTPUT_USD_PER_MILLION')]
-    if any(value is None for value in values):
-        if 'PYTEST_CURRENT_TEST' in os.environ:
-            return None
-        return [0.0, 0.0]
-    result = [float(value) for value in values]
-    if any(not math.isfinite(value) or value < 0 for value in result):
-        raise ValueError('API token prices must be finite non-negative numbers.')
-    return result
+def rates(provider: str, model: str = ''):
+    from .direct_pricing import pricing
+    return pricing(provider, model)['rates']

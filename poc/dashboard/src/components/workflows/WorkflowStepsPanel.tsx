@@ -4,6 +4,7 @@ import { PlusOutlined, DeleteOutlined, FileTextOutlined, GithubOutlined, FolderO
 
 
 import { useWorkflowBuilder } from './useWorkflowBuilder';
+import { WorkflowRepositoryFields } from './WorkflowRepositoryFields';
 
 export function WorkflowStepsPanel({ model }: { model: ReturnType<typeof useWorkflowBuilder> }) {
   const {
@@ -154,7 +155,7 @@ export function WorkflowStepsPanel({ model }: { model: ReturnType<typeof useWork
                       </span>
                       <Select
                         size="small"
-                        value={notifyMode}
+                        value={['ON_COMPLETE', 'ON_FAILURE', 'ALWAYS'].includes(notifyMode) ? 'COMPLETION_ONLY' : notifyMode}
                         onChange={(val) => {
                           setNotifyMode(val);
                           syncToYaml(
@@ -173,10 +174,10 @@ export function WorkflowStepsPanel({ model }: { model: ReturnType<typeof useWork
                         }}
                         style={{ width: '100%' }}
                         options={[
-                          { label: 'Post on Complete', value: 'ON_COMPLETE' },
-                          { label: 'Post on Failure', value: 'ON_FAILURE' },
-                          { label: 'Always Post', value: 'ALWAYS' },
-                          { label: 'Read-only (None)', value: 'NONE' },
+                          { label: text.notifyEachStep, value: 'EACH_STEP' },
+                          { label: text.notifyStartComplete, value: 'START_AND_COMPLETE' },
+                          { label: text.notifyCompletion, value: 'COMPLETION_ONLY' },
+                          { label: text.notifyNone, value: 'NONE' },
                         ]}
                       />
                     </Col>
@@ -367,11 +368,15 @@ export function WorkflowStepsPanel({ model }: { model: ReturnType<typeof useWork
                       </Row>
 
                       {/* MCP and Skill assignment per step */}
+                      <WorkflowRepositoryFields step={st} catalog={model.workspaceCatalog}
+                        error={model.workspaceCatalogError} loading={model.resourcesLoading}
+                        onChange={changes => handleUpdateStep(idx, changes)} />
                       <Row gutter={8} style={{ marginBottom: '8px' }}>
                         <Col span={12}>
                           <span style={{ fontSize: '11px', color: '#8b949e' }}>Step MCP Connectors:</span>
                           <Select
                             mode="multiple"
+                            disabled={Boolean(st.params?.workspace)}
                             size="small"
                             style={{ width: '100%' }}
                             value={st.mcp_servers || []}

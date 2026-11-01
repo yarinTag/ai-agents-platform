@@ -76,6 +76,7 @@ export function WorkflowChatModal({ onClose, onCreated }: Props) {
             <Steps direction="vertical" size="small" style={{ marginTop: 20, marginBottom: 16 }}
               items={workflow.steps.map(step => ({ status: 'wait' as const, title: step.name, description: <>
                 <Typography.Text type="secondary">{agentLabel(step.agent_id)}</Typography.Text>
+                {step.workspace && <div><Tag color={step.workspace.mode === 'write' ? 'orange' : 'blue'}>{text.workspace}: {step.workspace.repository} · {step.workspace.mode === 'write' ? text.draftPr : text.readWorkspace}</Tag></div>}
                 {!!step.resources.length && <div dir="ltr">{step.resources.map((r, i) =>
                   <Tag key={i} style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{[r.repository, r.channel_id ? channelLabel(r.connector_id, r.channel_id) : null, r.tool_name].filter(Boolean).join(' · ')}</Tag>)}</div>}
               </> }))} />
@@ -83,7 +84,11 @@ export function WorkflowChatModal({ onClose, onCreated }: Props) {
             {[...new Set([...(workflow.skills || []), ...workflow.steps.flatMap(step => step.skills || [])])].map(id =>
               <Tag color="purple" key={id} title={id}>{skillLabel(id)}</Tag>)}
             <Typography.Paragraph type="secondary">{text.skillInheritance}</Typography.Paragraph>
-            {workflow.destination && <Typography.Paragraph>{text.delivery}: <Typography.Text code>{channelLabel(workflow.destination.connector_id, workflow.destination.channel_id)}</Typography.Text></Typography.Paragraph>}
+            {workflow.steps.some(step => step.workspace) && context?.catalog?.workspace_readiness &&
+              !context.catalog.workspace_readiness.configured && <Alert type="warning" message={text.workspaceSetupRequired}
+                description={context.catalog.workspace_readiness.errors.join(' ')} style={{ marginBottom: 12 }} />}
+            {workflow.destination && <Typography.Paragraph>{text.delivery}: <Typography.Text code>{channelLabel(workflow.destination.connector_id, workflow.destination.channel_id)}</Typography.Text>{' · '}
+              {workflow.destination.notify_mode === 'EACH_STEP' ? text.notifyEachStep : workflow.destination.notify_mode === 'START_AND_COMPLETE' ? text.notifyStartComplete : workflow.destination.notify_mode === 'NONE' ? text.notifyNone : text.notifyCompletion}</Typography.Paragraph>}
             {!!job?.result?.errors.length && <Alert type="warning" message={text.invalid}
               description={job.result.errors.map((value, index) => <div key={index}>{value}</div>)} style={{ marginBottom: 12 }} />}
             {created ? <Alert type="success" showIcon message={text.created} /> : <>
@@ -101,8 +106,8 @@ export function WorkflowChatModal({ onClose, onCreated }: Props) {
         </div>}
         {connectors.map(connector => <div key={connector.id} style={{ marginBottom: 12 }}>
           <Typography.Text strong>{connector.name}</Typography.Text>{' '}
-          <Tag color={connector.execution_supported ? 'success' : 'default'}>{connector.execution_supported ? text.available : text.unavailable}</Tag>
-          {[{ label: text.repositories, items: connector.repositories }, { label: text.channels, items: connector.channels.map(id => connector.channel_labels?.[id] || id) }, { label: text.tools, items: connector.tools }].map(({ label, items }) =>
+          <Tag color={connector.execution_supported || connector.workspace_operations?.length ? 'success' : 'default'}>{connector.execution_supported || connector.workspace_operations?.length ? text.available : text.unavailable}</Tag>
+          {[{ label: text.repositories, items: connector.repositories }, { label: text.channels, items: connector.channels.map(id => connector.channel_labels?.[id] || id) }, { label: text.tools, items: connector.tools }, { label: text.workspace, items: connector.workspace_operations || [] }].map(({ label, items }) =>
             items.length > 0 ? <div key={String(label)}><Typography.Text type="secondary">{String(label)}: </Typography.Text>
               {items.map(value => <Tag key={value}>{value}</Tag>)}</div> : null)}
         </div>)}
