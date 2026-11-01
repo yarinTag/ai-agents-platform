@@ -9,18 +9,40 @@ import hmac
 import hashlib
 import base64
 import json
+import logging
 import time
 import secrets
 from typing import Dict, Any, Optional
 
-DEFAULT_SECRET = "ai-agents-platform-enterprise-jwt-secret-key-2026"
+logger = logging.getLogger(__name__)
+
+MIN_SECRET_LENGTH = 32
+_DEV_SECRET: Optional[bytes] = None
+
+
+def dev_mode_enabled() -> bool:
+    return os.getenv("PLATFORM_DEV_MODE", "").strip().lower() in ("1", "true")
 
 
 def _get_jwt_secret() -> bytes:
+    """JWT_SECRET_KEY is required. Dev mode uses a random per-process key, never a known one."""
+    global _DEV_SECRET
     key = os.getenv("JWT_SECRET_KEY", "").strip()
-    if not key:
-        key = DEFAULT_SECRET
-    return key.encode("utf-8")
+    if len(key) >= MIN_SECRET_LENGTH:
+        return key.encode("utf-8")
+    if dev_mode_enabled():
+        if _DEV_SECRET is None:
+            logger.warning("JWT_SECRET_KEY is unset or short; PLATFORM_DEV_MODE uses a random key. "
+                           "Tokens stop working on restart and across worker processes.")
+            _DEV_SECRET = secrets.token_bytes(32)
+        return _DEV_SECRET
+    raise RuntimeError(f"JWT_SECRET_KEY must be set to at least {MIN_SECRET_LENGTH} characters "
+                       "(or set PLATFORM_DEV_MODE=1 for local development).")
+
+
+def validate_token_configuration() -> None:
+    """Fail application startup instead of signing tokens with a missing or weak secret."""
+    _get_jwt_secret()
 
 
 def _b64url_encode(data: bytes) -> str:
@@ -71,9 +93,12 @@ def decode_access_token(token: str) -> Optional[Dict[str, Any]]:
 
     header_b64, payload_b64, sig_b64 = parts
 
-    signing_input = f"{header_b64}.{payload_b64}".encode('ascii')
+    try:
+        signing_input = f"{header_b64}.{payload_b64}".encode('ascii')
+        actual_sig = _b64url_decode(sig_b64)
+    except (ValueError, UnicodeError):
+        return None  # Malformed token: reject instead of raising a 500.
     expected_sig = hmac.new(_get_jwt_secret(), signing_input, hashlib.sha256).digest()
-    actual_sig = _b64url_decode(sig_b64)
 
     if not hmac.compare_digest(expected_sig, actual_sig):
         return None

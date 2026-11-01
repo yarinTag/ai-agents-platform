@@ -37,7 +37,11 @@ async def stream_events(
     """
     Global Server-Sent Events (SSE) stream endpoint.
     Streams real-time platform events with support for filtering and historical replay.
+    Only events owned by the caller's organization (and departments) are streamed.
     """
+    from ..security import get_authorized_scope
+    from .scope import EventScope
+    tenant = EventScope(event_service.db_manager, get_authorized_scope(request, event_service.db_manager))
     def stream_data(event):
         data = event.to_dict()
         if event.task_id and not (data.get("payload") or {}).get("workflow_execution_id"):
@@ -78,6 +82,8 @@ async def stream_events(
                 for e in historical_events:
                     if e.sequence_number and e.sequence_number > last_seq:
                         last_seq = e.sequence_number
+                    if not await asyncio.to_thread(tenant.allows, e):
+                        continue
                     yield f"event: {e.event_type}\ndata: {json.dumps(stream_data(e))}\n\n"
                     sent_count += 1
                     if limit and sent_count >= limit:
@@ -93,6 +99,8 @@ async def stream_events(
                     event = await asyncio.wait_for(queue.get(), timeout=2.0)
                     # Deduplicate if event was already yielded in historical replay
                     if last_seq and event.sequence_number and event.sequence_number <= last_seq:
+                        continue
+                    if not await asyncio.to_thread(tenant.allows, event):
                         continue
                     yield f"event: {event.event_type}\ndata: {json.dumps(stream_data(event))}\n\n"
                     sent_count += 1
@@ -121,15 +129,23 @@ async def stream_events(
 
 @router.get("/system/stats")
 async def get_system_stats(
+    request: Request,
     config_manager = Depends(get_config_manager),
     db_manager = Depends(get_db_manager),
     runtime_adapter = Depends(get_optional_runtime_adapter)
 ):
-    """Get overall system statistics."""
-    agents = config_manager.list_agents()
-    projects = config_manager.list_projects()
-    skills = db_manager.list_skills()
-    recent_tasks = db_manager.list_task_runs(limit=10)
+    """Get statistics for the caller's organization only."""
+    from ..security import get_current_org_id
+    org_id = get_current_org_id(request)
+    if not org_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="An organization scope is required.")
+    owned = lambda item: getattr(item, "organization_id", None) == org_id
+    agents = [a for a in config_manager.list_agents() if owned(a)]
+    projects = [p for p in config_manager.list_projects() if owned(p)]
+    project_ids = {p.id for p in projects}
+    # Skills have no organization: global skills plus skills of this org's projects.
+    skills = [s for s in db_manager.list_skills() if s.project_id is None or s.project_id in project_ids]
+    recent_tasks = db_manager.list_task_runs(limit=10, organization_id=org_id)
 
     # Count tasks by status
     task_counts = {status.value: 0 for status in TaskStatus}
@@ -141,7 +157,7 @@ async def get_system_stats(
     live_runs = runtime_adapter.list_runs() if runtime_adapter else recent_tasks
     for run in live_runs:
         run_id = run.run_id
-        if run.status in [TaskStatus.QUEUED, TaskStatus.RUNNING]:
+        if owned(run) and run.status in [TaskStatus.QUEUED, TaskStatus.RUNNING]:
             active_runs.append({
                 "run_id": run_id,
                 "agent_id": run.agent_id,
@@ -190,7 +206,7 @@ async def get_system_health(
         health_checks.append({
             "component": "config_manager",
             "status": "healthy",
-            "message": f"Loaded {len(agents)} agents"
+            "message": "Configuration loaded"
         })
     except Exception as e:
         health_checks.append({
@@ -206,7 +222,7 @@ async def get_system_health(
         health_checks.append({
             "component": "persistence_manager",
             "status": "healthy",
-            "message": f"Connected to DB, {len(db_agents)} agents persisted"
+            "message": "Database reachable"
         })
     except Exception as e:
         health_checks.append({
@@ -228,7 +244,7 @@ async def get_system_health(
         health_checks.append({
             "component": "runtime_adapter",
             "status": "healthy",
-            "message": f"Managing {len(runs)} total runs, {active_count} active"
+            "message": "Runtime responding"
         })
     except Exception as e:
         health_checks.append({

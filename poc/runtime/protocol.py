@@ -60,9 +60,10 @@ class RuntimeAdapter(Protocol):
     def resume_task(
         self,
         run_id: str,
-        answer: str
+        answer: str,
+        grant_permissions: bool = False
     ) -> str:
-        """Resume a suspended/waiting task run with an operator or supervisor response."""
+        """Resume a suspended/waiting task run. Only an explicit approval sets grant_permissions."""
         ...
 
     def list_runs(self) -> List[AgentRun]:

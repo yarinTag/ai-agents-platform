@@ -175,7 +175,8 @@ def get_current_user_profile(
 ):
     """Get current session user profile, organization, and department roles."""
     state_user = getattr(request.state, "user", None)
-    if not state_user:
+    if not state_user or state_user.get("service"):
+        # Org-bound API-key/dev service claims are not a user session and must never self-heal a user.
         raise HTTPException(status_code=401, detail="Not authenticated with user session token")
 
     user_id = state_user.get("sub")

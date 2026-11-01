@@ -216,7 +216,8 @@ async def respond_to_interaction(
         db.update_task_run(task_id, status=TaskStatus.RUNNING)
         try:
             if hasattr(runtime, "resume_task"):
-                runtime.resume_task(task_id, payload.response_text)
+                # An explicit human "approve" decision is the only structured permission grant.
+                runtime.resume_task(task_id, payload.response_text, grant_permissions=True)
         except Exception as res_err:
             import logging
             logging.getLogger(__name__).warning(f"Failed to auto resume task {task_id}: {res_err}")
@@ -315,7 +316,10 @@ async def telegram_webhook_callback(
     """
     Telegram Bot Webhook endpoint handling Inline Keyboard button clicks.
     Format: callback_query.data = "appr:<decision>:<interaction_id>"
+    The request must carry the configured webhook secret token.
     """
+    from .callback_auth import verify_telegram_callback
+    verify_telegram_callback(request)
     try:
         body = await request.json()
     except Exception:
@@ -389,7 +393,10 @@ async def slack_interactivity_callback(
 ):
     """
     Slack Interactivity Webhook endpoint handling Block Kit button clicks.
+    The request must carry a valid, fresh Slack signature.
     """
+    from .callback_auth import verify_slack_callback
+    await verify_slack_callback(request)
     form_data = await request.form()
     payload_str = form_data.get("payload")
     if not payload_str:

@@ -57,3 +57,6 @@ Workflow chat source cases cover real SQLite/FastAPI creation with no office age
 Manual workflow creation has a real FastAPI/SQLite source case asserting planned-runner ID replacement and actual department-bound runner creation; not executed.
 
 Connector source tests cover exact long-report preservation, Hebrew/emoji UTF-16 chunk bounds, numbering, whitespace reconstruction and explicit >60000-character rejection. No tests executed.
+
+## Test security environment
+pyproject addopts loads `-p poc.tests.platform_test_env`, which setdefaults PLATFORM_DEV_MODE=1 because the app refuses to start without JWT_SECRET_KEY. It works with `python -m pytest` (cwd on sys.path), including --noconftest runs. Never commit a real JWT secret to tests.

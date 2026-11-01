@@ -1,6 +1,7 @@
 """
 API Key and Bearer token authentication provider.
 """
+import hmac
 import os
 import logging
 from typing import Optional, Dict, Any
@@ -13,10 +14,23 @@ API_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=False)
 BEARER_AUTH = HTTPBearer(auto_error=False)
 
 
+# Browsers' EventSource cannot send headers; only this stream may take ?token=.
+QUERY_TOKEN_PATHS = {"/api/v1/events/stream"}
+
+
 def get_configured_api_key() -> Optional[str]:
     """Get the currently configured platform API key from environment."""
     key = os.getenv("PLATFORM_API_KEY", "").strip()
     return key if key else None
+
+
+def _service_claims(org_env: str, mode: str) -> Optional[Dict[str, Any]]:
+    """Non-JWT callers act inside one configured organization, never across all tenants."""
+    org_id = os.getenv(org_env, "").strip()
+    if not org_id:
+        logger.warning("%s authentication rejected: %s is not set", mode, org_env)
+        return None
+    return {"org_id": org_id, "role": "ORG_ADMIN", "service": mode}
 
 
 def get_current_user_claims(request: Request) -> Optional[Dict[str, Any]]:
@@ -83,21 +97,14 @@ def get_authorized_scope(request: Request, db_manager=None) -> Dict[str, Any]:
         except Exception:
             department_ids = []
 
-    # If not org admin, or if department_ids is still empty:
-    if not is_org_admin:
-        if db_manager and user_id:
-            try:
-                user_depts = db_manager.get_user_departments(user_id)
-                department_ids = [d["department_id"] for d in user_depts if d.get("department_id")]
-            except Exception:
-                department_ids = []
-        if not department_ids and "departments" in claims:
-            # Fallback to JWT departments claim: [{"id": ...}]
-            department_ids = [
-                d.get("id") or d.get("department_id")
-                for d in claims["departments"]
-                if isinstance(d, dict) and (d.get("id") or d.get("department_id"))
-            ]
+    # Department membership comes from the database only; JWT department claims can be stale.
+    if not is_org_admin and db_manager and user_id:
+        try:
+            user_depts = db_manager.get_user_departments(user_id)
+            department_ids = [d["department_id"] for d in user_depts
+                              if d.get("department_id") and d.get("organization_id") in (None, org_id)]
+        except Exception:
+            department_ids = []
 
     default_department_id = department_ids[0] if department_ids else None
     if not default_department_id and org_id and db_manager:
@@ -112,12 +119,10 @@ def get_authorized_scope(request: Request, db_manager=None) -> Dict[str, Any]:
             pass
 
     # Check X-Department-ID header override if caller specified an active department
+    # The header only selects among departments already authorized above (admins: their org's).
     header_dept = request.headers.get("X-Department-ID", "").strip()
-    if header_dept:
-        if is_org_admin or header_dept in department_ids:
-            default_department_id = header_dept
-            if header_dept not in department_ids and is_org_admin:
-                department_ids.append(header_dept)
+    if header_dept and header_dept in department_ids:
+        default_department_id = header_dept
 
     return {
         "org_id": org_id,
@@ -153,14 +158,14 @@ async def authenticate_request(
             "actor": "anonymous"
         }
 
-    # 1. Extract and verify JWT token from Authorization header or ?token= query parameter
+    # 1. Extract and verify JWT token from Authorization header (or ?token= on the SSE stream only)
     raw_token = None
     if bearer_creds and bearer_creds.credentials:
         raw_token = bearer_creds.credentials.strip()
-    elif request.query_params.get("token"):
-        raw_token = request.query_params.get("token").strip()
     elif request.headers.get("authorization", "").lower().startswith("bearer "):
         raw_token = request.headers.get("authorization")[7:].strip()
+    elif path in QUERY_TOKEN_PATHS and request.query_params.get("token"):
+        raw_token = request.query_params.get("token").strip()
 
     if raw_token:
         from .tokens import decode_access_token
@@ -174,32 +179,23 @@ async def authenticate_request(
                 "user": jwt_claims
             }
 
-    # 2. Check PLATFORM_API_KEY matching X-API-Key, Bearer token, or ?api_key= query param
+    # 2. Check PLATFORM_API_KEY from X-API-Key or Bearer header (never a query parameter)
     configured_key = get_configured_api_key()
     if configured_key:
-        provided_key = None
-        query_key = request.query_params.get("api_key")
-        if api_key_header:
-            provided_key = api_key_header.strip()
-        elif raw_token:
-            provided_key = raw_token
-        elif query_key:
-            provided_key = query_key.strip()
+        provided_key = api_key_header.strip() if api_key_header else raw_token
+        if provided_key and hmac.compare_digest(provided_key.encode(), configured_key.encode()):
+            claims = _service_claims("PLATFORM_API_KEY_ORG_ID", "api_key")
+            if claims:
+                request.state.user = claims
+                return {"authenticated": True, "mode": "api_key", "actor": "api_client", "user": claims}
 
-        if provided_key and provided_key == configured_key:
-            return {
-                "authenticated": True,
-                "mode": "api_key",
-                "actor": "api_client"
-            }
-
-    # 3. Allow open development mode only if explicitly enabled via environment variable
-    if os.getenv("ALLOW_UNAUTHENTICATED_DEV", "false").lower() == "true":
-        return {
-            "authenticated": True,
-            "mode": "open_development",
-            "actor": "developer"
-        }
+    # 3. Open development mode needs both dev flags and an explicit organization
+    from .tokens import dev_mode_enabled
+    if dev_mode_enabled() and os.getenv("ALLOW_UNAUTHENTICATED_DEV", "false").lower() == "true":
+        claims = _service_claims("PLATFORM_DEV_ORG_ID", "open_development")
+        if claims:
+            request.state.user = claims
+            return {"authenticated": True, "mode": "open_development", "actor": "developer", "user": claims}
 
     # 4. Strict rejection for unauthenticated requests
     raise HTTPException(

@@ -115,3 +115,23 @@ class EventsRepository:
                     timestamp=str(row["timestamp"])
                 ))
             return events
+
+    def get_event_owner(self, task_id: Optional[str] = None, agent_id: Optional[str] = None,
+                        project_id: Optional[str] = None) -> Optional[dict]:
+        """Tenant owner of an event's subject: task first, then agent, then project. None if unattributable."""
+        with self._get_connection() as conn:
+            if task_id:
+                row = conn.execute(
+                    "SELECT t.organization_id AS organization_id, a.department_id AS department_id "
+                    "FROM task_runs t LEFT JOIN agents a ON a.id = t.agent_id WHERE t.run_id = ?", (task_id,)).fetchone()
+                if row and row['organization_id']:
+                    return {'organization_id': row['organization_id'], 'department_id': row['department_id']}
+            if agent_id:
+                row = conn.execute("SELECT organization_id, department_id FROM agents WHERE id = ?", (agent_id,)).fetchone()
+                if row and row['organization_id']:
+                    return {'organization_id': row['organization_id'], 'department_id': row['department_id']}
+            if project_id:
+                row = conn.execute("SELECT organization_id FROM projects WHERE id = ?", (project_id,)).fetchone()
+                if row and row['organization_id']:
+                    return {'organization_id': row['organization_id'], 'department_id': None}
+        return None
