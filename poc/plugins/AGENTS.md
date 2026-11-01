@@ -6,7 +6,9 @@ The API's skills_metadata.py and skills_git_scanner.py retain compatibility expo
 
 GET `/api/v1/skills/plugins/content` revalidates remote content through GitHub under current credentials rather than returning a globally cached private document. Local content must resolve inside the current organization's configured plugins_local_path; an empty source or out-of-root file returns 404. Organization-scoped token discovery never falls back to another organization's credentials or host gh authentication. Legacy unscoped local use retains the prior token lookup behavior.
 
-The shared runtime skill-content cache remains a compatibility integration in skills_service; this refactor does not claim a complete audit of every runtime skill-resolution policy. No source import, scanner execution, live provider request, test, build or lint was executed during this task.
+The shared runtime skill-content cache remains a compatibility integration in skills_service; this refactor does not claim a complete audit of every runtime skill-resolution policy.
+
+Agent skill resolution (`skills_service.resolve_skill`) is contained: an absolute-path ID resolves only to an existing `.md` file inside a configured skill search root (checked after symlink resolution), and name IDs used in marketplace globs must be plain relative names (no `..`, absolute paths, `~` or glob characters). Relative file-path IDs are no longer read from the process working directory. Search roots still merge every organization's `plugins_local_path`; per-tenant root scoping is a separate open item. No source import, scanner execution, live provider request, test, build or lint was executed during this task.
 
 Master refresh integration: _scan_git_repo_via_api(repo_url, token, force_refresh=False) bypasses cached Git tree results when requested by GET /api/v1/skills/plugins/scan?refresh=true; configured empty sources still return no plugins.
 

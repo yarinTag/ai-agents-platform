@@ -16,6 +16,10 @@ integration, rather than falling back to an insecure default.
 | `PLATFORM_SANDBOX_PROXY_IMAGE` (digest-pinned, has python3) | A workflow sets a network allowlist | Sandbox steps fail (no unproxied fallback). |
 | `TELEGRAM_WEBHOOK_SECRET` | Telegram approval buttons | `/api/v1/approvals/telegram-callback` returns 503. Register it with `setWebhook(secret_token=...)`. |
 | `SLACK_SIGNING_SECRET` | Slack approval buttons | `/api/v1/approvals/slack-callback` returns 503. Use the Slack app's signing secret. |
+| `PLATFORM_WORKSPACE_ROOTS` | Any project/agent working directory outside `poc/workspaces` | The run fails with a workspace-policy error. Separate roots with `:`; `/` and the home folder itself are rejected. |
+| `PLATFORM_DANGEROUSLY_SKIP_PERMISSIONS=true` | Only to restore unattended approval of every tool (not recommended) | Default `false`: CLI runs auto-approve only each agent's `allowed_tools`. |
+
+Execution defaults are described in [runtime provider setup](runtime-provider-setup.md#execution-safety-settings).
 
 ## What changed
 

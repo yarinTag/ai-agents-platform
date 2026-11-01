@@ -47,3 +47,6 @@ poc/output.txt
 .env
 .env.local
 poc/.venv
+
+# Platform-owned agent workspaces (runtime output)
+poc/workspaces/

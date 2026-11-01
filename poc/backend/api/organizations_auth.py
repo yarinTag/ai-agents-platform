@@ -179,50 +179,12 @@ def get_current_user_profile(
         # Org-bound API-key/dev service claims are not a user session and must never self-heal a user.
         raise HTTPException(status_code=401, detail="Not authenticated with user session token")
 
+    # Resolve strictly by the signed subject. A token never creates, revives or
+    # re-identifies an account: unknown or inactive users must sign in again.
     user_id = state_user.get("sub")
-    org_id = state_user.get("org_id")
-    email = state_user.get("email") or "admin@organization.local"
-    role = state_user.get("role") or "ORG_ADMIN"
-
     user = db.get_user(user_id) if user_id else None
-    if not user and email:
-        user = db.get_user_by_email(email)
-
-    # Self-heal if database file was recreated while user holds a valid signed JWT
-    if not user and user_id and org_id:
-        org = db.get_organization(org_id)
-        if not org:
-            slug_base = email.split("@")[0].lower() if "@" in email else "enterprise"
-            org = db.create_organization(
-                id=org_id,
-                name=f"{slug_base.title()} Organization",
-                slug=f"{slug_base}-{org_id[-4:]}",
-                domain=email.split("@")[1] if "@" in email else None
-            )
-        depts = db.list_departments(organization_id=org.id)
-        default_dept = depts[0] if depts else db.create_department(
-            name="Engineering & Operations",
-            description="Default primary department for engineering and platform operations",
-            monthly_budget_usd=500.0,
-            organization_id=org.id
-        )
-        user = db.create_user(
-            id=user_id,
-            organization_id=org.id,
-            email=email,
-            full_name=email.split("@")[0].replace(".", " ").title(),
-            role=role,
-            status="ACTIVE",
-            password_hash=hash_password("admin123")
-        )
-        db.add_user_to_department(
-            department_id=default_dept.id,
-            user_id=user.id,
-            role="MANAGER"
-        )
-
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+    if not user or user.status != "ACTIVE" or user.organization_id != state_user.get("org_id"):
+        raise HTTPException(status_code=401, detail="Session is no longer valid. Please sign in again.")
 
     org = db.get_organization(user.organization_id)
     if org and len(db.list_organizations()) <= 1:

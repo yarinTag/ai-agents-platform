@@ -57,7 +57,26 @@ No Claude Code installation is required for these paths.
 
 Ordinary direct runs offer the authorized subset of Read, Write, Edit, Glob,
 Grep, Bash and AskUserQuestion. File tools stay within the assigned workspace;
-Bash follows the existing execution permission flag and is not an OS sandbox.
+Bash runs only when it is explicitly listed in the agent's tools (managers and
+orchestrators always receive it for delegation) or the permission bypass is
+enabled. It is not an OS sandbox.
+
+## Execution safety settings
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `PLATFORM_DANGEROUSLY_SKIP_PERMISSIONS` | `false` | `true` restores unattended approval of every tool for all CLI runs. Prefer per-agent `allowed_tools` or the per-agent flag. |
+| `PLATFORM_WORKSPACE_ROOTS` | unset | Approved parent folders for project/agent working directories, separated by `:`. Paths outside them fail the run. `poc/workspaces` is always allowed and hosts the default workspace. `/` and your home folder itself are rejected as roots. |
+| `PLATFORM_AGENT_ENV_PASSTHROUGH` | unset | Comma-separated variable names that may reach agent processes despite looking like credentials. |
+
+Authentication and callback secrets (`JWT_SECRET_KEY`, `SLACK_SIGNING_SECRET`,
+`TELEGRAM_WEBHOOK_SECRET` and others) are listed in
+[security configuration](security-configuration.md).
+
+With the default, an agent with an empty tool list is effectively read-only in
+CLI runs (tools needing approval are denied). Workflow runners are created with
+Read, Grep, Glob, Write, Edit and AskUserQuestion; legacy runners saved with
+`["*"]` receive that same set, never every tool.
 CLI-installed extensions and inherited MCP servers are not imported into API runs.
 An unsupported requested tool fails explicitly. Tool/result events are delivered
 after each model response; token-by-token streaming is not implemented here.

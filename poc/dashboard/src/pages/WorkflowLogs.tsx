@@ -6,11 +6,21 @@ import { ReloadOutlined, DownloadOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import { getWorkflow, getWorkflowExecutions, getWorkflowExecution } from '../services/api';
 import { PlatformWorkflow, WorkflowExecution } from '../types/mcp';
+import { StepEventTimeline } from '../components/workflows/StepEventTimeline';
 
 const { Text, Title } = Typography;
 const active = (status: string) => ['QUEUED', 'RUNNING'].includes(status);
 const statusColor = (status: string) => status === 'FAILED' ? 'error' : status === 'COMPLETED' ? 'success' : 'processing';
 const preStyle: React.CSSProperties = { whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 420, overflow: 'auto', fontSize: 12 };
+const clamp: React.CSSProperties = { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', marginTop: 4 };
+const formatTime = (value?: string) => (value ? new Date(value).toLocaleString() : '—');
+const duration = (start?: string, end?: string) => {
+  if (!start) return '';
+  const ms = (end ? new Date(end).getTime() : Date.now()) - new Date(start).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return '';
+  const seconds = Math.round(ms / 1000);
+  return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+};
 
 export const WorkflowLogsPage: React.FC = () => {
   const runText = useWorkflowRunText();
@@ -82,8 +92,8 @@ export const WorkflowLogsPage: React.FC = () => {
                 style={{ height: 'auto', padding: 12, textAlign: 'start', whiteSpace: 'normal' }} onClick={() => setParams({ execution: run.id })}>
                 <div><Tag color={statusColor(run.status)}>{run.status}</Tag><Tag>{run.trigger_type}</Tag></div>
                 <div style={{ fontFamily: 'monospace', fontSize: 11 }}>{run.id}</div>
-                <div>{run.created_at ? new Date(run.created_at).toLocaleString() : ''}</div>
-                {run.error_message && <div style={{ color: '#ff7875', marginTop: 4 }}>{run.error_message}</div>}
+                <div>{formatTime(run.created_at)}{run.completed_at && <Text type="secondary"> · {duration(run.started_at, run.completed_at)}</Text>}</div>
+                {run.error_message && <Text type="danger" style={clamp}>{run.error_message}</Text>}
               </Button>)}
             </Space>
             {runs.length === 200 && <Text type="secondary">Showing the latest 200 runs.</Text>}
@@ -95,7 +105,8 @@ export const WorkflowLogsPage: React.FC = () => {
               <Space wrap><Tag color={statusColor(execution.status)}>{execution.status}</Tag><Tag>{execution.trigger_type}</Tag>
                 <Text>Cost: ${(execution.total_cost_usd || 0).toFixed(4)}</Text>
                 <Text>Tokens: {execution.total_input_tokens} in / {execution.total_output_tokens} out</Text></Space>
-              <div><Text type="secondary">Started: {execution.started_at || 'Pending'} · Finished: {execution.completed_at || '—'}</Text></div>
+              <div><Text type="secondary">Started: {execution.started_at ? formatTime(execution.started_at) : 'Pending'} · Finished: {formatTime(execution.completed_at)}
+                {execution.started_at && ` · Duration: ${duration(execution.started_at, execution.completed_at)}`}</Text></div>
               {execution.notification_error && <Alert style={{ marginTop: 12 }} type="warning" showIcon
                 message={runText.deliveryWarning} description={execution.notification_error} />}
               {execution.error_message && <Alert style={{ marginTop: 12 }} type="error" showIcon message="Run failed" description={<pre style={preStyle}>{execution.error_message}</pre>} />}
@@ -105,20 +116,19 @@ export const WorkflowLogsPage: React.FC = () => {
             {!steps.length && <Alert type={execution.status === 'FAILED' ? 'warning' : 'info'} showIcon
               message={active(execution.status) ? 'Waiting for the first step' : 'No step logs were recorded'}
               description={execution.status === 'FAILED' ? 'This run failed before a step started, or predates step logging. See the run error above.' : undefined} />}
-            <Collapse defaultActiveKey={steps.map(step => step.id)} items={steps.filter(step => JSON.stringify(step).toLowerCase().includes(search.toLowerCase())).map(step => ({
+            {/* Only failed or still-running steps open by default; finished steps stay one line. */}
+            <Collapse key={execution.id} defaultActiveKey={steps.filter(step => step.status === 'FAILED' || active(step.status)).map(step => step.id)} items={steps.filter(step => JSON.stringify(step).toLowerCase().includes(search.toLowerCase())).map(step => ({
               key: step.id,
-              label: <Space wrap><Tag color={statusColor(step.status)}>{step.task_status || step.status}</Tag><strong>{step.step_key}</strong><Text type="secondary">{step.agent_id}</Text></Space>,
+              label: <Space wrap><Tag color={statusColor(step.status)}>{step.task_status || step.status}</Tag><strong>{step.step_key}</strong><Text type="secondary">{step.agent_id}</Text>
+                {step.started_at && <Text type="secondary">{duration(step.started_at, step.completed_at)}</Text>}
+                {step.cost_usd > 0 && <Text type="secondary">${step.cost_usd.toFixed(4)}</Text>}</Space>,
               children: <Space direction="vertical" style={{ width: '100%' }}>
-                <Text type="secondary">Started: {step.started_at || '—'} · Finished: {step.completed_at || '—'}</Text>
-                {step.error && <Alert type="error" message={step.error} />}
-                <details><summary>Step input</summary><pre style={preStyle}>{step.input_data}</pre></details>
+                <Text type="secondary">Started: {formatTime(step.started_at)} · Finished: {formatTime(step.completed_at)}</Text>
+                {step.error && <Alert type="error" showIcon message="Step failed" description={<pre style={preStyle}>{step.error}</pre>} />}
                 <div><Text strong>Output</Text><pre style={preStyle}>{step.output_data || (active(step.status) ? 'Running…' : 'No output')}</pre></div>
-                <Text strong>Runtime events ({step.events?.length || 0})</Text>
-                {!step.events?.length && <Text type="secondary">No runtime events captured for this step.</Text>}
-                {step.events?.map((event, index) => <details key={index}>
-                  <summary>{String(event.type || 'event')} {typeof event._timestamp === 'number' ? new Date(event._timestamp * 1000).toLocaleTimeString() : ''}</summary>
-                  <pre style={preStyle}>{JSON.stringify(event, null, 2)}</pre>
-                </details>)}
+                <details><summary>Step input</summary><pre style={preStyle}>{step.input_data}</pre></details>
+                <details open={step.status === 'FAILED'}><summary>Runtime events ({step.events?.length || 0})</summary>
+                  <StepEventTimeline events={step.events || []} /></details>
               </Space>
             }))} />
           </Space>}
