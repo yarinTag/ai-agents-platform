@@ -35,6 +35,21 @@ export interface AuthContextType {
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const getDeptId = (d?: Department | null): string | null => {
+  if (!d) return null;
+  return d.id || d.department_id || null;
+};
+
+const normalizeDepartments = (list?: Department[] | null): Department[] =>
+  (list || []).map((d) => {
+    const resolvedId = getDeptId(d) || '';
+    return {
+      ...d,
+      id: resolvedId,
+      department_id: d.department_id || resolvedId,
+    };
+  });
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(AUTH_TOKEN_KEY));
 
@@ -59,7 +74,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [departments, setDepartments] = useState<Department[]>(() => {
     try {
       const cached = localStorage.getItem(AUTH_SESSION_KEY);
-      return cached ? JSON.parse(cached).departments || [] : [];
+      return cached ? normalizeDepartments(JSON.parse(cached).departments) : [];
     } catch {
       return [];
     }
@@ -70,8 +85,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const cached = localStorage.getItem(AUTH_SESSION_KEY);
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (parsed.departments && parsed.departments.length > 0) {
-          return parsed.departments[0].id || parsed.departments[0].department_id;
+        const normalized = normalizeDepartments(parsed.departments);
+        if (normalized.length > 0) {
+          return normalized[0].id;
         }
       }
       return null;
@@ -89,19 +105,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     newOrg: Organization | null,
     newDepts: Department[]
   ) => {
+    const normalizedDepts = normalizeDepartments(newDepts);
     localStorage.setItem(AUTH_TOKEN_KEY, newToken);
     localStorage.setItem(
       AUTH_SESSION_KEY,
-      JSON.stringify({ user: newUser, organization: newOrg, departments: newDepts })
+      JSON.stringify({ user: newUser, organization: newOrg, departments: normalizedDepts })
     );
     setToken(newToken);
     setUser(newUser);
     setOrganization(newOrg);
-    setDepartments(newDepts);
-    if (newDepts.length > 0) {
+    setDepartments(normalizedDepts);
+    if (normalizedDepts.length > 0) {
       setActiveDepartmentId((prev) => {
-        const exists = newDepts.some((d) => (d.id || (d as any).department_id) === prev);
-        return exists ? prev : (newDepts[0].id || (newDepts[0] as any).department_id);
+        const exists = normalizedDepts.some((d) => d.id === prev);
+        return exists ? prev : normalizedDepts[0].id;
       });
     }
   };
@@ -126,21 +143,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const res = await getCurrentUserProfile();
       const { user: refreshedUser, organization: refreshedOrg, departments: refreshedDepts } = res.data;
+      const normalizedDepts = normalizeDepartments(refreshedDepts);
       setUser(refreshedUser);
       setOrganization(refreshedOrg);
-      setDepartments(refreshedDepts || []);
+      setDepartments(normalizedDepts);
       localStorage.setItem(
         AUTH_SESSION_KEY,
         JSON.stringify({
           user: refreshedUser,
           organization: refreshedOrg,
-          departments: refreshedDepts || [],
+          departments: normalizedDepts,
         })
       );
-      if (refreshedDepts && refreshedDepts.length > 0) {
+      if (normalizedDepts.length > 0) {
         setActiveDepartmentId((prev) => {
-          const exists = refreshedDepts.some((d) => (d.id || (d as any).department_id) === prev);
-          return exists ? prev : (refreshedDepts[0].id || (refreshedDepts[0] as any).department_id);
+          const exists = normalizedDepts.some((d) => d.id === prev);
+          return exists ? prev : normalizedDepts[0].id;
         });
       }
       eventStream.connect();
@@ -158,19 +176,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
           const res = await getCurrentUserProfile();
           const { user: refreshedUser, organization: refreshedOrg, departments: refreshedDepts } = res.data;
+          const normalizedDepts = normalizeDepartments(refreshedDepts);
           setUser(refreshedUser);
           setOrganization(refreshedOrg);
-          setDepartments(refreshedDepts || []);
+          setDepartments(normalizedDepts);
           localStorage.setItem(
             AUTH_SESSION_KEY,
             JSON.stringify({
               user: refreshedUser,
               organization: refreshedOrg,
-              departments: refreshedDepts || [],
+              departments: normalizedDepts,
             })
           );
-          if (refreshedDepts && refreshedDepts.length > 0) {
-            setActiveDepartmentId(refreshedDepts[0].id || (refreshedDepts[0] as any).department_id);
+          if (normalizedDepts.length > 0) {
+            setActiveDepartmentId((prev) => {
+              const exists = normalizedDepts.some((d) => d.id === prev);
+              return exists ? prev : normalizedDepts[0].id;
+            });
           }
           eventStream.connect();
         } catch (err: any) {

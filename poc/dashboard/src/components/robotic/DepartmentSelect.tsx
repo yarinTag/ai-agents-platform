@@ -33,7 +33,7 @@ export const DepartmentSelect: React.FC<DepartmentSelectProps> = ({
 
   const handleChange = (selectedId: string) => {
     if (onChange) {
-      const foundDept = departments.find((d) => d.id === selectedId);
+      const foundDept = departments.find((d) => (d.id || d.department_id) === selectedId);
       onChange(selectedId, foundDept);
     }
   };
@@ -57,6 +57,7 @@ export const DepartmentSelect: React.FC<DepartmentSelectProps> = ({
       optionLabelProp="label"
     >
       {departments.map((dept) => {
+        const deptId = dept.id || dept.department_id || '';
         const spend = Number(dept.current_spend_usd || 0);
         const budget = Number(dept.monthly_budget_usd || 0);
         const pct = budget > 0 ? Math.round((spend / budget) * 100) : 0;
@@ -67,8 +68,8 @@ export const DepartmentSelect: React.FC<DepartmentSelectProps> = ({
 
         return (
           <Select.Option
-            key={dept.id}
-            value={dept.id}
+            key={deptId}
+            value={deptId}
             data-name={dept.name}
             label={
               <Space size={6}>

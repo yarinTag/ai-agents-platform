@@ -176,7 +176,10 @@ Workflow chat agent catalog types support provision_on_create. No-agent warnings
 
 The manual workflow agent dropdown now reflects authorized persisted agents, not static role names. A planned dedicated runner is an explicit option only for new workflows; other workflow runners are excluded.
 
+WorkflowLogs.tsx renders vertical dark-themed clickable run cards (`#0d1117` with `#10b981` active accent border) instead of `<Button type="primary" block>` items, along with a `Segmented` run-mode filter and structured execution/step summary blocks.
 
+`OfficeTopBar.tsx` removes the `Runtime settings` button and organization badge from the header. Runtime configuration now lives in `SettingsPage.tsx` (`/settings` under `ORGANIZATION & GOVERNANCE` in `AppSidebar.tsx`) and the `Runtime settings` tab on `OrganizationPage.tsx` via `RuntimeSettingsPanel.tsx`.
+`AuthContext.tsx`, `OfficeTopBar.tsx`, and `DepartmentSelect.tsx` normalize department IDs (`d.id || d.department_id`) so the header department selector always displays the department name (`label`) while sending the department ID (`value`).
 
 ## Reasoning logs (2026-11-01)
 Workflow Logs displays persisted reasoning_summary events through StepEventTimeline, separately from results, with expansion and explicit missing-summary status. Existing polling, scoped reads and JSON export apply. Events arrive per completed model response, not live token streaming. No route/API changes or runtime verification.

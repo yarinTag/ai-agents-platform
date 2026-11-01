@@ -183,6 +183,7 @@ The server requires JWT_SECRET_KEY (>= 32 chars) unless PLATFORM_DEV_MODE=1. API
 ## Workflow settings (model, machine size, network, secrets)
 Each workflow's definition.settings selects a model (default, tier or catalog ID; it overrides the agent model for step tasks), a sandbox machine size (small/medium/large) and an HTTPS egress allowlist enforced by a per-step proxy container. Write-only secrets are stored AES-GCM encrypted (PLATFORM_SECRETS_KEY) or as allowlisted AWS Secrets Manager ARNs, injected only into repository sandboxes as env vars and redacted from tool output. Managing them requires a DB-verified org admin or department manager. See docs/workflow-settings.md. No tests, builds, Docker or AWS calls were run.
 
+Local launch: `uv run python poc/start_api.py` loads repository-root .env through Uvicorn before application import. Configure a persistent random JWT_SECRET_KEY (>=32 chars) in ignored .env; changing it invalidates existing login tokens. Do not print or commit the key.
 
 Provider-visible reasoning summaries are recorded per completed API response and shown in Workflow Logs events; missing summaries are explicit. Encrypted continuation stays in private session transcripts. OpenAI reasoning families use Responses; known Claude families request thinking. Exact contracts: poc/runtime/AGENTS.md. No tests/build/typecheck/startup/provider calls performed.
 
