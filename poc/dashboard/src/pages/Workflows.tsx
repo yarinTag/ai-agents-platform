@@ -5,6 +5,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Table, Button, Modal, Space, Card, Row, Col, Statistic, Tabs, Input, message, Switch, Form, Alert, Select } from 'antd';
 import { ApartmentOutlined, PlayCircleOutlined, PlusOutlined, ReloadOutlined, CodeOutlined, ThunderboltOutlined, CheckCircleOutlined, SyncOutlined, SafetyCertificateOutlined, CopyOutlined } from '@ant-design/icons';
 import { WorkflowHistoryDrawer } from '../components/workflows/WorkflowHistoryDrawer';
+import { WorkflowSettingsDrawer } from '../components/workflows/WorkflowSettingsDrawer';
 import { CreateWorkflowModal } from '../components/workflows/CreateWorkflowModal';
 import { WorkflowCanvasGraph } from '../components/workflows/WorkflowCanvasGraph';
 const { TextArea } = Input;
@@ -33,6 +34,8 @@ export const WorkflowsPage: React.FC = () => {
     setEditingWorkflow,
     historyWorkflow,
     setHistoryWorkflow,
+    settingsWorkflow,
+    setSettingsWorkflow,
     createModalOpen,
     setCreateModalOpen,
     canvasModalOpen,
@@ -373,6 +376,8 @@ export const WorkflowsPage: React.FC = () => {
       {/* Create Workflow Modal */}
       {historyWorkflow && <WorkflowHistoryDrawer key={historyWorkflow.id} workflow={historyWorkflow}
         onClose={() => setHistoryWorkflow(null)} />}
+      {settingsWorkflow && <WorkflowSettingsDrawer key={settingsWorkflow.id} workflow={settingsWorkflow}
+        onClose={() => setSettingsWorkflow(null)} onSaved={() => { void loadData(); }} />}
       {createModalOpen && <CreateWorkflowModal
         key={editingWorkflow?.id || 'new'}
         workflow={editingWorkflow}

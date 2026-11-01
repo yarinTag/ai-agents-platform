@@ -110,3 +110,6 @@ workflowChat supplies the plugin-skills resource label in English/Hebrew.
 workflowChat includes Workflow Skills and inheritance/direct-action guidance in English/Hebrew, shared by the builder and AI preview.
 
 workflowChat plannedRunner describes dedicated workflow runner provisioning on confirmation in English/Hebrew.
+
+## Workflow settings copy
+`workflowSettings.ts` exports `useWorkflowSettingsText`, the `WorkflowSettingsText` type, and `formatWorkflowSettingsText(template, params)` for `{name}`-style placeholders. It holds typed English/Hebrew dictionaries (Hebrew is `typeof en`, so keys stay in parity) for the Workflows **Settings** action, the settings drawer (model/tiers/catalog, machine size, network allowlist, save/409 conflict/validation/permission messages, read-only and invalid-settings notices) and the secrets section (table, add/replace form, name/value/ARN validation, 503 storage-not-configured). It reads the existing locale context; the legacy `en.ts`/`he.ts` dictionaries are unchanged. Server-provided details (validation text, tier/model names) are shown as returned.

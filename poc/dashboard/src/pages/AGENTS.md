@@ -221,3 +221,6 @@ Installed connectors expose Send test message beside each saved Telegram/Slack d
 Connector save correction: useMcpConnectorActions explicitly includes/destructures discoveredResources from useMcpState before deriving configuration.channel_labels. Omitting this caused a ReferenceError before Telegram/Slack save HTTP requests. Static source review only; runtime verification remains unauthorized.
 
 Telegram discovered-chat selection displays names with canonical IDs available on hover; checkbox values remain the discovered IDs. Installed connector tags use persisted channel_labels. No arbitrary name-to-destination guessing is introduced.
+
+## Workflow settings action
+`useWorkflowsPage` owns `settingsWorkflow`/`setSettingsWorkflow` and exposes `settingsText` (`useWorkflowSettingsText`). `workflowColumns.tsx` adds a **Settings** button next to History on each saved workflow row. `Workflows.tsx` mounts `WorkflowSettingsDrawer` keyed by workflow ID while `settingsWorkflow` is set and calls `loadData()` after a settings save, because saving bumps the workflow revision that Edit and canvas step deletion send as `expected_revision`. Secret writes do not change the revision and do not reload the list. No runtime verification was run.

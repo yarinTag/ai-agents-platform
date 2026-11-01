@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { useWorkflowRunText } from '../i18n/workflowRun';
+import { useWorkflowSettingsText } from '../i18n/workflowSettings';
 import { removeWorkflowStep } from '../services/workflowDefinitions';
 import { useState, useEffect, useCallback } from 'react';
 import { Table, Modal, Input, message, Drawer, Form } from 'antd';
@@ -9,6 +10,7 @@ import { WorkflowCanvasStep } from '../components/workflows/WorkflowCanvasGraph'
 
 export const useWorkflowsPage = () => {
   const runText = useWorkflowRunText();
+  const settingsText = useWorkflowSettingsText();
   const [workflows, setWorkflows] = useState<PlatformWorkflow[]>([]);
   const [executions, setExecutions] = useState<WorkflowExecution[]>([]);
   const [connectors, setConnectors] = useState<MCPConnector[]>([]);
@@ -18,6 +20,7 @@ export const useWorkflowsPage = () => {
   // Modals & Drawers state
   const [editingWorkflow, setEditingWorkflow] = useState<PlatformWorkflow | null>(null);
   const [historyWorkflow, setHistoryWorkflow] = useState<PlatformWorkflow | null>(null);
+  const [settingsWorkflow, setSettingsWorkflow] = useState<PlatformWorkflow | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState<boolean>(false);
   const [canvasModalOpen, setCanvasModalOpen] = useState<boolean>(false);
   const [selectedWorkflow, setSelectedWorkflow] = useState<PlatformWorkflow | null>(null);
@@ -255,6 +258,9 @@ export const useWorkflowsPage = () => {
     setEditingWorkflow,
     historyWorkflow,
     setHistoryWorkflow,
+    settingsWorkflow,
+    setSettingsWorkflow,
+    settingsText,
     createModalOpen,
     setCreateModalOpen,
     canvasModalOpen,
