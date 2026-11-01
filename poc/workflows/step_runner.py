@@ -156,21 +156,31 @@ class WorkflowStepRunner:
 
         # A missing runtime, failure, pause or timeout is never a completed step.
         updated_run = step_run
+        workspace = None
         try:
             if self.runtime is None:
                 raise RuntimeError("Runtime capability is unavailable")
             from .channel_action import action_configuration, execute_channel_action
+            from integrations.repo_workspace import workspace_configuration
             channel_action = action_configuration(step)
+            workspace_config = workspace_configuration(step)
             if channel_action and playground_workspace:
                 raise RuntimeError("Channel delivery actions cannot run in the tool-free Playground")
+            if workspace_config and playground_workspace:
+                raise RuntimeError("Repository workspaces cannot run in the tool-free Playground")
             if playground_workspace:
                 self.runtime.start_playground_task(
                     agent_id=actual_agent_id, task_id=task_id,
                     prompt=formatted_prompt, workspace=playground_workspace,
                 )
             else:
-                from integrations.tool_scopes import prepare_scope
-                prepare_scope(self.db, task_id, execution_id, step)
+                if workspace_config:
+                    # Sandboxed code steps get a container workspace instead of a connector scope.
+                    from integrations.repo_workspace import open_workspace
+                    workspace = open_workspace(self.db, task_id, execution_id, step, workspace_config)
+                else:
+                    from integrations.tool_scopes import prepare_scope
+                    prepare_scope(self.db, task_id, execution_id, step)
                 if channel_action:
                     execute_channel_action(self.db, step, step_run, step_outputs)
                 else:
@@ -208,6 +218,17 @@ class WorkflowStepRunner:
                 if hasattr(self.runtime, "cancel_run"):
                     self.runtime.cancel_run(task_id)
                 raise TimeoutError(f"Workflow step '{step.key}' exceeded its runtime timeout")
+            if workspace is not None and workspace["mode"] == "write":
+                finished = self.db.get_task_run(task_id) or updated_run
+                if str(getattr(finished.status, "value", finished.status)).lower() == "completed":
+                    # The backend, not the model, publishes: new branch + draft PR, never a merge.
+                    from integrations.repo_workspace import publish_workspace
+                    receipt = publish_workspace(self.db, step, workspace, finished.result)
+                    note = (f"Draft pull request for human review: {receipt['pull_request_url']}"
+                            if receipt["changed"] else "No file changes; no pull request was opened.")
+                    finished.result = f"{finished.result or ''}\n\n[REPOSITORY RESULT]\n{note}"
+                    self.db.save_task_run(finished)
+                    updated_run = finished
         except Exception as error:
             updated_run = self.db.get_task_run(task_id) or step_run
             updated_run.status = TaskStatus.FAILED
@@ -215,6 +236,13 @@ class WorkflowStepRunner:
             updated_run.ended_at = datetime.now()
             self.db.save_task_run(updated_run)
             logger.warning("Workflow step %s did not complete: %s", step.key, error)
+        finally:
+            if workspace is not None:
+                from integrations.repo_workspace import close_workspace
+                try:
+                    close_workspace(self.db, workspace)
+                except Exception:
+                    logger.warning("Repository sandbox cleanup failed for %s", task_id)
 
         step_status = str(getattr(updated_run.status, "value", updated_run.status)).upper()
         # Optional Maker-Checker review

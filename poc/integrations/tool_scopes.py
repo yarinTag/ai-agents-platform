@@ -161,7 +161,8 @@ def execution_context(db, execution_id):
 
 def prepare_execution_context(db, execution, workflow, definition, user_context=None):
     binding = definition.metadata.get('channel_binding') if definition.metadata else None
-    if not (binding or definition.mcp_servers or any(s.mcp_servers for s in definition.steps)):
+    workspaces = any((s.params or {}).get('workspace') is not None for s in definition.steps)
+    if not (binding or workspaces or definition.mcp_servers or any(s.mcp_servers for s in definition.steps)):
         return
     if execution.trigger_type == 'PLAYGROUND':
         raise ToolAccessError('Playground cannot receive live connector context.')
@@ -182,8 +183,12 @@ def prepare_execution_context(db, execution, workflow, definition, user_context=
             notification_target(db, workflow, execution.id)
         except ToolAccessError as error:
             record_notification_error(db, execution.id, str(error))
+    from .repo_workspace import authorize_workspace, workspace_configuration
     for step in definition.steps:
         prepare_scope(db, None, execution.id, step, persist=False)
+        workspace = workspace_configuration(step)
+        if workspace is not None:
+            authorize_workspace(db, execution.id, step, workspace)  # Fail before any step runs.
 
 
 def record_notification_error(db, execution_id, error):

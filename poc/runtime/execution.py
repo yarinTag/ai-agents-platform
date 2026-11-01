@@ -145,8 +145,12 @@ class TaskExecutor:
             connector_guard = attach_connectors(adapter, run, chosen_prov_id, cmd, env,
                 playground=playground_workspace is not None)
 
+            from .workspace_context import attach_workspace
+            sandbox_dir = attach_workspace(adapter, run, chosen_prov_id, cmd,
+                playground=playground_workspace is not None)
+
             # Determine working directory
-            work_dir = playground_workspace or adapter._resolve_working_directory(project_config, agent_config)
+            work_dir = playground_workspace or sandbox_dir or adapter._resolve_working_directory(project_config, agent_config)
 
             # Launch Claude Code process
             process = subprocess.Popen(

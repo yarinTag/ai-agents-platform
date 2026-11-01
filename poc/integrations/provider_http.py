@@ -41,7 +41,7 @@ def telegram_rejection(raw, status):
     return f'Telegram rejected the request (HTTP {status}). {hint} No automatic retry was made.'
 
 
-def request_json(host, path, headers=None, params=None, payload=None):
+def request_json(host, path, headers=None, params=None, payload=None, accepted=(200,)):
     if host not in _HOSTS or not path.startswith('/'):
         raise ToolAccessError('Unsupported integration endpoint.')
     if params:
@@ -56,7 +56,7 @@ def request_json(host, path, headers=None, params=None, payload=None):
         raw = response.read(2_000_001)
         if len(raw) > 2_000_000:
             raise ToolAccessError('Integration response exceeded the size limit.')
-        if response.status != 200:
+        if response.status not in accepted:
             reason = telegram_rejection(raw, response.status) if host == 'api.telegram.org' else None
             raise ToolAccessError(reason or f'Integration returned HTTP {response.status}; check credentials, access and rate limits. No automatic retry was made.')
         return json.loads(raw)

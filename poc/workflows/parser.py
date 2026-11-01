@@ -240,8 +240,10 @@ def validate_workflow_definition(data: Any) -> Dict[str, Any]:
         raise ValueError("Workflow definition must be an object with a steps array")
     parsed = WorkflowParser.from_dict(data)
     from .channel_action import action_configuration
+    from integrations.repo_workspace import workspace_configuration
     for step in parsed.steps:
         action_configuration(step)
+        workspace_configuration(step)
     keys = [step.get("key") or step.get("id") or item.key
             for step, item in zip(data.get("steps", []), parsed.steps)]
     if len(set(keys)) != len(keys):
