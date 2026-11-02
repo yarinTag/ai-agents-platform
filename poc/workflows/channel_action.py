@@ -19,6 +19,14 @@ def action_configuration(step):
     parsed = ChannelAction.model_validate(action)
     if parsed.source_step not in step.depends_on:
         raise ValueError('Channel action source_step must be an explicit step dependency.')
+    references = (step.params or {}).get('authorized_resources')
+    if (step.mcp_servers != [parsed.connector_id] or not isinstance(references, list)
+            or len(references) != 1 or not isinstance(references[0], dict)
+            or references[0].get('connector_id') != parsed.connector_id
+            or references[0].get('channel_id') != parsed.channel_id
+            or references[0].get('repository')
+            or references[0].get('tool_name') not in ('send_message', 'post_chat_message')):
+        raise ValueError('Channel action requires one matching step connector and explicit authorized delivery resource.')
     return parsed
 
 

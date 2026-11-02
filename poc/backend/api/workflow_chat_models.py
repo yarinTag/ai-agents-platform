@@ -1,6 +1,7 @@
 """Small, strict model-only chat contract for creating inactive workflows."""
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from integrations.repo_workspace import RepositoryWorkspace
 
 
 class StrictModel(BaseModel):
@@ -30,11 +31,14 @@ class ChatStep(StrictModel):
     timeout_seconds: int = Field(default=300, ge=10, le=1800)
     skills: list[str] = Field(default_factory=list, max_length=20)
     send_output_of: str | None = Field(default=None, min_length=1, max_length=80)
+    workspace: RepositoryWorkspace | None = None
+    required_outcome: Literal['analysis', 'pull_request'] = 'analysis'
 
 
 class Destination(StrictModel):
     connector_id: str = Field(min_length=1, max_length=200)
     channel_id: str = Field(min_length=1, max_length=200)
+    notify_mode: Literal['COMPLETION_ONLY', 'START_AND_COMPLETE', 'EACH_STEP', 'NONE'] = 'COMPLETION_ONLY'
 
 
 class ChatWorkflow(StrictModel):

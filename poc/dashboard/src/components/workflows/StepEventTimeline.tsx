@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Button, Space, Tag, Typography } from 'antd';
+import { asCostSummary, formatCost } from '../../services/workflowCosts';
 
 const { Text } = Typography;
 type RuntimeEvent = Record<string, unknown>;
@@ -18,6 +19,8 @@ export enum EventKind {
   ToolUse = 'tool_use',
   ToolResult = 'tool_result',
   Assistant = 'assistant',
+  ReasoningSummary = 'reasoning_summary',
+  Usage = 'usage',
   User = 'user',
   System = 'system',
   EndOfOutput = 'end_of_output',
@@ -31,6 +34,8 @@ const toKind = (value: unknown): EventKind =>
 const COLORS: Partial<Record<EventKind, string>> = {
   [EventKind.Error]: 'error', [EventKind.Stderr]: 'warning', [EventKind.Result]: 'success',
   [EventKind.ToolUse]: 'processing', [EventKind.ToolResult]: 'cyan', [EventKind.Assistant]: 'purple',
+  [EventKind.ReasoningSummary]: 'geekblue',
+  [EventKind.Usage]: 'gold',
 };
 
 interface EventDescription { kind: EventKind; label: string; summary: string; detail?: string }
@@ -61,6 +66,13 @@ export const describeEvent = (event: RuntimeEvent): EventDescription => {
   // Unrecognized types keep their own label so new runtime events stay identifiable.
   const label = kind === EventKind.Unknown ? String(event.type || EventKind.Unknown) : kind;
   switch (kind) {
+    case EventKind.Usage:
+      return withDetail(kind, 'Usage & cost',
+        `Call ${text(event.turn)}: ${text(event.input_tokens)} input / ${text(event.output_tokens)} output tokens · ${event.cost_usd == null ? 'Price unavailable' : '$' + Number(event.cost_usd).toFixed(6)} (${text(event.source)})\n` +
+        `Run: ${formatCost(asCostSummary(event.cost_summary))}\nSession total: ${formatCost(asCostSummary(event.session_cost_summary))}`);
+    case EventKind.ReasoningSummary:
+      return withDetail(kind, 'Reasoning summary', event.status === 'available'
+        ? text(event.content) : 'The provider did not return a visible reasoning summary for this turn.');
     case EventKind.Stderr:
     case EventKind.Raw:
       return withDetail(kind, label, text(event.content));
@@ -68,7 +80,8 @@ export const describeEvent = (event: RuntimeEvent): EventDescription => {
       return withDetail(kind, label, text(asRecord(event.error).message) || 'Unknown error');
     case EventKind.Result: {
       const reported = event.total_cost_usd;
-      const cost = typeof reported === 'number' ? ` · $${reported.toFixed(4)}` : '';
+      const summary = asCostSummary(event.cost_summary);
+      const cost = summary ? ` · ${formatCost(summary)}` : typeof reported === 'number' ? ` · $${reported.toFixed(6)}` : '';
       const shown = event.is_error ? EventKind.Error : kind;  // Failed results read as errors.
       const described = withDetail(shown, shown, text(event.result));
       return { ...described, summary: described.summary + cost };

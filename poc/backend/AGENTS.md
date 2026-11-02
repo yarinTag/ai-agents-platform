@@ -110,3 +110,16 @@ Queue availability correction: queue-api owns the /api/v1/queue HTTP module, whi
 The existing workflows capability composes workflow_chat.router before the other workflow routes; no workflow-assistant capability or removed module is restored. Three small API modules own routes/jobs, strict chat contracts and policy/native-definition conversion. The runtime extension uses tool-free process inference through the configured provider. Workflow preview records are stored in workflow_builder_jobs and never dispatched as agent/Office tasks.
 
 get_skill_context(skill_ids, organization_id=None) supports scoped plugin resolution for workflow steps; omitted organization preserves the legacy non-workflow resolver.
+
+
+
+Workflow execution list/detail now project cost_summary through api/workflow_costs.py after existing tenant/department authorization. Step detail includes recorded session totals; missing prices are distinct from confirmed free usage. No SQLite migration or historical repricing. See API/runtime guides. Source review only.
+
+
+AI workflow creation can now describe governed read/write repository workspaces and required pull_request outcomes; catalog reflects current department/agent workspace grants separately from read-only connector tools. It does not grant write permission. See API guide. Source review only.
+
+
+Workflow authoring catalog reports static workspace_readiness via existing /workflows/ai/context. This is configuration-only, never Docker/provider connectivity verification. Permission metadata registration remains separate from authorization. No tests/startup performed.
+
+
+Workflow channel binding supports completion-only, start/completion and each-step lifecycle modes; AI Destination.notify_mode feeds the existing metadata binding. No separate notification tasks or endpoints were introduced. See API/workflow guides. No runtime verification.

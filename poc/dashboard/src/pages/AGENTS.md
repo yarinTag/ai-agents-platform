@@ -226,3 +226,15 @@ Telegram discovered-chat selection displays names with canonical IDs available o
 `useWorkflowsPage` owns `settingsWorkflow`/`setSettingsWorkflow` and exposes `settingsText` (`useWorkflowSettingsText`). `workflowColumns.tsx` adds a **Settings** button next to History on each saved workflow row. `Workflows.tsx` mounts `WorkflowSettingsDrawer` keyed by workflow ID while `settingsWorkflow` is set and calls `loadData()` after a settings save, because saving bumps the workflow revision that Edit and canvas step deletion send as `expected_revision`. Secret writes do not change the revision and do not reload the list. No runtime verification was run.
 
 WorkflowLogs readability: steps render collapsed except FAILED or active ones (defaults reapply per selected execution; polling does not reset manual expansion). Step headers show duration and cost; run/step times use locale formatting with run durations, and run-list errors clamp to two lines with theme danger color. Output precedes the collapsed input. Runtime events render through components/workflows/StepEventTimeline as one summarized line per event, with More (full text) and JSON (raw event) toggles; the events section opens by default only for failed steps. Source review only; no build/typecheck was run.
+
+
+
+
+WorkflowLogs now renders a dedicated Model reasoning summaries panel above Step Output inside each expanded step. Available summaries are counted in a geekblue Reasoning (N) badge visible even on collapsed step headers. Existing Runtime Events retains the full chronological trace. Missing-summary events remain visible in the dedicated panel. No route/API changes. Read-only inspection of existing SQLite run records confirmed persisted NVIDIA summaries; no new inference/tests/build/startup performed.
+
+WorkflowLogs displays reasoning_summary events only in the dedicated reasoning panel; Runtime Events filters them out and counts only remaining events. Persisted event records and JSON export retain the complete trace. This supersedes the earlier duplicate chronological display. Source review only; no runtime checks performed.
+
+WorkflowLogs reasoning presentation follows the user preference: reasoning_summary appears once in the chronological Runtime Events timeline alongside tools/results. The separate reasoning panel is removed; Runtime Events defaults open when reasoning events exist (or the step failed). The Reasoning (N) header badge remains for discoverability. This supersedes the earlier panel/filter notes. Persistence and JSON export are unchanged. Source review only; no runtime checks performed.
+
+
+WorkflowLogs, WorkflowExecutionDrawer and workflowExecutionColumns use services/workflowCosts.formatCost for all workflow/run/step prices, including free and unavailable values. Logs and inspection show cumulative session cost from step.session_cost_summary; usage events show per-call pricing. All run list cost rows are visible even at zero; historical missing pricing is unavailable rather than free. No routes, new requests or schema changes. No build/typecheck performed.

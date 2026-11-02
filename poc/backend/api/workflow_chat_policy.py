@@ -5,6 +5,7 @@ from workflows.parser import validate_workflow_definition
 from integrations.tool_definitions import OPERATIONS, ensure_tools, require_credentials, resource_values, valid_channel, valid_repository
 from .workflow_chat_models import ChatWorkflow
 from integrations.tool_scopes import agent_tool_allowed
+from .workflow_chat_workspace import workspace_operations, agent_workspace_operations, validate_workspace
 
 PLANNED_RUNNER_ID = "__workflow_runner__"
 
@@ -29,7 +30,7 @@ def catalog(db, claims, department_id):
     agent_records = [a for a in db.list_agents(organization_id=user.organization_id)
               if a.organization_id == user.organization_id and a.department_id in (None, department_id)
               and not a.is_workflow_agent]
-    agents = [{'id': a.id, 'name': a.name, 'connector_tools': {}} for a in agent_records]
+    agents = [{'id': a.id, 'name': a.name, 'connector_tools': {}, 'workspace_operations': {}} for a in agent_records]
     connectors = []
     for connector in db.list_mcp_connectors(organization_id=user.organization_id):
         if connector.organization_id != user.organization_id or connector.status != 'CONNECTED':
@@ -39,8 +40,10 @@ def catalog(db, claims, department_id):
             continue
         implementations = ensure_tools(db, connector)
         tools = [name for name in implementations if db.check_department_mcp_permission(department_id, connector.id, name)['allowed']]
+        workspace_tools = workspace_operations(db, connector, department_id)
         for record, public in zip(agent_records, agents):
             public['connector_tools'][connector.id] = [name for name in tools if agent_tool_allowed(db, record, connector, implementations[name])]
+            public['workspace_operations'][connector.id] = agent_workspace_operations(db, record, connector, workspace_tools)
         config = connector.configuration or {}
         repositories = [v for v in resource_values(config, 'repositories') if valid_repository(v)]
         channels = [v for v in resource_values(config, 'channels') if valid_channel(connector.provider.lower(), v)]
@@ -52,14 +55,18 @@ def catalog(db, claims, department_id):
         executable = bool(tools) and configured and bool(repositories if connector.provider.lower() == 'github' else channels)
         connectors.append({'id': connector.id, 'name': connector.name, 'provider': connector.provider,
             'tools': sorted(tools), 'execution_supported': executable,
+            'workspace_operations': workspace_tools if configured else [],
             'repositories': repositories, 'channels': channels,
             'channel_labels': {identifier: str(config.get('channel_labels', {}).get(identifier) or identifier)[:200]
                                for identifier in channels}})
     agents.append({'id': PLANNED_RUNNER_ID, 'name': 'Dedicated workflow runner',
         'provision_on_create': True,
+        'workspace_operations': {connector['id']: connector['workspace_operations'] for connector in connectors},
         'connector_tools': {connector['id']: connector['tools'] for connector in connectors}})
     from plugins.workflow_skills import skill_catalog
+    from workflows.repo_sandbox import configuration_status
     return {'agents': agents, 'connectors': connectors, 'skills': skill_catalog(db, user.organization_id),
+        'workspace_readiness': configuration_status(),
         'note': 'Only these configured resource IDs are authorized. Discovery does not grant access. '
                 'Only implemented and granted runtime tools are listed. A connected catalog entry alone is not executable. '
                 'Channel display-name aliases are excluded; exact delivery IDs must be configured. '
@@ -85,6 +92,7 @@ def validate_candidate(candidate, resources):
     if set(candidate.skills) - approved_skills:
         errors.append('Workflow selects a skill outside the configured plugin catalog.')
     for step in candidate.steps:
+        errors.extend(validate_workspace(step, agents, connectors))
         if set(step.skills) - approved_skills:
             errors.append(f'Step {step.key} selects a skill outside the configured plugin catalog.')
         if step.send_output_of:
@@ -134,11 +142,15 @@ def native_definition(candidate: ChatWorkflow, resources, runner_agent_id=None):
     connectors = {c['id']: c for c in resources['connectors']}
     steps = []
     for step in candidate.steps:
-        data = step.model_dump(exclude={'resources', 'send_output_of', 'skills'})
+        data = step.model_dump(exclude={'resources', 'send_output_of', 'skills', 'workspace', 'required_outcome'})
         if step.agent_id == PLANNED_RUNNER_ID and runner_agent_id:
             data['agent_id'] = runner_agent_id
         data['mcp_servers'] = sorted({r.connector_id for r in step.resources})
         data['params'] = {'authorized_resources': [r.model_dump(exclude_none=True) for r in step.resources]}
+        if step.workspace:
+            data['params'] = {'workspace': step.workspace.model_dump(exclude_none=True)}
+        if step.required_outcome == 'pull_request':
+            data['params']['required_outcome'] = 'pull_request'
         if step.send_output_of and len(step.resources) == 1:
             ref = step.resources[0]
             data['params']['channel_action'] = {'action': 'send_channel_message',
@@ -154,8 +166,10 @@ def native_definition(candidate: ChatWorkflow, resources, runner_agent_id=None):
         connector = connectors.get(destination.connector_id, {})
         metadata['channel_binding'] = {'provider': connector.get('provider', ''),
             'connector_id': destination.connector_id, 'channel_id': destination.channel_id,
-            'channel_name': connector.get('channel_labels', {}).get(destination.channel_id, destination.channel_id), 'trigger_enabled': False, 'notify_mode': 'ON_COMPLETE'}
+            'channel_name': connector.get('channel_labels', {}).get(destination.channel_id, destination.channel_id),
+            'trigger_enabled': False, 'notify_mode': destination.notify_mode}
     selected_skills = list(dict.fromkeys([*candidate.skills, *(value for step in candidate.steps for value in step.skills)]))
     return {'name': candidate.name, 'description': candidate.description, 'steps': steps, 'skills': selected_skills,
-        'mcp_servers': sorted({value for step in steps for value in step['mcp_servers']}),
+        'mcp_servers': sorted({value for step in steps for value in step['mcp_servers']} |
+                              {step.workspace.connector_id for step in candidate.steps if step.workspace}),
         'cron_expression': candidate.cron_expression, 'webhook_enabled': False, 'metadata': metadata}

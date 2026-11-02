@@ -197,3 +197,24 @@ agent fallback. Changing department/workflow reloads the source. No live checks.
 
 ### StepEventTimeline (`workflows/StepEventTimeline.tsx`)
 Renders persisted runtime events (`Array<Record<string, unknown>>`) as compact rows: local time, kind tag and a one-line summary from `describeEvent`. Kinds are the exported string enum `EventKind`, and `describeEvent` switches over it exhaustively (a `never` check), so a new kind fails type checking until it has a branch. Unrecognized runtime types map to `EventKind.Unknown` but keep their original label. That function covers stderr/raw content, error.message, result text plus reported cost, direct tool_use/tool_result, CLI assistant/user message parts (text, tool_use, tool_result), system session IDs and end_of_output. Unknown shapes fall back to clipped JSON. Each row toggles full text (More) or the raw event (JSON). Event content is rendered as React text, never HTML. Used by `pages/WorkflowLogs.tsx`.
+
+## Reasoning runtime events (2026-11-01)
+StepEventTimeline recognizes reasoning_summary with a separate geekblue Reasoning summary label, preview, full text expansion and JSON control. status=not_returned explains missing provider-visible reasoning. Existing authorized Workflow Logs data and export apply; no component API/route changed. Events arrive per completed response, not token-by-token. No build/typecheck/runtime checks executed.
+
+
+StepEventTimeline recognizes usage events as Usage & cost: per-call tokens, price/source, run total and cumulative session total with full-text expansion. Result rows use cost_summary when present. Unknown price remains explicit, and known zero remains visible. Existing reasoning/tool chronological ordering is retained. No runtime checks performed.
+
+
+
+WorkflowChatModal previews each typed workspace as repository plus read-files or code-changes/draft-PR badge. Resource catalog shows workspace_operations separately from connector tools; workspace-only capability contributes to availability. EN/HE labels live in workflowChat.ts. No permissions are changed by preview. No build/typecheck performed.
+
+
+## Visual repository workspace authoring (2026-11-01)
+WorkflowRepositoryFields is mounted once per step by WorkflowStepsPanel. It selects connector tools, read workspace, or write workspace with required draft-PR outcome; repository choices come only from the current department-authorized AI context catalog. It edits connector_id, repository, ref and pr_title inside existing step.params, clearing conflicting tool/channel scopes only on an explicit mode change. Workspace steps disable the connector-tools selector. Write mode requires catalog clone_repository and open_pull_request grants. This UI never changes grants or executes anything. WorkflowStep.params is now typed while retaining unknown extension fields. useWorkflowBuilder includes workspace connector IDs in root mcp_servers and preserves native params through visual/YAML round trips. useWorkflowResources loads one department context shared by all step fields, with stale-response disposal and independent catalog errors; there are no per-step network requests. Existing permission checks remain authoritative at runtime.
+Both visual fields and AI preview show workspace_readiness errors as configuration warnings. Draft creation remains separate from execution. New labels are EN/HE in workflowChat.ts. No tests/build/typecheck/startup performed.
+
+
+The existing Channel Binding → Notification Mode selector now offers Start/each step/completion, Start/completion, Completion only (success/failure), and None, retaining readable legacy modes. WorkflowChatModal previews the configured cadence alongside its channel instead of rendering progress updates as steps. No new settings page or notification stages. No build/typecheck performed.
+
+
+Notification Mode now shows exactly four friendly options: Every step, Start and finish, Finish only, Off. Legacy final-only values display as Finish only without changing persisted semantics merely by viewing the form; selecting a mode uses its canonical value. Legacy entries are no longer offered in the dropdown. No tests/build/typecheck performed.

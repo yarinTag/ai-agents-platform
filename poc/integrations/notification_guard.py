@@ -35,25 +35,32 @@ def notification_target(db, workflow, execution_id):
     return connector, tool, channel, binding
 
 
-def deliver_notification(db, workflow, execution_id, text):
-    connector, tool, channel, _ = notification_target(db, workflow, execution_id)
+def deliver_notification(db, workflow, execution_id, text, event_key='complete'):
+    connector, tool, channel, binding = notification_target(db, workflow, execution_id)
     # An explicit send step already delivered this destination; do not send it again.
     with db._get_connection() as conn:
         calls = conn.execute('''SELECT c.arguments FROM mcp_tool_calls c
             JOIN workflow_tool_scopes s ON s.task_id=c.task_id
             WHERE s.execution_id=? AND c.connector_id=? AND c.status='COMPLETED' ''',
             (execution_id, connector.id)).fetchall()
-    if any(json.loads(call['arguments'] or '{}').get('channel_id') == channel for call in calls):
+    if (event_key == 'complete' and binding.get('notify_mode', 'ON_COMPLETE') in ('ON_COMPLETE', 'ON_FAILURE', 'ALWAYS')
+            and any(json.loads(call['arguments'] or '{}').get('channel_id') == channel for call in calls)):
         return {'delivery': 'already_delivered', 'channel_id': channel}
     # A real execution agent owns the audit record, never an arbitrary tenant agent.
     with db._get_connection() as conn:
-        row = conn.execute('SELECT agent_id FROM workflow_step_runs WHERE execution_id=? ORDER BY started_at DESC LIMIT 1',
-                           (execution_id,)).fetchone()
-    actor = db.get_agent(row['agent_id']) if row else None
+        if event_key.startswith('step:'):
+            row = conn.execute('SELECT agent_id FROM workflow_step_runs WHERE execution_id=? AND step_key=? LIMIT 1',
+                               (execution_id, event_key.removeprefix('step:'))).fetchone()
+        else:
+            row = conn.execute('SELECT agent_id FROM workflow_step_runs WHERE execution_id=? ORDER BY started_at DESC LIMIT 1',
+                               (execution_id,)).fetchone()
+    context = execution_context(db, execution_id) or {}
+    actor_id = row['agent_id'] if row else context.get('notification_agent_id')
+    actor = db.get_agent(actor_id) if actor_id else None
     if not actor or actor.organization_id != workflow.organization_id or actor.department_id not in (None, workflow.department_id):
         raise ToolAccessError('Notification has no authorized execution audit actor.')
-    identifier = 'call_notify_' + execution_id
-    arguments = {'channel_id': channel, 'message_sha256': hashlib.sha256(text.encode()).hexdigest()}
+    identifier = notification_call_id(execution_id, event_key)
+    arguments = {'channel_id': channel, 'event': event_key, 'message_sha256': hashlib.sha256(text.encode()).hexdigest()}
     with db._get_connection() as conn:
         try:
             conn.execute('''INSERT INTO mcp_tool_calls
@@ -74,3 +81,8 @@ def deliver_notification(db, workflow, execution_id, text):
         db.update_mcp_tool_call(identifier, 'FAILED', error=detail,
                                completed_at=datetime.now().isoformat())
         raise ToolAccessError(detail) from exc
+
+
+def notification_call_id(execution_id, event_key='complete'):
+    suffix = '' if event_key == 'complete' else '_' + hashlib.sha256(event_key.encode()).hexdigest()[:24]
+    return 'call_notify_' + execution_id + suffix

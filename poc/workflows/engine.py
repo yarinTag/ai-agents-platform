@@ -194,6 +194,8 @@ class WorkflowEngine:
             except ValueError as error:
                 self.db.update_workflow_execution(execution_id, status="FAILED", error_message=str(error),
                     completed_at=datetime.now().isoformat())
+                self._notify_lifecycle(workflow_id, execution_id, trigger_type, 'FAILED', {},
+                                       error=str(error), event='complete')
                 sandbox.cleanup()
                 raise MCPGovernanceViolationError(department_id=dept_id, connector_id="workflow_scope", reason=str(error)) from error
 
@@ -216,6 +218,8 @@ class WorkflowEngine:
                         completed_at=datetime.now().isoformat()
                     )
                     sandbox.cleanup()
+                    self._notify_lifecycle(workflow_id, execution_id, trigger_type, 'FAILED', {},
+                                           error=err_msg, event='complete')
                     raise MCPGovernanceViolationError(
                         department_id=dept_id,
                         connector_id=conn_id,
@@ -229,6 +233,9 @@ class WorkflowEngine:
         total_cost_usd = 0.0
         final_status = "COMPLETED"
         failure_error: Optional[str] = None
+
+        if not playground:
+            self._notify_lifecycle(workflow_id, execution_id, trigger_type, 'RUNNING', {}, event='start')
 
         try:
             stages = self._group_steps_into_stages(wf_def.steps)
@@ -255,6 +262,9 @@ class WorkflowEngine:
                     total_input_tokens += res.input_tokens
                     total_output_tokens += res.output_tokens
                     total_cost_usd += res.cost_usd
+                    if not playground:
+                        self._notify_lifecycle(workflow_id, execution_id, trigger_type, res.status,
+                                               step_outputs, error=res.error, event=f'step:{res.step_key}')
                     if res.status != "COMPLETED":
                         final_status = res.status
                         failure_error = res.error
@@ -279,6 +289,9 @@ class WorkflowEngine:
                             total_input_tokens += res.input_tokens
                             total_output_tokens += res.output_tokens
                             total_cost_usd += res.cost_usd
+                            if not playground:
+                                self._notify_lifecycle(workflow_id, execution_id, trigger_type, res.status,
+                                                       step_outputs, error=res.error, event=f'step:{res.step_key}')
                             if res.status != "COMPLETED" and final_status == "COMPLETED":
                                 final_status = res.status
                                 failure_error = res.error
@@ -329,6 +342,14 @@ class WorkflowEngine:
                 logger.warning("Workflow notification adapter failed for %s", execution_id)
 
         return self.db.get_workflow_execution(execution_id)
+
+    def _notify_lifecycle(self, workflow_id, execution_id, trigger_type, status, outputs, error=None, *, event):
+        if not self.notifier or not hasattr(self.notifier, 'notify_event'):
+            return
+        try:
+            self.notifier.notify_event(workflow_id, execution_id, trigger_type, status, outputs, error=error, event=event)
+        except Exception:
+            logger.warning('Workflow lifecycle notification failed for %s', execution_id)
 
     def _execute_single_step(self, step, execution_id, step_outputs, trigger_payload, dept_id, playground_workspace=None):
         self._step_runner.runtime = self.runtime

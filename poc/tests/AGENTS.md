@@ -60,3 +60,18 @@ Connector source tests cover exact long-report preservation, Hebrew/emoji UTF-16
 
 ## Test security environment
 pyproject addopts loads `-p poc.tests.platform_test_env`, which setdefaults PLATFORM_DEV_MODE=1 because the app refuses to start without JWT_SECRET_KEY. It works with `python -m pytest` (cwd on sys.path), including --noconftest runs. Never commit a real JWT secret to tests. It also setdefaults PLATFORM_WORKSPACE_ROOTS to the system temp directory so pytest tmp_path project folders pass the runtime workspace allow-list.
+
+## Reasoning log source contracts (2026-11-01)
+test_direct_reasoning.py adds pure transformation cases without mocked transports or model calls: visible summary/answer separation, opaque continuation excluded from logs but preserved for resume, phase preservation, legacy and Responses tool history conversion, incomplete responses, missing summaries, compatible detail filtering/deduplication and model-specific thinking budgets. Cases not executed.
+
+
+test_direct_pricing.py adds unexecuted source cases for missing versus explicit free rates, fixed NVIDIA free-endpoint provenance, exact-model rate separation, reference versus provider charge (including zero), incomplete totals/known spend, invalid rates, real-file session resume/fork/legacy history and legacy workflow zero-cost display. No mocked transports or inference calls; tests remain unrun.
+
+
+test_workflow_pr_authoring.py adds unexecuted real-SQLite catalog/grant tests (read-only/wildcard PR denial, explicit grant native conversion and revocation) plus pure workspace-required-PR validation and structured blocked/malformed final-outcome cases. It imports only the existing setup fixture. No provider/Docker/model calls or test execution.
+
+
+test_repo_cache.py adds unexecuted source contracts for tenant/connector/repository cache identity, real local Git checkout materialization, edit/object independence and cache eviction survival, exact commit/detached checkout behavior, alternates/symlink rejection and lazy TTL/LRU cleanup. No mocked HTTP/Git transport or model inference. No tests were run, per explicit user instruction.
+
+
+test_workflow_notification_modes.py adds unexecuted pure contracts for terminal/start/step selection, disabled and legacy compatibility, and deterministic per-execution/per-event delivery claim IDs. No provider, model, Docker or mocked transport calls; no tests were run.

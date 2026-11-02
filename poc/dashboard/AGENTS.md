@@ -175,3 +175,30 @@ ChatWorkflow types now support root skills:string[]; optional step skills are le
 Workflow chat agent catalog types support provision_on_create. No-agent warnings count the explicit provisioning option as available authoring capacity, while previews distinguish it from an existing execution agent.
 
 The manual workflow agent dropdown now reflects authorized persisted agents, not static role names. A planned dedicated runner is an explicit option only for new workflows; other workflow runners are excluded.
+
+
+
+## Reasoning logs (2026-11-01)
+Workflow Logs displays persisted reasoning_summary events through StepEventTimeline, separately from results, with expansion and explicit missing-summary status. Existing polling, scoped reads and JSON export apply. Events arrive per completed model response, not live token streaming. No route/API changes or runtime verification.
+
+
+Workflow Logs reasoning discoverability: collapsed step headers show Reasoning (N) when provider-visible summaries exist; expanded steps show a dedicated summary panel above output, independently of the closed Runtime Events section. Existing records were inspected read-only; no runtime checks or model calls performed.
+
+WorkflowLogs displays reasoning_summary events only in the dedicated reasoning panel; Runtime Events filters them out and counts only remaining events. Persisted event records and JSON export retain the complete trace. This supersedes the earlier duplicate chronological display. Source review only; no runtime checks performed.
+
+WorkflowLogs reasoning presentation follows the user preference: reasoning_summary appears once in the chronological Runtime Events timeline alongside tools/results. The separate reasoning panel is removed; Runtime Events defaults open when reasoning events exist (or the step failed). The Reasoning (N) header badge remains for discoverability. This supersedes the earlier panel/filter notes. Persistence and JSON export are unchanged. Source review only; no runtime checks performed.
+
+
+Workflow price visibility uses additive CostSummary DTOs plus workflowCosts formatting across execution tables, Logs and inspection. Explicit free zero, estimates and unavailable prices differ; per-call usage and cumulative session prices appear in existing logs/detail. Reference estimates are separate from actual/configured costs. See service/page/component guides. No build or runtime verification.
+
+
+AI creation preview now exposes repository workspace mode and its currently granted operations separately from read-only MCP tools. ChatStep DTO preserves workspace and required_outcome; catalog DTOs include workspace_operations for connectors/agents. EN/HE copy updated. No build/runtime checks.
+
+
+Manual Create/Edit now supports typed repository read/write workspace configuration through WorkflowRepositoryFields, using a single department catalog load shared across steps. AI preview and manual fields expose static readiness warnings; neither grants permissions nor executes. Workspace params and required PR outcome survive serialization. No runtime checks performed.
+
+
+Workflow progress cadence is configured in the existing Channel Binding selector, with canonical completion-only/start-completion/each-step options. AI preview presents channel plus cadence; manual new binding defaults to COMPLETION_ONLY. Historical message stages are not automatically removed from unrelated workflows. No tests/build/typecheck performed.
+
+
+Channel Binding offers exactly four notification choices with friendly EN/HE names. Legacy final modes remain backend-compatible and render under Finish only rather than adding extra options. No runtime checks performed.

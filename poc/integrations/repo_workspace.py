@@ -53,8 +53,12 @@ class RepositoryWorkspace(BaseModel):
 def workspace_configuration(step):
     raw = (step.params or {}).get('workspace')
     if raw is None:
+        if (step.params or {}).get('required_outcome') == 'pull_request':
+            raise ValueError('A required pull request needs a write repository workspace.')
         return None
     parsed = RepositoryWorkspace.model_validate(raw)
+    if (step.params or {}).get('required_outcome') == 'pull_request' and parsed.mode != 'write':
+        raise ValueError('A required pull request needs a write repository workspace.')
     if not valid_repository(parsed.repository):
         raise ValueError('Workspace repository must be an exact owner/repo name.')
     if parsed.ref is not None and (not _REF.fullmatch(parsed.ref) or '..' in parsed.ref
@@ -202,13 +206,24 @@ def open_workspace(db, task_id, execution_id, step, config):
     try:
         # The worker's cwd is on its import path; it must never be the untrusted checkout.
         Path(workspace['cwd']).mkdir(mode=0o700)
-        clone = ['git', 'clone', '--no-tags', '--single-branch', '--depth', '1', '--no-recurse-submodules',
-                 '--separate-git-dir', workspace['gitdir']]
-        if config.ref:
-            clone += ['--branch', config.ref]
-        clone += ['--', f'https://github.com/{config.repository}.git', workspace['worktree']]
-        _run(clone, _git_env(root / 'repo', _token(connector)))
-        Path(workspace['worktree'], '.git').unlink(missing_ok=True)
+        from .repo_cache import checkout_repository
+        token = _token(connector)
+
+        def authorize_cache_use():
+            current, _ = authorize_workspace(db, execution_id, step, config)
+            execution = db.get_workflow_execution(execution_id)
+            task = db.get_task_run(task_id)
+            state = str(getattr(task.status, 'value', task.status)).lower() if task else ''
+            if not execution or execution.status != 'RUNNING' or state != 'running':
+                raise ToolAccessError('Repository checkout was cancelled or is no longer running.')
+            if _token(current) != token:
+                raise ToolAccessError('Repository credentials changed during checkout; start a new execution.')
+
+        cache_root = os.environ.get('PLATFORM_REPO_CACHE_DIR') or str(Path(db.db_path).resolve().parent / 'repo_cache')
+        workspace['repository_cache'] = checkout_repository(
+            cache_root, workflow.organization_id, connector.id, config.repository, config.ref,
+            root / 'repo', root / 'git', run=_run, git_env=_git_env, token=token,
+            authorize=authorize_cache_use)
         workspace['commit'] = _git(workspace, 'rev-parse', 'HEAD').strip()
         try:
             workspace['base_branch'] = _git(workspace, 'symbolic-ref', '--short', 'HEAD').strip()
@@ -231,7 +246,7 @@ def open_workspace(db, task_id, execution_id, step, config):
             conn.execute('INSERT INTO workflow_repo_workspaces(task_id, execution_id, workspace_json) VALUES (?, ?, ?)',
                          (task_id, execution_id, json.dumps(workspace)))
         _finish(db, audit, {'repository': config.repository, 'commit': workspace['commit'],
-                            'base_branch': workspace['base_branch']})
+                            'base_branch': workspace['base_branch'], 'repository_cache': workspace['repository_cache']})
         return workspace
     except Exception as exc:
         _finish(db, audit, error=str(exc) if isinstance(exc, ToolAccessError) else 'Workspace preparation failed.')

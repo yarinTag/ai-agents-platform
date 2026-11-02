@@ -1,5 +1,5 @@
 """Workflow request and response contracts."""
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Literal
 from pydantic import BaseModel, Field
 
 class WorkflowCreateRequest(BaseModel):
@@ -31,7 +31,7 @@ class ChannelBindingDto(BaseModel):
     channel_id: str = Field(..., min_length=1, description="e.g. #pr-review or @channel_bot")
     channel_name: Optional[str] = None
     trigger_enabled: bool = True
-    notify_mode: str = Field("ON_COMPLETE", description="ON_COMPLETE, ON_FAILURE, ALWAYS, NONE")
+    notify_mode: Literal['COMPLETION_ONLY', 'START_AND_COMPLETE', 'EACH_STEP', 'ON_COMPLETE', 'ON_FAILURE', 'ALWAYS', 'NONE'] = 'COMPLETION_ONLY'
     message_template: Optional[str] = None
 
 class WorkflowResponse(BaseModel):
@@ -73,6 +73,7 @@ class WorkflowExecutionResponse(BaseModel):
     total_input_tokens: int = 0
     total_output_tokens: int = 0
     total_cost_usd: float = 0.0
+    cost_summary: Optional[Dict[str, Any]] = None
     started_at: Optional[str] = None
     completed_at: Optional[str] = None
     error_message: Optional[str] = None

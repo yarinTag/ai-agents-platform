@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { getAgents, getMCPConnectors, discoverMCPResources, getSkills, scanPlugins } from '../../services/api';
 import { readResource } from '../../services/resourceLoading';
+import { getWorkflowChatContext } from '../../services/workflowChatApi';
+import type { WorkflowChatContext } from '../../types/workflowChat';
 
 interface WorkflowResourceOptions {
   open: boolean;
@@ -29,6 +31,8 @@ export function useWorkflowResources(options: WorkflowResourceOptions) {
   const [connectorError, setConnectorError] = useState<string | null>(null);
   const [skillsError, setSkillsError] = useState<string | null>(null);
   const [repositoryError, setRepositoryError] = useState<string | null>(null);
+  const [workspaceCatalog, setWorkspaceCatalog] = useState<WorkflowChatContext['catalog']>(null);
+  const [workspaceCatalogError, setWorkspaceCatalogError] = useState<string | null>(null);
   const generation = useRef(0);
 
   const reloadResources = async () => {
@@ -36,9 +40,10 @@ export function useWorkflowResources(options: WorkflowResourceOptions) {
     const current = () => generation.current === requestId;
     setResourcesLoading(true);
     setAgentOptions([]);
+    setWorkspaceCatalog(null);
     let skillItems: any[] = [];
     let pluginItems: any[] = [];
-    const [mcpFailure, skillFailure, pluginFailure, agentFailure] = await Promise.all([
+    const [mcpFailure, skillFailure, pluginFailure, agentFailure, workspaceFailure] = await Promise.all([
       readResource(getMCPConnectors(), ({ data }) => {
         if (!current()) return;
         const connectors = data?.connectors || [];
@@ -99,9 +104,13 @@ export function useWorkflowResources(options: WorkflowResourceOptions) {
         if (!options.editing) available.unshift({ value: '__workflow_runner__', label: 'Dedicated workflow runner · created on confirmation' });
         setAgentOptions(available);
       }, 'Execution agents'),
+      options.departmentId ? readResource(getWorkflowChatContext(options.departmentId), ({ data }) => {
+        if (current()) setWorkspaceCatalog(data.catalog);
+      }, 'Repository workspace permissions') : Promise.resolve(null),
     ]);
     if (!current()) return;
     setConnectorError(mcpFailure || agentFailure);
+    setWorkspaceCatalogError(workspaceFailure);
     setSkillsError(skillFailure || pluginFailure);
     setCatalogSkills([...skillItems, ...pluginItems]);
     setResourcesLoading(false);
@@ -116,5 +125,6 @@ export function useWorkflowResources(options: WorkflowResourceOptions) {
     agentOptions, getChannelLabel, installedMcps, telegramChannels, slackChannels, githubRepos,
     catalogSkills, setCatalogSkills, resourcesLoading, connectorError, skillsError, repositoryError,
     reloadResources,
+    workspaceCatalog, workspaceCatalogError,
   };
 }

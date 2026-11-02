@@ -224,6 +224,9 @@ class WorkflowStepRunner:
                     # The backend, not the model, publishes: new branch + draft PR, never a merge.
                     from integrations.repo_workspace import publish_workspace
                     receipt = publish_workspace(self.db, step, workspace, finished.result)
+                    if step.params.get('required_outcome') == 'pull_request' and (
+                            not receipt.get('changed') or not receipt.get('pull_request_url')):
+                        raise RuntimeError('This step requires a created pull request, but no PR receipt was returned.')
                     note = (f"Draft pull request for human review: {receipt['pull_request_url']}"
                             if receipt["changed"] else "No file changes; no pull request was opened.")
                     finished.result = f"{finished.result or ''}\n\n[REPOSITORY RESULT]\n{note}"

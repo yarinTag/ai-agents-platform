@@ -174,3 +174,29 @@ AI workflow chat now catalogs current organization plugin skills, validates and 
 Workflow Skills is now a single shared selection inherited by every AI step. Legacy step skills are promoted/deduplicated; deterministic delivery actions do not load skills. AI chat and the visual builder save shared root skills. See workflow/API/dashboard component guides.
 
 Workflow AI chat exposes an explicit planned dedicated-runner option, materialized only during confirmed creation. It does not require an Office agent or reuse other workflow runners. Current department/resource grants still govern all steps; unknown IDs are rejected.
+
+
+## Provider-visible reasoning logs (2026-11-01)
+Direct API runs persist reasoning_summary events per completed model response, separate from final answers, with explicit not_returned status. Workflow Logs renders these through StepEventTimeline. Known Claude families request thinking; OpenAI reasoning families use stateless Responses with private continuation replay; compatible provider visible reasoning excludes encrypted fields. See runtime/component guides. No live token streaming or runtime verification performed.
+
+
+## Explicit workflow/session pricing (2026-11-01)
+Direct API calls now emit per-call usage/pricing provenance and run/session cumulative summaries. Private session ledgers survive resume; forks start a new spend ledger. Workflow list/detail exposes cost_summary plus per-step session totals without a schema migration. UI distinguishes confirmed free, estimated, provider-reported and unavailable prices; optional configured reference estimates are separate from charged costs. NVIDIA fixed hosted prototyping endpoints use documented free pricing, not missing-rate zero. Legacy unpriced usage stays unknown. See runtime/API/dashboard guides. No tests/build/startup/provider calls performed.
+
+
+AI workflow chat now supports governed repository workspaces and explicit required PR outcomes. Current write grants are exposed separately from read-only tools; wildcard grants cannot publish. Declared PR completion requires a backend receipt; connector models return explicit completed/blocked final outcomes. Static pinned-image preflight runs before workflow steps. Existing workflow/grants were not changed or rerun. See runtime/API/integration/workflow guides. No runtime verification performed.
+
+
+Visual workflow editing now supports governed repository read/write workspaces and required draft-PR outcomes, alongside the AI authoring path. Authorized catalog choices and configuration-only sandbox readiness are shared across step editors; no per-step requests, implicit write grants or execution. Pinned proxy setup is checked during preflight when network access is configured. No tests/build/typecheck/startup/Docker or external actions performed.
+
+
+Workflow authoring is generic and follows the current user request: changes, deliverables, acceptance criteria, dependencies and requested notifications. No version-bump defaults, release policies or fixed notification sequence are imposed. Execution inspects real files and repository instructions, preserves unrelated work and clarifies material missing requirements. Changes sharing a checkout remain in one workspace step because separate steps use independent clones; dependencies do not transfer uncommitted files. Requested PRs use write workspaces with required PR receipts and remain drafts. Notifications report actual exposed milestones and returned URLs. Workspace repository references stay separate from connector resources. This supersedes the earlier version-bump-specific guidance. No saved workflow/grants were modified and no tests/build/typecheck/startup/model calls were performed.
+
+
+Channel action configuration now requires exactly one matching step mcp_servers connector and authorized_resources destination/tool (send_message or post_chat_message), in addition to its explicit source dependency. Workflow execution preflight checks every channel action before any steps, preventing a malformed final notification from being discovered only after a PR is published. The saved Core plugin patch PR workflow notify_done scope was repaired with an immutable configuration revision; historical failed execution status/PR receipts were retained and nothing was retried. No tests/build/startup/provider calls or messages were performed. Repository workspaces still use per-step shallow clones cleaned up afterward; a shared Git-object cache is not implemented by this repair.
+
+
+Repository workspaces now reuse a backend-only persistent Git object cache, scoped by tenant/connector/repository, with current remote-ref refresh and independent per-run object/filesystem copies. Locking, lazy TTL/LRU retention and oversized-entry eviction are owned by integrations/repo_cache.py. Cache provenance is recorded in existing workspace/audit JSON. No schema changes or cached authorization. See integrations/workflow guides. No tests or live operations performed.
+
+
+Workflow progress notifications are now metadata.channel_binding configuration: COMPLETION_ONLY, START_AND_COMPLETE, EACH_STEP, NONE, with legacy mode compatibility. The engine sends actual lifecycle updates through governed optional delivery, with independent deterministic event audit claims and no model calls or notification DAG stages. Latest core-plugin workflow migrated to one work step plus EACH_STEP binding (revision3); no execution/messages/tests performed. See workflow/integration/API/dashboard guides.

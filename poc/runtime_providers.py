@@ -242,8 +242,7 @@ def _detect_direct(provider_id):
     detail = f'{key_var} is configured.' if available else f'Configure {key_var} below or in the server environment.'
     try:
         if available and rates(provider_id) is None:
-            available = False
-            detail = f'Set {provider_id.upper()}_INPUT_USD_PER_MILLION and {provider_id.upper()}_OUTPUT_USD_PER_MILLION for API cost accounting.'
+            detail += ' Configure model/provider token prices before budget-limited inference; unpriced usage is not reported as free.'
     except ValueError:
         available = False
         detail = 'API token prices must be finite non-negative numbers.'

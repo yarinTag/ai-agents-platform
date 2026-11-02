@@ -1,5 +1,13 @@
 import type { PlatformWorkflow } from '../../types/mcp';
 
+export interface RepositoryWorkspaceConfig {
+  connector_id: string;
+  repository: string;
+  mode: 'read' | 'write';
+  ref?: string | null;
+  pr_title?: string | null;
+}
+
 export interface WorkflowStep {
   key: string;
   name: string;
@@ -9,6 +17,8 @@ export interface WorkflowStep {
   timeout_seconds?: number;
   mcp_servers?: string[];
   skills?: string[];
+  params?: { workspace?: RepositoryWorkspaceConfig; required_outcome?: 'pull_request';
+    agentId?: string; [key: string]: unknown };
 }
 
 export interface AttachedSkill {

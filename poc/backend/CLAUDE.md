@@ -150,3 +150,16 @@ Workflow chat may plan __workflow_runner__, which is materialized as a real tena
 Both AI and manual new-workflow authoring may explicitly select the planned runner; saved step assignments must reference the actual generated runner ID. Runtime creation based on inferred missing capabilities is not implemented by this UI correction.
 
 Governed channel sends and workflow notifications share lossless bounded multipart delivery. Preserve per-part authorization, aggregate acknowledged receipts and failed/unknown no-retry claims. No live verification performed.
+
+
+
+Workflow pricing display uses additive cost_summary on execution list/detail and step/session projections, not a zero fallback. Preserve API_KEY cost_source for budget accounting and existing scope checks before querying linked task events. No runtime checks performed.
+
+
+For PR authoring preserve typed workspace and required_outcome, current explicit grants, exact repository IDs and confirmed inactive creation. Do not use read-only activity tools as a substitute for a coding workspace. No runtime checks performed.
+
+
+Repository readiness projection must stay configuration-only and credential-free; catalog reads must not start Docker or create grants. Existing current-DB role/department authorization still governs the context. No runtime verification performed.
+
+
+Lifecycle notifications belong to metadata.channel_binding, with typed mode validation and current per-send authorization. Preserve explicit channel actions for actual business deliverables; do not model progress messages as DAG stages. No tests or live execution performed.

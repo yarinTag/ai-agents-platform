@@ -22,8 +22,14 @@ _validated_definition = validate_workflow_definition
 
 def _with_notification_status(db, record, **overrides):
     from integrations.tool_scopes import execution_context
+    from .workflow_costs import execution_costs
     context = execution_context(db, record.id) or {}
-    return _execution_to_response(record, notification_error=context.get('notification_error'), **overrides)
+    summary, steps = execution_costs(db, record.id)
+    for step in overrides.get('step_runs', []):
+        step.update(steps.get(step['id'], {}))
+    response = _execution_to_response(record, notification_error=context.get('notification_error'), **overrides)
+    response.cost_summary = summary
+    return response
 
 def _get_scoped_execution(execution_id: str, request: Request, db: DatabaseManager):
     """Authorize both the current workflow owner and execution department."""
