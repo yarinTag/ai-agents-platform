@@ -1,12 +1,10 @@
-import { useRuntimeSetupText } from '../../i18n/runtimeSetup';
 import React, { useState, useEffect } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Tooltip, Button, Tag, Popconfirm, Select } from 'antd';
 import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   LogoutOutlined,
-  BankOutlined,
   UserOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext';
@@ -16,25 +14,9 @@ interface OfficeTopBarProps {
   onToggleCollapse?: () => void;
 }
 
-const routeTitles: Record<string, { title: string; subtitle: string; icon: string }> = {
-  // '/': { title: 'OFFICE CANVAS', subtitle: 'Interactive Autonomous Workstation', icon: '🏢' },
-  '/flow': { title: 'LIVE FLOW', subtitle: 'Execution Pipeline & Dag', icon: '⚡' },
-  '/agents': { title: 'AGENTS ROSTER', subtitle: 'Autonomous Agent Fleet', icon: '🤖' },
-  '/skills': { title: 'PLUGINS HUB', subtitle: 'Extensible Capabilities & Skills', icon: '🧩' },
-  '/mcp': { title: 'MCP HUB', subtitle: 'Model Context Protocol Integrations', icon: '🔌' },
-  '/tasks': { title: 'TASKS QUEUE', subtitle: 'Orchestrated Assignments', icon: '📋' },
-  '/projects': { title: 'PROJECTS', subtitle: 'Enterprise Workspaces & Repositories', icon: '🗂️' },
-  '/calendar': { title: 'SCHEDULE & CALENDAR', subtitle: 'Automated Cron Routines', icon: '🗓️' },
-  '/organization': { title: 'ORG & TEAMS', subtitle: 'Departments, Budgets & Access Control', icon: '🏢' },
-  '/dashboard': { title: 'SYSTEM METRICS', subtitle: 'Health & Runtime Statistics', icon: '📊' },
-};
-
 export const OfficeTopBar: React.FC<OfficeTopBarProps> = ({ collapsed = false, onToggleCollapse }) => {
   const [timeStr, setTimeStr] = useState('');
-  const runtimeText = useRuntimeSetupText();
-  const navigate = useNavigate();
-  const { organization, user, departments, activeDepartmentId, setActiveDepartmentId, logout } = useAuth();
-  const location = useLocation();
+  const { user, departments, activeDepartmentId, setActiveDepartmentId, logout } = useAuth();
 
   useEffect(() => {
     const updateClock = () => {
@@ -53,12 +35,6 @@ export const OfficeTopBar: React.FC<OfficeTopBarProps> = ({ collapsed = false, o
     const timer = setInterval(updateClock, 1000);
     return () => clearInterval(timer);
   }, []);
-
-  const currentRoute = routeTitles[location.pathname] || {
-    title: 'AGENTS PLATFORM',
-    subtitle: 'Autonomous AI Office',
-    icon: '⚡',
-  };
 
   return (
     <header
@@ -143,75 +119,41 @@ export const OfficeTopBar: React.FC<OfficeTopBarProps> = ({ collapsed = false, o
         </div>
       </div>
 
-      {/* Center: Current View Indicator */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          background: '#161b22',
-          padding: '4px 12px',
-          borderRadius: '20px',
-          border: '1px solid #21262d',
-        }}
-      >
-        <span style={{ fontSize: '13px' }}>{currentRoute.icon}</span>
-        <span style={{ fontSize: '11px', fontWeight: 700, color: '#f0f6fc', letterSpacing: '0.5px' }}>
-          {currentRoute.title}
-        </span>
-        <span style={{ color: '#30363d' }}>•</span>
-        <span style={{ fontSize: '10px', fontWeight: 500, color: '#8b949e' }}>
-          {currentRoute.subtitle}
-        </span>
-      </div>
-
-      {/* Right: Org Info + User & Role + Logout + Clock */}
+      {/* Right: Department Selector + User & Role + Logout + Clock */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-        <Button size="small" onClick={() => window.dispatchEvent(new Event('platform:configure-runtime'))}>
-          {runtimeText.settings}
-        </Button>
-        {organization && (
-          <Tooltip title="View Organization & Teams">
-            <Tag
-              icon={<BankOutlined />}
-              color="blue"
-              onClick={() => navigate('/organization')}
-              style={{
-                margin: 0,
-                padding: '2px 8px',
-                borderRadius: '6px',
-                fontWeight: 600,
-                fontSize: '11px',
-                background: '#161b22',
-                borderColor: '#30363d',
-                color: '#58a6ff',
-                cursor: 'pointer',
-              }}
-            >
-              {organization.name}
-            </Tag>
-          </Tooltip>
-        )}
-
         {/* Compact Department Selector Dropdown */}
-        {departments && departments.length > 0 && (
-          <Select
-            size="small"
-            value={activeDepartmentId || (user?.role === 'ORG_ADMIN' ? 'all' : departments[0]?.id)}
-            onChange={(val) => {
-              setActiveDepartmentId(val === 'all' ? null : val);
-            }}
-            options={[
-              ...(user?.role === 'ORG_ADMIN' ? [{ label: '🌐 All Departments', value: 'all' }] : []),
-              ...departments.map((d) => ({
+        {departments && departments.length > 0 && (() => {
+          const deptOptions = [
+            ...(user?.role === 'ORG_ADMIN' ? [{ label: '🌐 All Departments', value: 'all' }] : []),
+            ...departments.map((d) => {
+              const deptId = d.id || d.department_id || '';
+              return {
                 label: `📁 ${d.name}`,
-                value: d.id,
-              })),
-            ]}
-            style={{ minWidth: 150 }}
-            popupMatchSelectWidth={false}
-          />
-        )}
+                value: deptId,
+              };
+            }),
+          ];
+          const firstDeptId = departments[0]?.id || departments[0]?.department_id;
+          const fallbackValue = user?.role === 'ORG_ADMIN' ? 'all' : firstDeptId;
+          const selectedValue =
+            activeDepartmentId && deptOptions.some((opt) => opt.value === activeDepartmentId)
+              ? activeDepartmentId
+              : fallbackValue;
+
+          return (
+            <Select
+              size="small"
+              value={selectedValue}
+              optionFilterProp="label"
+              onChange={(val) => {
+                setActiveDepartmentId(val === 'all' ? null : val);
+              }}
+              options={deptOptions}
+              style={{ minWidth: 160 }}
+              popupMatchSelectWidth={false}
+            />
+          );
+        })()}
 
         {user && (
           <div

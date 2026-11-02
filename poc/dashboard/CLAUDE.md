@@ -40,8 +40,7 @@ This document provides developer instructions, architectural invariants, and com
     3. `WORKSPACE & DATA`: Projects (`/projects`), Schedule & Calendar (`/calendar`), System Metrics (`/dashboard`).
     4. `ORGANIZATION & GOVERNANCE`: Org & Teams (`/organization`).
 * **Top Bar (`src/components/layout/OfficeTopBar.tsx`)**:
-  * Live status indicator with route titles.
-  * Clickable organization badge (triggers `OrgHierarchyModal`).
+  * Brand title and active platform status indicator.
   * Department switcher dropdown (`Select`) bound to `AuthContext`.
   * User identity & role badge (`admin`, `lead`, `member`).
   * Live digital clock.

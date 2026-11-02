@@ -21,6 +21,7 @@ const featureRoutes = [
   { path: '/mcp', load: () => import('./pages/McpHub') },
   { path: '/projects', capability: 'projects', load: () => import('./pages/Projects') },
   { path: '/organization', capability: 'organizations', load: () => import('./pages/OrganizationPage') },
+  { path: '/settings', load: () => import('./pages/SettingsPage') },
   { path: '/dashboard', capability: 'events', load: () => import('./pages/Dashboard') },
 ];
 

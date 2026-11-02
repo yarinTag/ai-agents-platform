@@ -109,3 +109,6 @@ workflow_schema now initializes workflow_execution_tool_contexts(execution_id TE
 Existing mcp_tools holds deterministic tool_exec_<hash> implementation metadata. mcp_tool_calls records call_exec_<hash> actual calls, call_denied_<uuid> policy failures and call_notify_<execution> notifications. STARTED is committed before external I/O; COMPLETED requires acknowledged output. Duplicate or ambiguous delivery is not replayed. Safe arguments exclude message bodies/credentials (message SHA256 only); read result projections stay in private application audit storage. No immutable external audit ledger or retention worker is introduced. Cancelled task status is persisted before further tools can be authorized.
 
 Execution tool context JSON additionally stores nullable notification_error through a short BEGIN IMMEDIATE read/modify/write. This preserves frozen identity/binding fields and makes optional delivery failures inspectable without changing the primary execution status or creating extra notifications.
+
+## User departments ID normalization (2026-11-01)
+`UsersRepository.get_user_departments` selects `d.id as id, d.id as department_id` so returned department membership rows always populate both `id` and `department_id` keys.

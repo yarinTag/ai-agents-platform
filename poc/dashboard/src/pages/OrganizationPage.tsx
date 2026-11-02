@@ -18,9 +18,12 @@ import {
   DollarCircleOutlined,
   ApartmentOutlined,
   SyncOutlined,
+  SettingOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../context/AuthContext';
 import { useTranslation } from '../i18n';
+import { useRuntimeSetupText } from '../i18n/runtimeSetup';
+import { RuntimeSettingsPanel } from '../components/common/RuntimeSettingsPanel';
 import {
   getDepartments,
   createDepartment,
@@ -37,8 +40,9 @@ const { Text } = Typography;
 export const OrganizationPage: React.FC = () => {
   const { organization, user, refreshUserProfile } = useAuth();
   const { t } = useTranslation();
+  const runtimeText = useRuntimeSetupText();
 
-  const [activeTab, setActiveTab] = useState<'departments' | 'team' | 'users'>('departments');
+  const [activeTab, setActiveTab] = useState<'departments' | 'team' | 'users' | 'runtime'>('departments');
   const [departmentsList, setDepartmentsList] = useState<Department[]>([]);
   const [loadingDepts, setLoadingDepts] = useState<boolean>(false);
   const [creatingDept, setCreatingDept] = useState<boolean>(false);
@@ -417,6 +421,16 @@ export const OrganizationPage: React.FC = () => {
                   organizationName={organization?.name}
                 />
               ),
+            },
+            {
+              key: 'runtime',
+              label: (
+                <span style={{ fontSize: 13, fontWeight: 600 }}>
+                  <SettingOutlined style={{ marginRight: 6 }} />
+                  {runtimeText.settings}
+                </span>
+              ),
+              children: <RuntimeSettingsPanel />,
             },
           ]}
         />
