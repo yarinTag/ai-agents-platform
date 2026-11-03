@@ -17,6 +17,7 @@ import {
   ThunderboltOutlined,
   BankOutlined,
   ApartmentOutlined,
+  SettingOutlined,
 } from '@ant-design/icons';
 
 interface AppSidebarProps {
@@ -120,6 +121,11 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ collapsed, onToggleColla
           icon: <BankOutlined style={{ fontSize: '15px' }} />,
           badge: 'ORG',
           badgeColor: '#a855f7',
+        },
+        {
+          to: '/settings',
+          label: 'Settings',
+          icon: <SettingOutlined style={{ fontSize: '15px' }} />,
         },
       ],
     },

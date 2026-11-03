@@ -11,7 +11,6 @@ import os
 current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, current_dir)
 
-from backend.main import app
 
 
 def main():
@@ -29,6 +28,8 @@ def main():
         reload=True,
         reload_dirs=[current_dir],
         app_dir=current_dir,
+        env_file=os.path.join(os.path.dirname(current_dir), ".env")
+        if os.path.isfile(os.path.join(os.path.dirname(current_dir), ".env")) else None,
         log_level="info"
     )
 

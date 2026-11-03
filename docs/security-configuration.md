@@ -41,3 +41,6 @@ Execution defaults are described in [runtime provider setup](runtime-provider-se
 - The rate limiter is per process and keyed by client IP.
 
 Tests: `poc/tests/platform_test_env.py` is loaded through pytest `addopts`. It sets `PLATFORM_DEV_MODE=1` for test runs only and works with `python -m pytest`. No tests, builds or startup were run for this change.
+
+## Local launcher setup
+`uv run python poc/start_api.py` loads `.env` from the repository root when present, before importing the application. Store a persistent random JWT_SECRET_KEY of at least32 characters there; .env is Git-ignored and should have owner-only permissions. Direct Uvicorn commands need explicit `--env-file .env` (path relative to your working directory) or an exported key. Existing process environment takes precedence, so unset a stale/short exported JWT_SECRET_KEY before launching. After changing the signing key, sign in again. No server was started to verify this setup.

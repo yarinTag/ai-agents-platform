@@ -227,7 +227,11 @@ Telegram discovered-chat selection displays names with canonical IDs available o
 
 WorkflowLogs readability: steps render collapsed except FAILED or active ones (defaults reapply per selected execution; polling does not reset manual expansion). Step headers show duration and cost; run/step times use locale formatting with run durations, and run-list errors clamp to two lines with theme danger color. Output precedes the collapsed input. Runtime events render through components/workflows/StepEventTimeline as one summarized line per event, with More (full text) and JSON (raw event) toggles; the events section opens by default only for failed steps. Source review only; no build/typecheck was run.
 
+## WorkflowLogs runs card list & dark-theme polish (2026-11-01)
+`WorkflowLogs.tsx` replaces the multi-line Ant Design `<Button block type="primary">` run list items (which caused horizontal flex squishing and full-card green fill) with vertical dark-themed clickable run cards (`role="button"`, keyboard accessible, emerald accent border `#10b981` when selected), a `Segmented` mode filter (`All Runs`, `Live`, `Playground`), status/trigger/deduplication tags with icons, duration/cost/token metadata, and a 4-column execution summary grid with terminal-styled `#0d1117` output/input blocks.
 
+## Settings page & runtime configuration (2026-11-01)
+`SettingsPage.tsx` mounts at `/settings` (linked under `ORGANIZATION & GOVERNANCE` in `AppSidebar.tsx`) and renders `RuntimeSettingsPanel` for configuring AI API providers, API keys, enabled providers, and default models. `OrganizationPage.tsx` (`/organization`) also exposes a `Runtime settings` tab rendering `RuntimeSettingsPanel`, replacing the removed header button.
 
 
 WorkflowLogs now renders a dedicated Model reasoning summaries panel above Step Output inside each expanded step. Available summaries are counted in a geekblue Reasoning (N) badge visible even on collapsed step headers. Existing Runtime Events retains the full chronological trace. Missing-summary events remain visible in the dedicated panel. No route/API changes. Read-only inspection of existing SQLite run records confirmed persisted NVIDIA summaries; no new inference/tests/build/startup performed.

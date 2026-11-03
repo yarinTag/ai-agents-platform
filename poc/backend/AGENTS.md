@@ -111,6 +111,7 @@ The existing workflows capability composes workflow_chat.router before the other
 
 get_skill_context(skill_ids, organization_id=None) supports scoped plugin resolution for workflow steps; omitted organization preserves the legacy non-workflow resolver.
 
+Startup configuration: the root .env is loaded when using poc/start_api.py; direct Uvicorn invocations must explicitly use --env-file or exported environment. The JWT startup validator remains fail-closed; missing/short keys still stop serving.
 
 
 Workflow execution list/detail now project cost_summary through api/workflow_costs.py after existing tenant/department authorization. Step detail includes recorded session totals; missing prices are distinct from confirmed free usage. No SQLite migration or historical repricing. See API/runtime guides. Source review only.

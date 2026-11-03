@@ -151,6 +151,7 @@ Both AI and manual new-workflow authoring may explicitly select the planned runn
 
 Governed channel sends and workflow notifications share lossless bounded multipart delivery. Preserve per-part authorization, aggregate acknowledged receipts and failed/unknown no-retry claims. No live verification performed.
 
+The local launcher now supports repository-root .env without an eager backend.main import. To use a direct Uvicorn command, pass --env-file with the correct path; environment exports take precedence. This configuration repair was not startup-tested.
 
 
 Workflow pricing display uses additive cost_summary on execution list/detail and step/session projections, not a zero fallback. Preserve API_KEY cost_source for budget accounting and existing scope checks before querying linked task events. No runtime checks performed.

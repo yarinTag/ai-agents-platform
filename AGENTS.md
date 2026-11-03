@@ -175,6 +175,7 @@ Workflow Skills is now a single shared selection inherited by every AI step. Leg
 
 Workflow AI chat exposes an explicit planned dedicated-runner option, materialized only during confirmed creation. It does not require an Office agent or reuse other workflow runners. Current department/resource grants still govern all steps; unknown IDs are rejected.
 
+Local API launcher poc/start_api.py passes the repository-root .env to Uvicorn when present and defers application import until after environment loading. JWT_SECRET_KEY remains mandatory outside explicit dev mode; local keys belong only in ignored .env, never source control. No server startup was executed.
 
 ## Provider-visible reasoning logs (2026-11-01)
 Direct API runs persist reasoning_summary events per completed model response, separate from final answers, with explicit not_returned status. Workflow Logs renders these through StepEventTimeline. Known Claude families request thinking; OpenAI reasoning families use stateless Responses with private continuation replay; compatible provider visible reasoning excludes encrypted fields. See runtime/component guides. No live token streaming or runtime verification performed.

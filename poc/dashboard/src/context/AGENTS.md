@@ -81,3 +81,6 @@ const MyComponent: React.FC = () => {
 > 2. Detail any alterations to localStorage keys or session hydration logic.
 > 3. Document new custom events or interceptor coordination mechanisms.
 > 4. Ensure [`poc/dashboard/AGENTS.md`](file:///Users/yarintag/Desktop/Projects/ai-agents-platform/poc/dashboard/AGENTS.md) is updated if tenant context boundaries change.
+
+## Department ID normalization (2026-11-01)
+`AuthContext.tsx` normalizes hydrated and refreshed `departments` entries via `normalizeDepartments` so every entry carries both `id` and `department_id` (`d.id || d.department_id`), and preserves the existing selected `activeDepartmentId` across `initAuth`/`refreshUserProfile` when still valid.

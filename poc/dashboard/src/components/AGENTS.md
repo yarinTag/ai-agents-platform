@@ -204,6 +204,10 @@ StepEventTimeline recognizes reasoning_summary with a separate geekblue Reasonin
 
 StepEventTimeline recognizes usage events as Usage & cost: per-call tokens, price/source, run total and cumulative session total with full-text expansion. Result rows use cost_summary when present. Unknown price remains explicit, and known zero remains visible. Existing reasoning/tool chronological ordering is retained. No runtime checks performed.
 
+## OfficeTopBar route indicator & runtime/org header items removal (2026-11-01)
+`layout/OfficeTopBar.tsx` removes the `routeTitles` dictionary and center "Current View Indicator" badge (`LIVE FLOW`, `AGENTS ROSTER`, etc.), as well as the header `Runtime settings` button and the organization badge right after it. Left section retains the menu collapse toggle, brand link, and `ACTIVE PLATFORM` badge; right section retains the department selector, user chip, logout button, and digital clock.
+`common/RuntimeSettingsPanel.tsx` provides an inline card component for configuring Direct HTTP API providers, API keys, enabled providers, and default models, mounted on `pages/SettingsPage.tsx` (`/settings`, added to `layout/AppSidebar.tsx` under `ORGANIZATION & GOVERNANCE`) and in the `Runtime settings` tab of `pages/OrganizationPage.tsx`.
+`layout/OfficeTopBar.tsx` and `robotic/DepartmentSelect.tsx` resolve `d.id || d.department_id` for option values while displaying `d.name` as the option label, ensuring the initial `activeDepartmentId` matches its dropdown option.
 
 
 WorkflowChatModal previews each typed workspace as repository plus read-files or code-changes/draft-PR badge. Resource catalog shows workspace_operations separately from connector tools; workspace-only capability contributes to availability. EN/HE labels live in workflowChat.ts. No permissions are changed by preview. No build/typecheck performed.

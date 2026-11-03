@@ -153,7 +153,7 @@ class UsersRepository:
         """Get all departments a user is a member of."""
         with self._get_connection() as conn:
             rows = conn.execute("""
-                SELECT d.id as department_id, d.name, d.description, d.monthly_budget_usd,
+                SELECT d.id as id, d.id as department_id, d.name, d.description, d.monthly_budget_usd,
                        d.organization_id, dm.role as department_role, dm.joined_at
                 FROM department_members dm
                 JOIN departments d ON dm.department_id = d.id
