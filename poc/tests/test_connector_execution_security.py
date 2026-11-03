@@ -282,6 +282,9 @@ def test_channel_action_cannot_change_a_scoped_destination(database):
         'depends_on': ['summary'], 'params': {'channel_action': {
             'action': 'send_channel_message', 'connector_id': 'telegram-secure',
             'channel_id': '-1009999999999', 'source_step': 'summary'}}}]}).steps[0]
+    step.mcp_servers = ['telegram-secure']
+    step.params['authorized_resources'] = [{'connector_id': 'telegram-secure',
+        'channel_id': '-1009999999999', 'tool_name': 'send_message'}]
     with pytest.raises(ToolAccessError, match='exactly one authorized'):
         execute_channel_action(database, step, task, {'summary': 'Summary'})
     assert database.list_mcp_tool_calls(task_id=task.run_id) == []
@@ -296,6 +299,11 @@ def test_channel_action_requires_explicit_output_dependency_and_preserves_long_r
     with pytest.raises(ValueError, match='explicit step dependency'):
         action_configuration(step)
     step.depends_on = ['summary']
+    with pytest.raises(ValueError, match='one matching step connector'):
+        action_configuration(step)
+    step.mcp_servers = ['telegram']
+    step.params['authorized_resources'] = [{'connector_id': 'telegram',
+        'channel_id': '-1001234567890', 'tool_name': 'send_message'}]
     action = action_configuration(step)
     with pytest.raises(ValueError, match='nonempty output'):
         delivery_text(action, {})

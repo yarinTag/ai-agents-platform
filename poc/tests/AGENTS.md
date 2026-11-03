@@ -102,3 +102,5 @@ The playground command fixture supplies an api_-prefixed prior session, matching
 
 ## Expanded GitHub CI contracts
 CI selects 16 reviewed test files across core, security and runtime groups, covering organization credentials, current connector policy, workflow authoring, execution backend admission, hosted broker/budget limits, completion formatting, diagnostics and local session/tool handling alongside the original six. Real SQLite/FastAPI/local filesystem and Unix HTTP contracts are retained. No production keys, model calls or notifications are supplied. Shared conftest is disabled. Each suite uploads its own JUnit report, and any failure blocks CI required. Unreviewed legacy suites remain excluded pending isolation review. Verification runs on GitHub, not the local application environment.
+
+Expanded-CI fixture corrections: hosted task records explicitly provide project_id=None. Channel-action cases now declare the required connector/resource envelope before testing frozen-destination substitution and delivery text; the missing-envelope denial is asserted separately. Production checks remain unchanged.

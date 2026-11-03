@@ -35,7 +35,7 @@ def hosted(setup, monkeypatch, tmp_path):
                        organization_id='org-chat', department_id='dept-chat')
     db.create_workflow_execution(execution_id='sdk-exec', workflow_id='sdk-wf',
                                 trigger_type='MANUAL', department_id='dept-chat')
-    run = AgentRun(run_id='wf_task_sdk', agent_id=agent.id, prompt='Analyze files.',
+    run = AgentRun(run_id='wf_task_sdk', agent_id=agent.id, project_id=None, prompt='Analyze files.',
                    status=TaskStatus.RUNNING, organization_id='org-chat', created_at=datetime.now())
     db.save_task_run(run)
     db.save_workflow_step_run(dict(id='sdk-step', execution_id='sdk-exec', step_key='inspect',
