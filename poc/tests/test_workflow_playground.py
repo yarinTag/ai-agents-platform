@@ -86,10 +86,22 @@ def test_inspection_includes_step_outputs(environment):
     assert step["events"][-1]["content"] == "diagnostic 500"
 
 
-def test_tool_free_command_overrides_agent_permissions():
-    runtime = ClaudeCodeRuntimeAdapter()
+def test_tool_free_command_overrides_agent_permissions(tmp_path, monkeypatch):
+    import base64
+    from runtime.services import RuntimeServices
+    from storage.runtime_settings import OrganizationRuntimeSettings
+
+    monkeypatch.setenv('PLATFORM_SECRETS_KEY', base64.b64encode(b'p' * 32).decode())
+    db = DatabaseManager(str(tmp_path / 'playground-command.sqlite'))
+    db.create_organization(id='playground-org', name='Playground', slug='playground')
+    OrganizationRuntimeSettings(db, 'playground-org').save(
+        {'runtime_provider': 'direct_nvidia', 'runtime_model_direct_nvidia': 'configured/model'},
+        {'direct_nvidia': 'test-only-key'}, None)
+    services = RuntimeServices(database=lambda: db, configuration=lambda: None,
+        resolve_model=lambda value: value, skills_prompt=lambda _: '', capture_session=lambda *_: None)
+    runtime = ClaudeCodeRuntimeAdapter(services=services)
     agent = AgentConfig(id="test", name="Test", description="Test", system_prompt="Analyze data",
-        allowed_tools=["Bash", "Write"], dangerously_skip_permissions=True)
+        allowed_tools=["Bash", "Write"], dangerously_skip_permissions=True, organization_id="playground-org")
     command = runtime._build_claude_command(agent, None, "hello", session_id="old-session",
         dangerously_skip_permissions=True, playground=True)
     assert command[command.index("--tools") + 1] == ""
