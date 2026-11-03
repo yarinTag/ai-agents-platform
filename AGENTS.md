@@ -212,3 +212,6 @@ CI regression fixtures for event replay and missing MCP grants now supply tenant
 
 ## Repository-wide CI hardening
 [GitHub automation](.github/AGENTS.md) defines core/security/runtime backend groups, frontend checks, PR-only Docker build checks and CI required aggregation. External Actions are pinned to immutable SHAs and updated via weekly Dependabot PRs. Master selects 11 existing backend contract files; PR #18 adds five further contracts with its implementation. No feature branch implementation is required for master CI. Private-plan merge enforcement remains unavailable.
+
+## Frontend logic regression suite
+[Dashboard logic tests](poc/dashboard/tests/AGENTS.md) documents direct Node22 tests for workflow editing, settings/secret validation, cost display, connector resource projection, shared skills, cache races, partial loading, model labels and office activity/coordinates. The standalone frontend PR contains no organization-runtime implementation. Existing master Actions discover all *.test.mjs files. No external API keys or provider calls.

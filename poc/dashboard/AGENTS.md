@@ -211,3 +211,6 @@ GitHub CI uses Node22 with npm ci, oxlint, explicit tsc --noEmit, request-cache 
 
 ## CI type compatibility repair
 `src/types/auth.ts` Department now declares optional department_id, already returned by membership queries and normalized in AuthContext. Workflow model filters narrow grouped/leaf options before value access. Telegram selectable tags keep the native title on a wrapper span compatible with Ant Design. Type checking remains required in CI.
+
+## Frontend logic tests
+[tests/AGENTS.md](tests/AGENTS.md) owns npm test (Node22 built-in runner) and the domain coverage map. Tests execute real TypeScript helpers with immutable fixtures/deferred promises, without external APIs or new test dependencies. CI discovers tests/*.test.mjs automatically; frontend checks still include lint, tsc and build. This suite does not replace browser/DOM or live integration testing.
