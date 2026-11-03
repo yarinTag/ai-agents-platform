@@ -227,3 +227,6 @@ Governed connector finals now use strict schema-backed internal completion and a
 See [.github/AGENTS.md](.github/AGENTS.md) for CI triggers, isolated backend contracts, dashboard checks, gated container publishing and PR labels. Workflow creation authorizes future GitHub CI; this task did not run local tests/builds or deploy anything. Branch protection requires repository administration after check names appear.
 
 Initial CI diagnosis: use only contract files versioned on master; branch-local tests cannot be referenced by master workflows. Frontend type checking is mandatory and exposed existing Department/Ant Design option compatibility issues, repaired without suppressing errors. Local runtime checks remain unrun.
+
+## CI safety policy
+CI required aggregates backend core/security/runtime, dashboard checks and PR-only container builds. Test suites use disposable runners and --noconftest, without production credentials or live inference. All external Actions use immutable SHAs; Dependabot proposes weekly updates. Merge enforcement still requires a GitHub plan supporting private branch protection. See .github/AGENTS.md.

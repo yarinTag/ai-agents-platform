@@ -232,3 +232,6 @@ CI regression fixtures for event replay and missing MCP grants now supply tenant
 
 ## PR CI synchronization
 The organization-credentials/runtime branch incorporates master CI workflows and type/fixture repairs. Documentation-only merge conflicts retain both branch contracts and automation guidance. PR checks require a conflict-free merge; labels use metadata-only pull_request_target and can run during conflicts.
+
+## Hardened CI coverage
+[GitHub automation](.github/AGENTS.md) defines isolated core/security/runtime test groups, PR container builds, named frontend checks, immutable Action pins, weekly reviewed dependency updates and the CI required aggregate. Publishing requires CI success. Private-repository plan restrictions still prevent enforcing merge protection; no deployment/automatic merge is enabled. GitHub-only verification preserves local runtime restrictions.

@@ -99,3 +99,6 @@ Missing-grant cases also assert the persisted error at the actual rejection laye
 The playground command-inventory case uses a temporary SQLite organization, test-only encrypted provider credential and injected RuntimeServices. It checks command flags only; it performs no model call or subprocess launch. This aligns the fixture with organization-only credential resolution.
 
 The playground command fixture supplies an api_-prefixed prior session, matching its Direct API provider, and still requires no --resume in the resulting tool-free command. Cross-method session rejection remains a separate runtime contract.
+
+## Expanded GitHub CI contracts
+CI selects 16 reviewed test files across core, security and runtime groups, covering organization credentials, current connector policy, workflow authoring, execution backend admission, hosted broker/budget limits, completion formatting, diagnostics and local session/tool handling alongside the original six. Real SQLite/FastAPI/local filesystem and Unix HTTP contracts are retained. No production keys, model calls or notifications are supplied. Shared conftest is disabled. Each suite uploads its own JUnit report, and any failure blocks CI required. Unreviewed legacy suites remain excluded pending isolation review. Verification runs on GitHub, not the local application environment.
