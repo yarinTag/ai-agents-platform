@@ -207,3 +207,6 @@ Repository cache implementation: integrations/repo_cache.py, default database-ad
 
 
 Notification configuration change: use existing Channel Binding cadence, not synthetic start/middle/done work stages. Engine lifecycle hooks, per-event audit claims, best-effort delivery warnings and typed chat/UI modes are implemented. Existing workflow revision migration preserves historical run failures and PR receipts. No tests/build/typecheck/startup or message sends performed.
+
+## GitHub Actions
+See [.github/AGENTS.md](.github/AGENTS.md) for CI triggers, isolated backend contracts, dashboard checks, gated container publishing and PR labels. Workflow creation authorizes future GitHub CI; this task did not run local tests/builds or deploy anything. Branch protection requires repository administration after check names appear.

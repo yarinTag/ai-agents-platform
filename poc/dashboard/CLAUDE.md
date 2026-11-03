@@ -248,3 +248,6 @@ Use Channel Binding for workflow lifecycle update cadence; preserve legacy modes
 
 
 Keep the Channel Binding notification dropdown at four canonical choices; older persisted modes must not add visible legacy options. Friendly labels live in workflowChat.ts. No tests/build/typecheck performed.
+
+## CI environment
+Dashboard CI and Docker builds target Node22. CI explicitly runs type checking because npm run build only invokes Vite; it also runs lint and request-cache tests. Local runtime verification remains unperformed.

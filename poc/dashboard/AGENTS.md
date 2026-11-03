@@ -205,3 +205,6 @@ Workflow progress cadence is configured in the existing Channel Binding selector
 
 
 Channel Binding offers exactly four notification choices with friendly EN/HE names. Legacy final modes remain backend-compatible and render under Finish only rather than adding extra options. No runtime checks performed.
+
+## Dashboard CI container runtime
+GitHub CI uses Node22 with npm ci, oxlint, explicit tsc --noEmit, request-cache tests and Vite build. Dockerfile now uses node:22-alpine to match; .dockerignore excludes local dependencies, bundles, environment files and logs. See [.github automation](../../.github/AGENTS.md). No local verification executed.

@@ -201,3 +201,6 @@ Repository workspaces now reuse a backend-only persistent Git object cache, scop
 
 
 Workflow progress notifications are now metadata.channel_binding configuration: COMPLETION_ONLY, START_AND_COMPLETE, EACH_STEP, NONE, with legacy mode compatibility. The engine sends actual lifecycle updates through governed optional delivery, with independent deterministic event audit claims and no model calls or notification DAG stages. Latest core-plugin workflow migrated to one work step plus EACH_STEP binding (revision3); no execution/messages/tests performed. See workflow/integration/API/dashboard guides.
+
+## Repository CI and image publishing
+[GitHub automation](.github/AGENTS.md) documents PR checks, gated GHCR image publishing, and metadata-only generic PR labeling. Deployment and branch protection are not configured. CI starts with an isolated contract subset, not the full backend suite. No local runtime verification performed.
