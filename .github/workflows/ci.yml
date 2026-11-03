@@ -38,12 +38,8 @@ jobs:
           poc/tests/test_workflow_revisions.py
           poc/tests/test_workflow_origin.py
           poc/tests/test_workflow_playground.py
-          poc/tests/test_organization_provider_credentials.py
-          poc/tests/test_execution_backends.py
           poc/tests/test_direct_reasoning.py
           poc/tests/test_direct_pricing.py
-          poc/tests/test_completion_validation.py
-          poc/tests/test_sandbox_diagnostics.py
           poc/tests/test_repo_cache.py
           --junitxml=reports/backend.xml
       - name: Upload test report

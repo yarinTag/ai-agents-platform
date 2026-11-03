@@ -3,7 +3,7 @@
 ## CI contracts
 `workflows/ci.yml` runs on PRs, main/master pushes, manual dispatch and reusable calls.
 Python 3.11 uses frozen uv dependencies with the dev extra and no project installation.
-Backend syntax compilation and an explicit initial ten-file contract suite run without shared
+Backend syntax compilation and an explicit initial six-file contract suite run without shared
 conftest cleanup. These contracts use local files/Git, real SQLite and FastAPI; no provider
 keys, live model calls, Docker services or channel sends are supplied. This is not the full suite.
 JUnit reports are retained for 14 days even after failure. Dashboard uses Node22, npm ci,
@@ -38,3 +38,9 @@ by repository/organization policy. CI may expose pre-existing source/lock incomp
 never suppress failing checks or silently broaden the contract suite to live operations.
 Use pinned immutable action SHAs when upgrading supply-chain policy; current major refs
 should be reviewed and updated through normal PRs.
+
+## Initial CI repair
+The initial workflow referenced four tests absent from master; the explicit suite now lists
+only versioned master tests: revisions, origin, playground, reasoning, pricing and repo cache.
+Dashboard type checking remains required; shared Department includes its optional API ID alias,
+grouped model filtering narrows leaf options, and Telegram tooltips use a native wrapper.

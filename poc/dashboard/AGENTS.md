@@ -208,3 +208,6 @@ Channel Binding offers exactly four notification choices with friendly EN/HE nam
 
 ## Dashboard CI container runtime
 GitHub CI uses Node22 with npm ci, oxlint, explicit tsc --noEmit, request-cache tests and Vite build. Dockerfile now uses node:22-alpine to match; .dockerignore excludes local dependencies, bundles, environment files and logs. See [.github automation](../../.github/AGENTS.md). No local verification executed.
+
+## CI type compatibility repair
+`src/types/auth.ts` Department now declares optional department_id, already returned by membership queries and normalized in AuthContext. Workflow model filters narrow grouped/leaf options before value access. Telegram selectable tags keep the native title on a wrapper span compatible with Ant Design. Type checking remains required in CI.

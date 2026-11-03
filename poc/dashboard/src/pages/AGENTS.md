@@ -242,3 +242,6 @@ WorkflowLogs reasoning presentation follows the user preference: reasoning_summa
 
 
 WorkflowLogs, WorkflowExecutionDrawer and workflowExecutionColumns use services/workflowCosts.formatCost for all workflow/run/step prices, including free and unavailable values. Logs and inspection show cumulative session cost from step.session_cost_summary; usage events show per-call pricing. All run list cost rows are visible even at zero; historical missing pricing is unavailable rather than free. No routes, new requests or schema changes. No build/typecheck performed.
+
+## Telegram selectable-tag tooltip
+McpTelegramSelection renders each discovered chat in a keyed native span with title=canonical chat ID, containing the controlled Ant Design CheckableTag. The tag keeps selection handlers and styles; unsupported title props are not passed to it.

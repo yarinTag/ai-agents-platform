@@ -204,3 +204,6 @@ Workflow progress notifications are now metadata.channel_binding configuration: 
 
 ## Repository CI and image publishing
 [GitHub automation](.github/AGENTS.md) documents PR checks, gated GHCR image publishing, and metadata-only generic PR labeling. Deployment and branch protection are not configured. CI starts with an isolated contract subset, not the full backend suite. No local runtime verification performed.
+
+## Initial CI failure repair
+CI now selects only six contract files present on master. Dashboard Department declares optional department_id (existing API/hydration alias), grouped model filtering narrows value access, and Telegram tag titles use native spans. No checks disabled; no local runtime verification.

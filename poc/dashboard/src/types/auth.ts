@@ -21,6 +21,7 @@ export interface Organization {
 
 export interface Department {
   id: string;
+  department_id?: string;
   name: string;
   description?: string | null;
   monthly_budget_usd: number;

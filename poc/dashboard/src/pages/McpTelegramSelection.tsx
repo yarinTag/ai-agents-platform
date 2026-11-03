@@ -155,9 +155,8 @@ export const McpTelegramSelection = (model: Pick<
                     if (!chatName) return null;
                     const isChecked = selectedResources.includes(chatName);
                     return (
+                      <span key={chatName} title={chatName}>
                       <Tag.CheckableTag
-                        key={chatName}
-                        title={chatName}
                         checked={isChecked}
                         onChange={(checked) => {
                           if (checked) {
@@ -177,6 +176,7 @@ export const McpTelegramSelection = (model: Pick<
                       >
                         {chat.name || chatName}
                       </Tag.CheckableTag>
+                      </span>
                     );
                   })}
                 </div>

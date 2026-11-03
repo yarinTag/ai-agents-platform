@@ -222,3 +222,6 @@ The existing Channel Binding → Notification Mode selector now offers Start/eac
 
 
 Notification Mode now shows exactly four friendly options: Every step, Start and finish, Finish only, Off. Legacy final-only values display as Finish only without changing persisted semantics merely by viewing the form; selecting a mode uses its canonical value. Legacy entries are no longer offered in the dropdown. No tests/build/typecheck performed.
+
+## Model filter type narrowing
+WorkflowModelSelect filterOption checks for a value property before reading it because provider groups carry only label/options. Both group labels and leaf labels/IDs remain searchable. No any cast or disabled type check.
