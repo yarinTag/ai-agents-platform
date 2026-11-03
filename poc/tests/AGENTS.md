@@ -97,3 +97,5 @@ The origin SSE replay test now assigns the shared agent to a real organization a
 Missing-grant cases also assert the persisted error at the actual rejection layer: workflow governance prefix for root MCP declarations, explicit no-active-grant reason for step preflight. Both require FAILED execution and a raised governance exception.
 
 The playground command-inventory case uses a temporary SQLite organization, test-only encrypted provider credential and injected RuntimeServices. It checks command flags only; it performs no model call or subprocess launch. This aligns the fixture with organization-only credential resolution.
+
+The playground command fixture supplies an api_-prefixed prior session, matching its Direct API provider, and still requires no --resume in the resulting tool-free command. Cross-method session rejection remains a separate runtime contract.

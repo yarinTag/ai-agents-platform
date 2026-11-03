@@ -102,7 +102,7 @@ def test_tool_free_command_overrides_agent_permissions(tmp_path, monkeypatch):
     runtime = ClaudeCodeRuntimeAdapter(services=services)
     agent = AgentConfig(id="test", name="Test", description="Test", system_prompt="Analyze data",
         allowed_tools=["Bash", "Write"], dangerously_skip_permissions=True, organization_id="playground-org")
-    command = runtime._build_claude_command(agent, None, "hello", session_id="old-session",
+    command = runtime._build_claude_command(agent, None, "hello", session_id="api_old-session",
         dangerously_skip_permissions=True, playground=True)
     assert command[command.index("--tools") + 1] == ""
     assert command[command.index("--mcp-config") + 1] == '{"mcpServers":{}}'
