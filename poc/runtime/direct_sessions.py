@@ -5,6 +5,7 @@ import os
 import re
 import uuid
 from pathlib import Path
+from contextlib import contextmanager
 
 
 class DirectSession:
@@ -13,6 +14,7 @@ class DirectSession:
         self.provider, self.model = provider, model
         self.scope = os.environ.get('PLATFORM_API_SESSION_SCOPE', '')
         self.id = 'api_' + uuid.uuid4().hex
+        self.thread_state = {}
         self.messages = []
         self.usage_calls = []
         self.prior_usage_unknown = False
@@ -25,6 +27,7 @@ class DirectSession:
                 raise ValueError('Session provider, model or agent changed. Start a new session.')
             self.messages = record['messages']
             if not fork:
+                self.thread_state = record.get("thread_state", {})
                 self.id = resume
                 self.usage_calls = record.get('usage_calls', [])
                 self.prior_usage_unknown = bool(record.get('prior_usage_unknown') or 'usage_calls' not in record)
@@ -43,7 +46,31 @@ class DirectSession:
             with open(temporary, 'x', opener=lambda p, flags: os.open(p, flags, 0o600)) as stream:
                 json.dump({'provider': self.provider, 'model': self.model, 'scope': self.scope,
                     'messages': self.messages, 'usage_calls': self.usage_calls,
+                    'thread_state': self.thread_state,
                     'prior_usage_unknown': self.prior_usage_unknown}, stream, ensure_ascii=False)
             os.replace(temporary, path)
         finally:
             temporary.unlink(missing_ok=True)
+
+
+@contextmanager
+def session_lease(resume):
+    """Serialize resume readers/writers across local processes, before loading history."""
+    if not resume:
+        yield
+        return
+    import fcntl
+    if not re.fullmatch(r'api_[0-9a-f]{32}', resume):
+        raise ValueError('Invalid direct API session.')
+    scope = hashlib.sha256(os.environ.get('PLATFORM_API_SESSION_SCOPE', '').encode()).hexdigest()
+    directory = Path(os.environ.get('PLATFORM_API_SESSION_DIR', '.runtime_sessions')) / scope
+    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+    descriptor = os.open(directory / (resume + '.lock'), os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    try:
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise ValueError('This session is already running. Wait before resuming.') from None
+        yield
+    finally:
+        os.close(descriptor)

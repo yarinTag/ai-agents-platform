@@ -25,6 +25,7 @@ export enum EventKind {
   System = 'system',
   ExecutionBackend = 'execution_backend',
   CompletionValidation = 'completion_validation',
+  ConversationTransport = 'conversation_transport',
   EndOfOutput = 'end_of_output',
   Unknown = 'event',
 }
@@ -98,6 +99,9 @@ export const describeEvent = (event: RuntimeEvent): EventDescription => {
     case EventKind.Assistant:
     case EventKind.User:
       return withDetail(kind, label, messageText(event) || kind);
+    case EventKind.ConversationTransport:
+      return withDetail(kind, 'Conversation transport',
+        `${text(event.mode)} · ${text(event.messages_sent)} messages · ${text(event.request_bytes)} bytes${event.reason ? ' · ' + text(event.reason) : ''}`);
     case EventKind.CompletionValidation:
       return withDetail(kind, 'Completion validation',
         `${text(event.error_code)} · attempt ${text(event.attempt)}: ${text(event.message)}\n${text(event.candidate_preview)}`);

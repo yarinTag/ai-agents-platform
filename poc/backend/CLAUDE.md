@@ -170,3 +170,5 @@ Organization runtime configuration is now tenant-scoped and credentials are AES-
 Workflow settings expose source-only execution engine metadata independently of provider credentials. Non-direct engines are pending and fail execution admission; no fallback or CLI authentication is enabled. Existing settings authorization/revision/audit applies. See docs/execution-backends.md. No runtime verification performed.
 
 The hosted SDK broker exposes no host TCP or public FastAPI route. Private Unix HTTP accepts only run-bound /authorize and /v1/messages, with current policy and durable budget holds. Available source integration is not deployment verification; see docs/claude-hosted.md. No runtime verification performed.
+
+Anthropic Message Threads is an optional organization setting on the existing runtime selection API, disabled by default. Preserve existing authorization and atomic save; do not interpret server-thread retention as local session persistence. See docs/anthropic-message-threads.md. No runtime verification performed.

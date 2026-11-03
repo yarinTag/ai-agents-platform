@@ -234,7 +234,7 @@ class TaskExecutor:
                         run.output_tokens = summary['output_tokens']
                         run.cost_usd = summary['known_cost_usd']
                     adapter._subscriptions.publish(run_id, event)
-                    if event.get('type') in ('reasoning_summary', 'usage', 'completion_validation') or (playground_workspace and time.monotonic() - last_checkpoint >= 1):
+                    if event.get('type') in ('reasoning_summary', 'usage', 'completion_validation', 'conversation_transport') or (playground_workspace and time.monotonic() - last_checkpoint >= 1):
                         adapter.services.database().save_task_run(run)
                         last_checkpoint = time.monotonic()
 

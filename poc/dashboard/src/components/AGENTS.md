@@ -237,3 +237,5 @@ StepEventTimeline recognizes completion_validation with a warning label, validat
 
 ## Model filter type narrowing
 WorkflowModelSelect filterOption checks for a value property before reading it because provider groups carry only label/options. Both group labels and leaf labels/IDs remain searchable. No any cast or disabled type check.
+
+RuntimeSetupModal and RuntimeSettingsPanel expose the Anthropic-only Message Threads beta checkbox and retention/pricing notice. Both load providers[].config.message_threads_enabled and send message_threads_enabled on selection save. The Settings panel now reloads per user/org, clears submitted keys and restricts editing to administrators; backend remains authoritative. StepEventTimeline renders conversation_transport mode/reason/message count/request bytes, without thread IDs or message bodies. No build/typecheck/UI execution performed.

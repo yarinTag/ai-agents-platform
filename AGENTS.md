@@ -238,3 +238,6 @@ The organization-credentials/runtime branch incorporates master CI workflows and
 
 ## Repository-wide CI hardening
 [GitHub automation](.github/AGENTS.md) defines core/security/runtime backend groups, frontend checks, PR-only Docker build checks and CI required aggregation. External Actions are pinned to immutable SHAs and updated via weekly Dependabot PRs. Master selects 11 existing backend contract files; PR #18 adds five further contracts with its implementation. No feature branch implementation is required for master CI. Private-plan merge enforcement remains unavailable.
+
+## Anthropic Message Threads opt-in
+Direct Anthropic API sessions support organization-enabled beta create/continue with private transcript-backed recovery and session leases. Default disabled; no SDK/backend routing change, streaming or prompt caching. See docs/anthropic-message-threads.md and runtime/API/UI guides. No tests/build/startup/model calls performed.

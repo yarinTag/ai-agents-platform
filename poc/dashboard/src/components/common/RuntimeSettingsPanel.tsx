@@ -1,3 +1,4 @@
+import { useAuth } from '../../context/AuthContext';
 import { useRuntimeSetupText } from '../../i18n/runtimeSetup';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Radio, Space, Tag, Typography, Input, Button, Alert, Spin, App, Select, Checkbox, Card } from 'antd';
@@ -9,6 +10,8 @@ const { Text, Paragraph } = Typography;
 
 export const RuntimeSettingsPanel: React.FC = () => {
   const runtimeText = useRuntimeSetupText();
+  const { user, organization } = useAuth();
+  const canManage = user?.role === 'ORG_ADMIN';
   const { message } = App.useApp();
   const [state, setState] = useState<RuntimeSetupState | null>(null);
   const [loading, setLoading] = useState(true);
@@ -17,10 +20,12 @@ export const RuntimeSettingsPanel: React.FC = () => {
   const [providerModels, setProviderModels] = useState<Record<string, string>>({});
   const [providerKeys, setProviderKeys] = useState<Record<string, string>>({});
   const [enabledProviders, setEnabledProviders] = useState<string[]>([]);
+  const [messageThreads, setMessageThreads] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const applyState = useCallback((next: RuntimeSetupState) => {
     setState(next);
+    setMessageThreads(Boolean(next.providers.find(p => p.id === 'direct_anthropic')?.config?.message_threads_enabled));
     const apiProviders = next.providers.filter((p) => p.id.startsWith('direct_'));
     const rawTarget = next.selected_provider ?? next.suggested_provider ?? null;
     const initialChoice =
@@ -45,6 +50,10 @@ export const RuntimeSettingsPanel: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    if (!organization?.id || !user?.id) return;
+    setProviderKeys({});
+    setState(null);
+    setLoading(true);
     let cancelled = false;
     getRuntimeSetupState()
       .then(({ data }) => {
@@ -59,7 +68,7 @@ export const RuntimeSettingsPanel: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [applyState, runtimeText.loadError]);
+  }, [applyState, runtimeText.loadError, organization?.id, user?.id]);
 
   const handleRescan = async () => {
     setLoading(true);
@@ -75,7 +84,7 @@ export const RuntimeSettingsPanel: React.FC = () => {
   };
 
   const handleConfirm = async () => {
-    if (!choice) return;
+    if (!choice || !canManage) return;
     setSaving(true);
     setError(null);
     try {
@@ -83,6 +92,7 @@ export const RuntimeSettingsPanel: React.FC = () => {
       const selectedKey = (providerKeys[choice] || '').trim();
       const { data } = await selectRuntimeProvider({
         provider_id: choice,
+        message_threads_enabled: messageThreads,
         model_id: selectedModel || undefined,
         api_key: selectedKey || undefined,
         enabled_providers: Array.from(new Set([...enabledProviders, choice])),
@@ -96,6 +106,7 @@ export const RuntimeSettingsPanel: React.FC = () => {
       const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
       setError(detail ?? 'Could not save the runtime selection.');
     } finally {
+      setProviderKeys({});
       setSaving(false);
     }
   };
@@ -104,7 +115,7 @@ export const RuntimeSettingsPanel: React.FC = () => {
   const selected = apiProviders.find((p) => p.id === choice);
   const selectedHasKey = Boolean(selected?.available || (choice && (providerKeys[choice] || '').trim()));
   const selectedModelId = choice ? (providerModels[choice] || '').trim() : '';
-  const confirmDisabled = !choice || !selectedHasKey || !selectedModelId;
+  const confirmDisabled = loading || saving || !canManage || !choice || !selectedHasKey || !selectedModelId;
 
   const modelOptionsForSelected = React.useMemo(() => {
     if (!selected) return [];
@@ -156,6 +167,7 @@ export const RuntimeSettingsPanel: React.FC = () => {
         <div style={{ padding: 32, textAlign: 'center' }}><Spin /></div>
       ) : (
         <Radio.Group
+          disabled={!canManage || saving}
           value={choice}
           onChange={(e) => {
             const id = e.target.value as RuntimeProviderId;
@@ -223,6 +235,14 @@ export const RuntimeSettingsPanel: React.FC = () => {
                   {isSelected && (
                     <div style={{ marginLeft: 24, marginTop: 12 }}>
                       <Space direction="vertical" size="small" style={{ width: '100%' }}>
+                        {provider.id === 'direct_anthropic' && <Checkbox
+                          checked={messageThreads}
+                          disabled={saving || !canManage}
+                          onChange={event => setMessageThreads(event.target.checked)}
+                        >{runtimeText.messageThreads}</Checkbox>}
+                        {provider.id === 'direct_anthropic' && <Text type="secondary" style={{ fontSize: 11 }}>
+                          {runtimeText.messageThreadsHelp}
+                        </Text>}
                         <Text style={{ fontSize: 12, fontWeight: 600 }}>
                           <KeyOutlined style={{ marginRight: 6 }} />
                           {provider.name} {runtimeText.apiKey}

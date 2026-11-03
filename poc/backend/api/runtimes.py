@@ -68,6 +68,7 @@ class ProviderSelectionRequest(BaseModel):
     enabled_providers: Optional[List[str]] = None
     provider_models: Optional[Dict[str, str]] = None
     provider_keys: Optional[Dict[str, SecretStr]] = None
+    message_threads_enabled: Optional[bool] = None
 
 
 def organization_settings(request, manage=False):
@@ -99,6 +100,7 @@ def _build_setup_state(settings) -> SetupStateResponse:
             requires_config=True, is_selected=pid == selected,
             config={'model_id': settings.get_setting(model_setting(pid)) or DEFAULT_PROVIDER_MODEL[pid],
                     'models': PROVIDER_MODELS.get(pid, []), 'has_api_key': has_key,
+                    'message_threads_enabled': pid == 'direct_anthropic' and settings.get_setting('runtime_message_threads_enabled') == 'true',
                     'enabled': has_key and (settings.get_setting(enabled_setting(pid)) == 'true' or pid == selected)}))
     return SetupStateResponse(setup_completed=settings.get_setting(providers.SETTING_SETUP_COMPLETED) == 'true' and selected in available,
         selected_provider=selected, effective_provider=effective,
@@ -131,6 +133,8 @@ async def select_runtime_provider(payload: ProviderSelectionRequest, request: Re
     if any(len(value.encode()) > 4096 for value in credentials.values()):
         raise HTTPException(400, 'Provider API key exceeds the size limit.')
     updates = {providers.SETTING_PROVIDER: pid, providers.SETTING_SETUP_COMPLETED: 'true'}
+    if payload.message_threads_enabled is not None:
+        updates['runtime_message_threads_enabled'] = 'true' if payload.message_threads_enabled else 'false'
     try:
         for provider, model in (payload.provider_models or {}).items():
             if provider not in DIRECT_PROVIDERS:

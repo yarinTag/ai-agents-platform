@@ -10,7 +10,7 @@ import os
 from .direct_config import validate_model
 from .direct_pricing import call_cost, pricing, totals
 from .direct_http import DirectAPIError, add_tool_results, request
-from .direct_sessions import DirectSession
+from .direct_sessions import DirectSession, session_lease
 from .direct_reasoning import reasoning_event
 from .direct_tools import DirectTools
 from .direct_outcomes import OUTCOME_PROMPT
@@ -36,10 +36,9 @@ def emit(event):
     print(json.dumps(event, ensure_ascii=False), flush=True)
 
 
-async def run(args):
+async def run_session(args, session):
     provider = os.environ['PLATFORM_RUNTIME_PROVIDER']
     model = validate_model(args.model)
-    session = DirectSession(provider, model, args.resume, args.fork_session, args.no_session_persistence)
     messages = session.messages
     messages.append({'role': 'user', 'content': args.p})
     session.save()
@@ -87,11 +86,18 @@ async def run(args):
                 if totals(run_calls)['known_cost_usd'] + reservation > args.max_budget_usd:
                     result('The remaining API budget is too small for another model request.', is_error=True)
                     return
+            def guard():
+                if tools.connector is not None:
+                    tools.connector.inventory()
+
             try:
-                response = await asyncio.to_thread(request, provider, model, system, messages, inventory, args.max_tokens)
+                response = await asyncio.to_thread(request, provider, model, system, messages,
+                                                  inventory, args.max_tokens, session, guard)
             except DirectAPIError as exc:
                 result(str(exc), is_error=True)
                 return
+            if response.get('transport'):
+                emit(response['transport'])
             input_tokens += response['input_tokens']
             output_tokens += response['output_tokens']
             usage_call = call_cost(response, price_policy)
@@ -106,6 +112,9 @@ async def run(args):
                 event['content'] = tools.sandbox.redact(event['content'])
             emit(event)
             session.save()
+            if response.get('stop_reason') in ('pause_turn', 'refusal'):
+                result('The provider paused or refused this turn; automatic continuation is not supported.', is_error=True)
+                return
             if response['truncated']:
                 session.save()
                 result('The API response was truncated or filtered. Increase the output token limit or refine the request.', is_error=True)
@@ -179,6 +188,20 @@ async def run(args):
                 result('[SUPERVISOR_REQUEST] ' + question)
                 return
         result('The direct API tool-call limit was reached. Resume this session to continue.', is_error=True)
+
+
+async def run(args):
+    provider = os.environ['PLATFORM_RUNTIME_PROVIDER']
+    model = validate_model(args.model)
+    with session_lease(args.resume):
+        session = DirectSession(provider, model, args.resume, args.fork_session, args.no_session_persistence)
+        if session.id == args.resume:
+            await run_session(args, session)
+        elif args.no_session_persistence:
+            await run_session(args, session)
+        else:
+            with session_lease(session.id):
+                await run_session(args, session)
 
 
 def main():

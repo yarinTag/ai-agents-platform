@@ -30,12 +30,14 @@ export const RuntimeSetupModal: React.FC = () => {
   const [providerModels, setProviderModels] = useState<Record<string, string>>({});
   const [providerKeys, setProviderKeys] = useState<Record<string, string>>({});
   const [enabledProviders, setEnabledProviders] = useState<string[]>([]);
+  const [messageThreads, setMessageThreads] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const promptKey = `runtime-setup-shown:${organization?.id}:${user?.id}`;
 
   const applyState = useCallback((next: RuntimeSetupState) => {
     setState(next);
+    setMessageThreads(Boolean(next.providers.find(p => p.id === 'direct_anthropic')?.config?.message_threads_enabled));
     const apiProviders = next.providers.filter((p) => p.id.startsWith('direct_'));
     const rawTarget = next.selected_provider ?? next.suggested_provider ?? null;
     const initialChoice =
@@ -124,6 +126,7 @@ export const RuntimeSetupModal: React.FC = () => {
       const selectedKey = (providerKeys[choice] || '').trim();
       const { data } = await selectRuntimeProvider({
         provider_id: choice,
+        message_threads_enabled: messageThreads,
         model_id: selectedModel || undefined,
         api_key: selectedKey || undefined,
         enabled_providers: Array.from(new Set([...enabledProviders, choice])),
@@ -265,6 +268,14 @@ export const RuntimeSetupModal: React.FC = () => {
                   {isSelected && (
                     <div style={{ marginLeft: 24, marginTop: 12 }}>
                       <Space direction="vertical" size="small" style={{ width: '100%' }}>
+                        {provider.id === 'direct_anthropic' && <Checkbox
+                          checked={messageThreads}
+                          disabled={saving}
+                          onChange={event => setMessageThreads(event.target.checked)}
+                        >{runtimeText.messageThreads}</Checkbox>}
+                        {provider.id === 'direct_anthropic' && <Text type="secondary" style={{ fontSize: 11 }}>
+                          {runtimeText.messageThreadsHelp}
+                        </Text>}
                         <Text style={{ fontSize: 12, fontWeight: 600 }}>
                           <KeyOutlined style={{ marginRight: 6 }} />
                           {provider.name} {runtimeText.apiKey}

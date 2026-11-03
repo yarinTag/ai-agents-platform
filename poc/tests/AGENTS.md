@@ -107,3 +107,5 @@ Expanded-CI fixture corrections: hosted task records explicitly provide project_
 
 ## Master CI groups
 Master runs 11 reviewed files across core (six), security (connector_execution_security, workflow_chat, workflow_pr_authoring) and runtime (direct_runtime, workflow_notification_modes). Temporary SQLite/local contracts run with --noconftest on disposable runners, without provider keys or live sends. Connector channel tests now declare valid connector/resource envelopes before testing frozen destination and report rules; missing envelopes remain explicitly rejected. Feature-specific organization/hosted tests are introduced only with PR #18.
+
+test_anthropic_threads.py adds unexecuted pure wire/state contracts and real private-filesystem session lease cases: suffix continuation, interrupted cursor invalidation, resume/fork, changed tools/reasoning wire isolation, credential rotation/expiry, refusal/truncation/pause clearing, concurrent lease rejection and legacy records. No provider mocks or live calls; no tests executed. Provider HTTP recovery and end-to-end runtime remain unverified.

@@ -255,3 +255,5 @@ Completion-validation events now render a bounded redacted candidate preview in 
 
 ## CI environment
 Dashboard CI and Docker builds target Node22. CI explicitly runs type checking because npm run build only invokes Vite; it also runs lint and request-cache tests. Local runtime verification remains unperformed.
+
+Thread transport controls must remain Anthropic-only, organization-scoped and opt-in, with the temporary-retention notice. RuntimeSettingsPanel now scopes reload to authenticated user/org and disables non-admin edits. Thread events are transport metadata, not TTFT or token savings. No build/typecheck/test execution performed.

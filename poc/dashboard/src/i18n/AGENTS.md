@@ -131,3 +131,5 @@ RuntimeSetup EN/HE copy now describes encrypted organization-owned provider keys
 workflowSettings.ts adds EN/HE backendSection/backendHelp/backendPending/backendBlocked/backendBlockedHelp for the execution-engine control and explicit pending-runtime warning. No build/typecheck/UI execution.
 
 workflowSettings adds EN/HE backendSetupNeeded and updates backendBlockedHelp to distinguish server configuration from unsupported engines and describe the read-only SDK limit. No runtime checks.
+
+runtimeSetup.ts adds matched EN/HE messageThreads/messageThreadsHelp labels describing opt-in, unchanged token prices, temporary provider retention and ZDR/HIPAA incompatibility. No runtime verification performed.

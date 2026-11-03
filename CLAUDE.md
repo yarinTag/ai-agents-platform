@@ -233,3 +233,5 @@ CI required aggregates backend core/security/runtime, dashboard checks and PR-on
 
 ## Repository-wide Actions
 All PRs trigger CI using isolated backend tests, dashboard checks and build-only containers. CI required fails when any required check fails/cancels; publishing calls the same CI first. Actions use immutable SHAs. Master contains only master-available suites; branch-specific features/tests remain in their PR. See .github/AGENTS.md.
+
+Optional Anthropic Message Threads is configured per organization in API provider settings. Keep durable local history, current credential/policy checks and bounded recovery; never retry external tools or infer cheaper token usage from smaller HTTP payloads. See docs/anthropic-message-threads.md. Runtime verification remains unauthorized.
