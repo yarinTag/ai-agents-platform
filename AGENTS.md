@@ -215,3 +215,6 @@ CI regression fixtures for event replay and missing MCP grants now supply tenant
 
 ## Frontend logic regression suite
 [Dashboard logic tests](poc/dashboard/tests/AGENTS.md) documents direct Node22 tests for workflow editing, settings/secret validation, cost display, connector resource projection, shared skills, cache races, partial loading, model labels and office activity/coordinates. The standalone frontend PR contains no organization-runtime implementation. Existing master Actions discover all *.test.mjs files. No external API keys or provider calls.
+
+## Unified repository CI
+ci.yml now owns tests, PR/manual build-only validation and gated main/master/v* image publishing; images.yml is removed to avoid running tests twice per master push. One image plan owns the component matrix. Registry write access remains exclusive to the trusted publishing job. Manual runs default to build-only; publishing requires explicit opt-in on a supported ref. PR labels remain a separate privileged metadata-only workflow.

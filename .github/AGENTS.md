@@ -1,8 +1,7 @@
 # GitHub automation
 
 ## Required checks and execution boundaries
-`workflows/ci.yml` runs on pull requests, main/master pushes, manual dispatch and reusable
-calls. Read-only GitHub permissions, disabled checkout credential persistence, job deadlines
+`workflows/ci.yml` runs on pull requests, main/master pushes, v-prefixed tag pushes and manual dispatch. Read-only GitHub permissions, disabled checkout credential persistence, job deadlines
 and fail-fast:false preserve independent failure evidence. No production secrets, cloud
 credentials, provider keys or live notification destinations are supplied. Python uses 3.11,
 frozen uv.lock with the dev extra and --no-install-project. All backend tests use --noconftest
@@ -20,11 +19,11 @@ unique per-suite names and 14-day retention, uploaded even on test failure.
 
 Dashboard checks use Node22/npm ci, named lint/TypeScript/unit-test/build steps. All
 `tests/*.test.mjs` files run, rather than only one named file. Build does not replace tsc.
-PR-only Container build matrix checks API/worker/dashboard Dockerfiles with push:false,
-no registry login and separate pr-* cache scopes. CI required runs with always(), requires
-both test jobs to succeed, and requires all container builds on PR events. Non-PR calls
-require container checks to be skipped; actual publish builds live in images.yml.
-Failures, cancellation and unexpected skips cannot turn the aggregate check green.
+Container build validates API/worker/dashboard images without login or publishing on PRs
+and non-publishing manual runs. CI required aggregates Image plan, all backend suites,
+dashboard and the applicable build checks; failures/cancellations/unexpected skips fail it.
+Publish runs skip build-only checks because the gated publishing job builds each image once.
+The image matrix is defined once in Image plan and shared by build/publish jobs.
 
 ## Immutable Actions and updates
 All external uses references are pinned to full commit hashes with readable version comments.
@@ -32,13 +31,17 @@ Dependabot checks github-actions weekly and opens reviewable update PRs; no auto
 Pinned commits were resolved from the upstream GitHub API. No untrusted PR text is interpolated
 into shell or script source. The matrix test list is passed as environment data.
 
-## Image publishing
-images.yml first calls the same CI; publishing requires CI including its aggregate to pass.
-Only image jobs receive packages:write and GHCR credentials. API/worker/dashboard images
-publish to lowercase ghcr.io/<owner>/<repository>-<component> with full sha-<commit>,
-branch/tag tags and no implicit latest. Main/master, v* tags and manual dispatch are supported.
-Root/dashboard Docker ignore files exclude environment files, databases and local outputs.
-No deployment or automatic PR merge is configured.
+## Unified image publishing
+ci.yml owns checking, building and publishing; images.yml is removed. A main/master or
+v* tag push runs tests once and publishes only after CI required succeeds. Manual dispatch
+builds without publishing by default; publish=true opts in only on main/master or v* refs.
+Other refs cannot publish, even with that flag. PR code never runs in a packages:write job.
+Only Publish image receives packages:write and GHCR login; read-only Container build
+uses push:false and pr-* cache scopes. Publishing uses separate component cache scopes.
+Images retain lowercase ghcr.io/<owner>/<repository>-<component> names, sha-<fullcommit>,
+branch/tag tags and no implicit latest. Tests do not run twice on master anymore.
+New PR runs cancel older runs for the same PR; publishing runs are not cancelled mid-push.
+No deployment or automatic merge is configured.
 
 ## PR labeling
 pr-labels.yml uses pull_request_target opened/reopened/synchronize/edited/ready_for_review.

@@ -215,3 +215,6 @@ Initial CI diagnosis: use only contract files versioned on master; branch-local 
 
 ## Repository-wide Actions
 All PRs trigger CI using isolated backend tests, dashboard checks and build-only containers. CI required fails when any required check fails/cancels; publishing calls the same CI first. Actions use immutable SHAs. Master contains only master-available suites; branch-specific features/tests remain in their PR. See .github/AGENTS.md.
+
+## Unified Actions execution
+CI runs backend/frontend checks once per trigger and then either validates images without publishing (PR/default manual) or builds/publishes after the aggregate gate (main/master/v* push). Manual publication needs publish=true and a supported ref. ci.yml replaces the duplicate images.yml orchestrator; .github/AGENTS.md owns the exact contracts. No local runtime verification performed.
