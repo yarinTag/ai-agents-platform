@@ -181,7 +181,8 @@ def test_live_execution_still_requires_declared_mcp_grants(environment, mcp_scop
         engine.execute_workflow("wf")
     record = db.list_workflow_executions()[0]
     assert record.status == "FAILED"
-    assert "MCP Governance Violation" in record.error_message
+    expected_reason = "MCP Governance Violation" if mcp_scope == "workflow" else "no active grant"
+    assert expected_reason in record.error_message
 
 
 def test_output_reader_preserves_buffered_text_after_process_exit():

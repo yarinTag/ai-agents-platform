@@ -78,3 +78,5 @@ test_workflow_notification_modes.py adds unexecuted pure contracts for terminal/
 
 ## Initial GitHub CI fixture repair
 The origin SSE replay test now assigns the shared agent to a real organization and supplies organization-admin request claims so replay passes current tenant filtering. Live MCP grant tests now create a real organization, department, scoped agent and registered CONNECTED GitHub connector without a grant; they assert the appropriate workflow/step missing-grant denial. No model or connector HTTP call is performed. These repair stale fixtures without relaxing production security. Verification is through GitHub CI only.
+
+Missing-grant cases also assert the persisted error at the actual rejection layer: workflow governance prefix for root MCP declarations, explicit no-active-grant reason for step preflight. Both require FAILED execution and a raised governance exception.
