@@ -209,3 +209,6 @@ Workflow progress notifications are now metadata.channel_binding configuration: 
 CI now selects only six contract files present on master. Dashboard Department declares optional department_id (existing API/hydration alias), grouped model filtering narrows value access, and Telegram tag titles use native spans. No checks disabled; no local runtime verification.
 
 CI regression fixtures for event replay and missing MCP grants now supply tenant identity and configured subjects before asserting the intended policy behavior. Production security is unchanged; GitHub checks are the verification environment.
+
+## Repository-wide CI hardening
+[GitHub automation](.github/AGENTS.md) defines core/security/runtime backend groups, frontend checks, PR-only Docker build checks and CI required aggregation. External Actions are pinned to immutable SHAs and updated via weekly Dependabot PRs. Master selects 11 existing backend contract files; PR #18 adds five further contracts with its implementation. No feature branch implementation is required for master CI. Private-plan merge enforcement remains unavailable.

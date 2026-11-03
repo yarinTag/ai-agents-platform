@@ -12,41 +12,58 @@ concurrency:
   cancel-in-progress: true
 jobs:
   backend:
-    name: Backend contracts
+    name: Backend tests (${{ matrix.suite }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: core
+            files: >-
+              poc/tests/test_workflow_revisions.py
+              poc/tests/test_workflow_origin.py
+              poc/tests/test_workflow_playground.py
+              poc/tests/test_direct_reasoning.py
+              poc/tests/test_direct_pricing.py
+              poc/tests/test_repo_cache.py
+          - suite: security
+            files: >-
+              poc/tests/test_connector_execution_security.py
+              poc/tests/test_workflow_chat.py
+              poc/tests/test_workflow_pr_authoring.py
+          - suite: runtime
+            files: >-
+              poc/tests/test_direct_runtime.py
+              poc/tests/test_workflow_notification_modes.py
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
       PLATFORM_DEV_MODE: '1'
       PYTHONDONTWRITEBYTECODE: '1'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.11'
-      - uses: astral-sh/setup-uv@v7
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
         with:
           enable-cache: true
       - name: Install locked dependencies
         run: uv sync --frozen --extra dev --no-install-project
       - name: Check Python syntax
         run: uv run --no-sync python -m compileall -q poc
-      - name: Run isolated contracts without shared database reset
-        run: >-
-          uv run --no-sync python -m pytest --noconftest -q
-          poc/tests/test_workflow_revisions.py
-          poc/tests/test_workflow_origin.py
-          poc/tests/test_workflow_playground.py
-          poc/tests/test_direct_reasoning.py
-          poc/tests/test_direct_pricing.py
-          poc/tests/test_repo_cache.py
-          --junitxml=reports/backend.xml
+      - name: Run isolated backend tests
+        env:
+          TEST_FILES: ${{ matrix.files }}
+        run: |
+          read -r -a files <<< "$TEST_FILES"
+          uv run --no-sync python -m pytest --noconftest -q "${files[@]}" --junitxml=reports/backend.xml
       - name: Upload test report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: backend-test-report
+          name: backend-tests-${{ matrix.suite }}
           path: reports/backend.xml
           if-no-files-found: ignore
           retention-days: 14
@@ -58,16 +75,73 @@ jobs:
       run:
         working-directory: poc/dashboard
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '22'
           cache: npm
           cache-dependency-path: poc/dashboard/package-lock.json
-      - run: npm ci
-      - run: npm run lint
-      - run: npx --no-install tsc --noEmit
-      - run: node --test tests/requestCache.test.mjs
-      - run: npm run build
+      - name: Install locked dashboard dependencies
+        run: npm ci
+      - name: Dashboard lint
+        run: npm run lint
+      - name: Dashboard TypeScript checks
+        run: npx --no-install tsc --noEmit
+      - name: Dashboard unit tests
+        run: node --test tests/*.test.mjs
+      - name: Dashboard production build
+        run: npm run build
+  containers:
+    name: Container build (${{ matrix.component }})
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - component: api
+            context: .
+            file: Dockerfile.api
+          - component: worker
+            context: .
+            file: Dockerfile.worker
+          - component: dashboard
+            context: poc/dashboard
+            file: poc/dashboard/Dockerfile
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Build only; no registry credentials or publishing
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          push: false
+          cache-from: type=gha,scope=pr-${{ matrix.component }}
+          cache-to: type=gha,mode=max,scope=pr-${{ matrix.component }}
+  gate:
+    name: CI required
+    if: always()
+    needs: [backend, frontend, containers]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require all applicable checks to succeed
+        env:
+          BACKEND: ${{ needs.backend.result }}
+          FRONTEND: ${{ needs.frontend.result }}
+          CONTAINERS: ${{ needs.containers.result }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          test "$BACKEND" = success
+          test "$FRONTEND" = success
+          if [ "$EVENT" = pull_request ]; then
+            test "$CONTAINERS" = success
+          else
+            test "$CONTAINERS" = skipped
+          fi

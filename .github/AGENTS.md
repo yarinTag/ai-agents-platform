@@ -1,48 +1,63 @@
 # GitHub automation
 
-## CI contracts
-`workflows/ci.yml` runs on PRs, main/master pushes, manual dispatch and reusable calls.
-Python 3.11 uses frozen uv dependencies with the dev extra and no project installation.
-Backend syntax compilation and an explicit initial six-file contract suite run without shared
-conftest cleanup. These contracts use local files/Git, real SQLite and FastAPI; no provider
-keys, live model calls, Docker services or channel sends are supplied. This is not the full suite.
-JUnit reports are retained for 14 days even after failure. Dashboard uses Node22, npm ci,
-oxlint, explicit TypeScript checking, cache tests and production build. Jobs are read-only
-and time-bounded. No local tests/build/lint/typecheck/startup were performed for this task.
+## Required checks and execution boundaries
+`workflows/ci.yml` runs on pull requests, main/master pushes, manual dispatch and reusable
+calls. Read-only GitHub permissions, disabled checkout credential persistence, job deadlines
+and fail-fast:false preserve independent failure evidence. No production secrets, cloud
+credentials, provider keys or live notification destinations are supplied. Python uses 3.11,
+frozen uv.lock with the dev extra and --no-install-project. All backend tests use --noconftest
+to avoid the shared default-database reset hook. Each matrix job has its own disposable runner.
 
-## Images
-`workflows/images.yml` runs on main/master pushes, v-prefixed tags or manual dispatch.
-It first calls the same CI workflow; publishing requires both CI jobs to pass. It builds
-API, worker and dashboard separately and pushes to lowercase
-`ghcr.io/<owner>/<repository>-<component>` with full sha-<commit>, branch/tag tags;
-no implicit latest. Only image jobs receive packages:write. No deployment is configured.
-Root and dashboard Docker ignore files exclude credentials, databases and local outputs.
-Dashboard Docker build uses Node22 to match CI and Vite's runtime requirements.
+Backend tests are selected explicitly after source review:
+- core: workflow_revisions, workflow_origin, workflow_playground, direct_reasoning,
+  direct_pricing, repo_cache (six test_*.py files).
+- security: connector_execution_security, workflow_chat, workflow_pr_authoring (three files).
+- runtime: direct_runtime, workflow_notification_modes (two files).
 
-## PR labels
-`workflows/pr-labels.yml` reads current PR metadata/files through GitHub's API on
-pull_request_target opened/reopened/synchronize/edited/ready_for_review, without checkout.
-It creates missing labels, applies/removes only its managed area/type labels, and preserves
-other labels. Areas: backend, frontend, tests, docs, ci, infrastructure, dependencies.
-Types follow conventional PR-title prefixes: feat/fix/docs/refactor/test/ci/build/chore/perf/revert.
-Multiple area labels are allowed; a title without a supported prefix gets no managed type.
-Renamed files consider old and new paths. The workflow needs issues:write for label creation
-and pull-requests:write for PR labels. It supports fork PRs without executing their content.
-It becomes active once merged into the default branch. No external tokens are required.
+Real SQLite, local Git/files, FastAPI/JWT and local Unix HTTP contracts are used. Other unreviewed legacy suites
+remain outside CI; this is not full-system or live integration coverage. JUnit artifacts have
+unique per-suite names and 14-day retention, uploaded even on test failure.
 
-## Administration
-After first successful CI, configure a branch ruleset requiring Backend contracts and
-Dashboard checks (use the actual reported names, including reusable prefixes if present).
-Workflow files alone do not enable branch protection. GHCR package creation must be allowed
-by repository/organization policy. CI may expose pre-existing source/lock incompatibilities;
-never suppress failing checks or silently broaden the contract suite to live operations.
-Use pinned immutable action SHAs when upgrading supply-chain policy; current major refs
-should be reviewed and updated through normal PRs.
+Dashboard checks use Node22/npm ci, named lint/TypeScript/unit-test/build steps. All
+`tests/*.test.mjs` files run, rather than only one named file. Build does not replace tsc.
+PR-only Container build matrix checks API/worker/dashboard Dockerfiles with push:false,
+no registry login and separate pr-* cache scopes. CI required runs with always(), requires
+both test jobs to succeed, and requires all container builds on PR events. Non-PR calls
+require container checks to be skipped; actual publish builds live in images.yml.
+Failures, cancellation and unexpected skips cannot turn the aggregate check green.
 
-## Initial CI repair
-The initial workflow referenced four tests absent from master; the explicit suite now lists
-only versioned master tests: revisions, origin, playground, reasoning, pricing and repo cache.
-Dashboard type checking remains required; shared Department includes its optional API ID alias,
-grouped model filtering narrows leaf options, and Telegram tooltips use a native wrapper.
+## Immutable Actions and updates
+All external uses references are pinned to full commit hashes with readable version comments.
+Dependabot checks github-actions weekly and opens reviewable update PRs; no automatic merge.
+Pinned commits were resolved from the upstream GitHub API. No untrusted PR text is interpolated
+into shell or script source. The matrix test list is passed as environment data.
 
-The first repaired run passed dashboard checks and 47 backend cases; three older cases required tenant-aware SSE and live-connector fixtures. Fixtures now exercise current fail-closed policy with real SQLite, preserving missing-grant denial.
+## Image publishing
+images.yml first calls the same CI; publishing requires CI including its aggregate to pass.
+Only image jobs receive packages:write and GHCR credentials. API/worker/dashboard images
+publish to lowercase ghcr.io/<owner>/<repository>-<component> with full sha-<commit>,
+branch/tag tags and no implicit latest. Main/master, v* tags and manual dispatch are supported.
+Root/dashboard Docker ignore files exclude environment files, databases and local outputs.
+No deployment or automatic PR merge is configured.
+
+## PR labeling
+pr-labels.yml uses pull_request_target opened/reopened/synchronize/edited/ready_for_review.
+It reads current metadata/files through GitHub API, never checks out or executes PR content.
+Only it receives issues:write and pull-requests:write. Missing managed labels are created;
+managed area/type labels are synchronized while unrelated labels remain. Areas: backend,
+frontend, tests, docs, ci, infrastructure, dependencies. Types use conventional PR titles.
+Renames consider old/new paths. Labels can run during merge conflicts; pull_request CI cannot.
+
+## Merge enforcement limitation
+The private repository's current plan returns HTTP403 for both branch protection and rulesets.
+CI required is a reporting/publishing gate, not an enforceable merge restriction on this plan.
+After upgrading, require CI required with an up-to-date branch and pull-request-only changes,
+apply restrictions to administrators, prohibit force pushes/deletion, and configure appropriate
+review requirements. Preserve existing rules when applying protection. Do not claim labels,
+CODEOWNERS or an Actions workflow can substitute for server-enforced branch protection.
+
+## Verification
+Master CI lists only tests versioned on master. PR #18 separately adds organization/runtime
+contracts and retains its expanded suite; those tests cannot be required before they exist.
+CI hardening is verified on GitHub before promotion to master. No local model calls,
+application startup, Docker execution or local test/build/lint/typecheck is performed.
