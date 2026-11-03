@@ -235,3 +235,6 @@ The organization-credentials/runtime branch incorporates master CI workflows and
 
 ## Hardened CI coverage
 [GitHub automation](.github/AGENTS.md) defines isolated core/security/runtime test groups, PR container builds, named frontend checks, immutable Action pins, weekly reviewed dependency updates and the CI required aggregate. Publishing requires CI success. Private-repository plan restrictions still prevent enforcing merge protection; no deployment/automatic merge is enabled. GitHub-only verification preserves local runtime restrictions.
+
+## Repository-wide CI hardening
+[GitHub automation](.github/AGENTS.md) defines core/security/runtime backend groups, frontend checks, PR-only Docker build checks and CI required aggregation. External Actions are pinned to immutable SHAs and updated via weekly Dependabot PRs. Master selects 11 existing backend contract files; PR #18 adds five further contracts with its implementation. No feature branch implementation is required for master CI. Private-plan merge enforcement remains unavailable.

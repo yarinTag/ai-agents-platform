@@ -62,3 +62,8 @@ CODEOWNERS or an Actions workflow can substitute for server-enforced branch prot
 ## Verification
 CI hardening is verified on GitHub in the organization runtime PR. No local model calls,
 application startup, Docker execution or local test/build/lint/typecheck is performed.
+
+## Master Actions synchronization
+Master now owns the hardened workflow baseline and runs 11 backend files available there.
+This branch preserves all 16 contracts because its five feature-specific files are present.
+Syncing master does not merge this PR or include frontend tests from the separate PR #24.

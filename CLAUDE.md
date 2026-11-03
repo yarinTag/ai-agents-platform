@@ -230,3 +230,6 @@ Initial CI diagnosis: use only contract files versioned on master; branch-local 
 
 ## CI safety policy
 CI required aggregates backend core/security/runtime, dashboard checks and PR-only container builds. Test suites use disposable runners and --noconftest, without production credentials or live inference. All external Actions use immutable SHAs; Dependabot proposes weekly updates. Merge enforcement still requires a GitHub plan supporting private branch protection. See .github/AGENTS.md.
+
+## Repository-wide Actions
+All PRs trigger CI using isolated backend tests, dashboard checks and build-only containers. CI required fails when any required check fails/cancels; publishing calls the same CI first. Actions use immutable SHAs. Master contains only master-available suites; branch-specific features/tests remain in their PR. See .github/AGENTS.md.
