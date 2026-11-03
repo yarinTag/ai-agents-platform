@@ -234,3 +234,6 @@ WorkflowBackendSelect now distinguishes implemented source support from configur
 Runtime setup automatic prompts wait for authenticated organization/user context and are shown at most once per user/organization per browser tab session (sessionStorage contains only the shown marker). Explicit Configure runtime still opens the modal. Missing organization keys remain execution-blocking; dismissal grants no credentials. No runtime verification performed.
 
 StepEventTimeline recognizes completion_validation with a warning label, validation code, attempt, message and expandable redacted preview. Full diagnostic metadata remains accessible through the existing JSON toggle; no new request or log authorization boundary. No build/typecheck/render verification.
+
+## Model filter type narrowing
+WorkflowModelSelect filterOption checks for a value property before reading it because provider groups carry only label/options. Both group labels and leaf labels/IDs remain searchable. No any cast or disabled type check.

@@ -165,18 +165,24 @@ def test_runtime_launch_failure_is_not_reported_as_success(environment, mcp_scop
 def test_live_execution_still_requires_declared_mcp_grants(environment, mcp_scope):
     from workflows.engine import MCPGovernanceViolationError
     db, engine, client = environment
-    db.create_department(id="dept-no-grants", name="No MCP grants")
+    db.create_organization(id="grant-org", name="Grant scope", slug="grant-scope")
+    db.create_department(id="dept-no-grants", name="No MCP grants", organization_id="grant-org")
+    db.save_agent(AgentConfig(id="grant-agent", name="Grant agent", description="Scoped worker",
+        system_prompt="Analyze", organization_id="grant-org", department_id="dept-no-grants"))
+    db.save_mcp_connector({"id": "github", "name": "GitHub", "provider": "github",
+        "status": "CONNECTED", "organization_id": "grant-org"})
     definition = {"name": "Exercise", "steps": [
-        {"key": "analyze", "agent_id": "missing", "prompt_template": "Analyze input"}
+        {"key": "analyze", "agent_id": "grant-agent", "prompt_template": "Analyze input"}
     ]}
     target = definition if mcp_scope == "workflow" else definition["steps"][0]
     target["mcp_servers"] = ["github"]
-    db.update_workflow("wf", department_id="dept-no-grants", definition_json=json.dumps(definition))
-    with pytest.raises(MCPGovernanceViolationError, match="github"):
+    db.update_workflow("wf", organization_id="grant-org", department_id="dept-no-grants", definition_json=json.dumps(definition))
+    with pytest.raises(MCPGovernanceViolationError, match="github" if mcp_scope == "workflow" else "no active grant"):
         engine.execute_workflow("wf")
     record = db.list_workflow_executions()[0]
     assert record.status == "FAILED"
-    assert "MCP Governance Violation" in record.error_message
+    expected_reason = "MCP Governance Violation" if mcp_scope == "workflow" else "no active grant"
+    assert expected_reason in record.error_message
 
 
 def test_output_reader_preserves_buffered_text_after_process_exit():

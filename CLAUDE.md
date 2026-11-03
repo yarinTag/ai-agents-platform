@@ -222,3 +222,8 @@ Sandbox startup failures now surface sanitized Docker category/exit/reference di
 Explicit diagnostic exception: Docker info/image inspection and one network-disabled sleep-0 container probe were authorized and completed successfully. No test suite, workflow, model or message was run. The broader runtime restriction remains; see docs/workflow-repairs.md.
 
 Governed connector finals now use strict schema-backed internal completion and at most one formatting-only pass without connector tools. It is not an external-action retry; it adds accounted model usage only on a future run when needed. Rejected candidate previews are bounded/redacted and remain scoped to authorized logs. See docs/connector-completion.md. No inference/workflow/tests/build executed for this fix.
+
+## GitHub Actions
+See [.github/AGENTS.md](.github/AGENTS.md) for CI triggers, isolated backend contracts, dashboard checks, gated container publishing and PR labels. Workflow creation authorizes future GitHub CI; this task did not run local tests/builds or deploy anything. Branch protection requires repository administration after check names appear.
+
+Initial CI diagnosis: use only contract files versioned on master; branch-local tests cannot be referenced by master workflows. Frontend type checking is mandatory and exposed existing Department/Ant Design option compatibility issues, repaired without suppressing errors. Local runtime checks remain unrun.

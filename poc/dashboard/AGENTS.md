@@ -209,3 +209,9 @@ Channel Binding offers exactly four notification choices with friendly EN/HE nam
 WorkflowSettingsValues and update settings add optional ExecutionBackend (direct_api/claude_code/codex_cli/antigravity_cli); absence supports legacy responses. WorkflowSettingsResponse adds optional execution_backends:ExecutionBackendDescriptor[] with source_contract_only verification and explicit implemented/capability metadata. No runtime verification.
 
 ExecutionBackendDescriptor now includes configured/configuration_error/supports_session_resume; source implementation is distinct from deployment readiness. Claude SDK is configuration-gated and read-only. No build/typecheck.
+
+## Dashboard CI container runtime
+GitHub CI uses Node22 with npm ci, oxlint, explicit tsc --noEmit, request-cache tests and Vite build. Dockerfile now uses node:22-alpine to match; .dockerignore excludes local dependencies, bundles, environment files and logs. See [.github automation](../../.github/AGENTS.md). No local verification executed.
+
+## CI type compatibility repair
+`src/types/auth.ts` Department now declares optional department_id, already returned by membership queries and normalized in AuthContext. Workflow model filters narrow grouped/leaf options before value access. Telegram selectable tags keep the native title on a wrapper span compatible with Ant Design. Type checking remains required in CI.

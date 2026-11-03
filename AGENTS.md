@@ -221,3 +221,14 @@ By later explicit exception, read-only Docker inspection and one disposable cach
 
 ## Connector completion schema and format recovery
 Governed Direct API connector runs now expose a server-only platform_workflow_finish schema tool, require strict status/output/blocker envelopes and permit one formatting-only model pass with all connector tools removed. Current policy/required successful receipts remain mandatory; blocked/malformed outcomes never become implicit success. Sanitized bounded completion_validation diagnostics are checkpointed and shown in Workflow Logs. No historical run/config changed or retried. See docs/connector-completion.md. No tests/build/model calls executed.
+
+## Repository CI and image publishing
+[GitHub automation](.github/AGENTS.md) documents PR checks, gated GHCR image publishing, and metadata-only generic PR labeling. Deployment and branch protection are not configured. CI starts with an isolated contract subset, not the full backend suite. No local runtime verification performed.
+
+## Initial CI failure repair
+CI now selects only six contract files present on master. Dashboard Department declares optional department_id (existing API/hydration alias), grouped model filtering narrows value access, and Telegram tag titles use native spans. No checks disabled; no local runtime verification.
+
+CI regression fixtures for event replay and missing MCP grants now supply tenant identity and configured subjects before asserting the intended policy behavior. Production security is unchanged; GitHub checks are the verification environment.
+
+## PR CI synchronization
+The organization-credentials/runtime branch incorporates master CI workflows and type/fixture repairs. Documentation-only merge conflicts retain both branch contracts and automation guidance. PR checks require a conflict-free merge; labels use metadata-only pull_request_target and can run during conflicts.

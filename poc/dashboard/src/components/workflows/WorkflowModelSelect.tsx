@@ -85,7 +85,7 @@ export const WorkflowModelSelect: React.FC<WorkflowModelSelectProps> = ({ value,
         loading={loading}
         showSearch
         filterOption={(input, option) =>
-          `${String(option?.label ?? '')} ${String(option?.value ?? '')}`.toLowerCase().includes(input.trim().toLowerCase())}
+          `${String(option?.label ?? '')} ${String(option && 'value' in option ? option.value : '')}`.toLowerCase().includes(input.trim().toLowerCase())}
         optionRender={option => {
           const description = descriptions.get(String(option.value));
           return (

@@ -1,0 +1,59 @@
+name: PR labels
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, edited, ready_for_review]
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+concurrency:
+  group: labels-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+jobs:
+  labels:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # No checkout or execution of PR content in this privileged workflow.
+      - uses: actions/github-script@v8
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: issue_number });
+            const files = await github.paginate(github.rest.pulls.listFiles,
+              { owner, repo, pull_number: issue_number, per_page: 100 });
+            const paths = files.flatMap(f => [f.filename, f.previous_filename].filter(Boolean));
+            const rules = [
+              ['area: backend', '1d76db', 'Backend, runtime, storage or orchestration changes',
+                paths.some(p => p.startsWith('poc/') && !p.startsWith('poc/dashboard/') && !p.startsWith('poc/tests/'))],
+              ['area: frontend', '5319e7', 'Dashboard changes', paths.some(p => p.startsWith('poc/dashboard/'))],
+              ['area: tests', '0e8a16', 'Test changes', paths.some(p => /(^|\/)(tests\/|test_[^/]+\.py$)/.test(p))],
+              ['area: docs', '0075ca', 'Documentation changes', paths.some(p => /\.(md|rst)$/i.test(p) || p.startsWith('docs/'))],
+              ['area: ci', '006b75', 'GitHub automation changes', paths.some(p => p.startsWith('.github/'))],
+              ['area: infrastructure', 'd4c5f9', 'Container or deployment changes',
+                paths.some(p => /(^|\/)(Dockerfile[^/]*|docker-compose[^/]*|compose\.[^/]+|\.dockerignore)$/.test(p))],
+              ['area: dependencies', '0366d6', 'Dependency manifest or lockfile changes',
+                paths.some(p => /(^|\/)(pyproject\.toml|uv\.lock|requirements[^/]*\.txt|package(-lock)?\.json)$/.test(p))],
+            ];
+            const types = { feat: 'feature', fix: 'bug', docs: 'docs', refactor: 'refactor',
+              test: 'tests', ci: 'ci', build: 'build', chore: 'chore', perf: 'performance', revert: 'revert' };
+            const match = pr.title.match(/^(feat|fix|docs|refactor|test|ci|build|chore|perf|revert)(?:\([^)]*\))?!?:\s/i);
+            for (const [prefix, type] of Object.entries(types)) {
+              rules.push([`type: ${type}`, 'ededed', `Conventional PR title: ${prefix}:`,
+                match?.[1].toLowerCase() === prefix]);
+            }
+            const current = new Set(pr.labels.map(l => l.name));
+            for (const [name, color, description, applies] of rules) {
+              if (applies) {
+                try { await github.rest.issues.getLabel({ owner, repo, name }); }
+                catch (error) {
+                  if (error.status !== 404) throw error;
+                  try { await github.rest.issues.createLabel({ owner, repo, name, color, description }); }
+                  catch (createError) { if (createError.status !== 422) throw createError; }
+                }
+                if (!current.has(name)) await github.rest.issues.addLabels({ owner, repo, issue_number, labels: [name] });
+              } else if (current.has(name)) {
+                await github.rest.issues.removeLabel({ owner, repo, issue_number, name });
+              }
+            }

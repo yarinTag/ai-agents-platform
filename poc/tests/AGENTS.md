@@ -90,3 +90,8 @@ test_claude_hosted.py adds real SQLite/Unix HTTP source cases for capability/rou
 test_sandbox_diagnostics.py adds unexecuted pure startup-error category, secret/path exclusion, exit-code type and classification-priority contracts. No Docker, application or test execution.
 
 test_completion_validation.py adds unexecuted pure contracts for strict final schema/types/required fields, whole-fence compatibility, prose/duplicate-key rejection, blockers, single repair with connector-free inventory, rejection of mixed/external recovery calls, and bounded credential-redacted diagnostics. No mocked transport, provider calls or test execution.
+
+## Initial GitHub CI fixture repair
+The origin SSE replay test now assigns the shared agent to a real organization and supplies organization-admin request claims so replay passes current tenant filtering. Live MCP grant tests now create a real organization, department, scoped agent and registered CONNECTED GitHub connector without a grant; they assert the appropriate workflow/step missing-grant denial. No model or connector HTTP call is performed. These repair stale fixtures without relaxing production security. Verification is through GitHub CI only.
+
+Missing-grant cases also assert the persisted error at the actual rejection layer: workflow governance prefix for root MCP declarations, explicit no-active-grant reason for step preflight. Both require FAILED execution and a raised governance exception.

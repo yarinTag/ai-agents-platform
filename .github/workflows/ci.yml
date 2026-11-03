@@ -1,0 +1,73 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+  workflow_call:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  backend:
+    name: Backend contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PLATFORM_DEV_MODE: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - name: Install locked dependencies
+        run: uv sync --frozen --extra dev --no-install-project
+      - name: Check Python syntax
+        run: uv run --no-sync python -m compileall -q poc
+      - name: Run isolated contracts without shared database reset
+        run: >-
+          uv run --no-sync python -m pytest --noconftest -q
+          poc/tests/test_workflow_revisions.py
+          poc/tests/test_workflow_origin.py
+          poc/tests/test_workflow_playground.py
+          poc/tests/test_direct_reasoning.py
+          poc/tests/test_direct_pricing.py
+          poc/tests/test_repo_cache.py
+          --junitxml=reports/backend.xml
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-report
+          path: reports/backend.xml
+          if-no-files-found: ignore
+          retention-days: 14
+  frontend:
+    name: Dashboard checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: poc/dashboard
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: poc/dashboard/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npx --no-install tsc --noEmit
+      - run: node --test tests/requestCache.test.mjs
+      - run: npm run build
