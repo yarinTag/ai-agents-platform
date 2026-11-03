@@ -86,15 +86,26 @@ def test_task_api_scopes_snapshots_and_returns_workflow_identity(db):
 
 
 def test_history_stream_enriches_legacy_events_and_activity_filters_office(db):
-    from fastapi import FastAPI
+    from fastapi import FastAPI, Request
     from fastapi.testclient import TestClient
     from backend.events.router import router
     from backend.dependencies import get_db_manager, get_event_service, get_event_bus
     from events.models import PlatformEvent
+    db.create_organization(id='origin-org', name='Origin', slug='origin')
+    agent = db.get_agent('shared')
+    agent.organization_id = 'origin-org'
+    db.save_agent(agent)
+    for run in db.list_task_runs():
+        run.organization_id = 'origin-org'
+        db.save_task_run(run)
     bus = EventBus()
     service = EventService(db, bus)
     db.save_event(PlatformEvent(event_type='task_started', task_id='child', payload={}))
     app = FastAPI()
+    @app.middleware('http')
+    async def identity(request: Request, call_next):
+        request.state.user = {'sub': 'origin-user', 'role': 'ORG_ADMIN', 'org_id': 'origin-org'}
+        return await call_next(request)
     app.include_router(router, prefix='/events')
     app.dependency_overrides[get_db_manager] = lambda: db
     app.dependency_overrides[get_event_service] = lambda: service

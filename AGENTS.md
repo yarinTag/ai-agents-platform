@@ -207,3 +207,5 @@ Workflow progress notifications are now metadata.channel_binding configuration: 
 
 ## Initial CI failure repair
 CI now selects only six contract files present on master. Dashboard Department declares optional department_id (existing API/hydration alias), grouped model filtering narrows value access, and Telegram tag titles use native spans. No checks disabled; no local runtime verification.
+
+CI regression fixtures for event replay and missing MCP grants now supply tenant identity and configured subjects before asserting the intended policy behavior. Production security is unchanged; GitHub checks are the verification environment.

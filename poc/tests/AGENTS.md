@@ -75,3 +75,6 @@ test_repo_cache.py adds unexecuted source contracts for tenant/connector/reposit
 
 
 test_workflow_notification_modes.py adds unexecuted pure contracts for terminal/start/step selection, disabled and legacy compatibility, and deterministic per-execution/per-event delivery claim IDs. No provider, model, Docker or mocked transport calls; no tests were run.
+
+## Initial GitHub CI fixture repair
+The origin SSE replay test now assigns the shared agent to a real organization and supplies organization-admin request claims so replay passes current tenant filtering. Live MCP grant tests now create a real organization, department, scoped agent and registered CONNECTED GitHub connector without a grant; they assert the appropriate workflow/step missing-grant denial. No model or connector HTTP call is performed. These repair stale fixtures without relaxing production security. Verification is through GitHub CI only.

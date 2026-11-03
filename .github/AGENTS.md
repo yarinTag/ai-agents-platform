@@ -44,3 +44,5 @@ The initial workflow referenced four tests absent from master; the explicit suit
 only versioned master tests: revisions, origin, playground, reasoning, pricing and repo cache.
 Dashboard type checking remains required; shared Department includes its optional API ID alias,
 grouped model filtering narrows leaf options, and Telegram tooltips use a native wrapper.
+
+The first repaired run passed dashboard checks and 47 backend cases; three older cases required tenant-aware SSE and live-connector fixtures. Fixtures now exercise current fail-closed policy with real SQLite, preserving missing-grant denial.
