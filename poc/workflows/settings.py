@@ -9,6 +9,7 @@ Secret values never live here; see integrations/workflow_secrets.py.
 import re
 from typing import Dict, List, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from runtime.execution_backends import ExecutionBackend
 
 MACHINE_SIZES: Dict[str, Dict[str, str]] = {
     'small': {'cpus': '1', 'memory': '1g', 'pids': '128'},
@@ -22,6 +23,7 @@ _HOSTNAME = re.compile(r'(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-
 
 class WorkflowSettings(BaseModel):
     model_config = ConfigDict(extra='forbid')
+    execution_backend: ExecutionBackend = ExecutionBackend.DIRECT_API
     model: Optional[str] = Field(default=None, min_length=1, max_length=200)
     machine_size: Literal['small', 'medium', 'large'] = DEFAULT_MACHINE_SIZE
     network_allowlist: List[str] = Field(default_factory=list, max_length=MAX_ALLOWED_HOSTS)

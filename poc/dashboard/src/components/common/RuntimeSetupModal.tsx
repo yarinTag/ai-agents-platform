@@ -1,10 +1,11 @@
 import { useRuntimeSetupText } from '../../i18n/runtimeSetup';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Modal, Radio, Space, Tag, Typography, Input, Button, Alert, Spin, App, Select, Checkbox } from 'antd';
+import { Modal, Radio, Space, Tag, Typography, Input, Button, Alert, Spin, App, Select, Checkbox, Popconfirm } from 'antd';
 import { ReloadOutlined, CheckCircleOutlined, CloseCircleOutlined, KeyOutlined } from '@ant-design/icons';
-import { getRuntimeSetupState, redetectRuntimeProviders, selectRuntimeProvider } from '../../services/api';
+import { getRuntimeSetupState, redetectRuntimeProviders, selectRuntimeProvider, revokeRuntimeCredential } from '../../services/api';
 import { RuntimeProviderId, RuntimeSetupState } from '../../types/runtime';
 import { useTranslation } from '../../i18n';
+import { useAuth } from '../../context/AuthContext';
 
 const { Text, Paragraph } = Typography;
 
@@ -17,6 +18,8 @@ const { Text, Paragraph } = Typography;
  */
 export const RuntimeSetupModal: React.FC = () => {
   const { t } = useTranslation();
+  const { user, organization } = useAuth();
+  const canManage = user?.role === 'ORG_ADMIN';
   const runtimeText = useRuntimeSetupText();
   const { message } = App.useApp();
   const [state, setState] = useState<RuntimeSetupState | null>(null);
@@ -28,6 +31,8 @@ export const RuntimeSetupModal: React.FC = () => {
   const [providerKeys, setProviderKeys] = useState<Record<string, string>>({});
   const [enabledProviders, setEnabledProviders] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+
+  const promptKey = `runtime-setup-shown:${organization?.id}:${user?.id}`;
 
   const applyState = useCallback((next: RuntimeSetupState) => {
     setState(next);
@@ -52,11 +57,18 @@ export const RuntimeSetupModal: React.FC = () => {
     setProviderModels(modelsMap);
     setEnabledProviders(enabledList);
     setProviderKeys({});
-    setOpen(!next.setup_completed);
-  }, []);
+    const shouldPrompt = !next.setup_completed && !sessionStorage.getItem(promptKey);
+    if (shouldPrompt) sessionStorage.setItem(promptKey, "true");
+    setOpen(shouldPrompt);
+  }, [promptKey]);
 
   useEffect(() => {
+    if (!organization?.id || !user?.id) return;
     let cancelled = false;
+    setProviderKeys({});
+    setState(null);
+    setChoice(null);
+    setLoading(true);
     getRuntimeSetupState()
       .then(({ data }) => {
         if (!cancelled) applyState(data);
@@ -70,7 +82,7 @@ export const RuntimeSetupModal: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [applyState]);
+  }, [applyState, organization?.id, user?.id]);
 
   useEffect(() => {
     const reopen = () => {
@@ -104,7 +116,7 @@ export const RuntimeSetupModal: React.FC = () => {
   };
 
   const handleConfirm = async () => {
-    if (!choice) return;
+    if (!choice || !canManage) return;
     setSaving(true);
     setError(null);
     try {
@@ -124,8 +136,9 @@ export const RuntimeSetupModal: React.FC = () => {
       message.success(`API provider set to ${data.providers.find((p) => p.id === data.selected_provider)?.name}`);
     } catch (err: unknown) {
       const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      setError(detail ?? 'Could not save the runtime selection.');
+      setError(typeof detail === 'string' ? detail : runtimeText.loadError);
     } finally {
+      setProviderKeys({});
       setSaving(false);
     }
   };
@@ -134,7 +147,7 @@ export const RuntimeSetupModal: React.FC = () => {
   const selected = apiProviders.find((p) => p.id === choice);
   const selectedHasKey = Boolean(selected?.available || (choice && (providerKeys[choice] || '').trim()));
   const selectedModelId = choice ? (providerModels[choice] || '').trim() : '';
-  const confirmDisabled = !choice || !selectedHasKey || !selectedModelId;
+  const confirmDisabled = loading || saving || !canManage || !choice || !selectedHasKey || !selectedModelId;
 
   const modelOptionsForSelected = React.useMemo(() => {
     if (!selected) return [];
@@ -155,13 +168,13 @@ export const RuntimeSetupModal: React.FC = () => {
       open={open}
       closable={!saving}
       onCancel={() => {
-        if (!saving) setOpen(false);
+        if (!saving) { setProviderKeys({}); setOpen(false); }
       }}
       mask={{ closable: false }}
       keyboard={!saving}
       width={660}
       footer={[
-        <Button key="later" onClick={() => setOpen(false)} disabled={saving}>
+        <Button key="later" onClick={() => { setProviderKeys({}); setOpen(false); }} disabled={saving}>
           {t('featureAvailability.configureLater')}
         </Button>,
         <Button key="rescan" icon={<ReloadOutlined />} onClick={handleRescan} disabled={loading || saving}>
@@ -177,12 +190,14 @@ export const RuntimeSetupModal: React.FC = () => {
         {runtimeText.credentials}
       </Paragraph>
 
+      {!canManage && <Alert type="info" message={runtimeText.adminOnly} style={{ marginBottom: 16 }} />}
       {error && <Alert type="error" showIcon message={error} style={{ marginBottom: 16 }} />}
 
       {loading && !state ? (
         <Spin />
       ) : (
         <Radio.Group
+          disabled={!canManage || saving}
           value={choice}
           onChange={(e) => {
             const id = e.target.value as RuntimeProviderId;
@@ -226,7 +241,7 @@ export const RuntimeSetupModal: React.FC = () => {
                     {hasKey && (
                       <Checkbox
                         checked={isEnabled}
-                        disabled={isSelected}
+                        disabled={isSelected || !canManage || saving}
                         onChange={(e) => {
                           const checked = e.target.checked;
                           setEnabledProviders((prev) =>
@@ -255,6 +270,7 @@ export const RuntimeSetupModal: React.FC = () => {
                           {provider.name} {runtimeText.apiKey}
                         </Text>
                         <Input.Password
+                          disabled={!canManage || saving}
                           autoComplete="new-password"
                           value={providerKeys[provider.id] || ''}
                           onChange={(e) =>
@@ -270,10 +286,27 @@ export const RuntimeSetupModal: React.FC = () => {
                           }
                         />
 
+                        {provider.config?.has_api_key && canManage && <Popconfirm
+                          title={runtimeText.revokeConfirm}
+                          onConfirm={async () => {
+                            setSaving(true);
+                            setError(null);
+                            setProviderKeys({});
+                            try {
+                              const { data } = await revokeRuntimeCredential(provider.id);
+                              applyState(data);
+                              setOpen(true);
+                              window.dispatchEvent(new Event('platform:runtime-changed'));
+                            } catch { setError(runtimeText.loadError); }
+                            finally { setSaving(false); }
+                          }}>
+                          <Button danger size="small" disabled={saving}>{runtimeText.revoke}</Button>
+                        </Popconfirm>}
                         <Text style={{ fontSize: 12, fontWeight: 600, marginTop: 6 }}>
                           {runtimeText.model} ({provider.name})
                         </Text>
                         <Select
+                          disabled={!canManage || saving}
                           showSearch
                           style={{ width: '100%' }}
                           value={selectedModelId || undefined}

@@ -19,36 +19,27 @@ class RuntimeCommandBuilder:
     def __init__(self, services: RuntimeServices):
         self.services = services
 
+    def organization_settings(self, agent_config):
+        from storage.runtime_settings import OrganizationRuntimeSettings
+        return OrganizationRuntimeSettings(self.services.database(), getattr(agent_config, 'organization_id', None))
+
     def resolve_runtime_provider(self, agent_config: Optional[AgentConfig] = None) -> str:
-        """
-        Resolve which runtime provider a run should use.
+        """Resolve agent override/model owner, then the organization's default.
 
-        Precedence, most specific first:
-          1. The agent's own `runtime_provider` override
-          2. PLATFORM_RUNTIME_PROVIDER in the environment
-          3. The default saved by the first-run setup prompt
-          4. Native Claude Code CLI auth
-
-        Detection is intentionally *not* part of this chain: a saved default must
-        not flip because a proxy happened to be asleep. Detection only feeds the
-        setup prompt's suggestion.
+        Host provider defaults, global keys and legacy CLI auth never select an
+        organization's execution credential.
         """
-        saved_choice = None
-        db = None
-        try:
-            db = self.services.database()
-            saved_choice = db.get_setting(RUNTIME_PROVIDER_SETTING_KEY)
-        except Exception:
-            logging.getLogger(__name__).debug("Saved runtime provider unavailable")
-        agent_provider = getattr(agent_config, "runtime_provider", None)
-        if not agent_provider and agent_config and getattr(agent_config, "model", None):
-            from .direct_config import provider_for_model, resolve_api_key
-            model_owner = provider_for_model(agent_config.model)
-            if model_owner and resolve_api_key(model_owner, db=db):
-                agent_provider = model_owner
-        return providers.resolve_provider_selection(
-            agent_provider, saved_choice,
-        )
+        from .direct_config import DIRECT_PROVIDERS, provider_for_model
+        settings = self.organization_settings(agent_config)
+        selected = getattr(agent_config, 'runtime_provider', None)
+        if not selected and agent_config:
+            selected = provider_for_model(getattr(agent_config, 'model', None))
+        selected = selected or settings.get_setting(RUNTIME_PROVIDER_SETTING_KEY)
+        if selected not in DIRECT_PROVIDERS:
+            raise ValueError('Configure a Direct API provider for this organization.')
+        if not settings.has_credential(selected):
+            raise ValueError('This organization has no API key for the selected provider.')
+        return selected
 
     def _build_claude_env(
         self,
@@ -59,38 +50,31 @@ class RuntimeCommandBuilder:
         """Build environment variables for Claude Code subprocess."""
         provider_id = self.resolve_runtime_provider(agent_config)
 
-        gateway_url = None
-        try:
-            db_manager = self.services.database()
-            gateway_url = db_manager.get_setting(RUNTIME_GATEWAY_URL_SETTING_KEY)
-        except Exception:
-            pass
-
-        # build_provider_env strips inherited backend-steering vars before
-        # applying the selected provider, so a stale ANTHROPIC_BASE_URL in the
-        # platform's own shell cannot hijack a native-auth run.
-        env = providers.build_provider_env(
-            provider_id, os.environ.copy(), gateway_base_url=gateway_url
-        )
-        # Agents never inherit platform secrets (JWT key, API key, bot tokens,
-        # other providers' keys); only this run's provider credential survives.
-        from .direct_config import DIRECT_PROVIDERS as _DIRECT
         from .env_hygiene import strip_secrets
-        keep = {"ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY"}
-        if provider_id in _DIRECT:
-            keep.add(_DIRECT[provider_id][1])
-        if provider_id == providers.PROVIDER_CLAUDE_CODE_NATIVE:
-            keep.add("CLAUDE_CODE_OAUTH_TOKEN")
-        env = strip_secrets(env, keep)
-        env.pop('PLATFORM_CONNECTOR_DB', None)
-        env.pop('PLATFORM_CONNECTOR_TASK', None)
-        env["PLATFORM_RUNTIME_PROVIDER"] = provider_id
+        # Only this organization's selected key reaches the HTTP worker.
+        # Tool environments remove it and the broker context.
+        env = strip_secrets(os.environ.copy())
+        for name in tuple(env):
+            if name.startswith(('ANTHROPIC_', 'PLATFORM_PROVIDER_', 'PLATFORM_CONNECTOR_')) or name in {
+                'PLATFORM_SECRETS_KEY', 'NVIDIA_API_KEY', 'NVIDIA_NIM_API_KEY', 'OPENAI_API_KEY',
+                'OPENROUTER_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN'}:
+                env.pop(name, None)
+        env['PLATFORM_RUNTIME_PROVIDER'] = provider_id
+        from pathlib import Path
+        db = self.services.database()
+        organization_id = getattr(agent_config, 'organization_id', None)
+        env['PLATFORM_PROVIDER_DB'] = str(Path(db.db_path).resolve())
+        env['PLATFORM_PROVIDER_ORGANIZATION'] = organization_id
         from .direct_config import DIRECT_PROVIDERS
-        if provider_id in DIRECT_PROVIDERS:
-            from pathlib import Path
-            db = self.services.database()
-            env['PLATFORM_API_SESSION_DIR'] = str(Path(db.db_path).resolve().parent / 'runtime_sessions')
-            env['PLATFORM_API_SESSION_SCOPE'] = str(getattr(agent_config, 'organization_id', '') or '') + ':' + str(getattr(agent_config, 'id', '') or '')
+        settings = self.organization_settings(agent_config)
+        version = settings.credential_version(provider_id)
+        key = settings.resolve_credential(provider_id)
+        if version is None or not key or settings.credential_version(provider_id) != version:
+            raise ValueError('The organization credential changed. Start the run again.')
+        env[DIRECT_PROVIDERS[provider_id][1]] = key
+        env['PLATFORM_PROVIDER_VERSION'] = str(version)
+        env['PLATFORM_API_SESSION_DIR'] = str(Path(db.db_path).resolve().parent / 'runtime_sessions')
+        env['PLATFORM_API_SESSION_SCOPE'] = organization_id + ':' + str(agent_config.id)
         env.update({
             "CLAUDE_CODE_AUTO_COMPACT_WINDOW": os.getenv("CLAUDE_CODE_AUTO_COMPACT_WINDOW", "40000"),
             "DISABLE_AUTOUPDATER": "1",
@@ -168,7 +152,7 @@ class RuntimeCommandBuilder:
 
         if direct:
             resolved_model = resolve_model_for_provider(
-                provider_id, agent_config.model, db=self.services.database()
+                provider_id, agent_config.model, db=self.organization_settings(agent_config)
             )
             cmd.extend(['--max-tokens', str(agent_config.max_tokens)])
 

@@ -187,3 +187,6 @@ Telegram sendMessage supports bounded text messages; see [Telegram sendMessage](
 
 ## Running or changing code
 Connector tools never clone. Steps that must run or edit code use sandboxed repository workspaces (draft PR only, Docker required, Direct API only). See [repo-workspaces.md](repo-workspaces.md).
+
+## Final answer reliability
+Connector completion now uses a strict internal finalization tool, optional single connector-free formatting pass and bounded redacted rejection diagnostics. Required current-policy/receipt checks remain unchanged. See [completion contract](connector-completion.md). No existing failed execution was retried or rewritten.

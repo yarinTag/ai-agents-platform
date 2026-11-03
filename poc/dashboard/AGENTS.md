@@ -205,3 +205,7 @@ Workflow progress cadence is configured in the existing Channel Binding selector
 
 
 Channel Binding offers exactly four notification choices with friendly EN/HE names. Legacy final modes remain backend-compatible and render under Finish only rather than adding extra options. No runtime checks performed.
+
+WorkflowSettingsValues and update settings add optional ExecutionBackend (direct_api/claude_code/codex_cli/antigravity_cli); absence supports legacy responses. WorkflowSettingsResponse adds optional execution_backends:ExecutionBackendDescriptor[] with source_contract_only verification and explicit implemented/capability metadata. No runtime verification.
+
+ExecutionBackendDescriptor now includes configured/configuration_error/supports_session_resume; source implementation is distinct from deployment readiness. Claude SDK is configuration-gated and read-only. No build/typecheck.

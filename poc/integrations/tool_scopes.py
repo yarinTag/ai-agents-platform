@@ -194,7 +194,15 @@ def prepare_execution_context(db, execution, workflow, definition, user_context=
         if workspace is not None:
             authorize_workspace(db, execution.id, step, workspace)  # Fail before any step runs.
             from workflows.repo_sandbox import sandbox_image
-            sandbox_image()  # Validate static sandbox configuration before start notifications.
+            from workflows.backend_policy import step_backend
+            from workflows.settings import settings_for_workflow
+            if step_backend(settings_for_workflow(workflow), step).value == 'claude_code':
+                from runtime.claude_hosted.policy import configured_image
+                configured_image()
+                if db.list_workflow_secrets(workflow.id):
+                    raise ToolAccessError('Hosted SDK read-only steps do not accept workflow secrets.')
+            else:
+                sandbox_image()  # Validate static sandbox configuration before start notifications.
             from workflows.settings import settings_for_workflow
             if settings_for_workflow(workflow).network_allowlist:
                 from workflows.repo_sandbox import proxy_image

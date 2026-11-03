@@ -48,10 +48,13 @@ def public_job(row):
 @router.get('/ai/context')
 def context(request: Request, department_id: str | None = None,
             db=Depends(get_db_manager), runtime=Depends(get_optional_runtime_adapter)):
-    _, departments = workspace(db, claims(request), department_id)
+    user, departments = workspace(db, claims(request), department_id)
     selected = None
     if runtime and hasattr(runtime, 'workflow_chat_selection'):
-        selected = runtime.workflow_chat_selection()
+        try:
+            selected = runtime.workflow_chat_selection(user.organization_id)
+        except ValueError:
+            selected = None
     return {'departments': [{'id': d.id, 'name': d.name} for d in departments],
         'selection': selected, 'catalog': catalog(db, claims(request), department_id) if department_id else None}
 
@@ -65,7 +68,10 @@ def chat(payload: ChatRequest, request: Request, background: BackgroundTasks,
         raise HTTPException(503, 'The selected runtime does not support workflow creation chat.')
     raw = payload.model_dump_json()
     digest = hashlib.sha256(raw.encode()).hexdigest()
-    selected = runtime.workflow_chat_selection()
+    try:
+        selected = runtime.workflow_chat_selection(user.organization_id)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from None
     now = datetime.now()
     with db._get_connection() as conn:
         conn.execute('BEGIN IMMEDIATE')
@@ -136,6 +142,7 @@ def generate(db, runtime, identity, job_id):
                 return True
 
         selected = {key: row[key] for key in ('provider_id', 'model_id', 'cost_source')}
+        selected['organization_id'] = row['organization_id']
         inference = runtime.infer_workflow_chat(selected, prompt, ChatReply.model_json_schema(), remaining, stopped)
         resources = catalog(db, identity, payload.department_id)
         if inference.get('error'):

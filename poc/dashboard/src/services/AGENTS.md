@@ -248,3 +248,5 @@ Existing getWorkflowChatContext is reused once by useWorkflowResources for all m
 
 
 WorkflowChannelBinding.notify_mode union adds COMPLETION_ONLY, START_AND_COMPLETE and EACH_STEP. ChatWorkflow.destination adds the canonical optional notify_mode field. Existing service routes/signatures remain compatible. No new requests or tests.
+
+Runtime setup/selection/detection URLs remain unchanged but now scope to the authenticated organization. runtimeApi.ts adds revokeRuntimeCredential(providerId): DELETE /api/v1/runtimes/credentials/{encodedProviderId} -> RuntimeSetupState. Existing facade export applies. No build/typecheck performed.

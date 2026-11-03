@@ -1,11 +1,14 @@
 import { useTranslation } from './I18nContext';
 
 const en = {
-    "title": "Configure AI API Providers & Models",
+    "title": "Organization API Providers & Models",
     "intro": "Select the active API provider(s) and default model for agents and workflows. Available models across the platform automatically adapt to the providers you configure here.",
-    "credentials": "API keys are stored securely on the platform server. You can use environment variables or enter an API key directly below.",
+    "credentials": "Each organization uses its own encrypted API keys. Only organization administrators can replace or revoke them. Server-wide keys are never used as a fallback.",
+    "adminOnly": "Only an organization administrator can manage these settings.",
+    "revoke": "Revoke key",
+    "revokeConfirm": "Revoke this organization's key? New model requests will be blocked.",
     "apiKey": "API Key",
-    "apiKeyConfiguredPlaceholder": "API key already configured on server (enter a new key to override)",
+    "apiKeyConfiguredPlaceholder": "API key already configured for this organization (enter a new key to override)",
     "apiKeyMissingPlaceholder": "Enter provider API key (e.g. nvapi-..., sk-...)...",
     "enableModels": "Include this provider's models in model selectors",
     "model": "Default Provider Model",
@@ -16,11 +19,14 @@ const en = {
 };
 
 const he: typeof en = {
-    "title": "הגדרת ספקי API ומודלים",
+    "title": "ספקי API ומודלים של הארגון",
     "intro": "בחרו את ספקי ה־API הפעילים ואת מודל ברירת המחדל עבור סוכנים ותהליכי עבודה. רשימת המודלים בפלטפורמה מתעדכנת אוטומטית לפי הספקים שהגדרתם.",
-    "credentials": "מפתחות ה־API נשמרים בשרת הפלטפורמה. ניתן להשתמש במשתני סביבה או להזין מפתח API ישירות למטה.",
+    "credentials": "לכל ארגון מפתחות API משלו, הנשמרים מוצפנים. רק מנהלי הארגון יכולים להחליף או לבטל אותם. אין שימוש במפתחות גלובליים כגיבוי.",
+    "adminOnly": "רק מנהל הארגון יכול לשנות את ההגדרות האלה.",
+    "revoke": "ביטול מפתח",
+    "revokeConfirm": "לבטל את מפתח הארגון? קריאות מודל חדשות ייחסמו.",
     "apiKey": "מפתח API",
-    "apiKeyConfiguredPlaceholder": "מפתח API כבר מוגדר בשרת (הזינו מפתח חדש כדי לדרוס)",
+    "apiKeyConfiguredPlaceholder": "מפתח API כבר מוגדר לארגון (הזינו מפתח חדש כדי לדרוס)",
     "apiKeyMissingPlaceholder": "הזינו מפתח API של הספק...",
     "enableModels": "הצג את המודלים של ספק זה בבוררי המודלים",
     "model": "מודל ברירת מחדל לספק",

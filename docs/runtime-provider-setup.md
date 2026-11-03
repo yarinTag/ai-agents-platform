@@ -1,3 +1,5 @@
+> Organization credential update (2026-11-03): organization execution now requires encrypted per-organization keys and settings. Global environment/settings/FCC credentials and shared CLI/gateway auth are not fallbacks. See [current contracts and migration](organization-provider-credentials.md); older server-global configuration instructions below do not authorize organization execution. No live configuration was changed.
+
 # Choose CLI or direct API
 
 On first use, select **CLI** or **Direct API** in the runtime setup dialog.

@@ -53,7 +53,8 @@ class DirectTools:
         # The shell gets no credentials at all (not even this run's provider key)
         # and no pointer to the shared transcript store or connector context.
         return {k: v for k, v in strip_secrets(os.environ).items()
-                if not k.startswith(('PLATFORM_API_SESSION_', 'PLATFORM_CONNECTOR_'))}
+                if not re.search(r'(SECRET|TOKEN|PASSWORD|API_?KEY|CREDENTIAL)', k, re.IGNORECASE)
+                if not k.startswith(('PLATFORM_API_SESSION_', 'PLATFORM_CONNECTOR_', 'PLATFORM_PROVIDER_'))}
 
     def allowed(self):
         return set((self.args.allowedTools or '').split(','))

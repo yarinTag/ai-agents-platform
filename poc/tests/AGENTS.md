@@ -75,3 +75,18 @@ test_repo_cache.py adds unexecuted source contracts for tenant/connector/reposit
 
 
 test_workflow_notification_modes.py adds unexecuted pure contracts for terminal/start/step selection, disabled and legacy compatibility, and deterministic per-execution/per-event delivery claim IDs. No provider, model, Docker or mocked transport calls; no tests were run.
+
+## Organization provider credentials
+test_organization_provider_credentials.py adds unexecuted real SQLite/FastAPI contracts: encrypted organization separation and model defaults, global/environment fallback denial, stale admin/inactive users, secret-safe 422, invalid-batch/missing-encryption-key atomic failure, worker rotation/revocation, AES-GCM organization AAD and command/tool environment hygiene. No mocks or provider requests. Existing global-runtime fixtures need migration to organization-scoped setup. No tests/collection/build/import/runtime verification was performed.
+
+test_direct_runtime.py command-routing fixture now creates an organization and encrypted scoped provider configuration instead of global settings. Not executed.
+
+## Execution backend foundation contracts
+test_execution_backends.py adds unexecuted pure-policy and real-SQLite cases for legacy Direct API default, immutable/source-only capability inventory, strict IDs, pending-backend authoring versus execution refusal, YAML/JSON preservation, step override/null inheritance, later-step whole-DAG blocking, deterministic delivery exemption and persisted task lineage/missing-step denial. No fake runtime, Docker or model transport. No tests or collection run.
+
+## Hosted Claude read-only source tests
+test_claude_hosted.py adds real SQLite/Unix HTTP source cases for capability/routes, current user/tool/key/cancellation checks, text/model/tool request limits, concurrent department reservations, conservative unknown holds versus actual spend, aggregate deduplication and terminal SSE usage. Existing backend tests accept fail-closed Claude shape/configuration errors now that source integration exists. No SDK/Docker/vendor mocks or calls; tests were not run.
+
+test_sandbox_diagnostics.py adds unexecuted pure startup-error category, secret/path exclusion, exit-code type and classification-priority contracts. No Docker, application or test execution.
+
+test_completion_validation.py adds unexecuted pure contracts for strict final schema/types/required fields, whole-fence compatibility, prose/duplicate-key rejection, blockers, single repair with connector-free inventory, rejection of mixed/external recovery calls, and bounded credential-redacted diagnostics. No mocked transport, provider calls or test execution.

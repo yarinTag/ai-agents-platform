@@ -125,3 +125,9 @@ workflowChat EN/HE adds notifyEachStep, notifyStartComplete, notifyCompletion an
 
 
 Notification cadence labels simplified in matching EN/HE: Every step / בכל שלב; Start and finish / בתחילה ובסיום; Finish only / בסיום בלבד; Off / כבוי. Shared labels also update AI preview. No runtime checks performed.
+
+RuntimeSetup EN/HE copy now describes encrypted organization-owned provider keys without global/environment fallback and adds adminOnly, revoke, revokeConfirm. No runtime checks performed.
+
+workflowSettings.ts adds EN/HE backendSection/backendHelp/backendPending/backendBlocked/backendBlockedHelp for the execution-engine control and explicit pending-runtime warning. No build/typecheck/UI execution.
+
+workflowSettings adds EN/HE backendSetupNeeded and updates backendBlockedHelp to distinguish server configuration from unsupported engines and describe the read-only SDK limit. No runtime checks.

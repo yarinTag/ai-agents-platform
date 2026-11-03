@@ -104,7 +104,9 @@ class DepartmentsRepository:
             chat = conn.execute("""SELECT COALESCE(SUM(cost_usd), 0) AS total
                 FROM workflow_builder_jobs WHERE department_id=? AND created_at LIKE ?
                 AND cost_source='API_KEY'""", (department_id, month_prefix)).fetchone()
-            return workflow_total + float(chat['total'])
+            from .hosted_budget import outstanding
+            settled_extra = outstanding(conn, department_id, month_prefix) / 1_000_000
+            return workflow_total + float(chat['total']) + settled_extra
 
     def check_department_budget(self, department_id: str, requested_cost: float = 0.0) -> Dict[str, Any]:
         """
@@ -117,13 +119,17 @@ class DepartmentsRepository:
 
         current_spend = dept.current_spend_usd
         budget = dept.monthly_budget_usd
+        from .hosted_budget import reserved_total
+        with self._get_connection() as conn:
+            reserved = reserved_total(conn, department_id, datetime.now().strftime('%Y-%m') + '%') / 1_000_000
 
-        if (current_spend + requested_cost) >= budget:
+        if (current_spend + reserved + requested_cost) >= budget:
             return {
                 "allowed": False,
                 "action": dept.budget_action,
                 "department_id": department_id,
                 "current_spend_usd": current_spend,
+                "reserved_usd": reserved,
                 "monthly_budget_usd": budget,
                 "message": f"Department '{dept.name}' exceeded monthly budget (${current_spend:.2f}/${budget:.2f}). Additional budget required."
             }
@@ -133,6 +139,7 @@ class DepartmentsRepository:
             "allowed": True,
             "department_id": department_id,
             "current_spend_usd": current_spend,
+            "reserved_usd": reserved,
             "monthly_budget_usd": budget,
             "is_alert": is_alert
         }

@@ -120,3 +120,8 @@ def initialize(conn):
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_invitations_email ON org_invitations(email, status)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_invitations_org ON org_invitations(organization_id)")
+    from .runtime_settings import initialize as initialize_runtime_settings
+    initialize_runtime_settings(conn)
+
+    from .hosted_budget import initialize as initialize_hosted_budget
+    initialize_hosted_budget(conn)

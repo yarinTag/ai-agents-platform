@@ -207,3 +207,18 @@ Repository cache implementation: integrations/repo_cache.py, default database-ad
 
 
 Notification configuration change: use existing Channel Binding cadence, not synthetic start/middle/done work stages. Engine lifecycle hooks, per-event audit claims, best-effort delivery warnings and typed chat/UI modes are implemented. Existing workflow revision migration preserves historical run failures and PR receipts. No tests/build/typecheck/startup or message sends performed.
+
+## Organization provider credentials
+Organization execution no longer consumes global provider keys/defaults or host CLI/gateway auth. Configure PLATFORM_SECRETS_KEY and re-enter keys/defaults per organization in Runtime settings; existing plaintext globals are not auto-migrated or deleted. See docs/organization-provider-credentials.md for schema, API, rollout and deferred verification. No tests/build/typecheck/startup/provider calls were performed.
+
+Execution backend foundation: definition.settings.execution_backend defaults to direct_api; step params can override. Claude Code uses Agent SDK as the planned transport. All non-direct engines remain explicitly blocked until hosted isolation/credential-proxy/policy integration exists. See docs/execution-backends.md. No SDK install/tests/build/startup/Docker/model calls performed.
+
+The local `uv run python poc/start_api.py` launcher passes the absolute repository-root `.env` path to Uvicorn and defers application import until environment loading. This includes JWT_SECRET_KEY; shell environment values retain precedence. Direct Uvicorn invocations must provide their own environment or --env-file. No startup or tests were performed.
+
+Claude Agent SDK read-only workflow integration is implemented in source, disabled by default. Native Linux/local Docker and a digest-pinned SDK image are required; no Docker Desktop claim. Real Anthropic keys stay in a host broker accessed through a private Unix socket relay. No shell/writes/PR/resume support yet. See docs/claude-hosted.md. Do not enable on the strength of source review; no tests/build/SDK/Docker/startup/inference executed.
+
+Sandbox startup failures now surface sanitized Docker category/exit/reference diagnostics; raw stderr is not echoed into workflow errors. The reported failed PR execution was not rerun or modified. Root Docker cause still requires server evidence; no Docker/tests/startup run.
+
+Explicit diagnostic exception: Docker info/image inspection and one network-disabled sleep-0 container probe were authorized and completed successfully. No test suite, workflow, model or message was run. The broader runtime restriction remains; see docs/workflow-repairs.md.
+
+Governed connector finals now use strict schema-backed internal completion and at most one formatting-only pass without connector tools. It is not an external-action retry; it adds accounted model usage only on a future run when needed. Rejected candidate previews are bounded/redacted and remain scoped to authorized logs. See docs/connector-completion.md. No inference/workflow/tests/build executed for this fix.

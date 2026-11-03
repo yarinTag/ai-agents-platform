@@ -248,3 +248,7 @@ Use Channel Binding for workflow lifecycle update cadence; preserve legacy modes
 
 
 Keep the Channel Binding notification dropdown at four canonical choices; older persisted modes must not add visible legacy options. Friendly labels live in workflowChat.ts. No tests/build/typecheck performed.
+
+Runtime setup automatic prompts wait for authenticated organization/user context and are shown at most once per user/organization per browser tab session (sessionStorage contains only the shown marker). Explicit Configure runtime still opens the modal. Missing organization keys remain execution-blocking; dismissal grants no credentials. No runtime verification performed.
+
+Completion-validation events now render a bounded redacted candidate preview in StepEventTimeline. Existing scoped logs/export are reused; raw provider envelopes are not displayed. No build/typecheck/render verification was performed for this change.

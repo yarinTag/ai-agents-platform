@@ -7,19 +7,18 @@ platform default provider.
 """
 
 import logging
-import os
 from typing import List, Optional, Dict, Any
 
 from fastapi import APIRouter, HTTPException, Request, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr
+from fastapi.routing import APIRoute
+from fastapi.exceptions import RequestValidationError
 from runtime.direct_config import (
     DIRECT_PROVIDERS,
     DEFAULT_PROVIDER_MODEL,
     PROVIDER_MODELS,
-    api_key_setting,
     enabled_setting,
     model_setting,
-    resolve_api_key,
     validate_model,
 )
 
@@ -27,7 +26,19 @@ from ..dependencies import db_manager, runtime_providers as providers
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+class CredentialRoute(APIRoute):
+    def get_route_handler(self):
+        handler = super().get_route_handler()
+        async def safe_handler(request):
+            try:
+                return await handler(request)
+            except RequestValidationError:
+                # FastAPI's default 422 includes rejected input, possibly a key.
+                raise HTTPException(422, 'Invalid runtime configuration request.') from None
+        return safe_handler
+
+
+router = APIRouter(route_class=CredentialRoute)
 
 
 class ProviderStatusResponse(BaseModel):
@@ -53,142 +64,106 @@ class ProviderSelectionRequest(BaseModel):
     provider_id: str
     gateway_base_url: Optional[str] = None
     model_id: Optional[str] = Field(default=None, max_length=200)
-    api_key: Optional[str] = Field(default=None, max_length=500)
+    api_key: Optional[SecretStr] = None
     enabled_providers: Optional[List[str]] = None
     provider_models: Optional[Dict[str, str]] = None
-    provider_keys: Optional[Dict[str, str]] = None
+    provider_keys: Optional[Dict[str, SecretStr]] = None
 
 
-def _build_setup_state() -> SetupStateResponse:
-    raw_selected = db_manager.get_setting(providers.SETTING_PROVIDER)
-    setup_completed = db_manager.get_setting(providers.SETTING_SETUP_COMPLETED) == "true"
-    effective = providers.resolve_provider_selection(saved_choice=raw_selected)
-    selected = effective if (raw_selected and "PYTEST_CURRENT_TEST" not in os.environ) else raw_selected
-
-    detected = providers.detect_providers()
-    provider_Items: List[ProviderStatusResponse] = []
-    for s in detected:
-        cfg = dict(s.config)
-        if s.id in DIRECT_PROVIDERS:
-            saved_model = db_manager.get_setting(model_setting(s.id)) or DEFAULT_PROVIDER_MODEL.get(s.id, "")
-            has_key = bool(resolve_api_key(s.id, db=db_manager))
-            explicit_enabled = db_manager.get_setting(enabled_setting(s.id))
-            is_enabled = (explicit_enabled == "true") if explicit_enabled is not None else (s.id == effective)
-            cfg.update({
-                "model_id": saved_model,
-                "models": PROVIDER_MODELS.get(s.id, []),
-                "has_api_key": has_key,
-                "enabled": bool(is_enabled or s.id == selected),
-            })
-        provider_Items.append(
-            ProviderStatusResponse(
-                id=s.id,
-                name=s.name,
-                description=s.description,
-                available=s.available,
-                detail=s.detail,
-                requires_config=s.requires_config,
-                config=cfg,
-                is_selected=(s.id == selected),
-            )
-        )
-
-    return SetupStateResponse(
-        setup_completed=setup_completed,
-        selected_provider=selected,
-        effective_provider=effective,
-        suggested_provider=providers.suggest_default_provider(),
-        providers=provider_Items,
-    )
+def organization_settings(request, manage=False):
+    from storage.runtime_settings import OrganizationRuntimeSettings
+    claims = getattr(request.state, 'user', None) or {}
+    org_id = claims.get('org_id')
+    user = db_manager.get_user(claims.get('sub')) if claims.get('sub') else None
+    service = claims.get('service') in ('api_key', 'open_development')
+    if not org_id or (not service and (not user or user.status != 'ACTIVE' or user.organization_id != org_id)):
+        raise HTTPException(403, 'An active organization account is required.')
+    if manage and not ((user and user.role == 'ORG_ADMIN') or (service and claims.get('role') == 'ORG_ADMIN')):
+        raise HTTPException(403, 'An organization administrator must manage provider credentials.')
+    try:
+        return OrganizationRuntimeSettings(db_manager, org_id)
+    except ValueError as exc:
+        raise HTTPException(403, str(exc)) from None
 
 
-@router.get("/", response_model=SetupStateResponse)
-@router.get("", response_model=SetupStateResponse)
-async def get_runtime_setup_state():
-    """Report provider availability on this machine plus the current selection."""
-    return _build_setup_state()
+def _build_setup_state(settings) -> SetupStateResponse:
+    selected = settings.get_setting(providers.SETTING_PROVIDER)
+    available = [pid for pid in DIRECT_PROVIDERS if settings.has_credential(pid)]
+    effective = selected or (available[0] if available else 'direct_nvidia')
+    items = []
+    for pid, (name, _, _) in DIRECT_PROVIDERS.items():
+        has_key = pid in available
+        items.append(ProviderStatusResponse(id=pid, name=name,
+            description=f'Direct HTTP API for {name} models.', available=has_key,
+            detail='Organization API key configured.' if has_key else 'Configure an API key for this organization.',
+            requires_config=True, is_selected=pid == selected,
+            config={'model_id': settings.get_setting(model_setting(pid)) or DEFAULT_PROVIDER_MODEL[pid],
+                    'models': PROVIDER_MODELS.get(pid, []), 'has_api_key': has_key,
+                    'enabled': has_key and (settings.get_setting(enabled_setting(pid)) == 'true' or pid == selected)}))
+    return SetupStateResponse(setup_completed=settings.get_setting(providers.SETTING_SETUP_COMPLETED) == 'true' and selected in available,
+        selected_provider=selected, effective_provider=effective,
+        suggested_provider=available[0] if available else None, providers=items)
 
 
-@router.put("/selection", response_model=SetupStateResponse)
+@router.get('/', response_model=SetupStateResponse)
+@router.get('', response_model=SetupStateResponse)
+async def get_runtime_setup_state(request: Request):
+    return _build_setup_state(organization_settings(request))
+
+
+@router.put('/selection', response_model=SetupStateResponse)
 async def select_runtime_provider(payload: ProviderSelectionRequest, request: Request):
-    """Persist the platform-default runtime provider and optional per-provider settings."""
-    user = getattr(request.state, 'user', None)
-    if user and user.get('role') != 'ORG_ADMIN':
-        raise HTTPException(status_code=403, detail='An organization administrator must configure the shared platform runtime.')
-    provider_id = payload.provider_id.strip()
-    forced = os.environ.get('PLATFORM_RUNTIME_PROVIDER', '').strip()
-    if forced and forced != provider_id:
-        raise HTTPException(status_code=409, detail='PLATFORM_RUNTIME_PROVIDER overrides this selection. Update the server environment first.')
-    if provider_id not in providers.ALL_PROVIDER_IDS:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"Unknown runtime provider '{provider_id}'. "
-                f"Expected one of: {', '.join(providers.ALL_PROVIDER_IDS)}."
-            ),
-        )
-
-    # Save any provided API keys first so availability probe sees them immediately
-    if payload.api_key is not None and payload.api_key.strip() and provider_id in DIRECT_PROVIDERS:
-        db_manager.set_setting(api_key_setting(provider_id), payload.api_key.strip())
-    if payload.provider_keys:
-        for pid, key_val in payload.provider_keys.items():
-            if pid in DIRECT_PROVIDERS and key_val is not None and key_val.strip():
-                db_manager.set_setting(api_key_setting(pid), key_val.strip())
-
-    if provider_id == providers.PROVIDER_CUSTOM_GATEWAY:
-        raw_url = (payload.gateway_base_url or "").strip()
-        if not raw_url:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="A gateway base URL is required when selecting 'custom_gateway'.",
-            )
-        try:
-            validated = providers.validate_gateway_url(raw_url)
-        except providers.ProviderConfigurationError as exc:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
-        db_manager.set_setting(providers.SETTING_GATEWAY_URL, validated)
-
-    probe = providers.detect_provider(provider_id)
-    if not probe.available:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Provider '{provider_id}' is not usable on this machine: {probe.detail}",
-        )
-
-    if provider_id in DIRECT_PROVIDERS:
-        candidate_model = payload.model_id
-        if not candidate_model and "PYTEST_CURRENT_TEST" not in os.environ:
-            candidate_model = db_manager.get_setting(model_setting(provider_id)) or DEFAULT_PROVIDER_MODEL.get(provider_id)
-        try:
-            model = validate_model(candidate_model)
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        db_manager.set_setting(model_setting(provider_id), model)
-
-    if payload.provider_models:
-        for pid, mid in payload.provider_models.items():
-            if pid in DIRECT_PROVIDERS and mid and mid.strip():
-                try:
-                    db_manager.set_setting(model_setting(pid), validate_model(mid))
-                except ValueError as exc:
-                    raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    if payload.enabled_providers is not None:
-        enabled_set = set(payload.enabled_providers) | {provider_id}
-        for pid in DIRECT_PROVIDERS:
-            db_manager.set_setting(enabled_setting(pid), "true" if pid in enabled_set else "false")
-    elif provider_id in DIRECT_PROVIDERS:
-        db_manager.set_setting(enabled_setting(provider_id), "true")
-
-    db_manager.set_setting(providers.SETTING_PROVIDER, provider_id)
-    db_manager.set_setting(providers.SETTING_SETUP_COMPLETED, "true")
-    logger.info(f"Runtime provider default set to '{provider_id}'")
-
-    return _build_setup_state()
+    settings = organization_settings(request, manage=True)
+    pid = payload.provider_id.strip()
+    if pid not in DIRECT_PROVIDERS:
+        raise HTTPException(400, 'Select a supported Direct API provider.')
+    if payload.gateway_base_url is not None:
+        raise HTTPException(400, 'Shared gateways are not organization credential providers.')
+    credentials = {}
+    for provider, value in (payload.provider_keys or {}).items():
+        if provider not in DIRECT_PROVIDERS:
+            raise HTTPException(400, 'Unknown credential provider.')
+        value = value.get_secret_value().strip()
+        if value:
+            credentials[provider] = value
+    if payload.api_key and payload.api_key.get_secret_value().strip():
+        credentials[pid] = payload.api_key.get_secret_value().strip()
+    if any(len(value.encode()) > 4096 for value in credentials.values()):
+        raise HTTPException(400, 'Provider API key exceeds the size limit.')
+    updates = {providers.SETTING_PROVIDER: pid, providers.SETTING_SETUP_COMPLETED: 'true'}
+    try:
+        for provider, model in (payload.provider_models or {}).items():
+            if provider not in DIRECT_PROVIDERS:
+                raise ValueError('Unknown model provider.')
+            updates[model_setting(provider)] = validate_model(model)
+        updates[model_setting(pid)] = validate_model(payload.model_id or updates.get(model_setting(pid))
+            or settings.get_setting(model_setting(pid)) or DEFAULT_PROVIDER_MODEL[pid])
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from None
+    enabled = set(payload.enabled_providers or [p for p in DIRECT_PROVIDERS
+        if settings.get_setting(enabled_setting(p)) == 'true']) | {pid}
+    if enabled - set(DIRECT_PROVIDERS):
+        raise HTTPException(400, 'Unknown enabled provider.')
+    if any(provider not in credentials and not settings.has_credential(provider) for provider in enabled):
+        raise HTTPException(400, 'Configure an organization API key for every enabled provider.')
+    updates.update({enabled_setting(provider): 'true' if provider in enabled else 'false' for provider in DIRECT_PROVIDERS})
+    try:
+        settings.save(updates, credentials, (getattr(request.state, 'user', None) or {}).get('sub'))
+    except Exception:
+        # Encryption/configuration errors must never echo submitted keys.
+        raise HTTPException(503, 'Unable to store organization credentials. Configure PLATFORM_SECRETS_KEY and check storage.') from None
+    return _build_setup_state(settings)
 
 
-@router.post("/detect", response_model=SetupStateResponse)
-async def redetect_providers():
-    """Re-probe providers — used by the 'Re-scan' action in the setup prompt."""
-    return _build_setup_state()
+@router.delete('/credentials/{provider_id}', response_model=SetupStateResponse)
+async def revoke_provider_credential(provider_id: str, request: Request):
+    settings = organization_settings(request, manage=True)
+    if provider_id not in DIRECT_PROVIDERS:
+        raise HTTPException(400, 'Unknown credential provider.')
+    settings.revoke(provider_id, (getattr(request.state, 'user', None) or {}).get('sub'))
+    return _build_setup_state(settings)
+
+
+@router.post('/detect', response_model=SetupStateResponse)
+async def redetect_providers(request: Request):
+    return _build_setup_state(organization_settings(request))

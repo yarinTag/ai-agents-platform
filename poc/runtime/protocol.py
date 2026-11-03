@@ -126,7 +126,7 @@ class PlaygroundRuntimeAdapter(RuntimeAdapter, Protocol):
 
 @runtime_checkable
 class WorkflowChatRuntimeAdapter(RuntimeAdapter, Protocol):
-    def workflow_chat_selection(self) -> Dict[str, str]:
+    def workflow_chat_selection(self, organization_id: str) -> Dict[str, str]:
         """Return the configured provider/model; callers cannot override the selection."""
         ...
 

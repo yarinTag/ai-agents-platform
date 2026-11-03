@@ -56,6 +56,7 @@ def _can_manage(request, db, wf) -> bool:
 
 def _response(db, wf, can_manage: bool) -> Dict[str, Any]:
     from workflows.settings import MACHINE_SIZES, MAX_ALLOWED_HOSTS, WorkflowSettings, validate_settings
+    from runtime.execution_backends import backend_catalog
     raw = json.loads(wf.definition_json or "{}").get("settings")
     try:
         settings = validate_settings(raw)
@@ -68,7 +69,8 @@ def _response(db, wf, can_manage: bool) -> Dict[str, Any]:
         for row in db.list_workflow_secrets(wf.id)]
     return {"workflow_id": wf.id, "revision": wf.revision, "settings": settings.model_dump(),
             "settings_error": error, "secrets": secrets, "can_manage": can_manage,
-            "machine_sizes": MACHINE_SIZES, "max_allowed_hosts": MAX_ALLOWED_HOSTS}
+            "machine_sizes": MACHINE_SIZES, "max_allowed_hosts": MAX_ALLOWED_HOSTS,
+            "execution_backends": backend_catalog()}
 
 
 def _audit(db, request, user, action, wf, details):
@@ -103,6 +105,7 @@ def update_workflow_settings(workflow_id: str, req: WorkflowSettingsUpdate, requ
     except WorkflowRevisionConflict as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     _audit(db, request, user, "workflow.settings.update", wf, {
+        "execution_backend": settings.execution_backend.value,
         "model": settings.model, "machine_size": settings.machine_size,
         "network_allowlist": settings.network_allowlist})
     return _response(db, updated, True)

@@ -164,3 +164,9 @@ Repository readiness projection must stay configuration-only and credential-free
 
 
 Lifecycle notifications belong to metadata.channel_binding, with typed mode validation and current per-send authorization. Preserve explicit channel actions for actual business deliverables; do not model progress messages as DAG stages. No tests or live execution performed.
+
+Organization runtime configuration is now tenant-scoped and credentials are AES-GCM encrypted using PLATFORM_SECRETS_KEY. Re-enter keys per organization; globals are not fallback or auto-migration sources. Runtime management rechecks active database identity/current admin role. Refer to docs/organization-provider-credentials.md. Runtime verification remains prohibited and was not performed.
+
+Workflow settings expose source-only execution engine metadata independently of provider credentials. Non-direct engines are pending and fail execution admission; no fallback or CLI authentication is enabled. Existing settings authorization/revision/audit applies. See docs/execution-backends.md. No runtime verification performed.
+
+The hosted SDK broker exposes no host TCP or public FastAPI route. Private Unix HTTP accepts only run-bound /authorize and /v1/messages, with current policy and durable budget holds. Available source integration is not deployment verification; see docs/claude-hosted.md. No runtime verification performed.

@@ -11,11 +11,13 @@ from .direct_config import DIRECT_PROVIDERS, resolve_model_for_provider
 from .processes import terminate_process
 
 
-def selection(adapter):
-    provider = adapter.resolve_runtime_provider()
-    model = resolve_model_for_provider(provider, 'default', adapter.services.database()) if provider in DIRECT_PROVIDERS else 'default'
+def selection(adapter, organization_id):
+    profile = AgentConfig(id='workflow-builder', name='Workflow builder', description='Tool-free planning',
+                          system_prompt='', organization_id=organization_id)
+    provider = adapter.resolve_runtime_provider(profile)
+    model = resolve_model_for_provider(provider, 'default', adapter._command_builder.organization_settings(profile)) if provider in DIRECT_PROVIDERS else 'default'
     return {'provider_id': provider, 'model_id': model,
-        'cost_source': 'API_KEY' if provider in (*DIRECT_PROVIDERS, 'anthropic_api', 'custom_gateway') else 'SUBSCRIPTION_CLI'}
+        'organization_id': organization_id, 'cost_source': 'API_KEY' if provider in (*DIRECT_PROVIDERS, 'anthropic_api', 'custom_gateway') else 'SUBSCRIPTION_CLI'}
 
 
 def infer(adapter, selected, prompt, schema, budget, is_cancelled):
@@ -79,7 +81,7 @@ def infer(adapter, selected, prompt, schema, budget, is_cancelled):
         'Do not emit a workflow while important details or permissions are unresolved.\n' + json.dumps(schema))
     profile = AgentConfig(id='workflow-builder', name='Workflow builder', description='Tool-free planning',
         model=selected['model_id'], runtime_provider=selected['provider_id'], system_prompt=system,
-        skills=[], dangerously_skip_permissions=False)
+        skills=[], dangerously_skip_permissions=False, organization_id=selected['organization_id'])
     command = adapter._build_claude_command(profile, None, prompt, playground=True)
     command[command.index('--system-prompt') + 1] = system
     if selected['provider_id'] not in ('free_claude_code', 'custom_gateway'):

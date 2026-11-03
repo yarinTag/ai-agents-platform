@@ -1,7 +1,7 @@
 """HTTP wire formats for Anthropic Messages and OpenAI-compatible chat APIs."""
-import json
 import httpx
 from .direct_config import configuration
+from .completion_validation import tool_input
 from .direct_reasoning import (anthropic_thinking, compatible_reasoning,
                                openai_reasoning_model, responses_body, responses_result)
 
@@ -67,7 +67,7 @@ def request(provider, model, system, messages, tools, max_tokens):
         text = raw.get('content') or ''
         reasoning = compatible_reasoning(raw)
         calls = [{'id': c['id'], 'name': c['function']['name'],
-            'input': json.loads(c['function']['arguments']), 'type': 'tool_use'} for c in raw.get('tool_calls') or []]
+            'input': tool_input(c['function']['name'], c['function']['arguments']), 'type': 'tool_use'} for c in raw.get('tool_calls') or []]
         truncated = choice.get('finish_reason') in ('length', 'content_filter')
     return {'text': text, 'calls': calls, 'message': message, 'truncated': truncated, 'reasoning': reasoning,
         'provider_cost_usd': usage.get('cost') if provider == 'direct_openrouter' else None,
