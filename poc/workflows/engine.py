@@ -173,6 +173,8 @@ class WorkflowEngine:
                 return self.db.get_workflow_execution(execution_id)
 
         try:
+            from .backend_policy import preflight_backends
+            preflight_backends(wf_def, playground=playground, db=self.db, workflow=workflow)
             for step in wf_def.steps:
                 require_agent_scope(self.db.get_agent(step.agent_id), workflow, user_context)
                 reviewer_id = (getattr(step, "params", None) or {}).get("reviewerAgentId")
@@ -242,7 +244,10 @@ class WorkflowEngine:
             for stage in stages:
                 # Check mid-run budget cap before launching next stage
                 if dept_id:
-                    check = self.db.check_department_budget(dept_id, requested_cost=total_cost_usd)
+                    from storage.hosted_budget import execution_settled
+                    # Hosted requests already appear in department spend before workflow rollup.
+                    incremental = max(0.0, total_cost_usd - execution_settled(self.db, execution_id))
+                    check = self.db.check_department_budget(dept_id, requested_cost=incremental)
                     if not check.get("allowed", False):
                         final_status = "FAILED"
                         failure_error = f"Mid-run budget exceeded for department {dept_id}. Additional budget required."

@@ -57,11 +57,16 @@ jobs:
               poc/tests/test_repo_cache.py
           - suite: security
             files: >-
+              poc/tests/test_organization_provider_credentials.py
               poc/tests/test_connector_execution_security.py
               poc/tests/test_workflow_chat.py
               poc/tests/test_workflow_pr_authoring.py
           - suite: runtime
             files: >-
+              poc/tests/test_execution_backends.py
+              poc/tests/test_claude_hosted.py
+              poc/tests/test_completion_validation.py
+              poc/tests/test_sandbox_diagnostics.py
               poc/tests/test_direct_runtime.py
               poc/tests/test_workflow_notification_modes.py
     runs-on: ubuntu-latest

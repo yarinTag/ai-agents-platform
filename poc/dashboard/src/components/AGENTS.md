@@ -223,5 +223,19 @@ The existing Channel Binding → Notification Mode selector now offers Start/eac
 
 Notification Mode now shows exactly four friendly options: Every step, Start and finish, Finish only, Off. Legacy final-only values display as Finish only without changing persisted semantics merely by viewing the form; selecting a mode uses its canonical value. Legacy entries are no longer offered in the dropdown. No tests/build/typecheck performed.
 
+## Organization runtime setup
+common/RuntimeSetupModal uses organization-specific runtime responses, reloads on organization change and offers explicit confirmation to revoke a stored provider key. Save/revoke/input controls are disabled for non-admins; backend authorization remains authoritative. Typed keys clear after submit (success/failure), cancel/close and organization change. No keys are returned or persisted in browser storage. EN/HE copy explains organization ownership and no server-global fallback. No build/typecheck/UI execution performed.
+
+## Workflow execution engine selection
+WorkflowBackendSelect.tsx is a focused settings control using server execution_backends descriptors. Pending engines are disabled; saved pending values remain visible with a blocking warning and explicit Direct API repair choice. WorkflowSettingsDrawer includes execution_backend in baseline/dirty comparison/save (legacy absent -> direct_api), preserving expected_revision behavior. Step-specific overrides are currently YAML params only. StepEventTimeline adds execution_backend / Execution engine rows with backend+transport. No CLI execution is advertised or enabled. No build/typecheck/render verification.
+
+WorkflowBackendSelect now distinguishes implemented source support from configured deployment status. SDK options require configured!=false; saved unsupported/unconfigured selections remain visible with a warning. UI describes Claude as read-only repository support, not generic CLI/shell/PR execution. No build/typecheck/render verification.
+
+Runtime setup automatic prompts wait for authenticated organization/user context and are shown at most once per user/organization per browser tab session (sessionStorage contains only the shown marker). Explicit Configure runtime still opens the modal. Missing organization keys remain execution-blocking; dismissal grants no credentials. No runtime verification performed.
+
+StepEventTimeline recognizes completion_validation with a warning label, validation code, attempt, message and expandable redacted preview. Full diagnostic metadata remains accessible through the existing JSON toggle; no new request or log authorization boundary. No build/typecheck/render verification.
+
 ## Model filter type narrowing
 WorkflowModelSelect filterOption checks for a value property before reading it because provider groups carry only label/options. Both group labels and leaf labels/IDs remain searchable. No any cast or disabled type check.
+
+RuntimeSetupModal and RuntimeSettingsPanel expose the Anthropic-only Message Threads beta checkbox and retention/pricing notice. Both load providers[].config.message_threads_enabled and send message_threads_enabled on selection save. The Settings panel now reloads per user/org, clears submitted keys and restricts editing to administrators; backend remains authoritative. StepEventTimeline renders conversation_transport mode/reason/message count/request bytes, without thread IDs or message bodies. No build/typecheck/UI execution performed.

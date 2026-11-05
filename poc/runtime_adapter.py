@@ -163,9 +163,9 @@ class ClaudeCodeRuntimeAdapter:
 
     _stderr_reader = staticmethod(read_stderr_tail)
 
-    def workflow_chat_selection(self):
+    def workflow_chat_selection(self, organization_id):
         from runtime.workflow_chat import selection
-        return selection(self)
+        return selection(self, organization_id)
 
     def infer_workflow_chat(self, selected, prompt, schema, budget, is_cancelled):
         from runtime.workflow_chat import infer

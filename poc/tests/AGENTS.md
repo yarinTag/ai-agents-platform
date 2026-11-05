@@ -76,10 +76,36 @@ test_repo_cache.py adds unexecuted source contracts for tenant/connector/reposit
 
 test_workflow_notification_modes.py adds unexecuted pure contracts for terminal/start/step selection, disabled and legacy compatibility, and deterministic per-execution/per-event delivery claim IDs. No provider, model, Docker or mocked transport calls; no tests were run.
 
+## Organization provider credentials
+test_organization_provider_credentials.py adds unexecuted real SQLite/FastAPI contracts: encrypted organization separation and model defaults, global/environment fallback denial, stale admin/inactive users, secret-safe 422, invalid-batch/missing-encryption-key atomic failure, worker rotation/revocation, AES-GCM organization AAD and command/tool environment hygiene. No mocks or provider requests. Existing global-runtime fixtures need migration to organization-scoped setup. No tests/collection/build/import/runtime verification was performed.
+
+test_direct_runtime.py command-routing fixture now creates an organization and encrypted scoped provider configuration instead of global settings. Not executed.
+
+## Execution backend foundation contracts
+test_execution_backends.py adds unexecuted pure-policy and real-SQLite cases for legacy Direct API default, immutable/source-only capability inventory, strict IDs, pending-backend authoring versus execution refusal, YAML/JSON preservation, step override/null inheritance, later-step whole-DAG blocking, deterministic delivery exemption and persisted task lineage/missing-step denial. No fake runtime, Docker or model transport. No tests or collection run.
+
+## Hosted Claude read-only source tests
+test_claude_hosted.py adds real SQLite/Unix HTTP source cases for capability/routes, current user/tool/key/cancellation checks, text/model/tool request limits, concurrent department reservations, conservative unknown holds versus actual spend, aggregate deduplication and terminal SSE usage. Existing backend tests accept fail-closed Claude shape/configuration errors now that source integration exists. No SDK/Docker/vendor mocks or calls; tests were not run.
+
+test_sandbox_diagnostics.py adds unexecuted pure startup-error category, secret/path exclusion, exit-code type and classification-priority contracts. No Docker, application or test execution.
+
+test_completion_validation.py adds unexecuted pure contracts for strict final schema/types/required fields, whole-fence compatibility, prose/duplicate-key rejection, blockers, single repair with connector-free inventory, rejection of mixed/external recovery calls, and bounded credential-redacted diagnostics. No mocked transport, provider calls or test execution.
+
 ## Initial GitHub CI fixture repair
 The origin SSE replay test now assigns the shared agent to a real organization and supplies organization-admin request claims so replay passes current tenant filtering. Live MCP grant tests now create a real organization, department, scoped agent and registered CONNECTED GitHub connector without a grant; they assert the appropriate workflow/step missing-grant denial. No model or connector HTTP call is performed. These repair stale fixtures without relaxing production security. Verification is through GitHub CI only.
 
 Missing-grant cases also assert the persisted error at the actual rejection layer: workflow governance prefix for root MCP declarations, explicit no-active-grant reason for step preflight. Both require FAILED execution and a raised governance exception.
 
+The playground command-inventory case uses a temporary SQLite organization, test-only encrypted provider credential and injected RuntimeServices. It checks command flags only; it performs no model call or subprocess launch. This aligns the fixture with organization-only credential resolution.
+
+The playground command fixture supplies an api_-prefixed prior session, matching its Direct API provider, and still requires no --resume in the resulting tool-free command. Cross-method session rejection remains a separate runtime contract.
+
+## Expanded GitHub CI contracts
+CI selects 16 reviewed test files across core, security and runtime groups, covering organization credentials, current connector policy, workflow authoring, execution backend admission, hosted broker/budget limits, completion formatting, diagnostics and local session/tool handling alongside the original six. Real SQLite/FastAPI/local filesystem and Unix HTTP contracts are retained. No production keys, model calls or notifications are supplied. Shared conftest is disabled. Each suite uploads its own JUnit report, and any failure blocks CI required. Unreviewed legacy suites remain excluded pending isolation review. Verification runs on GitHub, not the local application environment.
+
+Expanded-CI fixture corrections: hosted task records explicitly provide project_id=None. Channel-action cases now declare the required connector/resource envelope before testing frozen-destination substitution and delivery text; the missing-envelope denial is asserted separately. Production checks remain unchanged.
+
 ## Master CI groups
 Master runs 11 reviewed files across core (six), security (connector_execution_security, workflow_chat, workflow_pr_authoring) and runtime (direct_runtime, workflow_notification_modes). Temporary SQLite/local contracts run with --noconftest on disposable runners, without provider keys or live sends. Connector channel tests now declare valid connector/resource envelopes before testing frozen destination and report rules; missing envelopes remain explicitly rejected. Feature-specific organization/hosted tests are introduced only with PR #18.
+
+test_anthropic_threads.py adds unexecuted pure wire/state contracts and real private-filesystem session lease cases: suffix continuation, interrupted cursor invalidation, resume/fork, changed tools/reasoning wire isolation, credential rotation/expiry, refusal/truncation/pause clearing, concurrent lease rejection and legacy records. No provider mocks or live calls; no tests executed. Provider HTTP recovery and end-to-end runtime remain unverified.

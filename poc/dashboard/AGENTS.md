@@ -206,11 +206,17 @@ Workflow progress cadence is configured in the existing Channel Binding selector
 
 Channel Binding offers exactly four notification choices with friendly EN/HE names. Legacy final modes remain backend-compatible and render under Finish only rather than adding extra options. No runtime checks performed.
 
+WorkflowSettingsValues and update settings add optional ExecutionBackend (direct_api/claude_code/codex_cli/antigravity_cli); absence supports legacy responses. WorkflowSettingsResponse adds optional execution_backends:ExecutionBackendDescriptor[] with source_contract_only verification and explicit implemented/capability metadata. No runtime verification.
+
+ExecutionBackendDescriptor now includes configured/configuration_error/supports_session_resume; source implementation is distinct from deployment readiness. Claude SDK is configuration-gated and read-only. No build/typecheck.
+
 ## Dashboard CI container runtime
 GitHub CI uses Node22 with npm ci, oxlint, explicit tsc --noEmit, request-cache tests and Vite build. Dockerfile now uses node:22-alpine to match; .dockerignore excludes local dependencies, bundles, environment files and logs. See [.github automation](../../.github/AGENTS.md). No local verification executed.
 
 ## CI type compatibility repair
 `src/types/auth.ts` Department now declares optional department_id, already returned by membership queries and normalized in AuthContext. Workflow model filters narrow grouped/leaf options before value access. Telegram selectable tags keep the native title on a wrapper span compatible with Ant Design. Type checking remains required in CI.
+
+Anthropic provider settings support organization Message Threads opt-in in both setup and Settings. Workflow logs show sanitized conversation_transport events. See component/i18n guides; no UI verification performed.
 
 ## Frontend logic tests
 [tests/AGENTS.md](tests/AGENTS.md) owns npm test (Node22 built-in runner) and the domain coverage map. Tests execute real TypeScript helpers with immutable fixtures/deferred promises, without external APIs or new test dependencies. CI discovers tests/*.test.mjs automatically; frontend checks still include lint, tsc and build. This suite does not replace browser/DOM or live integration testing.

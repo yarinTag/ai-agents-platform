@@ -1,6 +1,6 @@
 """Provider-visible reasoning summaries; opaque continuation data stays private."""
-import json
 import re
+from .completion_validation import tool_input
 
 
 def anthropic_thinking(model, max_tokens):
@@ -65,7 +65,7 @@ def responses_result(data, model):
     summaries = [block['text'] for item in items if item.get('type') == 'reasoning'
                  for block in item.get('summary', []) if block.get('type') == 'summary_text' and block.get('text')]
     calls = [{'id': item['call_id'], 'name': item['name'], 'type': 'tool_use',
-              'input': json.loads(item['arguments'])} for item in items if item.get('type') == 'function_call']
+              'input': tool_input(item['name'], item['arguments'])} for item in items if item.get('type') == 'function_call']
     usage = data.get('usage') or {}
     return {'text': text, 'calls': calls, 'message': {'role': 'assistant', 'response_items': items},
             'truncated': data.get('status') != 'completed', 'model': data.get('model', model),

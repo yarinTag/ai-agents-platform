@@ -92,6 +92,23 @@ class TaskExecutor:
             if adapter._shutting_down or run.status == TaskStatus.CANCELLED:
                 run.status = TaskStatus.CANCELLED
                 return
+            db = adapter.services.database()
+            stored_agent = db.get_agent(run.agent_id)
+            if not stored_agent or not stored_agent.organization_id:
+                raise ValueError('The execution agent must belong to an organization.')
+            if run.organization_id and run.organization_id != stored_agent.organization_id:
+                raise ValueError('Task and agent organization do not match.')
+            if agent_config.organization_id and agent_config.organization_id != stored_agent.organization_id:
+                raise ValueError('Agent configuration organization changed.')
+            if project_config and project_config.organization_id != stored_agent.organization_id:
+                raise ValueError('Project and agent organization do not match.')
+            agent_config = replace(agent_config, organization_id=stored_agent.organization_id)
+            run.organization_id = stored_agent.organization_id
+            from workflows.backend_policy import backend_for_task
+            from .execution_backends import require_backend
+            backend = require_backend(backend_for_task(db, run_id), playground=playground_workspace is not None)
+            run.events.append({'type': 'execution_backend', 'backend': backend.id.value,
+                               'transport': backend.transport, '_timestamp': time.time(), '_run_id': run_id})
             # Update status to running
             run.status = TaskStatus.RUNNING
             run.started_at = datetime.now()
@@ -106,6 +123,14 @@ class TaskExecutor:
             workflow_model = model_for_task(adapter.services.database(), run_id)
             if workflow_model:
                 agent_config = replace(agent_config, model=workflow_model)
+
+            if backend.id.value == 'claude_code':
+                from .claude_hosted.execution import execute_hosted, finalize_usage
+                try:
+                    execute_hosted(adapter, run, agent_config, prompt, session_id, fork_session)
+                finally:
+                    finalize_usage(adapter, run)
+                return
 
             # Determine model and cost source
             resolved_model = getattr(agent_config, "model", None)
@@ -123,7 +148,7 @@ class TaskExecutor:
             if chosen_prov_id in DIRECT_PROVIDERS:
                 try:
                     run.model = resolve_model_for_provider(
-                        chosen_prov_id, agent_config.model, db=adapter.services.database()
+                        chosen_prov_id, agent_config.model, db=adapter._command_builder.organization_settings(agent_config)
                     )
                 except Exception:
                     pass
@@ -209,7 +234,7 @@ class TaskExecutor:
                         run.output_tokens = summary['output_tokens']
                         run.cost_usd = summary['known_cost_usd']
                     adapter._subscriptions.publish(run_id, event)
-                    if event.get('type') in ('reasoning_summary', 'usage') or (playground_workspace and time.monotonic() - last_checkpoint >= 1):
+                    if event.get('type') in ('reasoning_summary', 'usage', 'completion_validation', 'conversation_transport') or (playground_workspace and time.monotonic() - last_checkpoint >= 1):
                         adapter.services.database().save_task_run(run)
                         last_checkpoint = time.monotonic()
 

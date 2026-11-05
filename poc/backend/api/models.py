@@ -3,7 +3,7 @@ Model discovery and provider configuration API endpoints.
 Provides dynamic list of available AI models filtered by the configured API providers.
 """
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request
 from typing import List, Optional
 from pydantic import BaseModel
 
@@ -14,7 +14,6 @@ from runtime.direct_config import (
     PROVIDER_MODELS,
     enabled_setting,
     model_setting,
-    resolve_api_key,
 )
 
 router = APIRouter()
@@ -89,10 +88,14 @@ def _models_for_provider(provider_id: str, db_manager) -> List[ModelOption]:
 
 @router.get("/", response_model=List[ModelOption])
 @router.get("", response_model=List[ModelOption])
-async def list_models(provider: Optional[str] = Query(default=None)):
+async def list_models(request: Request, provider: Optional[str] = Query(default=None)):
     """List available models based on the configured runtime provider(s)."""
     from ..dependencies import db_manager, runtime_providers as providers
 
+    from .runtimes import organization_settings
+    db_manager = organization_settings(request)
+    if provider and provider in DIRECT_PROVIDERS and not db_manager.has_credential(provider):
+        return []
     if provider and provider in DIRECT_PROVIDERS:
         default_model = db_manager.get_setting(model_setting(provider)) or DEFAULT_PROVIDER_MODEL.get(provider, "")
         provider_name = DIRECT_PROVIDERS[provider][0]
@@ -109,9 +112,9 @@ async def list_models(provider: Optional[str] = Query(default=None)):
             *_models_for_provider(provider, db_manager),
         ]
 
-    active_provider = providers.resolve_provider_selection(
-        saved_choice=db_manager.get_setting(providers.SETTING_PROVIDER)
-    )
+    active_provider = db_manager.get_setting(providers.SETTING_PROVIDER)
+    if active_provider not in DIRECT_PROVIDERS or not db_manager.has_credential(active_provider):
+        return []
     if active_provider in DIRECT_PROVIDERS:
         active_name = DIRECT_PROVIDERS[active_provider][0]
         default_model = db_manager.get_setting(model_setting(active_provider)) or DEFAULT_PROVIDER_MODEL.get(active_provider, "")
@@ -130,7 +133,7 @@ async def list_models(provider: Optional[str] = Query(default=None)):
         enabled_providers = [active_provider]
         for pid in DIRECT_PROVIDERS:
             if pid != active_provider:
-                if db_manager.get_setting(enabled_setting(pid)) == "true" and resolve_api_key(pid, db=db_manager):
+                if db_manager.get_setting(enabled_setting(pid)) == "true" and db_manager.has_credential(pid):
                     enabled_providers.append(pid)
 
         seen_ids = {"default"}

@@ -6,12 +6,14 @@ import type { PlatformWorkflow } from '../../types/mcp';
 import {
   WORKFLOW_MACHINE_SIZES,
   type WorkflowMachineSize,
+  type ExecutionBackend,
   type WorkflowSecretSummary,
   type WorkflowSettingsResponse,
   type WorkflowSettingsValues,
 } from '../../types/workflowSettings';
 import { formatWorkflowSettingsText as fill, useWorkflowSettingsText } from '../../i18n/workflowSettings';
 import { useRequestGeneration } from '../../hooks/useRequestGeneration';
+import { WorkflowBackendSelect } from './WorkflowBackendSelect';
 import { WorkflowModelSelect } from './WorkflowModelSelect';
 import { WorkflowSecretsSection } from './WorkflowSecretsSection';
 import {
@@ -35,6 +37,7 @@ export const WorkflowSettingsDrawer: React.FC<WorkflowSettingsDrawerProps> = ({ 
   const { token } = theme.useToken();
   const [data, setData] = useState<WorkflowSettingsResponse | null>(null);
   const [baseline, setBaseline] = useState<WorkflowSettingsValues | null>(null);
+  const [backend, setBackend] = useState<ExecutionBackend>('direct_api');
   const [model, setModel] = useState<string>(toModelValue(null));
   const [machineSize, setMachineSize] = useState<WorkflowMachineSize>('medium');
   const [hosts, setHosts] = useState<string[]>([]);
@@ -49,12 +52,14 @@ export const WorkflowSettingsDrawer: React.FC<WorkflowSettingsDrawerProps> = ({ 
   /** Replace all local state with the server's view (initial load, reload after 409, successful save). */
   const apply = useCallback((response: WorkflowSettingsResponse) => {
     const settings: WorkflowSettingsValues = {
+      execution_backend: response.settings.execution_backend ?? 'direct_api',
       model: response.settings.model ?? null,
       machine_size: response.settings.machine_size,
       network_allowlist: normalizeHosts(response.settings.network_allowlist ?? []),
     };
     setData(response);
     setBaseline(settings);
+    setBackend(settings.execution_backend ?? 'direct_api');
     setModel(toModelValue(settings.model));
     setMachineSize(settings.machine_size);
     setHosts(settings.network_allowlist);
@@ -88,6 +93,7 @@ export const WorkflowSettingsDrawer: React.FC<WorkflowSettingsDrawerProps> = ({ 
   // null and "default" both mean platform default, so compare normalized model values.
   const dirty = baseline !== null && (
     fromModelValue(model) !== fromModelValue(toModelValue(baseline.model))
+    || backend !== (baseline.execution_backend ?? 'direct_api')
     || machineSize !== baseline.machine_size
     || !sameHosts(hosts, baseline.network_allowlist)
   );
@@ -103,7 +109,7 @@ export const WorkflowSettingsDrawer: React.FC<WorkflowSettingsDrawerProps> = ({ 
     setSaveProblem(null);
     try {
       const response = await updateWorkflowSettings(workflow.id, {
-        settings: { model: fromModelValue(model), machine_size: machineSize, network_allowlist: hosts },
+        settings: { execution_backend: backend, model: fromModelValue(model), machine_size: machineSize, network_allowlist: hosts },
         expected_revision: data.revision,
       });
       if (!current()) return;
@@ -168,6 +174,8 @@ export const WorkflowSettingsDrawer: React.FC<WorkflowSettingsDrawerProps> = ({ 
             description={<><div>{text.settingsErrorHelp}</div><Typography.Text code>{data.settings_error}</Typography.Text></>} />
         )}
 
+        <WorkflowBackendSelect value={backend} onChange={setBackend}
+          backends={data.execution_backends ?? []} disabled={!canManage || saving} />
         <Flex vertical gap={token.marginXS}>
           {sectionTitle(<RobotOutlined />, text.modelSection)}
           {helpText(text.modelHelp)}

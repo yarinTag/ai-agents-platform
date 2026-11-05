@@ -189,7 +189,17 @@ def open_workspace(db, task_id, execution_id, step, config):
         settings = settings_for_workflow(workflow)
     except ValueError as exc:
         raise ToolAccessError(f'Workflow settings are invalid: {exc}') from exc
-    image = sandbox_image()
+    from workflows.backend_policy import step_backend
+    backend = step_backend(settings, step)
+    hosted = backend.value == 'claude_code'
+    if hosted:
+        from runtime.claude_hosted.policy import configured_image, require_read_workspace
+        require_read_workspace(step, settings)
+        image = configured_image()
+        if db.list_workflow_secrets(workflow.id):
+            raise ToolAccessError('Hosted read-only SDK steps do not accept workflow secrets.')
+    else:
+        image = sandbox_image()
     egress_image = proxy_image() if settings.network_allowlist else None
     require_docker()
     secrets = resolve_workflow_secrets(db, workflow)  # Fails the step rather than starting without them.
@@ -240,8 +250,10 @@ def open_workspace(db, task_id, execution_id, step, config):
             workspace['redactions'] = str(redactions)
         if egress_image:
             workspace['egress'] = start_egress(settings.network_allowlist, egress_image)
-        workspace['container'] = start_container(root / 'repo', image, MACHINE_SIZES[settings.machine_size],
-                                                 secrets, workspace['egress'])
+        if not hosted:
+            workspace['container'] = start_container(root / 'repo', image, MACHINE_SIZES[settings.machine_size],
+                                                     secrets, workspace['egress'])
+        workspace['execution_backend'] = backend.value
         with db._get_connection() as conn:
             conn.execute('INSERT INTO workflow_repo_workspaces(task_id, execution_id, workspace_json) VALUES (?, ?, ?)',
                          (task_id, execution_id, json.dumps(workspace)))

@@ -23,6 +23,9 @@ export enum EventKind {
   Usage = 'usage',
   User = 'user',
   System = 'system',
+  ExecutionBackend = 'execution_backend',
+  CompletionValidation = 'completion_validation',
+  ConversationTransport = 'conversation_transport',
   EndOfOutput = 'end_of_output',
   Unknown = 'event',
 }
@@ -36,6 +39,7 @@ const COLORS: Partial<Record<EventKind, string>> = {
   [EventKind.ToolUse]: 'processing', [EventKind.ToolResult]: 'cyan', [EventKind.Assistant]: 'purple',
   [EventKind.ReasoningSummary]: 'geekblue',
   [EventKind.Usage]: 'gold',
+  [EventKind.CompletionValidation]: 'warning',
 };
 
 interface EventDescription { kind: EventKind; label: string; summary: string; detail?: string }
@@ -95,6 +99,14 @@ export const describeEvent = (event: RuntimeEvent): EventDescription => {
     case EventKind.Assistant:
     case EventKind.User:
       return withDetail(kind, label, messageText(event) || kind);
+    case EventKind.ConversationTransport:
+      return withDetail(kind, 'Conversation transport',
+        `${text(event.mode)} · ${text(event.messages_sent)} messages · ${text(event.request_bytes)} bytes${event.reason ? ' · ' + text(event.reason) : ''}`);
+    case EventKind.CompletionValidation:
+      return withDetail(kind, 'Completion validation',
+        `${text(event.error_code)} · attempt ${text(event.attempt)}: ${text(event.message)}\n${text(event.candidate_preview)}`);
+    case EventKind.ExecutionBackend:
+      return { kind, label: 'Execution engine', summary: `${text(event.backend)} · ${text(event.transport)}` };
     case EventKind.System:
       return { kind, label, summary: event.session_id ? `session ${text(event.session_id)}` : text(event.subtype) || label };
     case EventKind.EndOfOutput:

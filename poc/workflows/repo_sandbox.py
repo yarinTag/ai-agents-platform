@@ -16,6 +16,7 @@ import subprocess
 import uuid
 from pathlib import Path
 from integrations.tool_definitions import ToolAccessError
+from .sandbox_diagnostics import docker_failure
 
 logger = logging.getLogger(__name__)
 
@@ -105,8 +106,9 @@ def start_egress(hosts, image: str) -> dict:
         for args in steps:
             result = _docker(args, timeout=180)
             if result.returncode != 0:
-                logger.warning('Sandbox egress setup failed: %s', result.stderr[-500:])
-                raise ToolAccessError('The sandbox egress proxy could not start. Check the proxy image and Docker.')
+                diagnostic = docker_failure(result.stderr, result.returncode)
+                logger.warning('Sandbox egress setup failed: %s', diagnostic)
+                raise ToolAccessError('The sandbox egress proxy could not start. ' + diagnostic)
     except subprocess.TimeoutExpired as exc:
         remove_egress(egress)
         raise ToolAccessError('The sandbox egress proxy did not start in time.') from exc
@@ -150,9 +152,10 @@ def start_container(worktree: Path, image: str, size: dict, secrets=None, egress
         remove_container(name)
         raise ToolAccessError('The sandbox container did not start in time.') from exc
     if result.returncode != 0:
-        logger.warning('Sandbox container start failed: %s', result.stderr[-500:])
+        diagnostic = docker_failure(result.stderr, result.returncode)
+        logger.warning('Sandbox container start failed: %s', diagnostic)
         remove_container(name)
-        raise ToolAccessError('The sandbox container could not start. Check the sandbox image and Docker.')
+        raise ToolAccessError('The sandbox container could not start. ' + diagnostic)
     return name
 
 

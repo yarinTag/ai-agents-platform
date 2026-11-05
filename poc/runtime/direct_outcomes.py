@@ -1,5 +1,53 @@
 """Explicit final outcome contract for governed connector runs."""
 import json
+import re
+from typing import Literal, Optional
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
+
+class WorkflowOutcome(BaseModel):
+    model_config = ConfigDict(extra='forbid', strict=True)
+    status: Literal['completed', 'blocked']
+    output: str = Field(min_length=1, max_length=60000)
+    blocker: Optional[str] = Field(max_length=8000)
+
+
+class OutcomeFormatError(ValueError):
+    def __init__(self, code, message):
+        self.code = code
+        super().__init__(message)
+
+
+def _unique_keys(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError('Duplicate object key')
+        result[key] = value
+    return result
+
+
+def parse_outcome(value):
+    """Accept a typed tool input or one whole JSON document, optionally fenced.
+
+    Never search prose for a convenient embedded completed object.
+    """
+    if isinstance(value, str):
+        text = value.strip()
+        fence = re.fullmatch(r'```(?:json)?[ \t]*\r?\n(.*?)\r?\n```', text, re.DOTALL | re.IGNORECASE)
+        if fence:
+            text = fence.group(1)
+        try:
+            value = json.loads(text, object_pairs_hook=_unique_keys)
+        except (ValueError, TypeError):
+            raise OutcomeFormatError('INVALID_JSON', 'The model did not return a verifiable completion status.') from None
+    try:
+        parsed = WorkflowOutcome.model_validate(value)
+    except ValidationError:
+        raise OutcomeFormatError('INVALID_ENVELOPE', 'The model did not return the required status, output and blocker fields.') from None
+    if not parsed.output.strip():
+        raise OutcomeFormatError('EMPTY_OUTPUT', 'The model returned no task output.')
+    return parsed
 
 OUTCOME_PROMPT = '''
 For your final answer, return exactly one JSON object with these fields:
@@ -15,14 +63,15 @@ normally until you can produce this final outcome. Do not wrap JSON in markdown.
 
 def final_outcome(text):
     try:
-        value = json.loads(text)
-    except (ValueError, TypeError):
-        return None, 'The model did not return a verifiable completion status.'
-    if not isinstance(value, dict) or value.get('status') not in ('completed', 'blocked'):
-        return None, 'The model did not return a verifiable completion status.'
-    output, blocker = value.get('output'), value.get('blocker')
-    if not isinstance(output, str) or not output.strip():
-        return None, 'The model returned no task output.'
-    if value['status'] == 'blocked' or blocker:
-        return None, str(blocker or output)[:8000]
-    return output, None
+        value = parse_outcome(text)
+    except OutcomeFormatError as exc:
+        return None, str(exc)
+    return outcome_result(value)
+
+
+def outcome_result(value):
+    if value.status == 'blocked':
+        return None, str((value.blocker or '').strip() or value.output)[:8000]
+    if value.blocker is not None:
+        return None, value.blocker.strip() or 'The model returned a non-null blocker; completion is not permitted.'
+    return value.output, None

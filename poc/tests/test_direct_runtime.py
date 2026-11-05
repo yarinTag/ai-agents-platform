@@ -3,6 +3,7 @@
 These cases make no paid model calls and must be run with --noconftest.
 """
 import asyncio
+import base64
 import os
 from argparse import Namespace
 from contextlib import contextmanager
@@ -53,14 +54,18 @@ def test_api_session_survives_reload_and_refuses_other_tenant(tmp_path):
                 DirectSession('direct_openai', 'configured-model', session.id)
 
 
-def test_worker_command_uses_python_and_preserves_explicit_model(tmp_path):
+def test_worker_command_uses_python_and_preserves_explicit_model(tmp_path, monkeypatch):
     db = DatabaseManager(str(tmp_path / 'runtime.db'))
-    db.set_setting('runtime_provider', 'direct_nvidia')
-    db.set_setting('runtime_model_direct_nvidia', 'configured/model')
+    from storage.runtime_settings import OrganizationRuntimeSettings
+    monkeypatch.setenv('PLATFORM_SECRETS_KEY', base64.b64encode(b'a' * 32).decode())
+    db.create_organization(id='runtime-org', name='Runtime', slug='runtime')
+    OrganizationRuntimeSettings(db, 'runtime-org').save(
+        {'runtime_provider': 'direct_nvidia', 'runtime_model_direct_nvidia': 'configured/model'},
+        {'direct_nvidia': 'test-key'}, None)
     services = RuntimeServices(database=lambda: db, configuration=lambda: None,
         resolve_model=lambda value: value, skills_prompt=lambda _: '', capture_session=lambda *_: None)
     builder = RuntimeCommandBuilder(services)
-    agent = AgentConfig(id='worker', name='Worker', description='Worker', system_prompt='Work.', model='default')
+    agent = AgentConfig(id='worker', name='Worker', description='Worker', system_prompt='Work.', model='default', organization_id='runtime-org')
     with environment(PLATFORM_RUNTIME_PROVIDER=None):
         command = builder._build_claude_command(agent, None, 'Do work.', playground=True)
         assert command[1:3] == ['-m', 'runtime.direct_worker']

@@ -249,6 +249,8 @@ def validate_workflow_definition(data: Any) -> Dict[str, Any]:
     binding = parsed.metadata.get('channel_binding')
     if binding is not None and (not isinstance(binding, dict) or binding.get('notify_mode', 'ON_COMPLETE') not in MODES):
         raise ValueError('Invalid workflow channel notification mode.')
+    from .backend_policy import validate_step_backends
+    validate_step_backends(parsed)
     from .channel_action import action_configuration
     from integrations.repo_workspace import workspace_configuration
     for step in parsed.steps:

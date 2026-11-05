@@ -1,7 +1,6 @@
 """Direct HTTP provider metadata and model catalog; credentials remain on the server."""
 import os
 import re
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 DIRECT_PROVIDERS = {
@@ -210,50 +209,13 @@ def enabled_setting(provider: str) -> str:
     return 'runtime_enabled_' + provider
 
 
-def _read_fcc_env_key(var_names: List[str]) -> str:
-    if 'PYTEST_CURRENT_TEST' in os.environ:
-        return ''
-    fcc_env = Path.home() / '.fcc' / '.env'
-    if not fcc_env.exists():
-        return ''
-    try:
-        for line in fcc_env.read_text(encoding='utf-8', errors='ignore').splitlines():
-            stripped = line.strip()
-            if not stripped or stripped.startswith('#') or '=' not in stripped:
-                continue
-            k, v = stripped.split('=', 1)
-            if k.strip() in var_names and v.strip():
-                return v.strip().strip('"').strip("'")
-    except OSError:
-        pass
-    return ''
-
-
 def resolve_api_key(provider: str, db: Any = None) -> str:
-    if provider not in DIRECT_PROVIDERS:
+    """Resolve only an explicitly organization-scoped credential port."""
+    if provider not in DIRECT_PROVIDERS or db is None:
         return ''
-    _, key_var, _ = DIRECT_PROVIDERS[provider]
-    env_candidates = [key_var]
-    if provider == 'direct_nvidia':
-        env_candidates.append('NVIDIA_NIM_API_KEY')
-    for candidate in env_candidates:
-        val = os.environ.get(candidate, '').strip()
-        if val:
-            return val
-    if db is None and 'PYTEST_CURRENT_TEST' not in os.environ:
-        try:
-            from persistence import db_manager
-            db = db_manager
-        except Exception:
-            db = None
-    if db is not None:
-        try:
-            saved_key = (db.get_setting(api_key_setting(provider)) or '').strip()
-            if saved_key:
-                return saved_key
-        except Exception:
-            pass
-    return _read_fcc_env_key(env_candidates)
+    if not getattr(db, 'organization_id', None) or not hasattr(db, 'resolve_credential'):
+        return ''
+    return db.resolve_credential(provider)
 
 
 def validate_model(model: Optional[str]) -> str:
@@ -316,15 +278,31 @@ def resolve_model_for_provider(provider: str, raw_model: Optional[str], db: Any 
 
 
 def configuration(provider: str, db: Any = None):
-    name, key_var, base_url = DIRECT_PROVIDERS[provider]
+    if db is None:
+        # Trusted parent context, never an inherited provider API key.
+        from persistence import DatabaseManager
+        from storage.runtime_settings import OrganizationRuntimeSettings
+        database = os.environ.get('PLATFORM_PROVIDER_DB')
+        organization_id = os.environ.get('PLATFORM_PROVIDER_ORGANIZATION')
+        if not database or not organization_id:
+            raise ValueError('Organization model credential context is missing.')
+        scope = OrganizationRuntimeSettings(DatabaseManager(database), organization_id)
+        version = scope.credential_version(provider)
+        key = os.environ.get(DIRECT_PROVIDERS[provider][1], '')
+        if version is None or str(version) != os.environ.get('PLATFORM_PROVIDER_VERSION') or not key:
+            raise ValueError('The organization provider credential is missing, revoked or rotated. Start a new run.')
+        name, _, base_url = DIRECT_PROVIDERS[provider]
+        return name, key, base_url
+    name, _, base_url = DIRECT_PROVIDERS[provider]
     key = resolve_api_key(provider, db=db)
     if not key:
-        raise ValueError(f'{key_var} is not configured on the platform server.')
+        raise ValueError('Configure this provider API key for the current organization.')
     return name, key, base_url
 
 
-def configured_models(adapter, provider: str):
-    db = adapter.services.database()
+def configured_models(adapter, provider: str, organization_id: str):
+    from storage.runtime_settings import OrganizationRuntimeSettings
+    db = OrganizationRuntimeSettings(adapter.services.database(), organization_id)
     model = db.get_setting(model_setting(provider)) or DEFAULT_PROVIDER_MODEL.get(provider)
     return ([{'model_id': validate_model(model), 'name': model, 'provider_id': provider}]
             if model else [])

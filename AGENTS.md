@@ -67,6 +67,7 @@ The **AI Agents Platform** is an enterprise multi-tenant autonomous agent orches
 * [**REST API Routers**](poc/backend/api/AGENTS.md): Complete guide to all backend REST API routes, models, and endpoints.
 * [**Security & Hardening**](poc/backend/security/AGENTS.md): HS256 JWT, PBKDF2 hashing, RateLimiterMiddleware (2000 req/min), tenant scoping.
 * [**Workflows Engine**](poc/workflows/AGENTS.md): WorkflowEngine, WorkflowParser, SandboxManager, DAG execution, and budgets.
+* [**Hosted Claude SDK**](poc/runtime/claude_hosted/AGENTS.md): Isolated read-only SDK worker, private credential broker and request budgets.
 * [**Runtime Abstraction**](poc/runtime/AGENTS.md): RuntimeAdapter protocol, model tiers, and curated `MODEL_CATALOG`.
 * [**Orchestration & Hierarchy**](poc/orchestration/AGENTS.md): Multi-agent task trees, supervisor chain resolution, and department MCP checks.
 * [**Agent-to-Agent Messaging**](poc/backend/messages/AGENTS.md): Peer communication, structured message types, and thread tracking.
@@ -202,6 +203,25 @@ Repository workspaces now reuse a backend-only persistent Git object cache, scop
 
 Workflow progress notifications are now metadata.channel_binding configuration: COMPLETION_ONLY, START_AND_COMPLETE, EACH_STEP, NONE, with legacy mode compatibility. The engine sends actual lifecycle updates through governed optional delivery, with independent deterministic event audit claims and no model calls or notification DAG stages. Latest core-plugin workflow migrated to one work step plus EACH_STEP binding (revision3); no execution/messages/tests performed. See workflow/integration/API/dashboard guides.
 
+## Organization-owned model credentials (2026-11-03)
+Runtime setup, model discovery, normal/Playground task execution and workflow creation chat now use organization-scoped provider settings and AES-GCM encrypted keys. No global/environment/FCC credential fallback is used for organization execution. Rotation/revocation is checked before each worker HTTP request; in-flight calls cannot be recalled. See [credential contracts and migration](docs/organization-provider-credentials.md), storage/runtime/API guides. Existing organizations must re-enter their own keys with PLATFORM_SECRETS_KEY configured. No runtime verification performed.
+
+## Execution backend foundation (2026-11-03)
+Workflow settings now separate execution_backend from model/provider: direct_api (existing), claude_code (planned Agent SDK transport), codex_cli and antigravity_cli. Step params.execution_backend overrides workflow settings. Known pending engines are authorable but blocked at whole-DAG preflight and runtime admission with no fallback; UI marks them unavailable. No CLI/SDK runtime has been activated. See [backend contracts and milestones](docs/execution-backends.md). No runtime verification performed.
+
+The local `uv run python poc/start_api.py` launcher passes the absolute repository-root `.env` path to Uvicorn and defers application import until environment loading. This includes JWT_SECRET_KEY; shell environment values retain precedence. Direct Uvicorn invocations must provide their own environment or --env-file. No startup or tests were performed.
+
+## Hosted Claude Agent SDK read-only slice (2026-11-03)
+claude_code now has an opt-in source integration for read-only repository analysis. SDK/CLI runs inside a restricted container; a relay and private Unix socket reach the host credential/policy/budget broker. Native Linux/local Docker, pinned SDK image and explicit flag are required. Only Read/Glob/Grep; no shell/writes/PRs/connectors/secrets/resume. Separate durable hosted request reservations are included in budget checks, without claiming atomic reservations for existing Direct API calls. Disabled by default; no runtime verification or environment changes. See [hosting module](poc/runtime/claude_hosted/AGENTS.md) and [deployment/limitations](docs/claude-hosted.md).
+
+## Saved workflow configuration repairs (2026-11-03)
+Two inactive saved workflows were repaired by explicit user request with atomic revision/audit entries: t-skills activity uses its existing workflow-owned runner (revision7); PR-review Telegram resource declares its already-authorized send_message tool (revision4). No permissions expanded, histories rewritten, workflows activated/retried, PRs or messages sent. Docker startup cause remains unresolved pending permitted diagnostics. See docs/workflow-repairs.md.
+
+By later explicit exception, read-only Docker inspection and one disposable cached-image sleep-0 diagnostic container were authorized. The minimal sandbox startup probe passed (exit0); no workflow/model/test/message execution occurred. This does not authorize subsequent runtime verification or establish the old failure cause. See docs/workflow-repairs.md.
+
+## Connector completion schema and format recovery
+Governed Direct API connector runs now expose a server-only platform_workflow_finish schema tool, require strict status/output/blocker envelopes and permit one formatting-only model pass with all connector tools removed. Current policy/required successful receipts remain mandatory; blocked/malformed outcomes never become implicit success. Sanitized bounded completion_validation diagnostics are checkpointed and shown in Workflow Logs. No historical run/config changed or retried. See docs/connector-completion.md. No tests/build/model calls executed.
+
 ## Repository CI and image publishing
 [GitHub automation](.github/AGENTS.md) documents PR checks, gated GHCR image publishing, and metadata-only generic PR labeling. Deployment and branch protection are not configured. CI starts with an isolated contract subset, not the full backend suite. No local runtime verification performed.
 
@@ -210,11 +230,23 @@ CI now selects only six contract files present on master. Dashboard Department d
 
 CI regression fixtures for event replay and missing MCP grants now supply tenant identity and configured subjects before asserting the intended policy behavior. Production security is unchanged; GitHub checks are the verification environment.
 
+## PR CI synchronization
+The organization-credentials/runtime branch incorporates master CI workflows and type/fixture repairs. Documentation-only merge conflicts retain both branch contracts and automation guidance. PR checks require a conflict-free merge; labels use metadata-only pull_request_target and can run during conflicts.
+
+## Hardened CI coverage
+[GitHub automation](.github/AGENTS.md) defines isolated core/security/runtime test groups, PR container builds, named frontend checks, immutable Action pins, weekly reviewed dependency updates and the CI required aggregate. Publishing requires CI success. Private-repository plan restrictions still prevent enforcing merge protection; no deployment/automatic merge is enabled. GitHub-only verification preserves local runtime restrictions.
+
 ## Repository-wide CI hardening
 [GitHub automation](.github/AGENTS.md) defines core/security/runtime backend groups, frontend checks, PR-only Docker build checks and CI required aggregation. External Actions are pinned to immutable SHAs and updated via weekly Dependabot PRs. Master selects 11 existing backend contract files; PR #18 adds five further contracts with its implementation. No feature branch implementation is required for master CI. Private-plan merge enforcement remains unavailable.
+
+## Anthropic Message Threads opt-in
+Direct Anthropic API sessions support organization-enabled beta create/continue with private transcript-backed recovery and session leases. Default disabled; no SDK/backend routing change, streaming or prompt caching. See docs/anthropic-message-threads.md and runtime/API/UI guides. No tests/build/startup/model calls performed.
 
 ## Frontend logic regression suite
 [Dashboard logic tests](poc/dashboard/tests/AGENTS.md) documents direct Node22 tests for workflow editing, settings/secret validation, cost display, connector resource projection, shared skills, cache races, partial loading, model labels and office activity/coordinates. The standalone frontend PR contains no organization-runtime implementation. Existing master Actions discover all *.test.mjs files. No external API keys or provider calls.
 
 ## Unified repository CI
 ci.yml now owns tests, PR/manual build-only validation and gated main/master/v* image publishing; images.yml is removed to avoid running tests twice per master push. One image plan owns the component matrix. Registry write access remains exclusive to the trusted publishing job. Manual runs default to build-only; publishing requires explicit opt-in on a supported ref. PR labels remain a separate privileged metadata-only workflow.
+
+## PR #18 master synchronization (2026-11-05)
+Documentation conflicts retain organization-scoped Anthropic Message Threads contracts and master frontend regression/unified-CI guidance. The unified workflow keeps the branch-specific 16-file backend suite and all frontend tests. No feature was activated; local runtime verification remains unperformed.

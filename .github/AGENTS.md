@@ -10,10 +10,13 @@ to avoid the shared default-database reset hook. Each matrix job has its own dis
 Backend tests are selected explicitly after source review:
 - core: workflow_revisions, workflow_origin, workflow_playground, direct_reasoning,
   direct_pricing, repo_cache (six test_*.py files).
-- security: connector_execution_security, workflow_chat, workflow_pr_authoring (three files).
-- runtime: direct_runtime, workflow_notification_modes (two files).
+- security: organization_provider_credentials, connector_execution_security, workflow_chat,
+  workflow_pr_authoring (four files).
+- runtime: execution_backends, claude_hosted, completion_validation, sandbox_diagnostics,
+  direct_runtime, workflow_notification_modes (six files).
 
-Real SQLite, local Git/files, FastAPI/JWT and local Unix HTTP contracts are used. Other unreviewed legacy suites
+Real SQLite, local Git/files, FastAPI/JWT and local Unix HTTP contracts are used. Hosted SDK
+contracts do not start the SDK or Docker or call a provider. Other unreviewed legacy suites
 remain outside CI; this is not full-system or live integration coverage. JUnit artifacts have
 unique per-suite names and 14-day retention, uploaded even on test failure.
 
@@ -60,7 +63,13 @@ review requirements. Preserve existing rules when applying protection. Do not cl
 CODEOWNERS or an Actions workflow can substitute for server-enforced branch protection.
 
 ## Verification
-Master CI lists only tests versioned on master. PR #18 separately adds organization/runtime
-contracts and retains its expanded suite; those tests cannot be required before they exist.
-CI hardening is verified on GitHub before promotion to master. No local model calls,
+CI hardening is verified on GitHub in the organization runtime PR. No local model calls,
 application startup, Docker execution or local test/build/lint/typecheck is performed.
+
+## Master Actions synchronization
+Master now owns the hardened workflow baseline and runs 11 backend files available there.
+This branch preserves all 16 contracts because its five feature-specific files are present.
+The November5 master synchronization includes the merged frontend tests from PR #24
+and the unified ci.yml publishing path. This PR retains its 16 backend contract files;
+images.yml stays deleted. Feature-specific Anthropic Message Threads documentation is
+preserved alongside master frontend-test guidance. Syncing master does not merge this PR.

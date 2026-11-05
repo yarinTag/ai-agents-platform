@@ -10,10 +10,11 @@ import os
 from .direct_config import validate_model
 from .direct_pricing import call_cost, pricing, totals
 from .direct_http import DirectAPIError, add_tool_results, request
-from .direct_sessions import DirectSession
+from .direct_sessions import DirectSession, session_lease
 from .direct_reasoning import reasoning_event
 from .direct_tools import DirectTools
-from .direct_outcomes import OUTCOME_PROMPT, final_outcome
+from .direct_outcomes import OUTCOME_PROMPT
+from .completion_validation import ConnectorFinalizer, FINISH_PROMPT, REPAIR_PROMPT
 
 
 def arguments():
@@ -35,10 +36,9 @@ def emit(event):
     print(json.dumps(event, ensure_ascii=False), flush=True)
 
 
-async def run(args):
+async def run_session(args, session):
     provider = os.environ['PLATFORM_RUNTIME_PROVIDER']
     model = validate_model(args.model)
-    session = DirectSession(provider, model, args.resume, args.fork_session, args.no_session_persistence)
     messages = session.messages
     messages.append({'role': 'user', 'content': args.p})
     session.save()
@@ -68,8 +68,9 @@ async def run(args):
         emit({**event, **extra})
 
     async with DirectTools(args) as tools:
-        if tools.connector is not None:
-            system += OUTCOME_PROMPT
+        finalizer = ConnectorFinalizer() if tools.connector is not None else None
+        if finalizer:
+            system += OUTCOME_PROMPT + FINISH_PROMPT
         for turn in range(1, 41):
             if tools.connector is not None:
                 try:
@@ -77,18 +78,26 @@ async def run(args):
                 except ValueError as exc:
                     result(str(exc), is_error=True)
                     return
+            inventory = finalizer.inventory(tools.inventory) if finalizer else tools.inventory
             if args.max_budget_usd is not None:
                 # Conservative UTF-8 byte upper bound for text tokens, plus framing.
-                upper = len(json.dumps([system, messages, tools.inventory], ensure_ascii=False).encode()) + 4096
+                upper = len(json.dumps([system, messages, inventory], ensure_ascii=False).encode()) + 4096
                 reservation = (upper * token_rates[0] + args.max_tokens * token_rates[1]) / 1_000_000
                 if totals(run_calls)['known_cost_usd'] + reservation > args.max_budget_usd:
                     result('The remaining API budget is too small for another model request.', is_error=True)
                     return
+            def guard():
+                if tools.connector is not None:
+                    tools.connector.inventory()
+
             try:
-                response = await asyncio.to_thread(request, provider, model, system, messages, tools.inventory, args.max_tokens)
+                response = await asyncio.to_thread(request, provider, model, system, messages,
+                                                  inventory, args.max_tokens, session, guard)
             except DirectAPIError as exc:
                 result(str(exc), is_error=True)
                 return
+            if response.get('transport'):
+                emit(response['transport'])
             input_tokens += response['input_tokens']
             output_tokens += response['output_tokens']
             usage_call = call_cost(response, price_policy)
@@ -103,24 +112,46 @@ async def run(args):
                 event['content'] = tools.sandbox.redact(event['content'])
             emit(event)
             session.save()
+            if response.get('stop_reason') in ('pause_turn', 'refusal'):
+                result('The provider paused or refused this turn; automatic continuation is not supported.', is_error=True)
+                return
             if response['truncated']:
                 session.save()
                 result('The API response was truncated or filtered. Increase the output token limit or refine the request.', is_error=True)
                 return
+            if finalizer:
+                action, output = finalizer.inspect(response)
+                if finalizer.diagnostic:
+                    emit(finalizer.diagnostic)
+                if action != 'tools':
+                    if response['calls']:
+                        # Close the internal tool turn for valid future session replay.
+                        # No call in a finalization response is sent to a connector.
+                        add_tool_results(provider, messages, [(call,
+                            'Server completion validation only; no connector action executed.',
+                            action != 'completed') for call in response['calls']])
+                    if action in ('failed', 'blocked'):
+                        session.save()
+                        result(output, is_error=True)
+                        return
+                    try:
+                        tools.connector.verify_completion()  # Rechecks live policy and required receipts.
+                    except ValueError as exc:
+                        session.save()
+                        result(str(exc), is_error=True)
+                        return
+                    if action == 'repair':
+                        # One bounded model-only formatting pass. Connector tools are
+                        # removed from the next request and cannot be dispatched.
+                        messages.append({'role': 'user', 'content': REPAIR_PROMPT})
+                        session.save()
+                        continue
+                    session.save()
+                    result(output)
+                    return
             if not response['calls']:
                 if not response['text']:
                     raise DirectAPIError('The API returned an empty response.')
-                if tools.connector is not None:
-                    output, blocked = final_outcome(response['text'])
-                    if blocked:
-                        result(blocked, is_error=True)
-                        return
-                    response['text'] = output
-                    try:
-                        tools.connector.verify_completion()
-                    except ValueError as exc:
-                        result(str(exc), is_error=True)
-                        return
                 session.save()
                 result(response['text'])
                 return
@@ -157,6 +188,20 @@ async def run(args):
                 result('[SUPERVISOR_REQUEST] ' + question)
                 return
         result('The direct API tool-call limit was reached. Resume this session to continue.', is_error=True)
+
+
+async def run(args):
+    provider = os.environ['PLATFORM_RUNTIME_PROVIDER']
+    model = validate_model(args.model)
+    with session_lease(args.resume):
+        session = DirectSession(provider, model, args.resume, args.fork_session, args.no_session_persistence)
+        if session.id == args.resume:
+            await run_session(args, session)
+        elif args.no_session_persistence:
+            await run_session(args, session)
+        else:
+            with session_lease(session.id):
+                await run_session(args, session)
 
 
 def main():

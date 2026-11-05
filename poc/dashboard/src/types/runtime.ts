@@ -44,6 +44,7 @@ export interface RuntimeSetupState {
 
 export interface RuntimeSelectionDto {
   provider_id: RuntimeProviderId;
+  message_threads_enabled?: boolean;
   gateway_base_url?: string;
   model_id?: string;
   api_key?: string;

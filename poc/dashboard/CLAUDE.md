@@ -249,8 +249,14 @@ Use Channel Binding for workflow lifecycle update cadence; preserve legacy modes
 
 Keep the Channel Binding notification dropdown at four canonical choices; older persisted modes must not add visible legacy options. Friendly labels live in workflowChat.ts. No tests/build/typecheck performed.
 
+Runtime setup automatic prompts wait for authenticated organization/user context and are shown at most once per user/organization per browser tab session (sessionStorage contains only the shown marker). Explicit Configure runtime still opens the modal. Missing organization keys remain execution-blocking; dismissal grants no credentials. No runtime verification performed.
+
+Completion-validation events now render a bounded redacted candidate preview in StepEventTimeline. Existing scoped logs/export are reused; raw provider envelopes are not displayed. No build/typecheck/render verification was performed for this change.
+
 ## CI environment
 Dashboard CI and Docker builds target Node22. CI explicitly runs type checking because npm run build only invokes Vite; it also runs lint and request-cache tests. Local runtime verification remains unperformed.
+
+Thread transport controls must remain Anthropic-only, organization-scoped and opt-in, with the temporary-retention notice. RuntimeSettingsPanel now scopes reload to authenticated user/org and disables non-admin edits. Thread events are transport metadata, not TTFT or token savings. No build/typecheck/test execution performed.
 
 ## Logic regression command
 npm test runs all tests/*.test.mjs with Node22 native TypeScript stripping and locked npm dependencies. The same glob is used by master CI. See tests/AGENTS.md for scope, deterministic race fixtures and limitations; no API keys or external requests are required. No local execution was performed under the current runtime restriction.
