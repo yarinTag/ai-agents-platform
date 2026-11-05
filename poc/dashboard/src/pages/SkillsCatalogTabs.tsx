@@ -1,8 +1,10 @@
+import React from 'react';
 import { ResourceSection } from './ResourceSection';
 import { PluginSourceConfiguration } from './PluginSourceConfiguration';
 import { Table, Input, Button, Tag, Tabs, Segmented, Select } from 'antd';
-import { DeleteOutlined, AppstoreOutlined, FolderOpenOutlined, FileTextOutlined, SyncOutlined, ThunderboltOutlined, CheckCircleOutlined, GithubOutlined, SaveOutlined, DownSquareOutlined, UpSquareOutlined, LockOutlined, UnlockOutlined, BranchesOutlined, KeyOutlined, LinkOutlined } from '@ant-design/icons';
+import { DeleteOutlined, AppstoreOutlined, ApartmentOutlined, FolderOpenOutlined, FileTextOutlined, SyncOutlined, ThunderboltOutlined, CheckCircleOutlined, GithubOutlined, SaveOutlined, DownSquareOutlined, UpSquareOutlined, LockOutlined, UnlockOutlined, BranchesOutlined, KeyOutlined, LinkOutlined } from '@ant-design/icons';
 import { CollapsiblePluginCard } from '../components/robotic';
+import { PluginsConnectionCanvas } from '../components/skills/PluginsConnectionCanvas';
 
 import type { useSkillsPage } from './useSkillsPage';
 
@@ -232,6 +234,28 @@ export const SkillsCatalogTabs = (props: Pick<
                   </div>
                 )}
               </div>
+              </ResourceSection>
+            ),
+          },
+          {
+            key: 'canvas',
+            label: (
+              <span>
+                <ApartmentOutlined /> Skills & Plugins Canvas ({plugins.length} Plugins)
+              </span>
+            ),
+            children: (
+              <ResourceSection error={sourceConfigError || scanError} onRetry={() => loadConfigAndScan(false)}>
+                <PluginsConnectionCanvas
+                  sourceMode={sourceMode}
+                  localPath={localPath}
+                  gitRepo={gitRepo}
+                  plugins={plugins}
+                  customSkills={skills}
+                  loading={loading || scanning}
+                  onRefresh={() => loadConfigAndScan(true)}
+                  onSelectPluginSkill={handleSelectSkill}
+                />
               </ResourceSection>
             ),
           },

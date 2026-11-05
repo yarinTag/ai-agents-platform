@@ -22,3 +22,6 @@ only within that catalog; unavailable/ambiguous references fail. No global skill
 content cache supplies workflow instructions. Combined content is <=120000 chars,
 local files <=100000 bytes; empty/missing content fails. No clone, tool grant or
 script execution is implied. Runtime verification was not performed.
+
+## Inter-skill flow connection extraction (2026-11-03)
+`metadata.py:extract_skill_meta_from_text` extracts optional `role` from YAML frontmatter and retains `_raw_content` transiently during package assembly. `packages.py:_enrich_skill_connections` resolves cross-skill references across discovered skills (matching both full skill IDs such as `product-prd-writer` and category-prefix-stripped aliases such as `prd-writer`, `idea-to-blueprint`, `architecture-designer`, `google-docs-prd-publisher`), populates `connected_skills: List[str]` on each skill summary, and strips `_raw_content` before returning `PluginPackage` payloads.

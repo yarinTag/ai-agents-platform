@@ -133,3 +133,6 @@ workflowSettings.ts adds EN/HE backendSection/backendHelp/backendPending/backend
 workflowSettings adds EN/HE backendSetupNeeded and updates backendBlockedHelp to distinguish server configuration from unsupported engines and describe the read-only SDK limit. No runtime checks.
 
 runtimeSetup.ts adds matched EN/HE messageThreads/messageThreadsHelp labels describing opt-in, unchanged token prices, temporary provider retention and ZDR/HIPAA incompatibility. No runtime verification performed.
+
+## Organization Workflows Canvas copy (2026-11-03)
+`orgWorkflowsCanvas.ts` exports `useOrgWorkflowsCanvasText` and `OrgWorkflowsCanvasText` with aligned English (`en`) and Hebrew (`he`) translations for the Organization & Department Workflows Canvas tab, filters, topology legend, triggers, expandable DAG stages, external resource/channel connections, and the workflow inspector drawer.

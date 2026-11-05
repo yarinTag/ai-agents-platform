@@ -245,3 +245,6 @@ WorkflowLogs, WorkflowExecutionDrawer and workflowExecutionColumns use services/
 
 ## Telegram selectable-tag tooltip
 McpTelegramSelection renders each discovered chat in a keyed native span with title=canonical chat ID, containing the controlled Ant Design CheckableTag. The tag keeps selection handlers and styles; unsupported title props are not passed to it.
+
+## Organization & Department Workflows Canvas & Skills Canvas Diagrams (2026-11-03)
+`OrganizationPage.tsx` (`/organization`) loads organization workflows via `getWorkflows()` alongside `getDepartments()` and `getOrganizationUsers()` and mounts `OrgWorkflowsCanvasTab` under the **Workflows Canvas** (`key: 'workflows'`) tab, powered by the generic `ConnectionCanvasDiagram` (`src/components/common/ConnectionCanvas/`). `SkillsCatalogTabs.tsx` (`/skills`) mounts `PluginsConnectionCanvas` exclusively under the top-level **Skills & Plugins Canvas** (`key: 'canvas'`) tab (with no duplicate canvas toggle inside `Skills Repository Hub`), rendering multi-stage skill flows and inter-skill connections.

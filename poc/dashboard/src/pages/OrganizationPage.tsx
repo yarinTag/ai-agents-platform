@@ -1,39 +1,21 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { Card, Row, Col, Statistic, Tabs, Tag, Button, Typography, message } from 'antd';
 import {
-  Card,
-  Row,
-  Col,
-  Statistic,
-  Tabs,
-  Tag,
-  Button,
-  Typography,
-  message,
-} from 'antd';
-import {
-  BankOutlined,
-  TeamOutlined,
-  UserOutlined,
-  SafetyCertificateOutlined,
-  DollarCircleOutlined,
-  ApartmentOutlined,
-  SyncOutlined,
-  SettingOutlined,
+  BankOutlined, TeamOutlined, UserOutlined, SafetyCertificateOutlined,
+  DollarCircleOutlined, ApartmentOutlined, SyncOutlined, SettingOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../context/AuthContext';
 import { useTranslation } from '../i18n';
 import { useRuntimeSetupText } from '../i18n/runtimeSetup';
+import { useOrgWorkflowsCanvasText } from '../i18n/orgWorkflowsCanvas';
 import { RuntimeSettingsPanel } from '../components/common/RuntimeSettingsPanel';
 import {
-  getDepartments,
-  createDepartment,
-  getDepartmentMembers,
-  bulkInviteDepartmentMembers,
-  removeDepartmentMember,
-  getOrganizationUsers,
+  getDepartments, createDepartment, getDepartmentMembers,
+  bulkInviteDepartmentMembers, removeDepartmentMember, getOrganizationUsers, getWorkflows,
 } from '../services/api';
 import { Department, DepartmentMember, OrganizationUser, InvitationRecord } from '../types/auth';
-import { DepartmentsBudgetTab, TeamInvitationsTab, OrgUsersTab } from '../components/org';
+import { PlatformWorkflow } from '../types/mcp';
+import { DepartmentsBudgetTab, TeamInvitationsTab, OrgUsersTab, OrgWorkflowsCanvasTab } from '../components/org';
 
 const { Text } = Typography;
 
@@ -41,11 +23,14 @@ export const OrganizationPage: React.FC = () => {
   const { organization, user, refreshUserProfile } = useAuth();
   const { t } = useTranslation();
   const runtimeText = useRuntimeSetupText();
+  const canvasText = useOrgWorkflowsCanvasText();
 
-  const [activeTab, setActiveTab] = useState<'departments' | 'team' | 'users' | 'runtime'>('departments');
+  const [activeTab, setActiveTab] = useState<'departments' | 'workflows' | 'team' | 'users' | 'runtime'>('departments');
   const [departmentsList, setDepartmentsList] = useState<Department[]>([]);
   const [loadingDepts, setLoadingDepts] = useState<boolean>(false);
   const [creatingDept, setCreatingDept] = useState<boolean>(false);
+  const [workflowsList, setWorkflowsList] = useState<PlatformWorkflow[]>([]);
+  const [loadingWorkflows, setLoadingWorkflows] = useState<boolean>(false);
 
   // Team tab state
   const [selectedDeptId, setSelectedDeptId] = useState<string | null>(null);
@@ -100,12 +85,27 @@ export const OrganizationPage: React.FC = () => {
     }
   }, [organization?.id, t]);
 
+  // Load organization workflows
+  const loadWorkflows = useCallback(async () => {
+    setLoadingWorkflows(true);
+    try {
+      const res = await getWorkflows();
+      const data = res.data as any;
+      setWorkflowsList(Array.isArray(data) ? data : (data?.workflows || []));
+    } catch {
+      setWorkflowsList([]);
+    } finally {
+      setLoadingWorkflows(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (organization?.id) {
       loadDepartments();
       loadOrgUsers();
+      loadWorkflows();
     }
-  }, [organization?.id, loadDepartments, loadOrgUsers]);
+  }, [organization?.id, loadDepartments, loadOrgUsers, loadWorkflows]);
 
   useEffect(() => {
     if (selectedDeptId) {
@@ -115,7 +115,7 @@ export const OrganizationPage: React.FC = () => {
 
   // Manual refresh helper
   const handleRefresh = async () => {
-    await Promise.all([loadDepartments(), loadOrgUsers()]);
+    await Promise.all([loadDepartments(), loadOrgUsers(), loadWorkflows()]);
     if (selectedDeptId) {
       await loadDepartmentMembers(selectedDeptId);
     }
@@ -378,6 +378,25 @@ export const OrganizationPage: React.FC = () => {
                   loading={loadingDepts}
                   onCreateDepartment={handleCreateDepartment}
                   creating={creatingDept}
+                  onManageTeam={handleManageTeam}
+                />
+              ),
+            },
+            {
+              key: 'workflows',
+              label: (
+                <span style={{ fontSize: 13, fontWeight: 600 }}>
+                  <ApartmentOutlined style={{ marginRight: 6 }} />
+                  {canvasText.tabLabel} ({workflowsList.length})
+                </span>
+              ),
+              children: (
+                <OrgWorkflowsCanvasTab
+                  organization={organization}
+                  departments={departmentsList}
+                  workflows={workflowsList}
+                  loading={loadingDepts || loadingWorkflows}
+                  onRefresh={handleRefresh}
                   onManageTeam={handleManageTeam}
                 />
               ),

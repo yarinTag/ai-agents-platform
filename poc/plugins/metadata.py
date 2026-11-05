@@ -50,8 +50,11 @@ def extract_skill_meta_from_text(
         m_ver = re.search(r"version:\s*[\"']?([^\s\"'\n\r]+)[\"']?", content)
         if m_ver:
             version = m_ver.group(1).strip()
+
+        m_role = re.search(r"role:\s*[\"']?([^\s\"'\n\r]+)[\"']?", content)
+        role = m_role.group(1).strip() if m_role else ""
     except Exception:
-        pass
+        role = ""
 
     final_desc = desc or f"Skill provided by {plugin_name}"
     cache_entry = {
@@ -73,7 +76,9 @@ def extract_skill_meta_from_text(
         "plugin": plugin_name,
         "domain": domain,
         "version": version,
+        "role": role,
         "content_preview": content[:1500] if content else "",
+        "_raw_content": content or "",
     }
 
 

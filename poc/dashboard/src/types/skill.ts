@@ -17,7 +17,9 @@ export interface PluginSkill {
   plugin: string;
   domain?: string;
   version?: string;
+  role?: string;
   content_preview?: string;
+  connected_skills?: string[];
 }
 
 export interface PluginPackage {
