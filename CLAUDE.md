@@ -235,3 +235,6 @@ CI required aggregates backend core/security/runtime, dashboard checks and PR-on
 All PRs trigger CI using isolated backend tests, dashboard checks and build-only containers. CI required fails when any required check fails/cancels; publishing calls the same CI first. Actions use immutable SHAs. Master contains only master-available suites; branch-specific features/tests remain in their PR. See .github/AGENTS.md.
 
 Optional Anthropic Message Threads is configured per organization in API provider settings. Keep durable local history, current credential/policy checks and bounded recovery; never retry external tools or infer cheaper token usage from smaller HTTP payloads. See docs/anthropic-message-threads.md. Runtime verification remains unauthorized.
+
+## Unified Actions execution
+CI runs backend/frontend checks once per trigger and then either validates images without publishing (PR/default manual) or builds/publishes after the aggregate gate (main/master/v* push). Manual publication needs publish=true and a supported ref. ci.yml replaces the duplicate images.yml orchestrator; .github/AGENTS.md owns the exact contracts. No local runtime verification performed.

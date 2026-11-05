@@ -3,14 +3,44 @@ on:
   pull_request:
   push:
     branches: [main, master]
-  workflow_call:
+    tags: ['v*']
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish images (only main/master or v-prefixed tags)
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
+  plan:
+    name: Image plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      images: ${{ steps.plan.outputs.images }}
+      publish: ${{ steps.plan.outputs.publish }}
+    steps:
+      - id: plan
+        name: Select image matrix and trusted publishing mode
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          REQUEST_PUBLISH: ${{ inputs.publish }}
+        run: |
+          echo 'images={"include":[{"component":"api","context":".","file":"Dockerfile.api"},{"component":"worker","context":".","file":"Dockerfile.worker"},{"component":"dashboard","context":"poc/dashboard","file":"poc/dashboard/Dockerfile"}]}' >> "$GITHUB_OUTPUT"
+          publish=false
+          case "$REF" in
+            refs/heads/main|refs/heads/master|refs/tags/v*)
+              if [ "$EVENT" = push ] || { [ "$EVENT" = workflow_dispatch ] && [ "$REQUEST_PUBLISH" = true ]; }; then
+                publish=true
+              fi
+              ;;
+          esac
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
   backend:
     name: Backend tests (${{ matrix.suite }})
     strategy:
@@ -100,22 +130,13 @@ jobs:
         run: npm run build
   containers:
     name: Container build (${{ matrix.component }})
-    if: github.event_name == 'pull_request'
+    needs: plan
+    if: needs.plan.outputs.publish != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - component: api
-            context: .
-            file: Dockerfile.api
-          - component: worker
-            context: .
-            file: Dockerfile.worker
-          - component: dashboard
-            context: poc/dashboard
-            file: poc/dashboard/Dockerfile
+      matrix: ${{ fromJSON(needs.plan.outputs.images) }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -132,21 +153,68 @@ jobs:
   gate:
     name: CI required
     if: always()
-    needs: [backend, frontend, containers]
+    needs: [plan, backend, frontend, containers]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
       - name: Require all applicable checks to succeed
         env:
+          PLAN: ${{ needs.plan.result }}
+          PUBLISH: ${{ needs.plan.outputs.publish }}
           BACKEND: ${{ needs.backend.result }}
           FRONTEND: ${{ needs.frontend.result }}
           CONTAINERS: ${{ needs.containers.result }}
-          EVENT: ${{ github.event_name }}
         run: |
+          test "$PLAN" = success
           test "$BACKEND" = success
           test "$FRONTEND" = success
-          if [ "$EVENT" = pull_request ]; then
-            test "$CONTAINERS" = success
-          else
+          if [ "$PUBLISH" = true ]; then
             test "$CONTAINERS" = skipped
+          else
+            test "$CONTAINERS" = success
           fi
+  publish:
+    name: Publish image (${{ matrix.component }})
+    needs: [plan, gate]
+    if: ${{ !cancelled() && needs.plan.outputs.publish == 'true' && needs.gate.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.images) }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Normalize registry path
+        id: registry
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: echo "image=ghcr.io/${REPOSITORY,,}-${{ matrix.component }}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+        id: meta
+        with:
+          images: ${{ steps.registry.outputs.image }}
+          tags: |
+            type=sha,format=long
+            type=ref,event=branch
+            type=ref,event=tag
+          flavor: latest=false
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.component }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.component }}

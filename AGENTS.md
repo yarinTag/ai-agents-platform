@@ -241,3 +241,12 @@ The organization-credentials/runtime branch incorporates master CI workflows and
 
 ## Anthropic Message Threads opt-in
 Direct Anthropic API sessions support organization-enabled beta create/continue with private transcript-backed recovery and session leases. Default disabled; no SDK/backend routing change, streaming or prompt caching. See docs/anthropic-message-threads.md and runtime/API/UI guides. No tests/build/startup/model calls performed.
+
+## Frontend logic regression suite
+[Dashboard logic tests](poc/dashboard/tests/AGENTS.md) documents direct Node22 tests for workflow editing, settings/secret validation, cost display, connector resource projection, shared skills, cache races, partial loading, model labels and office activity/coordinates. The standalone frontend PR contains no organization-runtime implementation. Existing master Actions discover all *.test.mjs files. No external API keys or provider calls.
+
+## Unified repository CI
+ci.yml now owns tests, PR/manual build-only validation and gated main/master/v* image publishing; images.yml is removed to avoid running tests twice per master push. One image plan owns the component matrix. Registry write access remains exclusive to the trusted publishing job. Manual runs default to build-only; publishing requires explicit opt-in on a supported ref. PR labels remain a separate privileged metadata-only workflow.
+
+## PR #18 master synchronization (2026-11-05)
+Documentation conflicts retain organization-scoped Anthropic Message Threads contracts and master frontend regression/unified-CI guidance. The unified workflow keeps the branch-specific 16-file backend suite and all frontend tests. No feature was activated; local runtime verification remains unperformed.
