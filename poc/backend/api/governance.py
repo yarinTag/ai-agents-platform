@@ -12,6 +12,26 @@ from governance.validation import validate_document
 router = APIRouter()
 
 
+def _editor_record(db, actor, scope_type, scope_id):
+    record = store.load(db, actor.organization_id, scope_type, scope_id)
+    options = []
+    for connector in db.list_mcp_connectors(organization_id=actor.organization_id):
+        if connector.organization_id != actor.organization_id:
+            continue
+        if scope_type == 'department':
+            grant = db.get_department_mcp_access(scope_id, connector.id)
+            if not grant or not grant.is_active or grant.organization_id not in (None, actor.organization_id):
+                continue
+        for cap in descriptors().values():
+            resources = configured_resources(connector, cap) if cap.implemented else []
+            if resources:
+                options.append({'capability_id': cap.id, 'connector_id': connector.id,
+                                'connector_name': connector.name, 'resource_type': cap.resource_type,
+                                'resource_ids': resources})
+    # Configuration/credentials never cross this projection. Options are not grants.
+    return {**record, 'resource_options': options}
+
+
 def _actor(request, db, department_id=None, level=1):
     actor = load_actor(request, db)
     if department_id:
@@ -45,7 +65,7 @@ def list_capability_descriptors(request: Request, db=Depends(get_db_manager)):
 @router.get('/organization/policy')
 def get_organization_capability_policy(request: Request, db=Depends(get_db_manager)):
     actor = _actor(request, db, level=4)
-    return store.load(db, actor.organization_id, 'organization', actor.organization_id)
+    return _editor_record(db, actor, 'organization', actor.organization_id)
 
 
 @router.put('/organization/policy')
@@ -57,7 +77,7 @@ def put_organization_capability_policy(payload: PolicyUpdate, request: Request, 
 @router.get('/departments/{department_id}/policy')
 def get_department_capability_policy(department_id: str, request: Request, db=Depends(get_db_manager)):
     actor = _actor(request, db, department_id, 3)
-    return store.load(db, actor.organization_id, 'department', department_id)
+    return _editor_record(db, actor, 'department', department_id)
 
 
 @router.put('/departments/{department_id}/policy')

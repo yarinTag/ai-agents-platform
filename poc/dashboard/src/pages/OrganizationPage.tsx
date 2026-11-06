@@ -16,6 +16,8 @@ import {
 import { Department, DepartmentMember, OrganizationUser, InvitationRecord } from '../types/auth';
 import { PlatformWorkflow } from '../types/mcp';
 import { DepartmentsBudgetTab, TeamInvitationsTab, OrgUsersTab, OrgWorkflowsCanvasTab } from '../components/org';
+import CapabilityGovernancePanel from '../components/org/CapabilityGovernancePanel';
+import { useGovernanceText } from '../i18n/governance';
 
 const { Text } = Typography;
 
@@ -24,8 +26,9 @@ export const OrganizationPage: React.FC = () => {
   const { t } = useTranslation();
   const runtimeText = useRuntimeSetupText();
   const canvasText = useOrgWorkflowsCanvasText();
+  const governanceText = useGovernanceText();
 
-  const [activeTab, setActiveTab] = useState<'departments' | 'workflows' | 'team' | 'users' | 'runtime'>('departments');
+  const [activeTab, setActiveTab] = useState<'departments' | 'workflows' | 'team' | 'users' | 'runtime' | 'capabilities'>('departments');
   const [departmentsList, setDepartmentsList] = useState<Department[]>([]);
   const [loadingDepts, setLoadingDepts] = useState<boolean>(false);
   const [creatingDept, setCreatingDept] = useState<boolean>(false);
@@ -364,6 +367,7 @@ export const OrganizationPage: React.FC = () => {
           onChange={(k) => setActiveTab(k as any)}
           tabBarStyle={{ borderColor: '#21262d', marginBottom: '20px' }}
           items={[
+            { key: 'capabilities', label: governanceText.title, children: <CapabilityGovernancePanel /> },
             {
               key: 'departments',
               label: (

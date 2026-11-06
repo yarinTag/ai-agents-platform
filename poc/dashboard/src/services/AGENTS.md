@@ -269,3 +269,6 @@ stored in localStorage by these changes. No local application or test execution 
 
 
 workflowApprovals.ts exposes typed getWorkflowApproval(executionId) and decideWorkflowApproval(executionId,approve) via existing auth/department-scoped httpClient; no secret query or transport bypass. types/workflowChat adds human_approval config/readiness and tool_capabilities/server_operations metadata.
+
+## AI-17 governance client
+governanceApi.ts (facade re-exported) owns getGovernanceCapabilities, getGovernanceCatalog(departmentId), getCapabilityPolicy(departmentId|null), updateCapabilityPolicy(departmentId|null,document,expectedRevision), getCapabilityPolicyHistory(departmentId). All accept AbortSignal and use the shared authenticated transport; null policy target means organization. Paths are encoded; no new cache/storage or token parameter. types/governance.ts owns policy, descriptor, catalog/decision and safe resource-option DTOs. Exact endpoint contracts: docs/design/capability-policy-editor.md.

@@ -141,3 +141,6 @@ workflowChat.noDepartments EN/HE now explains department membership rather than 
 
 
 workflowApproval.ts supplies matched EN/HE human decision labels, merge authorization/expiry/unknown-outcome copy. workflowChat adds humanApproval/mergeAfterApproval preview labels.
+
+## AI-17 governance localization
+governance.ts exports useGovernanceText/GovernanceText with paired typed English/Hebrew policy/access/role, rule effect, revision/history, review, 409 and readiness strings. New governance components use locale ConfigProvider direction; canonical IDs remain LTR. Existing large locale dictionaries and locale persistence remain unchanged.

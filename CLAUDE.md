@@ -261,3 +261,5 @@ P00 generic connector work is governed by docs/architecture/adr-ai-15-generic-co
 
 ## AI-16 policy development
 Preserve the legacy ceiling AND current/captured typed policies through governance.policy; typed allow never creates missing authority. Managers may append restrictions only; all effective edits and history are atomic/CAS. Register adapters in implementation code, never connector metadata. See docs/architecture/capability-policy-v1.md and poc/governance/AGENTS.md. Local verification for this task is the isolated real-FastAPI/SQLite API audit only; no agent/provider calls.
+
+AI-17 uses the existing /organization route and header department. Preserve read-only member journeys, manager restriction-only editing, explicit review/CAS save and scope-keyed cancellation. Policy options are secret-free configuration projections, not permissions. See docs/design/capability-policy-editor.md; no local UI/build/runtime verification is authorized.

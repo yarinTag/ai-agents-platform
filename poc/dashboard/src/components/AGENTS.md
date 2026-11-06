@@ -305,3 +305,10 @@ WorkflowApprovalPanel polls the scoped per-execution approval API and renders re
 
 
 AI-14 static governance wireframes (docs/design/governance-wireframes.{svg,png}) use existing Ant Design palette/cards/tags/tabs. Actual robotic exports are DepartmentSelect/ModelSelector/CollapsiblePluginCard, not historical nonexistent RoboticHeader/Card names. Shared approval UI must separate decision from action/provider receipt; proposed middle-DAG continuation is not shipped by this design.
+
+## AI-17 policy presentation
+org/CapabilityGovernancePanel.tsx owns scoped catalog/policy/history loading, effective-role tabs, generation/AbortSignal guards and server save outcomes. CapabilityAccessTable shows independent authoring/execution facts and unsupported descriptors. CapabilityPolicyRules renders exact rule/resources/constraints. CapabilityPolicyEditor owns an unsaved draft, manager append-only controls, exact resource selection, preserved advanced constraints, before/after review, explicit CAS save and locked 409 recovery. common/DepartmentAccessPage mounts the panel for nonadmins and localizes scope descriptions. No provider calls, secret fields, localStorage drafts or authority derived from token claims. EN/HE/RTL contract: docs/design/capability-policy-editor.md.
+
+CapabilityGovernancePanel explicitly initializes its optional AbortController ref for compatibility with the locked React type definitions; request cancellation semantics are unchanged.
+
+Policy review drawer identifies organization/department target and exact scope ID. Refresh is disabled while a draft editor is open; cancelling an edit remains possible if its original option disappeared.

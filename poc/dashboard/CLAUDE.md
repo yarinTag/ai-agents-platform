@@ -297,3 +297,5 @@ WorkflowApprovalPanel is a presentation of backend approval authority: never res
 
 
 For governance UI implementation, follow docs/design/governance-ux.md (AI-14). Keep supported/configured/authorized/provider-verified facts separate, clear stale department data, and distinguish draft/active/execution/approval/action receipt states. Static wireframes are design artifacts, not proof of shipped features or browser behavior.
+
+AI-17: do not mount the admin OrganizationPage for nonadmins. CapabilityGovernancePanel derives current account/membership presentation rights, reads only permitted endpoints and uses selected header department. No All Departments mutation. Preserve review-before-save, expected_revision/409 recovery, role/scope reset and AbortSignal/generation guards. No raw server exception bodies or configuration/credentials are rendered or cached. Full UI contract: docs/design/capability-policy-editor.md. Frontend verification is GitHub CI only; no local UI/runtime startup.
