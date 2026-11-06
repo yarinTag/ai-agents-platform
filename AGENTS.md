@@ -292,3 +292,7 @@ New read tools list_open_pull_requests and get_pull_request_review expose bounde
 
 ## AI-14 governance UX baseline (P00)
 [UX specification and role journeys](docs/design/governance-ux.md) and [static wireframes](docs/design/governance-wireframes.png) map the generic AI-13 contract to proposed department capabilities, channel triggers, workflow preview and human decisions. No production FE changes or new capabilities are introduced; AI-15 records the cross-module architecture decisions.
+
+
+## AI-15 P00 generic governance decision record
+[Governance ADR](docs/architecture/adr-ai-15-generic-connector-governance.md) records the shared engine/trusted-adapter boundary, central current policy, separate channel uses, verified identity/ingress, exact-action human approvals, checkpointed continuation and receipts/reconciliation. This is a planning decision with P01–P11 release gates, not shipped future capability. [AI-14 UX](docs/design/governance-ux.md) is the FE integration contract; [AI-13](docs/architecture/connector-governance-contract.md) remains the source-backed baseline. All three form P00; implementing tickets publish exact new APIs/schema before FE integration.

@@ -141,3 +141,6 @@ Nested response collections are authorized by their own resource type (for examp
 
 
 Workflow approval reads require current scoped execution access. decide_workflow_approval requires level3 and a personal authenticated user; the handler rechecks approver, initiator, immutable workflow revision, resource grants and deadline during resolution. Legacy Telegram/Slack shared-secret callback routes remain disabled. Merge authority never comes from a URL or model output.
+
+
+AI-15 target identity/event/approval boundaries require proved provider identities plus current personal approver policy. Channel membership/forwarded links alone never identify an approver. Trigger service principals have explicit fixed workflow/resource ceilings and cannot be selected by model text. Legacy global-secret callbacks remain denied until P04/P05/P08 ship the verified transport.

@@ -255,3 +255,6 @@ Workflow PR review and merging now use explicit terminal human_approval gates an
 
 
 AI-13 defines the generic connector baseline in docs/architecture/connector-governance-contract.md. Explicit user authorization now permits local API-only verification: use poc/tests/run_api_audit.py with an external --report-dir. It isolates legacy import-time singletons in a source snapshot and blocks network/child processes inside pytest. This does not authorize agents, models, provider actions or startup.
+
+
+P00 generic connector work is governed by docs/architecture/adr-ai-15-generic-connector-governance.md and docs/design/governance-ux.md. Implement only trusted, advertised adapter capabilities within central current resource policy. Model proposals/channel membership/URLs are never grants or human decisions. Documentation of planned capabilities does not activate them; agent prompt/schema updates must accompany actual implementations. User-authorized local API-only checks remain separate from agents/models/live providers/startup.

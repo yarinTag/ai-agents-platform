@@ -143,3 +143,6 @@ The private credential file is outside source control. No application/tests were
 
 
 workflow_approvals_schema initializes workflow_approvals: id PK, execution_id UNIQUE FK, step_run_id,task_id,organization_id,department_id,workflow_revision,status,config_json,subjects_json,report,created_at,expires_at,resolved_at,resolved_by,error,receipts_json(default[]). States NOTIFYING/PENDING/RESOLVING/APPROVED/REJECTED/EXPIRED/EXPIRING/FAILED. API GET lazily resolves expired pending gates. Execution dedup includes unexpired PENDING/RESOLVING WAITING_APPROVAL records; expired approvals do not block new runs. No live migration/database initialization executed in this task.
+
+
+AI-15 migration decision: preserve existing workflow revisions, approval/call receipts and denials while adding versioned policy/bindings/checkpoints in later owning tickets. P00 performs no schema/migration/data writes. Unknown grants remain inert and read wildcard cannot become write authority. No auto-claim, identity link, credential copy or replay of completed/unknown external writes.
