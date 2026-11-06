@@ -278,3 +278,6 @@ Workflow create and Create with AI entry points and recovery modal are enabled f
 
 
 WorkflowLogs mounts WorkflowApprovalPanel keyed by execution ID; Telegram links open /workflows/{workflow_id}/logs?execution={execution_id}. Gate reads/polling and role controls remain backend-authorized. WAITING_APPROVAL retains persisted step/run state without blocking a worker.
+
+
+AI-14 defines proposed page composition and role journeys in docs/design/governance-ux.md; existing /organization non-admin DepartmentAccessPage must not be replaced by an admin-requesting component just to display permissions. Empty context with an authorized header department is a load mismatch, not an instruction to join the department. No page behavior changed in P00.

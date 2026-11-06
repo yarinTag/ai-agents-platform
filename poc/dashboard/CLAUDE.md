@@ -294,3 +294,6 @@ typecheck/startup were performed. See docs/access-control-audit.md for exact bac
 
 
 WorkflowApprovalPanel is a presentation of backend approval authority: never resolve from local state or URL parameters, expose bearer tokens in Telegram links, or bypass existing department-scoped HTTP transport. Matched EN/HE copy lives in workflowApproval.ts.
+
+
+For governance UI implementation, follow docs/design/governance-ux.md (AI-14). Keep supported/configured/authorized/provider-verified facts separate, clear stale department data, and distinguish draft/active/execution/approval/action receipt states. Static wireframes are design artifacts, not proof of shipped features or browser behavior.
