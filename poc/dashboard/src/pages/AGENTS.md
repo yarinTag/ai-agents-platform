@@ -273,3 +273,5 @@ source config. QueuePanel explains why broker-wide metrics/DLQ actions are unava
 polling global endpoints. App supplies a read-only department access view to non-admin Org & Teams
 and denies direct Settings navigation. Each feature remounts on scope/role changes. No runtime
 checks were performed; exact exceptions/limitations are in docs/access-control-audit.md.
+
+Workflow create and Create with AI entry points and recovery modal are enabled for canRead. Existing editing/deletion/settings and execution controls retain their respective roles. No local runtime verification performed.

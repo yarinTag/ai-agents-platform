@@ -134,3 +134,5 @@ Execute/Playground bodies remain ordinary user data and cannot substitute for st
 Queued workflow admission rechecks the current active database account and department membership before budget/run creation, including empty DAGs. Request-local department claims are refreshed from current capped memberships; signed login claims do not retain revoked privileges.
 
 Tenant response projection is applied to direct and lazy included routes; organization collection filtering must run with current request actor/resources on every registered response. No local runtime verification performed.
+
+Workflow authoring endpoints require level1 department access, including nested resource references. This exception does not grant management or execution. Default path-scope calculation uses readable membership rather than requiring manager status for unrelated requests. No local runtime verification performed.

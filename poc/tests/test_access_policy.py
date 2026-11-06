@@ -197,3 +197,31 @@ def test_department_transfer_cannot_silently_transfer_history(access_lab):
         json={'department_id': 'atlas_finance'}, headers=headers(actors['atlas', 'ORG_ADMIN']))
     assert response.status_code == 409
     assert db.get_agent('atlas_engineering_agent').department_id == 'atlas_engineering'
+
+
+@pytest.mark.parametrize('role', ['MEMBER', 'OPERATOR', 'MANAGER'])
+def test_all_department_members_can_author_workflows(access_lab, role):
+    db, client, actors = access_lab
+    user = actors['atlas', role]
+    auth = headers(user, department='atlas_engineering')
+    context = client.get('/api/v1/workflows/ai/context', headers=auth)
+    assert context.status_code == 200, context.text
+    assert {d['id'] for d in context.json()['departments']} == {'atlas_engineering'}
+    payload = {'name': 'Member-authored', 'department_id': 'atlas_engineering',
+               'definition_json': json.dumps({'steps': [{'key': 'work',
+                   'agent_id': 'atlas_engineering_agent', 'prompt_template': 'Review.'}]})}
+    created = client.post('/api/v1/workflows/', headers=auth, json=payload)
+    assert created.status_code == 201, created.text
+    workflow_id = created.json()['id']
+    assert db.get_workflow(workflow_id).is_active == (role == 'MANAGER')
+    if role == 'MEMBER':
+        assert client.put(f'/api/v1/workflows/{workflow_id}', headers=auth,
+                          json={'is_active': True}).status_code == 403
+        assert client.post(f'/api/v1/workflows/{workflow_id}/execute', headers=auth,
+                           json={}).status_code == 403
+    for department in ('atlas_finance', 'boreal_engineering'):
+        denied = client.post('/api/v1/workflows/', headers=auth,
+                             json={**payload, 'department_id': department})
+        assert denied.status_code in (403, 404)
+    db.remove_user_from_department('atlas_engineering', user.id)
+    assert client.get('/api/v1/workflows/ai/context', headers=auth).status_code == 403

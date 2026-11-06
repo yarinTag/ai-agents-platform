@@ -336,3 +336,5 @@ reads stay inside the configured source; non-admin scans cannot persist query so
 No local test/build/typecheck/startup/provider operations were performed for verification.
 
 Auth profile/login/onboarding department lists are filtered to the current organization even if legacy membership rows are inconsistent. Project/detail and task agent lookup prefer persisted DB records over stale global config copies.
+
+All active recognized-role department members may create workflows, use AI context/chat/recovery/cancel/confirmed creation and generate definitions. Catalog grants, current membership and draft ownership still apply. Shared persistence forces newly authored workflows inactive below effective department MANAGER; activation/edit/delete remain management and execution remains operation permissions. No local runtime verification performed.

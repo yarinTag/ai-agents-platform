@@ -141,7 +141,7 @@ async def authorize_request(request: Request, db=Depends(get_db_manager)):
             resources.require(kind, body["id"], 1 if level == 4 else level)
     # Local files are explicit tenant storage, never host directories or another dept.
     from runtime.tenant_workspace import tenant_workspace
-    target_department = body.get("department_id") or actor.default_department(3)
+    target_department = body.get("department_id") or actor.default_department()
     if domain == "agents" and parameters.get("agent_id"):
         target_department = body.get("department_id") or getattr(resources.get("agent", parameters["agent_id"]), "department_id", None)
     for values in (body, query):
@@ -154,7 +154,7 @@ async def authorize_request(request: Request, db=Depends(get_db_manager)):
     if domain == "fs" and path.endswith("/pick-folder"):
         raise HTTPException(403, "Host-native folder selection is not a tenant-scoped operation.")
     if domain == "workflows" and path.endswith("/generate"):
-        actor.require(actor.default_department(3), 3)
+        actor.require(actor.default_department(), 1)
     if domain == "skills" and "/plugins/" in path:
         org = actor.db.get_organization(actor.organization_id)
         if org.plugins_source_mode == "local" and org.plugins_local_path:

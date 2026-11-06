@@ -62,6 +62,13 @@ def persist_workflow(req, request, db, workflow_id=None, initially_active=True):
         if not is_org_admin and target_dept_id not in authorized_dept_ids:
             raise HTTPException(status_code=403, detail=f"Not authorized to assign workflow to department '{target_dept_id}'")
 
+    from ..security.identity import load_actor
+    actor = load_actor(request, db)
+    actor.require(target_dept_id, 1)
+    # Authoring must not grant scheduled execution/activation to read-level members.
+    if not actor.allows(target_dept_id, 3):
+        initially_active = False
+
     wf_id = workflow_id or f"wf_{uuid.uuid4().hex[:10]}"
     runner_agent_id = f"wf-agent-{wf_id}"
 

@@ -174,3 +174,5 @@ included in this audit or source control. Existing organizations/accounts were n
 This SQL/data setup check is not application login, authorization-test or runtime verification.
 
 Queued workflow admission rechecks the current active database account and department membership before budget/run creation, including empty DAGs. Request-local department claims are refreshed from current capped memberships; signed login claims do not retain revoked privileges.
+
+Policy update: every active department member can author workflows through visual/API or AI creation. This supersedes manager-only creation in the earlier matrix. Department/resource grants remain required. Creation below effective MANAGER is inactive; activation/edit/delete still require management and manual execution requires operation rights. Accounts without department membership must first be assigned to a department. No local runtime verification performed.

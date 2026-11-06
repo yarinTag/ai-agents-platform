@@ -17,7 +17,7 @@ import { createWorkflowExecutionColumns } from './workflowExecutionColumns';
 import { WorkflowExecutionDrawer } from './WorkflowExecutionDrawer';
 
 export const WorkflowsPage: React.FC = () => {
-  const { canManage, canOperate } = usePermissions();
+  const { canRead, canManage, canOperate } = usePermissions();
   const model = useWorkflowsPage();
   const [chatSearch, setChatSearch] = useSearchParams();
   const [chatOpen, setChatOpen] = useState(() => chatSearch.has('workflowChat'));
@@ -98,7 +98,7 @@ export const WorkflowsPage: React.FC = () => {
         </div>
 
         <Space size={10}>
-          <Button disabled={!canManage} onClick={() => setChatOpen(true)}>{chatText.entry}</Button>
+          <Button disabled={!canRead} onClick={() => setChatOpen(true)}>{chatText.entry}</Button>
           <Button
             icon={<ReloadOutlined spin={loading} />}
             onClick={() => loadData()}
@@ -113,7 +113,7 @@ export const WorkflowsPage: React.FC = () => {
           <Button
             type="primary"
             icon={<PlusOutlined />}
-            disabled={!canManage} onClick={() => { setEditingWorkflow(null); setCreateModalOpen(true); }}
+            disabled={!canRead} onClick={() => { setEditingWorkflow(null); setCreateModalOpen(true); }}
             style={{
               background: '#8b5cf6',
               borderColor: '#8b5cf6',
@@ -372,7 +372,7 @@ export const WorkflowsPage: React.FC = () => {
         </pre>
       </Modal>
 
-      {chatOpen && canManage && <WorkflowChatModal onClose={closeChat} onCreated={() => { void loadData(); }} />}
+      {chatOpen && canRead && <WorkflowChatModal onClose={closeChat} onCreated={() => { void loadData(); }} />}
       <WorkflowExecutionDrawer {...model} />
 
       {/* Create Workflow Modal */}

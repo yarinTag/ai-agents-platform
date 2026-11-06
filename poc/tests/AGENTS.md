@@ -147,3 +147,5 @@ Playground diagnostic fixtures now persist agent/task organization and departmen
 CI repair: provider credential fixtures override the current database authentication dependency; disabled identities expect401. Local plugin fixtures live inside the temporary tenant shared root. Workflow exception compatibility and organization-list isolation remain enforced by existing contracts. No local runtime verification performed.
 
 test_direct_runtime.py covers organization-scoped authoring from an ephemeral non-tenant directory with empty tools or restricted mode: no file/shell inventory or calls, no MCP escape, and local-tool re-enablement still rejects the outside path. No local test execution; GitHub CI verifies the contracts.
+
+Access-policy contracts cover MEMBER/OPERATOR/MANAGER workflow authoring through real registered routes, AI context, forced inactive lower-role workflows, retained execution/activation restrictions, foreign/unassigned departments and immediate membership revocation. No local runtime verification performed.
