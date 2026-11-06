@@ -1,5 +1,6 @@
 import { invalidateRequestCache } from './requestCache';
 import axios from 'axios';
+import { getRequestDepartment } from './requestScope';
 
 export const AUTH_TOKEN_KEY = 'agents_platform_auth_token';
 export const AUTH_SESSION_KEY = 'agents_platform_auth_session';
@@ -14,6 +15,8 @@ export const api = axios.create({
 // Axios Request Interceptor: Attach Bearer token from localStorage
 api.interceptors.request.use(
   (config) => {
+    const department = getRequestDepartment();
+    if (department && config.headers) config.headers['X-Department-ID'] = department;
     const token = localStorage.getItem(AUTH_TOKEN_KEY);
     if (token) {
       if (config.headers) {
@@ -36,7 +39,9 @@ api.interceptors.response.use(
         url.includes('/auth/org-register') ||
         url.includes('/invitations/accept');
 
-      if (!isAuthExempt) {
+      const sentToken = error.config?.headers?.Authorization;
+      const currentToken = localStorage.getItem(AUTH_TOKEN_KEY);
+      if (!isAuthExempt && sentToken === `Bearer ${currentToken}`) {
         invalidateRequestCache('plugins:');
         localStorage.removeItem(AUTH_TOKEN_KEY);
         localStorage.removeItem(AUTH_SESSION_KEY);

@@ -194,3 +194,18 @@ Mid-run budget admission subtracts current-period execution_settled hosted cost 
 
 ## Safe sandbox startup diagnostics
 sandbox_diagnostics.docker_failure classifies Docker stderr into fixed codes/hints (disk, mount sharing/path, architecture, image access, daemon, registry network, resources, entrypoint or START_REJECTED). Only static messages, integer exit code and a 12-character SHA-256 correlation reference are surfaced; raw paths/credentials/stderr are not copied. repo_sandbox container and egress startup preserve the failure boundary/cleanup while returning the sanitized diagnostic in ToolAccessError and server warnings. No Docker run or retry occurred; historical execution errors remain unchanged.
+
+
+## Department and current actor admission (2026-11-05)
+agent_scope.require_agent_scope accepts db and is applied to steps/reviewers in whole-DAG
+preflight for every engine entry point. A department-scoped agent must match the workflow's
+stored department even for organization admins; JWT department claims never authorize a
+cross-department assignment. Personal user_context is revalidated against ACTIVE current DB
+user/org/operation role and current membership before queued work begins. Explicit server-owned
+organization services retain their scoped mode. No-context scheduler paths still enforce stored
+organization/department ownership. Unknown missing agents continue to fail through existing
+configuration checks. API input bodies for execute/Playground are model data, not authoring grants;
+subject/step scope is checked against the saved definition. Execution detail/evaluation intersects
+persisted execution/step/task scopes, including legacy histories. No engine/model/tests executed.
+
+Queued workflow admission rechecks the current active database account and department membership before budget/run creation, including empty DAGs. Request-local department claims are refreshed from current capped memberships; signed login claims do not retain revoked privileges.

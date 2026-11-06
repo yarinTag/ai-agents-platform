@@ -11,6 +11,23 @@ from fastapi import APIRouter
 router = APIRouter()
 
 
+def _session_departments(db: DatabaseManager, user, memberships):
+    """Project selectable departments separately from membership-based JWT claims."""
+    if user.role != "ORG_ADMIN" or not user.organization_id:
+        return memberships
+    member_by_id = {entry["department_id"]: entry for entry in memberships}
+    result = []
+    for department in db.list_departments(organization_id=user.organization_id):
+        if department is None:
+            continue
+        entry = {**department.to_dict(), "department_id": department.id}
+        membership = member_by_id.get(department.id)
+        if membership:
+            entry.update({key: membership[key] for key in ("department_role", "joined_at") if key in membership})
+        result.append(entry)
+    return result
+
+
 @router.post("/auth/org-register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
 def register_organization(
     req: OrgRegisterRequest,
@@ -74,32 +91,7 @@ def register_organization(
         role="MANAGER"
     )
 
-    # 2. If this is the first organization in the database, claim existing orphaned records
-    orgs = db.list_organizations()
-    if len(orgs) <= 1:
-        with db._get_connection() as conn:
-            for tbl in ["projects", "task_runs", "mcp_connectors"]:
-                try:
-                    conn.execute(f"UPDATE {tbl} SET organization_id = ? WHERE organization_id IS NULL", (org.id,))
-                except Exception:
-                    pass
-            try:
-                conn.execute(
-                    "UPDATE agents SET organization_id = ?, department_id = COALESCE(department_id, ?) WHERE organization_id IS NULL OR department_id IS NULL",
-                    (org.id, default_dept.id)
-                )
-            except Exception:
-                pass
-            try:
-                conn.execute(
-                    "UPDATE workflows SET organization_id = ?, department_id = COALESCE(department_id, ?) WHERE organization_id IS NULL OR department_id IS NULL",
-                    (org.id, default_dept.id)
-                )
-            except Exception:
-                pass
-            conn.commit()
-
-    user_depts = db.get_user_departments(user.id)
+    user_depts = [entry for entry in db.get_user_departments(user.id) if entry.get("organization_id") == user.organization_id]
     token_payload = {
         "sub": user.id,
         "email": user.email,
@@ -113,7 +105,7 @@ def register_organization(
         token=jwt_token,
         user=user.to_dict(),
         organization=org.to_dict(),
-        departments=user_depts
+        departments=_session_departments(db, user, user_depts)
     )
 
 
@@ -132,21 +124,18 @@ def login_user(
     if not user:
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
-    if user.status != "ACTIVE":
-        raise HTTPException(status_code=403, detail=f"User account is {user.status}")
-
     # Enforce password authentication: password must be provided, user must have password_hash, and verification must succeed
     if not req.password or not req.password.strip() or not user.password_hash or not verify_password(req.password.strip(), user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    if user.status != "ACTIVE":
+        raise HTTPException(status_code=403, detail=f"User account is {user.status}")
 
     org = db.get_organization(user.organization_id)
     if not org:
         raise HTTPException(status_code=404, detail="Organization associated with user not found")
 
-    if len(db.list_organizations()) <= 1:
-        db.claim_orphaned_records(org.id)
-
-    user_depts = db.get_user_departments(user.id)
+    user_depts = [entry for entry in db.get_user_departments(user.id) if entry.get("organization_id") == user.organization_id]
     now_iso = datetime.now().isoformat()
     db.update_user(user.id, last_login_at=now_iso)
 
@@ -163,7 +152,7 @@ def login_user(
         token=jwt_token,
         user=user.to_dict(),
         organization=org.to_dict(),
-        departments=user_depts
+        departments=_session_departments(db, user, user_depts)
     )
 
 
@@ -187,14 +176,11 @@ def get_current_user_profile(
         raise HTTPException(status_code=401, detail="Session is no longer valid. Please sign in again.")
 
     org = db.get_organization(user.organization_id)
-    if org and len(db.list_organizations()) <= 1:
-        db.claim_orphaned_records(org.id)
-
-    user_depts = db.get_user_departments(user.id)
+    user_depts = [entry for entry in db.get_user_departments(user.id) if entry.get("organization_id") == user.organization_id]
 
     return {
         "user": user.to_dict(),
         "organization": org.to_dict() if org else None,
-        "departments": user_depts
+        "departments": _session_departments(db, user, user_depts)
     }
 

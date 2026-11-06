@@ -65,6 +65,7 @@ class RuntimeCommandBuilder:
         organization_id = getattr(agent_config, 'organization_id', None)
         env['PLATFORM_PROVIDER_DB'] = str(Path(db.db_path).resolve())
         env['PLATFORM_PROVIDER_ORGANIZATION'] = organization_id
+        env['PLATFORM_PROVIDER_DEPARTMENT'] = getattr(agent_config, 'department_id', None) or ''
         from .direct_config import DIRECT_PROVIDERS
         settings = self.organization_settings(agent_config)
         version = settings.credential_version(provider_id)
@@ -110,7 +111,12 @@ class RuntimeCommandBuilder:
             candidate = project_config.working_directory.strip()
         elif agent_config and getattr(agent_config, "repo_path", None) and agent_config.repo_path.strip():
             candidate = agent_config.repo_path.strip()
-        return resolve_workspace(candidate)
+        organization_id = getattr(agent_config, "organization_id", None)
+        if organization_id:
+            from .tenant_workspace import tenant_workspace
+            return str(tenant_workspace(organization_id, getattr(agent_config, "department_id", None), candidate,
+                                        shared=bool(project_config), create=True))
+        raise ValueError("An organization-scoped workspace is required.")
 
     def _build_claude_command(
         self,
@@ -274,7 +280,9 @@ class RuntimeCommandBuilder:
         agent_skills = getattr(agent_config, "skills", None)
         if agent_skills and len(agent_skills) > 0:
             try:
-                skills_prompt = self.services.skills_prompt(agent_skills)
+                from plugins.workflow_skills import agent_skill_context
+                skills_prompt = agent_skill_context(self.services.database(), agent_config.organization_id, agent_skills,
+                                                    getattr(project_config, "id", None))
                 if not skills_prompt:
                     raise RuntimeError("Configured skill context could not be resolved")
                 prompt_parts.append(skills_prompt)

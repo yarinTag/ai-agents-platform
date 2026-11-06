@@ -1,3 +1,4 @@
+import { usePermissions } from '../hooks/usePermissions';
 import { useEffect, useState, useRef } from 'react';
 import { Form, Button, Tag, message } from 'antd';
 import { EditOutlined, DeleteOutlined } from '@ant-design/icons';
@@ -5,6 +6,7 @@ import { Skill, PluginPackage } from '../types/skill';
 import { getSkills, createSkill, updateSkill, deleteSkill, scanPlugins, getPluginsConfig, updatePluginsConfig, getPluginGitRepos, discoverMCPResources, getPluginSkillContent } from '../services/api';
 
 export const useSkillsPage = () => {
+  const { isAdmin } = usePermissions();
   const [skills, setSkills] = useState<Skill[]>([]);
   const [plugins, setPlugins] = useState<PluginPackage[]>([]);
   const [marketplacePath, setMarketplacePath] = useState<string>('');
@@ -118,7 +120,7 @@ export const useSkillsPage = () => {
         }
       }
 
-      if (mode === 'git' && gitRepos.length === 0) {
+      if (isAdmin && mode === 'git' && gitRepos.length === 0) {
         fetchGitRepos();
       }
 
@@ -127,7 +129,7 @@ export const useSkillsPage = () => {
         ...(mode === 'local' ? { local_path: lPath.trim() } : { git_repo: gRepo.trim() }),
       };
 
-      const res = await scanPlugins(scanParams, isManual);
+      const res = await scanPlugins(isAdmin ? scanParams : undefined, isManual);
       setScanError(null);
       if (res.data && Array.isArray(res.data.plugins)) {
         setPlugins(res.data.plugins);
@@ -298,7 +300,7 @@ export const useSkillsPage = () => {
         <div style={{ display: 'flex', gap: '8px' }}>
           <Button
             size="small"
-            icon={<EditOutlined />}
+            disabled={!isAdmin} icon={<EditOutlined />}
             onClick={() => {
               form.setFieldsValue({
                 name: record.name,
@@ -314,7 +316,7 @@ export const useSkillsPage = () => {
           <Button
             size="small"
             danger
-            icon={<DeleteOutlined />}
+            disabled={!isAdmin} icon={<DeleteOutlined />}
             onClick={() => {
               deleteSkill(record.id)
                 .then(() => {

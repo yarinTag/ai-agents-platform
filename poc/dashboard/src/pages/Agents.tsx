@@ -1,3 +1,4 @@
+import { usePermissions } from '../hooks/usePermissions';
 import React from 'react';
 import { Table, Button, Tabs } from 'antd';
 import { PlusOutlined, BranchesOutlined, BookOutlined, TeamOutlined, ThunderboltOutlined } from '@ant-design/icons';
@@ -11,6 +12,7 @@ import { createAgentColumns } from './agentColumns';
 import { AgentEditor } from './AgentEditor';
 
 export const AgentsPage: React.FC = () => {
+  const { canManage, canOperate } = usePermissions();
   const model = useAgentsPage();
   const {
     agents,
@@ -25,7 +27,7 @@ export const AgentsPage: React.FC = () => {
     handleCreate,
     officeFloorAgents,
   } = model;
-  const columns = createAgentColumns(model);
+  const columns = createAgentColumns(model, { canManage, canOperate });
   return (
       <div>
       {/* Header */}
@@ -41,7 +43,7 @@ export const AgentsPage: React.FC = () => {
         <Button
           type="primary"
           icon={<PlusOutlined />}
-          onClick={handleCreate}
+          disabled={!canManage} onClick={handleCreate}
           style={{ background: '#10b981', borderColor: '#10b981', borderRadius: '8px' }}
         >
           Create Custom Agent

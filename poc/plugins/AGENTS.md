@@ -57,3 +57,12 @@ limited to one million bytes. Tree fetch/blob and existing organization credenti
 in the adapters; no new API route, grant or model call. Sources may describe different
 modes and are not combined into a claimed universal execution sequence. See
 [the pinned-source audit](../../docs/plugin-skill-flow-audit.md). No local runtime checks.
+
+
+## Agent and local-source access scope (2026-11-05)
+workflow_skills.skill_catalog requires local sources to lie under the organization's shared
+server-owned tenant root. agent_skill_context adds owned custom-catalog/project records to the
+same organization plugin source; project skill use requires the actual selected project and
+owner. Foreign/unowned custom IDs fail instead of falling back to a global cache. Context is
+bounded to120000 chars. API plugin content additionally verifies configured Git owner/repo or
+local tenant containment. No source execution, scan, provider calls or verification imports.

@@ -10,7 +10,7 @@ import asyncio
 import subprocess
 from pathlib import Path
 from typing import List, Optional, Tuple
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict
 
 router = APIRouter()
@@ -132,24 +132,19 @@ def get_quick_access() -> List[QuickAccessItem]:
 
 
 @router.get("/browse", response_model=BrowseResponse)
-async def browse_directory(path: Optional[str] = Query(None, description="Directory path to inspect")):
+async def browse_directory(request: Request, path: Optional[str] = Query(None, description="Directory path to inspect")):
     """
     Browse directories on the local machine and detect project structures.
     """
-    if path and path.strip():
-        target_path = Path(path.strip()).expanduser().resolve()
-    else:
-        # Default starting point: current working directory or Home
-        cwd = Path.cwd().resolve()
-        target_path = cwd if cwd.exists() else Path.home().resolve()
-
+    from runtime.tenant_workspace import tenant_root
+    root = (tenant_root(request.state.access_actor.organization_id) / "shared").resolve()
+    target_path = Path(path.strip()).expanduser().resolve() if path and path.strip() else root
+    if not target_path.is_relative_to(root):
+        raise HTTPException(403, "Directory is outside authorized tenant storage.")
     if not target_path.exists() or not target_path.is_dir():
-        # Fallback to home if given path doesn't exist
-        target_path = Path.home().resolve()
-
-    # Determine parent
+        raise HTTPException(404, "Tenant directory not found.")
     parent = target_path.parent
-    is_root = parent == target_path
+    is_root = target_path == root
     parent_path_str = None if is_root else str(parent)
 
     folders: List[FolderItem] = []
@@ -159,7 +154,7 @@ async def browse_directory(path: Optional[str] = Query(None, description="Direct
             if entry.name.startswith("."):
                 continue
             try:
-                if entry.is_dir():
+                if entry.is_dir() and entry.resolve().is_relative_to(root):
                     is_proj, p_type = detect_project(entry)
                     has_children = False
                     try:
@@ -191,7 +186,7 @@ async def browse_directory(path: Optional[str] = Query(None, description="Direct
         parent_path=parent_path_str,
         name=target_path.name or str(target_path),
         is_root=is_root,
-        quick_access=get_quick_access(),
+        quick_access=[QuickAccessItem(name="Organization files", path=str(root), icon="folder")],
         folders=folders
     )
 

@@ -242,6 +242,23 @@ def test_api_org_registration_login_and_me_endpoints(client):
     assert dept_resp.status_code == 201
     dept_id = dept_resp.json()["id"]
 
+    # Admin visibility is organization-wide even without a new membership or JWT.
+    foreign_org = db_manager.create_organization(id=f"org_{uuid.uuid4().hex[:10]}", name="Other tenant", slug=f"other-{uuid.uuid4().hex[:10]}")
+    foreign_department = db_manager.create_department(id=f"dept_{uuid.uuid4().hex[:10]}", name="Foreign department", organization_id=foreign_org.id)
+    refreshed_profile = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {auth_token}"})
+    assert refreshed_profile.status_code == 200
+    visible_departments = refreshed_profile.json()["departments"]
+    assert foreign_department.id not in {dept["id"] for dept in visible_departments}
+    assert dept_id not in {dept["id"] for dept in decode_access_token(auth_token)["departments"]}
+    assert not db_manager.list_department_members(dept_id)
+    created_department = next(dept for dept in visible_departments if dept["id"] == dept_id)
+    assert created_department["department_id"] == dept_id
+    assert created_department["name"] == "Infrastructure"
+    assert "department_role" not in created_department
+    relogin = client.post("/api/v1/auth/login", json={"email": admin_email, "password": "AdminSecurePassword123!"})
+    assert relogin.status_code == 200
+    assert dept_id in {dept["id"] for dept in relogin.json()["departments"]}
+
     # 5. Bulk invite members to department via API
     invite_resp = client.post(f"/api/v1/departments/{dept_id}/members/bulk-invite", json={
         "emails": [f"eng1@{domain}", f"eng2@{domain}"],
@@ -270,6 +287,9 @@ def test_api_org_registration_login_and_me_endpoints(client):
     assert eng1_data["user"]["email"] == f"eng1@{domain}"
     assert len(eng1_data["departments"]) == 1
     assert eng1_data["departments"][0]["department_id"] == dept_id
+    member_profile = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {eng1_data['token']}"})
+    assert member_profile.status_code == 200
+    assert {dept["department_id"] for dept in member_profile.json()["departments"]} == {dept_id}
 
     # 8. List department members
     members_resp = client.get(f"/api/v1/departments/{dept_id}/members", headers={"Authorization": f"Bearer {auth_token}"})

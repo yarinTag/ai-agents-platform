@@ -15,6 +15,7 @@ import {
   acceptOrgInvitation,
   getCurrentUserProfile,
 } from '../services/api';
+import { setRequestDepartment } from '../services/requestScope';
 import { eventStream } from '../services/eventStream';
 
 export interface AuthContextType {
@@ -96,6 +97,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   });
 
+  // Request context follows the same selection used by every mounted page.
+  setRequestDepartment(activeDepartmentId);
+
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const isAuthenticated = Boolean(token && user);
 
@@ -131,6 +135,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setOrganization(null);
     setDepartments([]);
     setActiveDepartmentId(null);
+    setRequestDepartment(null);
     eventStream.disconnect();
   }, []);
 
@@ -142,8 +147,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     try {
       const res = await getCurrentUserProfile();
+      if (localStorage.getItem(AUTH_TOKEN_KEY) !== storedToken) return;
       const { user: refreshedUser, organization: refreshedOrg, departments: refreshedDepts } = res.data;
       const normalizedDepts = normalizeDepartments(refreshedDepts);
+      if (!normalizedDepts.length) setActiveDepartmentId(null);
       setUser(refreshedUser);
       setOrganization(refreshedOrg);
       setDepartments(normalizedDepts);
@@ -157,13 +164,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       );
       if (normalizedDepts.length > 0) {
         setActiveDepartmentId((prev) => {
+          if (prev === null && refreshedUser.role === 'ORG_ADMIN') return null;
           const exists = normalizedDepts.some((d) => d.id === prev);
           return exists ? prev : normalizedDepts[0].id;
         });
       }
       eventStream.connect();
     } catch (err: any) {
-      if (err.response?.status === 401) {
+      if (err.response?.status === 401 && localStorage.getItem(AUTH_TOKEN_KEY) === storedToken) {
         logout();
       }
     }
@@ -175,8 +183,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (storedToken) {
         try {
           const res = await getCurrentUserProfile();
+          if (localStorage.getItem(AUTH_TOKEN_KEY) !== storedToken) return;
           const { user: refreshedUser, organization: refreshedOrg, departments: refreshedDepts } = res.data;
           const normalizedDepts = normalizeDepartments(refreshedDepts);
+          if (!normalizedDepts.length) setActiveDepartmentId(null);
           setUser(refreshedUser);
           setOrganization(refreshedOrg);
           setDepartments(normalizedDepts);
@@ -196,7 +206,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
           eventStream.connect();
         } catch (err: any) {
-          if (err.response?.status === 401) {
+          if (err.response?.status === 401 && localStorage.getItem(AUTH_TOKEN_KEY) === storedToken) {
             logout();
           }
         }
@@ -218,6 +228,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       window.removeEventListener('auth:unauthorized', handleUnauthorized);
     };
   }, [logout]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    eventStream.disconnect();
+    eventStream.connect();
+    return () => eventStream.disconnect();
+  }, [activeDepartmentId, token, isAuthenticated]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const refresh = () => { void refreshUserProfile(); };
+    window.addEventListener('focus', refresh);
+    return () => window.removeEventListener('focus', refresh);
+  }, [isAuthenticated, refreshUserProfile]);
+
+  useEffect(() => {
+    const synchronizeLogin = (event: StorageEvent) => {
+      if (event.key !== AUTH_TOKEN_KEY) return;
+      eventStream.disconnect();
+      setUser(null);
+      setOrganization(null);
+      setDepartments([]);
+      setActiveDepartmentId(null);
+      setRequestDepartment(null);
+      const nextToken = localStorage.getItem(AUTH_TOKEN_KEY);
+      setToken(nextToken);
+      if (!nextToken) { setIsLoading(false); return; }
+      setIsLoading(true);
+      void refreshUserProfile().finally(() => setIsLoading(false));
+    };
+    window.addEventListener('storage', synchronizeLogin);
+    return () => window.removeEventListener('storage', synchronizeLogin);
+  }, [refreshUserProfile]);
 
   const login = async (data: LoginDto) => {
     const res = await loginOrganizationUser(data);

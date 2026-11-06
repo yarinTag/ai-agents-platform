@@ -308,18 +308,5 @@ async def get_recent_activity(
 @router.websocket("/ws/system")
 async def system_websocket(websocket):
     """WebSocket endpoint for real-time system updates."""
-    await websocket.accept()
-    try:
-        while True:
-            # Send periodic updates
-            await asyncio.sleep(5)
-            # In a real implementation, you'd send actual system updates
-            await websocket.send_json({
-                "type": "heartbeat",
-                "timestamp": datetime.utcnow().isoformat() + "Z"
-            })
-    except Exception:
-        # Client disconnected
-        pass
-    finally:
-        await websocket.close()
+    # This legacy websocket has no tenant-aware subscription protocol. Use authenticated SSE.
+    await websocket.close(code=1008)

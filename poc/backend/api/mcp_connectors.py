@@ -132,7 +132,13 @@ def update_connector(
     if req.name is not None:
         c.name = req.name
     if req.configuration is not None:
-        c.configuration = req.configuration
+        # Redacted reads never echo a credential back to the browser. A placeholder
+        # means retain the stored value; explicit new values still replace it.
+        def merge(old, incoming):
+            if isinstance(incoming, dict):
+                return {key: merge((old if isinstance(old, dict) else {}).get(key), value) for key, value in incoming.items()}
+            return old if incoming == "••••••" else incoming
+        c.configuration = merge(c.configuration, req.configuration)
     if req.status is not None:
         c.status = req.status
     if req.capabilities is not None:

@@ -35,6 +35,8 @@ def skill_catalog(db, organization_id):
     else:
         if not root:
             return []
+        from runtime.tenant_workspace import tenant_workspace
+        tenant_workspace(organization_id, candidate=root, shared=True)
         plugins = scan_local_source('local', '', root)['plugins']
         resolved_root = Path(root).expanduser().resolve()
         permitted = lambda path: Path(path).expanduser().resolve().is_relative_to(resolved_root)
@@ -87,3 +89,29 @@ def skill_context(db, organization_id, identifiers):
             raise ValueError('Selected skill content is empty or exceeds the workflow context limit.')
         parts.append(f"### {skill['name']} ({identifier})\n{content}")
     return '\n\n'.join(parts)
+
+
+def agent_skill_context(db, organization_id, identifiers, project_id=None):
+    """Agent skills may use owned custom records or the configured plugin source only."""
+    parts, plugin_ids = [], []
+    for identifier in identifiers:
+        skill = db.get_skill(identifier)
+        if skill is None:
+            plugin_ids.append(identifier)
+            continue
+        if skill.project_id:
+            project = db.get_project(skill.project_id)
+            owned = project and project.organization_id == organization_id and skill.project_id == project_id
+        else:
+            with db._get_connection() as conn:
+                owner = conn.execute("SELECT organization_id FROM access_resource_owners WHERE resource_type='skill' AND resource_id=?", (identifier,)).fetchone()
+            owned = owner and owner["organization_id"] == organization_id
+        if not owned:
+            raise ValueError('A configured custom skill is outside the current organization/project.')
+        parts.append(f"# Skill: {skill.name}\n{skill.content}")
+    if plugin_ids:
+        parts.append(skill_context(db, organization_id, plugin_ids))
+    text = '\n\n'.join(parts)
+    if len(text) > 120000:
+        raise ValueError('Combined skill instructions exceed the context limit.')
+    return text

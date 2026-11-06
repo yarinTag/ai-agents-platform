@@ -20,7 +20,11 @@ from workflows.sandbox import SandboxManager
 @pytest.fixture
 def environment(tmp_path):
     db = DatabaseManager(str(tmp_path / "test.sqlite"))
-    db.create_workflow(id="wf", name="Exercise", definition_json=json.dumps({
+    db.create_organization(id="playground-api-org", name="Playground API", slug="playground-api-org")
+    for role in ("ORG_ADMIN", "MEMBER"):
+        db.create_user(id=f"playground-api-org_{role}", organization_id="playground-api-org",
+                       email=f"{role.lower()}@playground.example.test", full_name=role, role=role)
+    db.create_workflow(id="wf", name="Exercise", organization_id="playground-api-org", definition_json=json.dumps({
         "name": "Exercise", "steps": [{"key": "analyze", "agent_id": "missing",
         "prompt_template": "Analyze {{text}}"}]
     }))
@@ -28,7 +32,9 @@ def environment(tmp_path):
     app = FastAPI()
     @app.middleware("http")
     async def identity(request: Request, call_next):
-        request.state.user = {"sub": "user", "role": request.headers.get("x-test-role", "ORG_ADMIN"), "org_id": request.headers.get("x-test-org")}
+        org = request.headers.get("x-test-org", "playground-api-org")
+        role = request.headers.get("x-test-role", "ORG_ADMIN")
+        request.state.user = {"sub": f"{org}_{role}", "role": role, "org_id": org}
         return await call_next(request)
     app.include_router(router, prefix="/workflows")
     app.dependency_overrides[get_db_manager] = lambda: db
@@ -58,11 +64,11 @@ def test_validates_input_and_configured_agents(environment):
 
 def test_inspection_includes_step_outputs(environment):
     db, engine, client = environment
-    db.save_agent(AgentConfig(id="missing", name="Test", description="Test", system_prompt="Analyze"))
+    db.save_agent(AgentConfig(id="missing", name="Test", description="Test", system_prompt="Analyze", organization_id="playground-api-org"))
     from runtime.models import AgentRun, TaskStatus
     from datetime import datetime
     db.save_task_run(AgentRun(run_id="pg_task_logs", agent_id="missing", project_id=None,
-        prompt="hello", status=TaskStatus.FAILED, created_at=datetime.now(), error="CLI diagnostic",
+        prompt="hello", organization_id="playground-api-org", status=TaskStatus.FAILED, created_at=datetime.now(), error="CLI diagnostic",
         events=[{"type": "stderr", "content": f"diagnostic {index}"} for index in range(501)]))
     db.create_workflow_execution(execution_id="pg_exec_test", workflow_id="wf",
         trigger_type="PLAYGROUND", trigger_payload='{"text":"hello"}', status="FAILED")
@@ -126,6 +132,8 @@ def test_execution_history_and_outputs_are_tenant_scoped(environment):
     db, engine, client = environment
     db.create_organization(id="org-a", name="A", slug="a")
     db.create_organization(id="org-b", name="B", slug="b")
+    for org in ("org-a", "org-b"):
+        db.create_user(id=f"{org}_ORG_ADMIN", organization_id=org, email=f"admin@{org}.test", full_name="Admin", role="ORG_ADMIN")
     db.update_workflow("wf", organization_id="org-a")
     db.create_workflow_execution(execution_id="private", workflow_id="wf", trigger_type="PLAYGROUND")
     headers = {"x-test-org": "org-b"}
@@ -151,8 +159,8 @@ def test_runtime_launch_failure_is_not_reported_as_success(environment, mcp_scop
     from uuid import uuid4
     db, engine, client = environment
     agent_id = "pg_isolated_" + uuid4().hex
-    db.save_agent(AgentConfig(id=agent_id, name="Test", description="Test", system_prompt="Analyze"))
-    db.create_department(id="dept-no-grants", name="No MCP grants")
+    db.save_agent(AgentConfig(id=agent_id, name="Test", description="Test", system_prompt="Analyze", organization_id="playground-api-org", department_id="dept-no-grants"))
+    db.create_department(id="dept-no-grants", name="No MCP grants", organization_id="playground-api-org")
     definition = {"name": "Exercise", "steps": [
         {"key": "analyze", "agent_id": agent_id, "prompt_template": "Analyze {{text}}"}
     ]}

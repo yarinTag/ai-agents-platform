@@ -73,3 +73,10 @@ The November5 master synchronization includes the merged frontend tests from PR 
 and the unified ci.yml publishing path. This PR retains its 16 backend contract files;
 images.yml stays deleted. Feature-specific Anthropic Message Threads documentation is
 preserved alongside master frontend-test guidance. Syncing master does not merge this PR.
+
+
+The security matrix now additionally selects test_access_policy.py, test_access_lab_setup.py and
+test_skill_connections.py (19 backend files total on this branch). They use actual temporary SQLite,
+FastAPI/JWT, Markdown/JSON inputs and private filesystem fixtures, without application lifespan,
+provider calls or live messages. Existing current-identity fixtures are aligned with DB-backed scope.
+No CI dispatch or local test/build/typecheck/lint was performed in this task.

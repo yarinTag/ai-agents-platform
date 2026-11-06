@@ -5,7 +5,8 @@ import hmac
 import os
 import logging
 from typing import Optional, Dict, Any
-from fastapi import Request, HTTPException, status, Security
+from fastapi import Request, HTTPException, status, Security, Depends
+from ..dependencies import get_db_manager
 from fastapi.security import APIKeyHeader, HTTPBearer, HTTPAuthorizationCredentials
 
 logger = logging.getLogger(__name__)
@@ -51,8 +52,10 @@ def require_org_admin(request: Request) -> Dict[str, Any]:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication required. Please provide a valid JWT bearer token."
         )
-    role = user.get("role", "MEMBER")
-    if role != "ORG_ADMIN":
+    from .identity import load_actor
+    from ..dependencies import get_db_manager
+    actor = load_actor(request, get_db_manager())
+    if not actor.admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access forbidden: ORG_ADMIN privileges required."
@@ -80,63 +83,27 @@ def get_authorized_scope(request: Request, db_manager=None) -> Dict[str, Any]:
         "default_department_id": str or None
     }
     """
-    claims = get_current_user_claims(request) or {}
-    user_id = claims.get("sub")
-    org_id = claims.get("org_id")
-    role = claims.get("role", "MEMBER")
-    is_org_admin = (role == "ORG_ADMIN")
+    if db_manager is None:
+        from ..dependencies import get_db_manager
+        db_manager = get_db_manager()
+    from .identity import load_actor
+    actor = load_actor(request, db_manager)
+    departments = list(actor.departments)
+    if actor.selected_department:
+        departments = [actor.selected_department]
+    return {"org_id": actor.organization_id, "user_id": actor.user_id,
+            "is_org_admin": actor.admin, "department_ids": departments,
+            "default_department_id": actor.default_department(),
+            "selected_department_id": actor.selected_department,
+            "expires_at": (get_current_user_claims(request) or {}).get("exp")}
 
-    department_ids = []
-
-    # If org admin and db_manager provided, get all department IDs in the organization
-    if is_org_admin and org_id and db_manager:
-        try:
-            with db_manager._get_connection() as conn:
-                rows = conn.execute("SELECT id FROM departments WHERE organization_id = ? ORDER BY created_at ASC", (org_id,)).fetchall()
-                department_ids = [r['id'] for r in rows]
-        except Exception:
-            department_ids = []
-
-    # Department membership comes from the database only; JWT department claims can be stale.
-    if not is_org_admin and db_manager and user_id:
-        try:
-            user_depts = db_manager.get_user_departments(user_id)
-            department_ids = [d["department_id"] for d in user_depts
-                              if d.get("department_id") and d.get("organization_id") in (None, org_id)]
-        except Exception:
-            department_ids = []
-
-    default_department_id = department_ids[0] if department_ids else None
-    if not default_department_id and org_id and db_manager:
-        try:
-            with db_manager._get_connection() as conn:
-                row = conn.execute("SELECT id FROM departments WHERE organization_id = ? ORDER BY created_at ASC LIMIT 1", (org_id,)).fetchone()
-                if row:
-                    default_department_id = row['id']
-                    if is_org_admin and default_department_id not in department_ids:
-                        department_ids.append(default_department_id)
-        except Exception:
-            pass
-
-    # Check X-Department-ID header override if caller specified an active department
-    # The header only selects among departments already authorized above (admins: their org's).
-    header_dept = request.headers.get("X-Department-ID", "").strip()
-    if header_dept and header_dept in department_ids:
-        default_department_id = header_dept
-
-    return {
-        "org_id": org_id,
-        "user_id": user_id,
-        "is_org_admin": is_org_admin,
-        "department_ids": department_ids,
-        "default_department_id": default_department_id
-    }
 
 
 async def authenticate_request(
     request: Request,
     api_key_header: Optional[str] = Security(API_KEY_HEADER),
-    bearer_creds: Optional[HTTPAuthorizationCredentials] = Security(BEARER_AUTH)
+    bearer_creds: Optional[HTTPAuthorizationCredentials] = Security(BEARER_AUTH),
+    db_manager = Depends(get_db_manager),
 ) -> Dict[str, Any]:
     """
     Authenticate an incoming request against signed JWT or PLATFORM_API_KEY.
@@ -171,7 +138,11 @@ async def authenticate_request(
         from .tokens import decode_access_token
         jwt_claims = decode_access_token(raw_token)
         if jwt_claims:
+            if jwt_claims.get("service"):
+                raise HTTPException(401, "User tokens cannot impersonate service identities.")
             request.state.user = jwt_claims
+            from .identity import load_actor
+            request.state.access_actor = load_actor(request, db_manager)
             return {
                 "authenticated": True,
                 "mode": "jwt_bearer",

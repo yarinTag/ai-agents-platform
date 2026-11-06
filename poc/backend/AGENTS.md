@@ -124,3 +124,15 @@ Workflow authoring catalog reports static workspace_readiness via existing /work
 
 
 Workflow channel binding supports completion-only, start/completion and each-step lifecycle modes; AI Destination.notify_mode feeds the existing metadata binding. No separate notification tasks or endpoints were introduced. See API/workflow guides. No runtime verification.
+
+
+## Central access boundary (2026-11-05)
+router_registry attaches authenticate_request then security.request_policy.authorize_request
+to every loaded domain and wraps JSON output using FastAPI's request/exit-stack adapter and
+response_policy. Failure after partial registration aborts startup. Unknown endpoint names
+lack authority until explicitly listed in route_permissions. Disabled domains return only
+authenticated availability metadata. See ../../docs/access-control-audit.md for all roles,
+resource inheritance, collection projection, streaming and fail-closed legacy operations.
+No local tests/application/worker startup performed.
+
+Generic department transfers are deliberately rejected409 until an explicit history/ownership migration exists; execution inspection/evaluation also checks persisted step subjects. See the access-control audit for this compatibility restriction.

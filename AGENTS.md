@@ -265,3 +265,18 @@ selection clears prior focus and its pending reveals. The source audit of the co
 Git repository and limitations are in [Plugin skill flow audit](docs/plugin-skill-flow-audit.md);
 projection/scanner contracts are in the plugin and dashboard component guides. No local
 runtime verification performed; no plugin instructions were edited or executed.
+
+
+## Tenant and role enforcement audit (2026-11-05)
+[Access-control audit and role matrix](docs/access-control-audit.md) records the explicit
+route inventory, current-database identity/membership checks, selected-department scope,
+collection/stream filtering, credential redaction and guarded tenant workspaces. New endpoint
+names fail closed until registered in backend/security/route_permissions.py. Organization
+admins never acquire platform-wide access. Legacy global queue/native picker/ChatOps approval
+operations are restricted as documented. Explicit isolated test data registration is owned
+by demo_data.setup_access_lab, delegated to storage/access_lab.py and invoked only by
+create_access_lab.py --apply. This authorized data setup does not authorize tests/startup.
+
+The two isolated Access Lab organizations were explicitly registered by user request (marker
+10da4d25): Engineering/Finance/Operations and13 role/edge-case accounts each. No existing records,
+model keys, live sends or executions were changed/created. See the access-control audit.

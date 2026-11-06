@@ -20,7 +20,7 @@ export const createWorkflowColumns = (model: Pick<
   | 'openRunModal'
   | 'copyToClipboard'
   | 'getParsedWorkflowSteps'
->) => {
+>, access: { canManage: boolean; canOperate: boolean }) => {
   const {
     workflows,
     setEditingWorkflow,
@@ -139,7 +139,7 @@ export const createWorkflowColumns = (model: Pick<
       key: 'actions',
       render: (_: any, record: PlatformWorkflow) => (
         <Space size={6} wrap>
-          <Button size="small" icon={<EditOutlined />} onClick={() => {
+          <Button size="small" disabled={!access.canManage} icon={<EditOutlined />} onClick={() => {
             setEditingWorkflow(record); setCreateModalOpen(true);
           }}>Edit</Button>
           <Button size="small" icon={<HistoryOutlined />} onClick={() => setHistoryWorkflow(record)}>History</Button>
@@ -148,14 +148,14 @@ export const createWorkflowColumns = (model: Pick<
             <Button
               type="primary"
               size="small"
-              icon={<PlayCircleOutlined />}
+              disabled={!access.canOperate} icon={<PlayCircleOutlined />}
               onClick={() => openRunModal(record)}
               style={{ background: '#238636', borderColor: '#238636' }}
             >
               Run
             </Button>
           </Tooltip>
-          <Button size="small" onClick={() => openRunModal(record, true)}>
+          <Button disabled={!access.canOperate} size="small" onClick={() => openRunModal(record, true)}>
             Playground
           </Button>
           <Link to={`/workflows/${record.id}/logs`}><Button size="small" icon={<EyeOutlined />}>Logs</Button></Link>
@@ -179,7 +179,7 @@ export const createWorkflowColumns = (model: Pick<
               }}
             />
           </Tooltip>
-          <Popconfirm
+          <Popconfirm disabled={!access.canManage}
             title="Delete this workflow?"
             description="This will permanently delete this playbook and its configuration."
             onConfirm={() => handleDelete(record.id)}
@@ -187,7 +187,7 @@ export const createWorkflowColumns = (model: Pick<
             cancelText="Cancel"
             okButtonProps={{ danger: true }}
           >
-            <Button size="small" danger icon={<DeleteOutlined />} />
+            <Button size="small" disabled={!access.canManage} danger icon={<DeleteOutlined />} />
           </Popconfirm>
         </Space>
       ),

@@ -288,3 +288,14 @@ and separate SKILL.md inspector callback remain. Tests are source-only, not exec
 Aggregated edges stay dashed if any declaration supplies a condition/optional flag;
 another unconditional source must not visually erase that condition. Reference-only
 edges remain dotted, and all individual declarations remain in the evidence panel.
+
+
+## Role-aware shell and shared mutation controls (2026-11-05)
+AppSidebar hides Settings from non-admins; App denies direct non-admin settings navigation and
+shows DepartmentAccessPage instead of administrative Org & Teams requests. DepartmentAccessPage
+lists the current accessible department, account/membership roles and budget without mutations.
+HierarchyEditor/template instantiation and agent management require canManage; chat/session
+mutations require canOperate, including disabled keyboard submission. Host-native folder selection
+is disabled. MCP configuration/testing/grants require isAdmin. Backend checks remain authoritative.
+All feature instances remount on user/org/department/effective-role changes. No local rendering,
+component execution or tests performed; contracts are in docs/access-control-audit.md.

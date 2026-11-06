@@ -2,8 +2,10 @@ import { api } from './httpClient';
 import type { PlatformWorkflow, WorkflowChannelBinding, WorkflowExecution } from '../types/mcp';
 
 // Workflows & Channel Bindings
-export const getWorkflows = () =>
-  api.get<PlatformWorkflow[]>('/api/v1/workflows/');
+export const getWorkflows = (departmentId?: string | null) =>
+  api.get<PlatformWorkflow[]>('/api/v1/workflows/', {
+    params: departmentId ? { department_id: departmentId } : {},
+  });
 
 export const getWorkflow = (id: string) =>
   api.get<PlatformWorkflow>(`/api/v1/workflows/${id}`);
@@ -42,9 +44,10 @@ export const executeWorkflow = (
 export const executeWorkflowPlayground = (workflowId: string, payload: Record<string, unknown>) =>
   api.post<WorkflowExecution>(`/api/v1/workflows/${workflowId}/playground`, payload);
 
-export const getWorkflowExecutions = (workflowId?: string, limit: number = 50) => {
+export const getWorkflowExecutions = (workflowId?: string, limit: number = 50, departmentId?: string | null) => {
   const params = new URLSearchParams();
   if (workflowId) params.append('workflow_id', workflowId);
+  if (departmentId) params.append('department_id', departmentId);
   params.append('limit', String(limit));
   return api.get<WorkflowExecution[]>(`/api/v1/workflows/executions?${params.toString()}`);
 };

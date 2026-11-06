@@ -1,3 +1,4 @@
+import { usePermissions } from '../hooks/usePermissions';
 import { Typography } from 'antd';
 import { ResourceSection } from './ResourceSection';
 import React from 'react';
@@ -13,6 +14,7 @@ import { useCalendarViewPage } from './useCalendarViewPage';
 const { Title, Paragraph } = Typography;
 
 export const CalendarView: React.FC = () => {
+  const { canManage } = usePermissions();
   const model = useCalendarViewPage();
   const {
     schedules,
@@ -60,7 +62,7 @@ export const CalendarView: React.FC = () => {
           type="primary"
           icon={<PlusOutlined />}
           size="large"
-          disabled={loading || Boolean(resourceErrors.schedules || resourceErrors.agents || resourceErrors.projects)}
+          disabled={!canManage || loading || Boolean(resourceErrors.schedules || resourceErrors.agents || resourceErrors.projects)}
           onClick={() => setModalVisible(true)}
           style={{ background: '#10b981', borderColor: '#10b981', fontWeight: 600 }}
         >
@@ -250,6 +252,7 @@ export const CalendarView: React.FC = () => {
                               </Tag>
                             </div>
                             <Button
+                              disabled={!canManage}
                               type="primary"
                               size="small"
                               style={{ background: '#f59e0b', borderColor: '#f59e0b', fontWeight: 600 }}

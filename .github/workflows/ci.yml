@@ -57,6 +57,9 @@ jobs:
               poc/tests/test_repo_cache.py
           - suite: security
             files: >-
+              poc/tests/test_access_policy.py
+              poc/tests/test_access_lab_setup.py
+              poc/tests/test_skill_connections.py
               poc/tests/test_organization_provider_credentials.py
               poc/tests/test_connector_execution_security.py
               poc/tests/test_workflow_chat.py

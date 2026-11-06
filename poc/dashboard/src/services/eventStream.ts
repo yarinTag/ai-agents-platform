@@ -1,3 +1,4 @@
+import { getRequestDepartment } from './requestScope';
 /**
  * Global SSE Event Stream Service.
  * Connects to the FastAPI backend SSE endpoint (/api/v1/events/stream)
@@ -63,6 +64,8 @@ class EventStreamService {
 
     const streamUrl = new URL(`${this.baseUrl}/api/v1/events/stream`);
     streamUrl.searchParams.set('token', token);
+    const department = getRequestDepartment();
+    if (department) streamUrl.searchParams.set('department_id', department);
     if (this.lastSequence > 0) {
       streamUrl.searchParams.set('after_sequence', String(this.lastSequence));
     }
@@ -204,6 +207,7 @@ class EventStreamService {
     }
     this.closeEventSource();
     this.setStatus('disconnected');
+    this.lastSequence = 0;
   }
 
   public subscribe(eventType: string, handler: EventHandler): () => void {

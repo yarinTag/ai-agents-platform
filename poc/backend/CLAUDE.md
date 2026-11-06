@@ -172,3 +172,18 @@ Workflow settings expose source-only execution engine metadata independently of 
 The hosted SDK broker exposes no host TCP or public FastAPI route. Private Unix HTTP accepts only run-bound /authorize and /v1/messages, with current policy and durable budget holds. Available source integration is not deployment verification; see docs/claude-hosted.md. No runtime verification performed.
 
 Anthropic Message Threads is an optional organization setting on the existing runtime selection API, disabled by default. Preserve existing authorization and atomic save; do not interpret server-thread retention as local session persistence. See docs/anthropic-message-threads.md. No runtime verification performed.
+
+
+Auth session department lists are selectable UI context: ORG_ADMIN sees the current
+organization's full department list via _session_departments; other users see memberships.
+Keep JWT department roles membership-based and never create memberships just to populate
+the header selector. New department creation is reflected by the existing profile refresh.
+No local runtime verification performed.
+
+
+Current database users, organization and department memberships govern all protected routes;
+JWT role claims are not authorization. All HTTP routers use the central reviewed endpoint
+inventory plus pre-side-effect admission and response scoping. Keep direct-ID, nested payload,
+secret, conversation, memory and selected-department checks intact. No automatic orphan
+claiming on auth. Organization roles do not authorize broker/host-wide operations. Exact
+contracts/limitations: docs/access-control-audit.md. No local runtime verification performed.

@@ -263,3 +263,31 @@ npm test runs all tests/*.test.mjs with Node22 native TypeScript stripping and l
 
 ## Connection canvas views
 Organization workflow and Skills & Plugins canvases share common/ConnectionCanvas. Keep domain graph projection in org/orgWorkflowsCanvasModel.ts and skills/pluginsFlowModel.ts, preserve IDs and configured resource boundaries, and use the existing organization-scoped APIs. Organization canvas copy is paired EN/HE in i18n/orgWorkflowsCanvas.ts. Runtime validation is performed through GitHub CI; no local application startup was performed.
+
+
+Plugin canvas skill edges represent server-extracted SKILL.md references, not a prescribed
+execution sequence. Preserve click focus, cross-package incoming/outgoing traversal and the
+separate instruction inspector in skills/PluginSkillFlowGraph.tsx. Do not restore fabricated
+Core lifecycle links or infer them from frontend previews. Organization canvases continue to
+use the shared ConnectionCanvas renderer. No local runtime verification performed.
+
+
+Skill-flow follow-up: use skill_connections kinds/evidence for flow, with optional
+ordinary references, and preserve declared conditions/source text. Do not convert the
+legacy connected_skills list into execution arrows. Package switches must clear focus
+and pending reveal work; focused neighbours never override the package filter.
+No local tests/build/typecheck/application/browser verification performed.
+
+
+The Workflows hub must explicitly forward AuthContext.activeDepartmentId to workflow and
+execution-list calls and reload on department changes. Clear old scoped rows/selections
+and discard late responses before presenting another department. All Departments omits
+the filter and remains subject to backend authorization. No local runtime verification.
+
+
+Use usePermissions/effectivePermissions for presentation: account/membership ranks intersect;
+organization admin rights never imply cross-tenant access. Every API request forwards the same
+in-memory selected department; API routes independently authorize it. Scope changes remount page
+instances, and async profile/401 results must not overwrite a newer login. Do not restore token
+secrets in URL/cache keys or host-wide queue/native picker controls. No local tests/build/lint/
+typecheck/startup were performed. See docs/access-control-audit.md for exact backend constraints.

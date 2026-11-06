@@ -31,7 +31,7 @@ async def create_task(
     org_id = task_data.organization_id or get_current_org_id(request)
 
     # Find agent from config or db
-    agent = config_manager.get_agent(task_data.agent_id) or db_manager.get_agent(task_data.agent_id)
+    agent = db_manager.get_agent(task_data.agent_id) or config_manager.get_agent(task_data.agent_id)
     if not agent:
         # Fallback by case-insensitive matching
         for a in config_manager.list_agents():

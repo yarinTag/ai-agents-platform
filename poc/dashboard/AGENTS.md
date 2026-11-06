@@ -242,3 +242,12 @@ opt-in dotted edges; explicit conditional flow remains dashed. Package/search vi
 is strict, package changes clear focus and pending reveals, and cross-package traversal
 updates the selected package. See docs/plugin-skill-flow-audit.md and component guide.
 No tests/build/typecheck/browser verification performed.
+
+
+## All-page access context (2026-11-05)
+HTTP requests send in-memory X-Department-ID; SSE reconnects with the validated department query.
+App remounts feature views by current organization/user/department/effective role so stale local
+page state cannot persist across a scope switch. New usePermissions caps account and membership
+rank. Primary mutation controls are gated; Settings is admin-only and non-admin Org & Teams
+renders DepartmentAccessPage. Unknown/unassigned users receive an access explanation. All backend
+checks remain authoritative. See ../../docs/access-control-audit.md. No local runtime checks.

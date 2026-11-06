@@ -92,6 +92,7 @@ def test_history_stream_enriches_legacy_events_and_activity_filters_office(db):
     from backend.dependencies import get_db_manager, get_event_service, get_event_bus
     from events.models import PlatformEvent
     db.create_organization(id='origin-org', name='Origin', slug='origin')
+    db.create_user(id='origin-user', organization_id='origin-org', email='origin@example.test', full_name='Origin user', role='ORG_ADMIN')
     agent = db.get_agent('shared')
     agent.organization_id = 'origin-org'
     db.save_agent(agent)

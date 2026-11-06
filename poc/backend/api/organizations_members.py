@@ -168,7 +168,7 @@ def accept_department_invitation(
         role=inv.role or "MEMBER"
     )
 
-    user_depts = db.get_user_departments(user.id)
+    user_depts = [entry for entry in db.get_user_departments(user.id) if entry.get("organization_id") == user.organization_id]
     token_payload = {
         "sub": user.id,
         "email": user.email,

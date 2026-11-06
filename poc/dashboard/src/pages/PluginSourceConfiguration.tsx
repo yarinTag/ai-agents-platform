@@ -1,3 +1,4 @@
+import { usePermissions } from '../hooks/usePermissions';
 import { Table, Input, Button, Tag, Tabs, Segmented, Select } from 'antd';
 import { DeleteOutlined, AppstoreOutlined, FolderOpenOutlined, FileTextOutlined, SyncOutlined, ThunderboltOutlined, CheckCircleOutlined, GithubOutlined, SaveOutlined, DownSquareOutlined, UpSquareOutlined, LockOutlined, UnlockOutlined, BranchesOutlined, KeyOutlined, LinkOutlined } from '@ant-design/icons';
 import type { useSkillsPage } from './useSkillsPage';
@@ -53,6 +54,8 @@ export const PluginSourceConfiguration = (props: Pick<
     handleSaveAndSync,
     handleClearSource,
   } = props;
+  const { isAdmin } = usePermissions();
+  if (!isAdmin) return <div style={{ color: '#8b949e', marginBottom: 12 }}>Plugin sources are managed by your organization administrator.</div>;
   return (<>
                 {/* Plugin Source Configuration Bar */}
                 <div

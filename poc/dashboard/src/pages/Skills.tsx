@@ -1,3 +1,4 @@
+import { usePermissions } from '../hooks/usePermissions';
 import React from 'react';
 import { Form, Input, Button, Modal, Tag, message, Select } from 'antd';
 import { PlusOutlined, SyncOutlined, CopyOutlined } from '@ant-design/icons';
@@ -8,6 +9,7 @@ import { useSkillsPage } from './useSkillsPage';
 import { SkillsCatalogTabs } from './SkillsCatalogTabs';
 
 export const SkillsPage: React.FC = () => {
+  const { isAdmin } = usePermissions();
   const model = useSkillsPage();
   const {
     skills,
@@ -50,7 +52,7 @@ export const SkillsPage: React.FC = () => {
           >
             Rescan Plugins
           </Button>
-          <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate} style={{ background: '#238636', borderColor: '#238636' }}>
+          <Button type="primary" icon={<PlusOutlined />} disabled={!isAdmin} onClick={handleCreate} style={{ background: '#238636', borderColor: '#238636' }}>
             Create Custom Skill
           </Button>
         </div>

@@ -20,11 +20,11 @@ from runtime.protocol import RuntimeAdapter
 from .parser import WorkflowParser, WorkflowDefinition, WorkflowStepDefinition
 from .sandbox import SandboxManager
 
-from .execution_models import BudgetExceededError, MCPGovernanceViolationError, UnauthorizedUserDepartmentError, WorkflowStepResult
+from .execution_models import BudgetExceededError, MCPGovernanceViolationError, WorkflowStepResult
 from .conditions import evaluate_condition_rule, evaluate_trigger_conditions
 from .step_runner import WorkflowStepRunner
 from .stages import group_steps_into_stages
-from .agent_scope import require_agent_scope
+from .agent_scope import require_agent_scope, require_workflow_actor
 
 logger = logging.getLogger(__name__)
 
@@ -92,24 +92,9 @@ class WorkflowEngine:
             trigger_type = "PLAYGROUND"
 
         # 1. Budget and Department Access Authorization pre-check
+        require_workflow_actor(workflow, user_context, self.db)
         dept_id = workflow.department_id
         if dept_id:
-            # Check user department authorization if user context is provided
-            if user_context:
-                user_role = user_context.get("role", "MEMBER")
-                if user_role != "ORG_ADMIN":
-                    raw_depts = user_context.get("departments", [])
-                    authorized_depts = [
-                        d.get("id") if isinstance(d, dict) else str(d)
-                        for d in raw_depts
-                    ]
-                    if dept_id not in authorized_depts:
-                        raise UnauthorizedUserDepartmentError(
-                            user_id=user_context.get("sub", "unknown"),
-                            department_id=dept_id,
-                            message=f"User '{user_context.get('email', user_context.get('sub'))}' is not an authorized member of department '{dept_id}'"
-                        )
-
             budget_status = self.db.check_department_budget(dept_id)
             if not budget_status.get("allowed", False):
                 raise BudgetExceededError(
@@ -176,10 +161,10 @@ class WorkflowEngine:
             from .backend_policy import preflight_backends
             preflight_backends(wf_def, playground=playground, db=self.db, workflow=workflow)
             for step in wf_def.steps:
-                require_agent_scope(self.db.get_agent(step.agent_id), workflow, user_context)
+                require_agent_scope(self.db.get_agent(step.agent_id), workflow, user_context, db=self.db)
                 reviewer_id = (getattr(step, "params", None) or {}).get("reviewerAgentId")
                 if reviewer_id and not playground:
-                    require_agent_scope(self.db.get_agent(reviewer_id), workflow, user_context)
+                    require_agent_scope(self.db.get_agent(reviewer_id), workflow, user_context, db=self.db)
         except Exception as error:
             self.db.update_workflow_execution(
                 execution_id, status="FAILED", error_message=str(error),

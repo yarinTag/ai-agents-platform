@@ -1,3 +1,4 @@
+import { usePermissions } from '../../hooks/usePermissions';
 import React, { useEffect, useState } from 'react';
 import { Card, Button, Tag, Modal, Form, Input, Select, message, Spin, Space } from 'antd';
 import { ThunderboltOutlined, UserAddOutlined, BranchesOutlined, CheckCircleOutlined, FolderOpenOutlined } from '@ant-design/icons';
@@ -15,6 +16,7 @@ export const TemplateGallery: React.FC<TemplateGalleryProps> = ({
   agents,
   onAgentInstantiated,
 }) => {
+  const { canManage } = usePermissions();
   const { departments, activeDepartmentId } = useAuth();
   const [templates, setTemplates] = useState<AgentTemplate[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -120,7 +122,7 @@ export const TemplateGallery: React.FC<TemplateGalleryProps> = ({
                 <Button
                   type="primary"
                   icon={<UserAddOutlined />}
-                  onClick={() => handleOpenInstantiate(tpl)}
+                  disabled={!canManage} onClick={() => handleOpenInstantiate(tpl)}
                   style={{ background: '#0284c7', borderColor: '#0284c7', borderRadius: '6px' }}
                 >
                   Instantiate Agent
@@ -243,7 +245,7 @@ export const TemplateGallery: React.FC<TemplateGalleryProps> = ({
                   type="link"
                   size="small"
                   icon={<FolderOpenOutlined />}
-                  onClick={() => setFolderPickerVisible(true)}
+                  disabled onClick={() => setFolderPickerVisible(true)}
                   style={{ padding: '0 6px', color: '#38bdf8' }}
                 >
                   Browse...

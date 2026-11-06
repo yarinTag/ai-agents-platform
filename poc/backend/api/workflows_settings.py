@@ -38,12 +38,11 @@ def _manager(request: Request, db, wf):
     user = db.get_user(claims.get("sub")) if claims.get("sub") else None
     if not user or user.status != "ACTIVE" or user.organization_id != wf.organization_id:
         raise HTTPException(status_code=403, detail="Only active organization users can manage workflow settings.")
-    if user.role == "ORG_ADMIN":
-        return user
-    if wf.department_id and any(m["department_id"] == wf.department_id and m["organization_id"] == wf.organization_id
-                                and m["department_role"] == "MANAGER" for m in db.get_user_departments(user.id)):
-        return user
-    raise HTTPException(status_code=403, detail="Workflow settings and secrets require an org admin or department manager.")
+    from ..security.identity import load_actor
+    actor = load_actor(request, db)
+    actor.require(wf.department_id, 3)
+    return user
+
 
 
 def _can_manage(request, db, wf) -> bool:

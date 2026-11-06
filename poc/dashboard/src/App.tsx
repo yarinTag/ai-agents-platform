@@ -6,6 +6,9 @@ import { I18nProvider } from './i18n';
 import AuthPage from './pages/AuthPage';
 import AppLayout from './components/layout/AppLayout';
 import { LazyFeatureRoute } from './components/common/LazyFeatureRoute';
+import { usePermissions } from './hooks/usePermissions';
+import DepartmentAccessPage from './components/common/DepartmentAccessPage';
+import { Alert } from 'antd';
 import { OptionalRuntimeSetup } from './components/common/OptionalRuntimeSetup';
 
 // Optional view modules load only when their route is selected.
@@ -26,7 +29,9 @@ const featureRoutes = [
 ];
 
 const AuthenticatedShell: React.FC = () => {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, organization, user, activeDepartmentId } = useAuth();
+  const permissions = usePermissions();
+  const pageScope = JSON.stringify([organization?.id, user?.id, user?.role, activeDepartmentId, permissions.rank]);
 
   if (isLoading) {
     return (
@@ -57,13 +62,17 @@ const AuthenticatedShell: React.FC = () => {
     <>
       <BrowserRouter>
         <AppLayout>
-          <OptionalRuntimeSetup />
+          {permissions.isAdmin && <OptionalRuntimeSetup />}
           <Routes>
             {featureRoutes.map(({ path, capability, load }) => (
               <Route
                 key={path}
                 path={path}
-                element={<LazyFeatureRoute key={path} load={load} capability={capability} />}
+                element={path === '/settings' && !permissions.isAdmin
+                  ? <Alert type="warning" message="Organization administrator access is required." />
+                  : path === '/organization' && !permissions.isAdmin ? <DepartmentAccessPage key={pageScope} />
+                  : !permissions.canRead ? <Alert type="info" message="No department access is assigned. Ask your organization administrator to add you to a department." />
+                  : <LazyFeatureRoute key={`${pageScope}:${path}`} load={load} capability={capability} />}
               />
             ))}
           </Routes>
