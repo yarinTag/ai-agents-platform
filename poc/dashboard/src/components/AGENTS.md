@@ -308,3 +308,5 @@ AI-14 static governance wireframes (docs/design/governance-wireframes.{svg,png})
 
 ## AI-17 policy presentation
 org/CapabilityGovernancePanel.tsx owns scoped catalog/policy/history loading, effective-role tabs, generation/AbortSignal guards and server save outcomes. CapabilityAccessTable shows independent authoring/execution facts and unsupported descriptors. CapabilityPolicyRules renders exact rule/resources/constraints. CapabilityPolicyEditor owns an unsaved draft, manager append-only controls, exact resource selection, preserved advanced constraints, before/after review, explicit CAS save and locked 409 recovery. common/DepartmentAccessPage mounts the panel for nonadmins and localizes scope descriptions. No provider calls, secret fields, localStorage drafts or authority derived from token claims. EN/HE/RTL contract: docs/design/capability-policy-editor.md.
+
+CapabilityGovernancePanel explicitly initializes its optional AbortController ref for compatibility with the locked React type definitions; request cancellation semantics are unchanged.

@@ -42,7 +42,7 @@ function ScopedGovernance({ departmentId, departmentName, organizationName, role
   const [unavailable, setUnavailable] = useState(false);
   const [editor, setEditor] = useState<PolicyRecord>();
   const [saved, setSaved] = useState(false);
-  const controller = useRef<AbortController>();
+  const controller = useRef<AbortController | undefined>(undefined);
   const current = useRef(0);
 
   useEffect(() => {
