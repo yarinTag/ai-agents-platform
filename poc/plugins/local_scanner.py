@@ -151,7 +151,20 @@ def scan_local_source(effective_source_mode, effective_git_repo, effective_local
                         if not any(s["id"] == meta["id"] for s in plugins_map[p_name]["skills"]):
                             plugins_map[p_name]["skills"].append(meta)
 
-    plugins_data = summarize_plugins(plugins_map)
+    flow_documents = {}
+    for root in potential_roots:
+        for path in sorted(root.rglob("skill-dependency-dag.json")):
+            resolved = path.resolve()
+            if path.parent.name != "references" or not resolved.is_relative_to(root.resolve()):
+                continue
+            if not any(resolved.is_relative_to(Path(pkg["path"]).resolve()) for pkg in plugins_map.values()):
+                continue
+            try:
+                if resolved.stat().st_size <= 1_000_000:
+                    flow_documents[str(path)] = resolved.read_text(encoding="utf-8")
+            except (OSError, UnicodeError):
+                continue
+    plugins_data = summarize_plugins(plugins_map, flow_documents)
 
     return {
         "status": "success",

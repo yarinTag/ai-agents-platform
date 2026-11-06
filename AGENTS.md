@@ -256,3 +256,12 @@ Documentation conflicts retain organization-scoped Anthropic Message Threads con
 
 ## Generic Connection Canvas & Multi-Stage Plugin Skill Flow (2026-11-03)
 `poc/dashboard/src/components/common/ConnectionCanvas/` provides a domain-agnostic connection canvas engine with zero-re-render GPU pan/zoom (`translate3d` + `requestAnimationFrame`), memoized native HTML/CSS node cards (`ConnectionCanvasNodeCard`), per-group expand/collapse, multi-stage horizontal columns (`useStageColumnsLayout`), and interactive upstream/downstream hover highlighting. Mounted in `/organization` (`OrgWorkflowsCanvasTab`) for Organization ➔ Department ➔ Workflow connections and in `/skills` (`PluginsConnectionCanvas` + `pluginsFlowModel.ts` + `poc/plugins/packages.py:_enrich_skill_connections`) under the single **Skills & Plugins Canvas** tab to visualize multi-stage skill pipelines (e.g., `core` plugin routing ➔ discovery/research ➔ PRD/design ➔ architecture/review ➔ implementation ➔ QA/governance gates).
+
+
+## Evidence-backed plugin skill canvas (2026-11-05)
+The plugin canvas separates explicit/conditional instruction handoffs, declared lifecycle
+transitions and optional ordinary references, each with source evidence. Strict package
+selection clears prior focus and its pending reveals. The source audit of the configured
+Git repository and limitations are in [Plugin skill flow audit](docs/plugin-skill-flow-audit.md);
+projection/scanner contracts are in the plugin and dashboard component guides. No local
+runtime verification performed; no plugin instructions were edited or executed.

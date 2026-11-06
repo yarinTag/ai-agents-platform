@@ -1,4 +1,4 @@
-import { PluginPackage, PluginSkill } from '../../types/skill';
+import type { PluginPackage, PluginSkill } from '../../types/skill';
 
 export interface EnrichedPluginSkillFlow {
   skill: PluginSkill;
@@ -6,84 +6,6 @@ export interface EnrichedPluginSkillFlow {
   stageLabel: string;
   connectedToIds: string[];
   connectedFromIds: string[];
-}
-
-/**
- * Canonical lifecycle edges defined in the `core` plugin (e.g. `product-prd-start` & `meta-repo-context-router`).
- * Used alongside dynamic `connected_skills` and text-extracted references so the skill flow graph is always complete.
- */
-const CANONICAL_SKILL_FLOW_EDGES: Record<string, string[]> = {
-  'meta-repo-context-router': [
-    'product-prd-start',
-    'meta-systematic-debugger',
-    'meta-adversarial-code-reviewer',
-    'meta-skill-qa-gate',
-  ],
-  'product-prd-start': [
-    'product-idea-to-blueprint',
-    'product-deep-researcher',
-    'product-competitor-benchmark-analyst',
-    'product-user-voice-analyst',
-    'product-opensource-scout',
-    'product-tech-spike-evaluator',
-    'product-prd-writer',
-  ],
-  'product-idea-to-blueprint': [
-    'product-deep-researcher',
-    'product-competitor-benchmark-analyst',
-    'product-user-voice-analyst',
-    'product-prd-writer',
-  ],
-  'product-deep-researcher': ['product-prd-writer', 'product-tech-spike-evaluator'],
-  'product-competitor-benchmark-analyst': ['product-prd-writer', 'product-feature-prioritizer'],
-  'product-user-voice-analyst': ['product-prd-writer', 'product-feature-prioritizer'],
-  'product-opensource-scout': ['product-tech-spike-evaluator', 'product-architecture-designer'],
-  'product-tech-spike-evaluator': ['product-prd-writer', 'product-architecture-designer'],
-  'product-prd-writer': [
-    'product-figma-alignment',
-    'product-prd-auto-review',
-    'product-devils-advocate',
-    'product-google-docs-prd-publisher',
-    'product-eng-review',
-    'product-architecture-designer',
-  ],
-  'product-figma-alignment': ['product-prd-auto-review', 'product-eng-review'],
-  'product-prd-auto-review': ['product-devils-advocate', 'product-google-docs-prd-publisher', 'product-eng-review'],
-  'product-devils-advocate': ['product-eng-review', 'product-architecture-designer'],
-  'product-google-docs-prd-publisher': ['product-eng-review', 'product-feature-prioritizer'],
-  'product-eng-review': [
-    'product-architecture-designer',
-    'product-adr-decision-maker',
-    'product-spec-drift-detector',
-    'product-implementation-planner',
-  ],
-  'product-architecture-designer': [
-    'product-adr-decision-maker',
-    'tech-infra-cost-estimator',
-    'business-regulatory-compliance',
-    'product-implementation-planner',
-  ],
-  'product-adr-decision-maker': ['product-implementation-planner', 'product-spec-drift-detector'],
-  'product-spec-drift-detector': ['product-implementation-planner', 'product-coverage-gate'],
-  'tech-infra-cost-estimator': ['product-implementation-planner', 'meta-budget-guardrail'],
-  'business-regulatory-compliance': ['product-implementation-planner', 'product-signoff-gate'],
-  'product-feature-prioritizer': ['product-implementation-planner'],
-  'product-implementation-planner': [
-    'product-coverage-gate',
-    'product-signoff-gate',
-    'meta-adversarial-code-reviewer',
-  ],
-  'product-coverage-gate': ['product-signoff-gate', 'meta-adversarial-code-reviewer'],
-  'meta-adversarial-code-reviewer': ['product-signoff-gate', 'meta-skill-qa-gate'],
-};
-
-function stripCategoryPrefix(skillId: string): string {
-  for (const prefix of ['product-', 'meta-', 'tech-', 'business-', 'shared-']) {
-    if (skillId.startsWith(prefix) && skillId.length > prefix.length + 3) {
-      return skillId.slice(prefix.length);
-    }
-  }
-  return skillId;
 }
 
 /**
@@ -194,7 +116,7 @@ export function classifySkillStage(skill: PluginSkill, pluginName: string): { in
 }
 
 /**
- * Computes the complete directed skill-to-skill connection graph and pipeline stages for a plugin package.
+ * Projects discovered directed skill references and presentation stages for a plugin package.
  */
 export function buildPluginSkillFlow(
   plugin: PluginPackage,
@@ -203,21 +125,8 @@ export function buildPluginSkillFlow(
   const pkgSkills = Array.isArray(plugin?.skills) ? plugin.skills : [];
   if (pkgSkills.length === 0) return [];
 
-  // Build lookup of all known skill IDs and short aliases across the ecosystem
-  const allSkillIds = new Set<string>();
-  const aliasToFullId = new Map<string, string>();
-
-  allPlugins.forEach((p) => {
-    (p?.skills || []).forEach((s) => {
-      if (!s?.id) return;
-      allSkillIds.add(s.id);
-      aliasToFullId.set(s.id.toLowerCase(), s.id);
-      const shortAlias = stripCategoryPrefix(s.id.toLowerCase());
-      if (shortAlias.length >= 6 && !aliasToFullId.has(shortAlias)) {
-        aliasToFullId.set(shortAlias, s.id);
-      }
-    });
-  });
+  const allSkills = allPlugins.flatMap((pkg) => pkg.skills || []);
+  const allSkillIds = new Set(allSkills.map((skill) => skill.id));
 
   const toMap = new Map<string, Set<string>>();
   const fromMap = new Map<string, Set<string>>();
@@ -235,22 +144,12 @@ export function buildPluginSkillFlow(
     fromMap.get(targetId)!.add(sourceId);
   };
 
-  pkgSkills.forEach((sk) => {
-    // 1. Backend-extracted connected_skills
-    (sk.connected_skills || []).forEach((targetId) => addEdge(sk.id, targetId));
-
-    // 2. Canonical lifecycle edges for core/router skills
-    (CANONICAL_SKILL_FLOW_EDGES[sk.id] || []).forEach((targetId) => addEdge(sk.id, targetId));
-
-    // 3. Frontend text scan across description + content_preview
-    const hay = `${sk.description || ''} ${sk.content_preview || ''}`.toLowerCase();
-    if (hay.trim()) {
-      aliasToFullId.forEach((fullTargetId, alias) => {
-        if (fullTargetId !== sk.id && hay.includes(alias)) {
-          addEdge(sk.id, fullTargetId);
-        }
-      });
-    }
+  // Scan every package so incoming links include cross-plugin references.
+  // Only evidence-backed handoffs/transitions count as flow. Legacy mentions stay references.
+  allSkills.forEach((skill) => {
+    (skill.skill_connections || []).forEach((connection) => {
+      if (connection.source === skill.id && connection.kind !== 'reference') addEdge(skill.id, connection.target);
+    });
   });
 
   return pkgSkills
