@@ -11,10 +11,9 @@ from config import AgentConfig
 from persistence import DatabaseManager
 from runtime.models import AgentRun, TaskStatus
 from integrations.github_prs import project_pull, readiness_blockers
-from integrations.pr_approval_policy import authorize_subject, merge_tool
+from integrations.pr_approval_policy import authorize_subject, pinned_subjects
 from integrations.tool_definitions import OPERATIONS, ToolAccessError, input_model, public_tool
 from workflows.approval_config import approval_configuration, validate_gates
-from workflows.human_approval import pinned_subjects
 from workflows.parser import WorkflowParser
 
 
@@ -151,3 +150,29 @@ def test_explicit_merge_grant_never_inherits_wildcard(state):
     db.update_user('ownORG_ADMIN', status='DISABLED')
     with pytest.raises(ToolAccessError, match='initiator'):
         authorize_subject(db, approval, subject, merge=True)
+
+
+def test_only_successful_persisted_review_receipts_can_pin_candidates(state):
+    db, _ = state
+    db.save_mcp_connector({'id': 'github', 'name': 'GitHub', 'provider': 'github', 'organization_id': 'own'})
+    db.save_mcp_tool({'id': 'reviewtool', 'connector_id': 'github', 'name': 'get_pull_request_review', 'description': 'Review'})
+    task = db.get_task_run('task')
+    task.run_id, task.status = 'reviewtask', TaskStatus.COMPLETED
+    db.save_task_run(task)
+    with db._get_connection() as conn:
+        conn.execute("INSERT INTO workflow_step_runs(id,execution_id,step_key,agent_id,status,task_run_id) VALUES ('source','exec','review','agent','COMPLETED','reviewtask')")
+    assert pinned_subjects(db, 'exec', 'review') == []
+    facts = {'repository': 'owner/repo', 'candidate_ready': True, 'partial': False,
+             'pull_request': {'number': 7, 'head': {'sha': 'a' * 40}, 'base': {'sha': 'b' * 40},
+                              'url': 'https://github.com/owner/repo/pull/7', 'author': 'dependabot[bot]'}}
+    call = {'id': 'receipt', 'connector_id': 'github', 'tool_id': 'reviewtool', 'agent_id': 'agent',
+            'task_id': 'reviewtask', 'run_id': 'reviewtask', 'status': 'FAILED', 'result': json.dumps(facts)}
+    db.save_mcp_tool_call(call)
+    assert pinned_subjects(db, 'exec', 'review') == []
+    call['status'] = 'COMPLETED'
+    db.save_mcp_tool_call(call)
+    assert pinned_subjects(db, 'exec', 'review')[0]['head_sha'] == 'a' * 40
+    facts['partial'] = True
+    call['result'] = json.dumps(facts)
+    db.save_mcp_tool_call(call)
+    assert pinned_subjects(db, 'exec', 'review') == []
