@@ -75,3 +75,6 @@ A department query is accepted only for authenticated SSE and validated against 
 Response policy scopes recent activity and statistics. Legacy /ws/system closes1008 until a
 separate tenant-authenticated websocket protocol exists; SSE remains supported. No streams,
 model calls, tests or application startup were executed locally.
+
+
+AI-15 plans per-connector verified ingress, normalized bounded events, durable dedup/outbox and authorized trigger principals. No such listener is implemented/enabled by this ADR; saved trigger_enabled is not delivery evidence. Provider authenticity must precede privileged event interpretation; policy independently authorizes the normalized sender and action.

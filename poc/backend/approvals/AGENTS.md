@@ -64,3 +64,6 @@ from user_id/service rather than the submitted string. Chat cannot bypass a pend
 approval with an operator reply. Legacy shared-secret Telegram/Slack callbacks and arbitrary-target
 dispatch are denied until tenant-bound actor/channel authorization exists. Ordinary governed
 workflow notifications remain separate. No approvals resumed or messages/tests executed locally.
+
+
+AI-15 plans a shared exact-action approval engine with verified external identities and one-use callback actions, plus checkpointed continuation. Current dashboard terminal gates and denied legacy channel callbacks remain unchanged. Approval identity uses execution/approval/action/evidence, not agent ID; decision recorded is not provider success.

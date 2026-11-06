@@ -242,3 +242,10 @@ cover fresh identity, actor stamping, duplicate decisions and expiry.
 Results and verification limits are recorded in [the audit report](ai-13-api-audit.md).
 This proves the tested HTTP/storage policies only: no provider connectivity, model planning,
 CI rerun, real merge/send, browser behavior, inbound webhook or general DAG resume was tested.
+
+## P00 companion specifications
+
+[AI-14 UX/role journeys and static wireframes](../design/governance-ux.md) map the
+contract to planned screens. [AI-15 architecture decision record](adr-ai-15-generic-connector-governance.md)
+records boundaries, alternatives, migration and release gates. Neither introduces new
+production behavior; current API evidence remains distinct from future implementation.

@@ -138,3 +138,6 @@ No local tests/application/worker startup performed.
 Generic department transfers are deliberately rejected409 until an explicit history/ownership migration exists; execution inspection/evaluation also checks persisted step subjects. See the access-control audit for this compatibility restriction.
 
 Router response guards traverse lazy included-router original_router trees as well as direct APIRoute objects. get_route_handler factories retain FastAPI effective inclusion dependencies before applying tenant response projection. No local runtime verification performed.
+
+
+AI-15 ADR (docs/architecture/adr-ai-15-generic-connector-governance.md) fixes the target ownership boundary: control-plane policy/approvals/checkpoints/audit stay shared; trusted adapters own canonical provider resources, authenticity, execution preconditions and receipts. Existing routes stay unchanged in P00. P01–P11 must publish actual versioned contracts and tests before exposing future behavior.

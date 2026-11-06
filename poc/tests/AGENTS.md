@@ -162,3 +162,6 @@ The explicit-merge rejection fixture uses the canonical stored wildcard string (
 
 ## API-only governance audit
 By explicit user authorization, local API tests are now allowed without agent/model/provider execution. run_api_audit.py executes an explicit HTTP-node inventory under real FastAPI/SQLite in a disposable tracked-source snapshot, excluding working data/workspaces/env/credentials. api_audit_guard.py disables actual runtime capability and rejects network/DNS/child-process attempts instead of faking responses. test_generic_governance_api.py covers GitHub/Telegram/Slack and descriptive-only Postgres metadata with 2 orgs/3 departments, four roles/mixed/unassigned/disabled users, redaction, grant/revocation/catalog/write boundaries and disabled callbacks. Static agent definitions are authorization records only, never launched. Selected existing HTTP access and report-approval contracts run too; no application lifespan. See docs/architecture/ai-13-api-audit.md for results and limits.
+
+
+AI-14/AI-15 add UX/ADR artifacts, not executable UI or API behavior. Reuse the 39-case isolated API-only runner as regression evidence; static wireframe/document inspection is not browser/E2E/provider verification. Later tickets must add API tests for actual new routes/state transitions before release.

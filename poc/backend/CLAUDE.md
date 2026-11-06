@@ -190,3 +190,6 @@ contracts/limitations: docs/access-control-audit.md. No local runtime verificati
 
 
 Workflow approval POSTs must preserve the current personal manager/admin identity check, atomic decision claim and repeated current-policy checks. Keep Telegram callbacks disabled until a separate verified user-binding transport exists; links alone never authorize a decision. See docs/workflow-pr-approvals.md.
+
+
+Follow the AI-15 governance ADR for future adapter/action/event/approval work. Connector metadata cannot install executable code; action approval cannot create a missing grant. Keep actor/resource checks central and repeated, channel send/trigger/approval separate, and unknown external writes non-retryable until reconciled. P00 documentation is not a schema migration or authorization to enable legacy callbacks.

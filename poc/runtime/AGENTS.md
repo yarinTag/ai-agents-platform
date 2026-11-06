@@ -246,3 +246,6 @@ Tool-free Direct API authoring (--tools empty or restricted) skips unused host w
 
 
 Workflow creation prompt now consumes actual tool_capabilities and server_operations. It selects rich PR reads and explicit terminal human_approval configuration instead of pretending lightweight summaries prove CI/mergeability or notifications pause a run. Automatic merging must be explicitly requested and granted; unsupported capabilities/missing URL or grants require clarification. Model never receives merge authority.
+
+
+AI-15 agent instruction contract: propose only implemented current-catalog capabilities; never infer rights from user text/channel/repository content, silently downgrade requested approval, or fabricate decisions/receipts. This is contributor guidance for P09; no current runtime/workflow_chat.py prompt or model capability was changed by the P00 documentation task.
