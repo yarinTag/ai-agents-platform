@@ -48,7 +48,8 @@ export default function CapabilityPolicyEditor({ record, isAdmin, capabilities, 
   };
   const elevated = draft.rules.some(rule => rule.effect === 'allow' && capabilities.some(cap => cap.id === rule.capability_id && cap.effect !== 'read')
     && JSON.stringify(rule) !== JSON.stringify(record.document.rules.find(old => old.id === rule.id)));
-  return <Drawer open title={text.editTitle} width="min(1050px, 100vw)" onClose={() => { if (!saving) onClose(); }}
+  return <Drawer open title={<Space wrap><span>{text.editTitle} · {record.scope_type === 'organization' ? text.organizationPolicy : text.departmentPolicy}</span>
+    <bdi dir="ltr">{record.scope_id}</bdi></Space>} width="min(1050px, 100vw)" onClose={() => { if (!saving) onClose(); }}
     maskClosable={!saving} closable={!saving} extra={<TagRevision text={text} revision={record.revision} />}>
     <Space direction="vertical" style={{ width: '100%' }} size="middle">
       <Alert type="info" showIcon message={text.ceiling} description={isAdmin ? text.conditional : text.managerHint} />
@@ -89,7 +90,7 @@ export default function CapabilityPolicyEditor({ record, isAdmin, capabilities, 
           </Form.Item>
           <Typography.Paragraph type="secondary">{text.preserveConstraints}</Typography.Paragraph>
           <Space><Button disabled={locked || !option || !resources.length || draft.rules.length >= 200 && !editing} onClick={apply}>{text.addRule}</Button>
-            {selected !== undefined && <Button disabled={locked} onClick={reset}>{text.cancel}</Button>}</Space>
+            {(editing || selected !== undefined) && <Button disabled={locked} onClick={reset}>{text.cancel}</Button>}</Space>
         </Form>}
         <Button type="primary" disabled={!changed || locked || !!editing || !!selected} onClick={() => setReviewing(true)}>{text.review}</Button>
       </>}

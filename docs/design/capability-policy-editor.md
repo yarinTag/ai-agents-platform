@@ -79,3 +79,5 @@ FastAPI/SQLite without agent execution or provider I/O. Frontend type/lint/build
 existing logic tests run in GitHub CI. No local UI/browser/render/accessibility or live
 provider execution is claimed. AI-18 broader P01 documentation and subsequent generic
 action/event/approval capabilities remain separate tickets.
+
+The review drawer title identifies the organization/department policy and exact scope ID. Refresh controls are disabled while the draft editor is open; explicit close/reload is required for conflict recovery. A rule edit remains cancellable when its original resource option is no longer configured.

@@ -120,13 +120,13 @@ function ScopedGovernance({ departmentId, departmentName, organizationName, role
       columns={[{ title: text.revision, dataIndex: 'revision' }, { title: text.actor, dataIndex: 'updated_by', render: value => <bdi dir="ltr">{value}</bdi> },
         { title: text.updated, dataIndex: 'updated_at', render: value => <bdi dir="ltr">{value}</bdi> }]} /> }]} />}
   </Space>;
-  return <Card title={text.title} extra={<Button disabled={loading} onClick={refresh}>{text.refresh}</Button>}>
+  return <Card title={text.title} extra={<Button disabled={loading || !!editor} onClick={refresh}>{text.refresh}</Button>}>
     <Space direction="vertical" size="middle" style={{ width: '100%' }}>
       <Space wrap><Typography.Text>{text.organization}: {organizationName}</Typography.Text>
         <Typography.Text>{text.department}: {departmentName}</Typography.Text><Typography.Text>{text.role}: <bdi dir="ltr">{role}</bdi></Typography.Text></Space>
       <Alert showIcon type="info" message={canManage ? isAdmin ? text.ceiling : text.managerHint : text.readOnly} />
       {saved && <Alert role="status" type="success" showIcon message={text.saved} />}
-      {loadError && !unavailable && <Alert role="alert" type="warning" showIcon message={text.loadError} action={<Button onClick={refresh}>{text.refresh}</Button>} />}
+      {loadError && !unavailable && <Alert role="alert" type="warning" showIcon message={text.loadError} action={<Button disabled={!!editor} onClick={refresh}>{text.refresh}</Button>} />}
       {unavailable ? <Alert role="alert" type="warning" showIcon message={text.unavailable} />
         : <Tabs activeKey={tab} onChange={value => { setEditor(undefined); setPolicy(undefined); setHistory([]); setLoading(true); setSaved(false); setTab(value); }} items={[
           { key: 'access', label: text.available, children: loading ? <Spin aria-label={text.loading} /> : catalog
