@@ -1,5 +1,6 @@
 """Bounded evidence collection; unknown provider policy never becomes merge authority."""
 import re
+from datetime import datetime, timezone
 from urllib.parse import quote
 from .tool_definitions import ToolAccessError
 
@@ -119,9 +120,19 @@ def review_evidence(client, number, pull):
         login = (row.get('user') or {}).get('login')
         if not isinstance(login, str) or not re.fullmatch(r'[A-Za-z0-9_\[\]-]{1,100}', login) or type(row.get('id')) is not int:
             partial = True; continue
-        if row['id'] > latest.get(login, {}).get('id', -1): latest[login] = row
+        try:
+            submitted = datetime.fromisoformat(row['submitted_at'].replace('Z', '+00:00'))
+            if submitted.tzinfo is None: raise ValueError('Missing review timezone')
+            order = (submitted.astimezone(timezone.utc), row['id'])
+        except (KeyError, TypeError, AttributeError, ValueError, OverflowError):
+            partial = True; continue
+        key = login.casefold()
+        # A pending review can be created earlier but submitted after a newer review.
+        # Creation ID alone must never let an old approval hide a later rejection.
+        if key not in latest or order > latest[key][0]: latest[key] = (order, row)
     result = []
-    for login, row in latest.items():
+    for _, row in latest.values():
+        login = row['user']['login']
         trusted = False
         if row.get('state') == 'APPROVED' and row.get('commit_id') == pull['head']['sha'] and login.casefold() != str(pull['author']).casefold() and (row.get('user') or {}).get('type') == 'User':
             if len(result) >= 10: partial = True
@@ -131,7 +142,8 @@ def review_evidence(client, number, pull):
                     trusted = (isinstance(value, dict) and value.get('permission') in ('admin', 'maintain', 'write')
                                and (value.get('user') or {}).get('login') == login)
                 except ToolAccessError: partial = True
-        result.append({'author': login, 'state': row.get('state'), 'commit_id': row.get('commit_id'), 'trusted_approval': trusted})
+        result.append({'author': login, 'state': row.get('state'), 'commit_id': row.get('commit_id'),
+                       'submitted_at': row['submitted_at'], 'trusted_approval': trusted})
     return result, partial
 
 

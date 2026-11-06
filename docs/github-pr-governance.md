@@ -54,7 +54,8 @@ For aggregate candidate_ready:true, all of these must be observable:
   skipped jobs (such as publishing disabled for PRs) do not by themselves block readiness.
 - Current-head approved reviews meet the configured count (minimum1), exclude PR author
   and bots, and have a current provider-verified write/maintain/admin repository reviewer.
-  Latest approved/changes-requested/dismissed state per reviewer is used; stale approvals
+  Latest submitted approved/changes-requested/dismissed state per reviewer is used;
+  review creation ID alone cannot let an earlier pending review submitted later be ignored. Stale approvals
   do not count. A GitHub reviewer is a provider identity, not automatically a platform user.
 - Comparing base SHA to HEAD confirms base is the merge base with behind_by=0. The
   current base branch commit and the PR head/base are re-read to detect changes.
