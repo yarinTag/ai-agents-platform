@@ -7,7 +7,7 @@ from datetime import datetime
 from pydantic import ValidationError
 from .github_activity import fetch_activity
 from .scoped_channels import send_message
-from .tool_definitions import MessageInput, RepositoryInput, ToolAccessError, public_tool, require_credentials, resource_values
+from .tool_definitions import MessageInput, RepositoryInput, ToolAccessError, public_tool, require_credentials, resource_values, input_model
 from .tool_scopes import agent_tool_allowed, connector_authorized, live_scope, load_scope
 
 
@@ -88,7 +88,7 @@ class WorkflowToolExecutor:
         entry = self.entries[name]
         try:
             try:
-                inputs = (RepositoryInput if entry['provider'] == 'github' else MessageInput).model_validate(arguments)
+                inputs = input_model(entry).model_validate(arguments)
             except ValidationError as exc:
                 raise ToolAccessError('Invalid tool arguments; only the declared repository/channel and bounded options are accepted.') from exc
             connector = self.authorize(entry, inputs)
@@ -115,7 +115,11 @@ class WorkflowToolExecutor:
         try:
             authorize = lambda: self.authorize(entry, inputs)
             if entry['provider'] == 'github':
-                output = fetch_activity(connector.configuration or {}, entry['operation'], inputs.repository, inputs.days, authorize)
+                if entry['operation'] in ('list_open_pull_requests', 'get_pull_request_review'):
+                    from .github_prs import execute_read
+                    output = execute_read(connector.configuration or {}, entry['operation'], inputs, authorize)
+                else:
+                    output = fetch_activity(connector.configuration or {}, entry['operation'], inputs.repository, inputs.days, authorize)
                 self.authorize(entry, inputs)
             else:
                 output = send_message(connector, inputs.channel_id, inputs.text, authorize)

@@ -2,6 +2,7 @@
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from integrations.repo_workspace import RepositoryWorkspace
+from workflows.approval_config import HumanApproval
 
 
 class StrictModel(BaseModel):
@@ -33,6 +34,7 @@ class ChatStep(StrictModel):
     send_output_of: str | None = Field(default=None, min_length=1, max_length=80)
     workspace: RepositoryWorkspace | None = None
     required_outcome: Literal['analysis', 'pull_request'] = 'analysis'
+    human_approval: HumanApproval | None = None
 
 
 class Destination(StrictModel):

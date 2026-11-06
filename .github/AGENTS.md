@@ -80,3 +80,6 @@ test_skill_connections.py (19 backend files total on this branch). They use actu
 FastAPI/JWT, Markdown/JSON inputs and private filesystem fixtures, without application lifespan,
 provider calls or live messages. Existing current-identity fixtures are aligned with DB-backed scope.
 No CI dispatch or local test/build/typecheck/lint was performed in this task.
+
+
+Security CI additionally runs test_workflow_pr_approvals.py: pure PR projection/configuration and real temporary SQLite/FastAPI approval ownership/roles/expiry/write-grant contracts. No provider network or model calls. Local execution remains restricted.

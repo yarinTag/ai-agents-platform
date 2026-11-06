@@ -58,7 +58,7 @@ async def execute_workflow(
     payload_hash = compute_execution_hash(workflow_id, payload, revision=workflow.revision)
     if not force_rerun:
         match = engine.db.find_matching_workflow_execution(workflow_id, payload_hash)
-        if match and match.status in {"QUEUED", "RUNNING", "COMPLETED"}:
+        if match and match.status in {"QUEUED", "RUNNING", "WAITING_APPROVAL", "COMPLETED"}:
             return _execution_to_response(match, is_deduplicated=True,
                 message="Identical saved workflow execution reused.")
     user_context = getattr(request.state, "user", None)
@@ -94,7 +94,7 @@ async def trigger_webhook(
         payload = {}
     payload_hash = compute_execution_hash(workflow.id, payload, revision=workflow.revision)
     match = db.find_matching_workflow_execution(workflow.id, payload_hash)
-    if match and match.status in {"QUEUED", "RUNNING", "COMPLETED"}:
+    if match and match.status in {"QUEUED", "RUNNING", "WAITING_APPROVAL", "COMPLETED"}:
         return _execution_to_response(match, is_deduplicated=True,
             message="Duplicate webhook trigger reused an active/completed execution.")
     return await _queue_execution(db, workflow, payload, "WEBHOOK", payload_hash)

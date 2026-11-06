@@ -299,3 +299,6 @@ mutations require canOperate, including disabled keyboard submission. Host-nativ
 is disabled. MCP configuration/testing/grants require isAdmin. Backend checks remain authoritative.
 All feature instances remount on user/org/department/effective-role changes. No local rendering,
 component execution or tests performed; contracts are in docs/access-control-audit.md.
+
+
+WorkflowApprovalPanel polls the scoped per-execution approval API and renders report, pinned PR SHAs, expiry, actual merge receipts/status and authenticated manager/admin approve/reject confirmations. No bearer token is embedded in external links. WorkflowChatModal displays human gate/merge intent in preview. UI does not implement Telegram callbacks.

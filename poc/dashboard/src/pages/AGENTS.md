@@ -275,3 +275,6 @@ and denies direct Settings navigation. Each feature remounts on scope/role chang
 checks were performed; exact exceptions/limitations are in docs/access-control-audit.md.
 
 Workflow create and Create with AI entry points and recovery modal are enabled for canRead. Existing editing/deletion/settings and execution controls retain their respective roles. No local runtime verification performed.
+
+
+WorkflowLogs mounts WorkflowApprovalPanel keyed by execution ID; Telegram links open /workflows/{workflow_id}/logs?execution={execution_id}. Gate reads/polling and role controls remain backend-authorized. WAITING_APPROVAL retains persisted step/run state without blocking a worker.

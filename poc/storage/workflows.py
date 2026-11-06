@@ -345,9 +345,12 @@ class WorkflowsRepository:
             # Active check
             row = conn.execute("""
                 SELECT * FROM workflow_executions
-                WHERE workflow_id = ? AND payload_hash = ? AND status IN ('QUEUED', 'RUNNING')
+                WHERE workflow_id = ? AND payload_hash = ? AND status IN ('QUEUED', 'RUNNING', 'WAITING_APPROVAL')
+                AND (status != 'WAITING_APPROVAL' OR EXISTS(SELECT 1 FROM workflow_approvals a
+                    WHERE a.execution_id=workflow_executions.id AND a.status IN ('PENDING','RESOLVING')
+                    AND a.expires_at > ?))
                 ORDER BY created_at DESC LIMIT 1
-            """, (workflow_id, payload_hash)).fetchone()
+            """, (workflow_id, payload_hash, datetime.now().isoformat())).fetchone()
             if row:
                 return self._row_to_workflow_execution(dict(row))
 

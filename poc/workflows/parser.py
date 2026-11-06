@@ -251,6 +251,8 @@ def validate_workflow_definition(data: Any) -> Dict[str, Any]:
         raise ValueError('Invalid workflow channel notification mode.')
     from .backend_policy import validate_step_backends
     validate_step_backends(parsed)
+    from .approval_config import validate_gates
+    validate_gates(parsed)
     from .channel_action import action_configuration
     from integrations.repo_workspace import workspace_configuration
     for step in parsed.steps:

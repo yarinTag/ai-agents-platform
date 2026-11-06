@@ -76,6 +76,7 @@ export function WorkflowChatModal({ onClose, onCreated }: Props) {
             <Steps direction="vertical" size="small" style={{ marginTop: 20, marginBottom: 16 }}
               items={workflow.steps.map(step => ({ status: 'wait' as const, title: step.name, description: <>
                 <Typography.Text type="secondary">{agentLabel(step.agent_id)}</Typography.Text>
+                {step.human_approval && <Tag color="orange">{text.humanApproval}{step.human_approval.merge_after_approval ? ` · ${text.mergeAfterApproval}` : ''}</Tag>}
                 {step.workspace && <div><Tag color={step.workspace.mode === 'write' ? 'orange' : 'blue'}>{text.workspace}: {step.workspace.repository} · {step.workspace.mode === 'write' ? text.draftPr : text.readWorkspace}</Tag></div>}
                 {!!step.resources.length && <div dir="ltr">{step.resources.map((r, i) =>
                   <Tag key={i} style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{[r.repository, r.channel_id ? channelLabel(r.connector_id, r.channel_id) : null, r.tool_name].filter(Boolean).join(' · ')}</Tag>)}</div>}

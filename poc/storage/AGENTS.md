@@ -140,3 +140,6 @@ local runtime verification remains prohibited.
 The user-requested lab data was explicitly inserted with marker10da4d25; read-only SQL confirmed
 2 new organizations,3 departments/13 users each and no model keys, connected connectors or runs.
 The private credential file is outside source control. No application/tests were started.
+
+
+workflow_approvals_schema initializes workflow_approvals: id PK, execution_id UNIQUE FK, step_run_id,task_id,organization_id,department_id,workflow_revision,status,config_json,subjects_json,report,created_at,expires_at,resolved_at,resolved_by,error,receipts_json(default[]). States NOTIFYING/PENDING/RESOLVING/APPROVED/REJECTED/EXPIRED/EXPIRING/FAILED. API GET lazily resolves expired pending gates. Execution dedup includes unexpired PENDING/RESOLVING WAITING_APPROVAL records; expired approvals do not block new runs. No live migration/database initialization executed in this task.

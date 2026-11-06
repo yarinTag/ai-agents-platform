@@ -151,3 +151,6 @@ test_direct_runtime.py covers organization-scoped authoring from an ephemeral no
 Access-policy contracts cover MEMBER/OPERATOR/MANAGER workflow authoring through real registered routes, AI context, forced inactive lower-role workflows, retained execution/activation restrictions, foreign/unassigned departments and immediate membership revocation. No local runtime verification performed.
 
 Member authoring denial contracts accept403/404 (resource concealment) and assert activation remains false; neither denial response authorizes execution.
+
+
+test_workflow_pr_approvals.py covers rich PR projection, conservative readiness, strict read tool schema/no model merge tool, terminal graph/channel validation, real SQLite/FastAPI personal actor/tenant/role decision and expiry contracts, duplicate claims and explicit merge grants versus wildcard/revocation. No mocks or provider/model calls; local execution not performed.

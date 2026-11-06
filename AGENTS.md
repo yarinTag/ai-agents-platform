@@ -280,3 +280,7 @@ create_access_lab.py --apply. This authorized data setup does not authorize test
 The two isolated Access Lab organizations were explicitly registered by user request (marker
 10da4d25): Engineering/Finance/Operations and13 role/edge-case accounts each. No existing records,
 model keys, live sends or executions were changed/created. See the access-control audit.
+
+
+## Governed PR review and terminal human approval
+New read tools list_open_pull_requests and get_pull_request_review expose bounded PR identity/diffs/checks/reviews with incomplete evidence blocking readiness. AI authors explicit terminal human_approval steps; approvals persist WAITING_APPROVAL and are resolved in Workflow Logs by authenticated managers/admins. Optional server-only SHA-pinned squash merges require explicit merge_pull_request grants (wildcards denied), fresh evidence/current authority, and durable per-PR receipts. Telegram/Slack deliver authenticated links; bot callbacks remain disabled. See docs/workflow-pr-approvals.md. No saved workflows/grants/provider keys changed; no runtime/live actions performed.

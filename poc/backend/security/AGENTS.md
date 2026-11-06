@@ -138,3 +138,6 @@ Tenant response projection is applied to direct and lazy included routes; organi
 Workflow authoring endpoints require level1 department access, including nested resource references. This exception does not grant management or execution. Default path-scope calculation uses readable membership rather than requiring manager status for unrelated requests. No local runtime verification performed.
 
 Nested response collections are authorized by their own resource type (for example departments inside workflow AI context), rather than the outer endpoint domain. The authoring context retains readable department choices.
+
+
+Workflow approval reads require current scoped execution access. decide_workflow_approval requires level3 and a personal authenticated user; the handler rechecks approver, initiator, immutable workflow revision, resource grants and deadline during resolution. Legacy Telegram/Slack shared-secret callback routes remain disabled. Merge authority never comes from a URL or model output.
