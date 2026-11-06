@@ -1,13 +1,15 @@
+import { RowActionMenu } from './RowActionMenu';
 import { Link } from 'react-router-dom';
-import { Table, Button, Tag, Space, Tooltip, Popconfirm, Badge } from 'antd';
+import { Button, Tag, Space, Tooltip, Modal, Badge } from 'antd';
 import { ApartmentOutlined, PlayCircleOutlined, DeleteOutlined, CodeOutlined, EyeOutlined, ThunderboltOutlined, ClockCircleOutlined, SlackOutlined, SendOutlined, BranchesOutlined, EditOutlined, HistoryOutlined, SettingOutlined } from '@ant-design/icons';
 import { PlatformWorkflow } from '../types/mcp';
+import type { Department } from '../types/auth';
 
 import type { useWorkflowsPage } from './useWorkflowsPage';
 
 export const createWorkflowColumns = (model: Pick<
   ReturnType<typeof useWorkflowsPage>,
-  | 'workflows'
+  | 'connectors'
   | 'setEditingWorkflow'
   | 'setHistoryWorkflow'
   | 'setSettingsWorkflow'
@@ -20,9 +22,8 @@ export const createWorkflowColumns = (model: Pick<
   | 'openRunModal'
   | 'copyToClipboard'
   | 'getParsedWorkflowSteps'
->, access: { canManage: boolean; canOperate: boolean }) => {
+>, access: { canManage: boolean; canOperate: boolean; isOrgAdmin: boolean }, departments: Department[]) => {
   const {
-    workflows,
     setEditingWorkflow,
     setHistoryWorkflow,
     setSettingsWorkflow,
@@ -36,6 +37,18 @@ export const createWorkflowColumns = (model: Pick<
     copyToClipboard,
     getParsedWorkflowSteps,
   } = model;
+  const departmentNames = new Map(departments.map(department => [
+    department.id || department.department_id, department.name,
+  ]));
+  const channelLabel = (binding: NonNullable<PlatformWorkflow['channel_binding']>) => {
+    const candidates = model.connectors.filter(connector =>
+      connector.provider === binding.provider &&
+      (!binding.connector_id || connector.id === binding.connector_id));
+    // Legacy bindings without a connector ID must not borrow another connector's label.
+    if (candidates.length !== 1) return binding.channel_id;
+    const label: unknown = candidates[0].configuration?.channel_labels?.[binding.channel_id];
+    return typeof label === 'string' && label.trim() ? label.trim() : binding.channel_id;
+  };
   const workflowColumns = [
     {
       title: 'Workflow Name',
@@ -52,19 +65,19 @@ export const createWorkflowColumns = (model: Pick<
         </div>
       ),
     },
-    {
+    ...(access.isOrgAdmin ? [{
       title: 'Department',
       dataIndex: 'department_id',
       key: 'department_id',
       render: (dept: string) =>
         dept ? (
-          <Tag color="cyan" style={{ fontFamily: 'monospace', fontSize: 11 }}>
-            {dept}
-          </Tag>
+          <Tooltip title={dept}>
+            <Tag color="cyan">{departmentNames.get(dept)?.trim() || dept}</Tag>
+          </Tooltip>
         ) : (
           <Tag color="default">Global</Tag>
         ),
-    },
+    }] : []),
     {
       title: 'Triggers & Bindings',
       key: 'triggers',
@@ -90,18 +103,20 @@ export const createWorkflowColumns = (model: Pick<
             </Tooltip>
           )}
           {record.channel_binding && (
-            <Tag
-              icon={
-                record.channel_binding.provider === 'telegram' ? (
-                  <SendOutlined />
-                ) : (
-                  <SlackOutlined />
-                )
-              }
-              color={record.channel_binding.provider === 'telegram' ? 'blue' : 'green'}
-            >
-              {record.channel_binding.channel_id}
-            </Tag>
+            <Tooltip title={record.channel_binding.channel_id}>
+              <Tag
+                icon={
+                  record.channel_binding.provider === 'telegram' ? (
+                    <SendOutlined />
+                  ) : (
+                    <SlackOutlined />
+                  )
+                }
+                color={record.channel_binding.provider === 'telegram' ? 'blue' : 'green'}
+              >
+                {channelLabel(record.channel_binding)}
+              </Tag>
+            </Tooltip>
           )}
           {!record.cron_expression && !record.webhook_enabled && !record.channel_binding && (
             <Tag color="default">Manual Trigger Only</Tag>
@@ -137,13 +152,9 @@ export const createWorkflowColumns = (model: Pick<
     {
       title: 'Actions',
       key: 'actions',
+      width: 150,
       render: (_: any, record: PlatformWorkflow) => (
-        <Space size={6} wrap>
-          <Button size="small" disabled={!access.canManage} icon={<EditOutlined />} onClick={() => {
-            setEditingWorkflow(record); setCreateModalOpen(true);
-          }}>Edit</Button>
-          <Button size="small" icon={<HistoryOutlined />} onClick={() => setHistoryWorkflow(record)}>History</Button>
-          <Button size="small" icon={<SettingOutlined />} onClick={() => setSettingsWorkflow(record)}>{settingsText.settingsAction}</Button>
+        <Space size={6}>
           <Tooltip title="Execute Workflow">
             <Button
               type="primary"
@@ -155,40 +166,29 @@ export const createWorkflowColumns = (model: Pick<
               Run
             </Button>
           </Tooltip>
-          <Button disabled={!access.canOperate} size="small" onClick={() => openRunModal(record, true)}>
-            Playground
-          </Button>
-          <Link to={`/workflows/${record.id}/logs`}><Button size="small" icon={<EyeOutlined />}>Logs</Button></Link>
-          <Tooltip title="View Visual DAG Execution Graph">
-            <Button
-              size="small"
-              icon={<ApartmentOutlined />}
-              onClick={() => {
-                setSelectedWorkflow(record);
-                setCanvasModalOpen(true);
-              }}
-            />
-          </Tooltip>
-          <Tooltip title="View Playbook Definition (YAML/JSON)">
-            <Button
-              size="small"
-              icon={<CodeOutlined />}
-              onClick={() => {
-                setSelectedWorkflow(record);
-                setViewDefModalOpen(true);
-              }}
-            />
-          </Tooltip>
-          <Popconfirm disabled={!access.canManage}
-            title="Delete this workflow?"
-            description="This will permanently delete this playbook and its configuration."
-            onConfirm={() => handleDelete(record.id)}
-            okText="Yes, Delete"
-            cancelText="Cancel"
-            okButtonProps={{ danger: true }}
-          >
-            <Button size="small" disabled={!access.canManage} danger icon={<DeleteOutlined />} />
-          </Popconfirm>
+          <RowActionMenu label={`Actions for workflow ${record.name}`} items={[
+            { key: 'playground', label: 'Playground', disabled: !access.canOperate, onClick: () => openRunModal(record, true) },
+            { key: 'edit', label: 'Edit', icon: <EditOutlined />, disabled: !access.canManage, onClick: () => {
+              setEditingWorkflow(record); setCreateModalOpen(true);
+            } },
+            { key: 'history', label: 'History', icon: <HistoryOutlined />, onClick: () => setHistoryWorkflow(record) },
+            { key: 'settings', label: settingsText.settingsAction, icon: <SettingOutlined />, onClick: () => setSettingsWorkflow(record) },
+            { key: 'logs', label: <Link to={`/workflows/${record.id}/logs`}>Logs</Link>, icon: <EyeOutlined /> },
+            { key: 'canvas', label: 'Canvas', icon: <ApartmentOutlined />, onClick: () => {
+              setSelectedWorkflow(record); setCanvasModalOpen(true);
+            } },
+            { key: 'definition', label: 'YAML / JSON Definition', icon: <CodeOutlined />, onClick: () => {
+              setSelectedWorkflow(record); setViewDefModalOpen(true);
+            } },
+            { type: 'divider' },
+            { key: 'delete', label: 'Delete', icon: <DeleteOutlined />, danger: true, disabled: !access.canManage,
+              onClick: () => Modal.confirm({
+                title: 'Delete this workflow?',
+                content: 'This will permanently delete this playbook and its configuration.',
+                okText: 'Yes, Delete', cancelText: 'Cancel', okButtonProps: { danger: true },
+                onOk: () => handleDelete(record.id),
+              }) },
+          ]} />
         </Space>
       ),
     },

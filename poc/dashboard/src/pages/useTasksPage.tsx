@@ -1,6 +1,8 @@
+import { RowActionMenu } from './RowActionMenu';
 import { usePermissions } from '../hooks/usePermissions';
-import { useState } from 'react';
-import { Form, Button, Modal, Tag, message, Space, Tree, Tooltip } from 'antd';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { Form, Button, Modal, Tag, message, Space, Tree } from 'antd';
 import { DeleteOutlined, SyncOutlined, EyeOutlined, BranchesOutlined, ApartmentOutlined, CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import { Task, TaskTreeNode } from '../types/task';
 import { Agent } from '../types/agent';
@@ -17,6 +19,27 @@ export const useTasksPage = () => {
   // Task Details Modal
   const [taskDetail, setTaskDetail] = useState<Task | null>(null);
   const [detailVisible, setDetailVisible] = useState<boolean>(false);
+
+  const [searchParams, setSearchParams] = useSearchParams();
+  const linkedTaskId = searchParams.get('taskId');
+  useEffect(() => {
+    if (!linkedTaskId) return;
+    let active = true;
+    setTaskDetail(null);
+    setDetailVisible(false);
+    getTask(linkedTaskId).then(response => {
+      if (active) { setTaskDetail(response.data); setDetailVisible(true); }
+    }).catch(() => { if (active) message.error('Unable to load the linked task logs.'); });
+    return () => { active = false; };
+  }, [linkedTaskId]);
+  const closeTaskDetail = (open: boolean) => {
+    setDetailVisible(open);
+    if (!open && linkedTaskId) {
+      const next = new URLSearchParams(searchParams);
+      next.delete('taskId');
+      setSearchParams(next, { replace: true });
+    }
+  };
 
   // Delegation Modal
   const [delegatingTask, setDelegatingTask] = useState<Task | null>(null);
@@ -250,6 +273,7 @@ export const useTasksPage = () => {
     {
       title: 'Actions',
       key: 'actions',
+      width: 150,
       render: (_: any, record: Task) => {
         const assignedAgent = agents.find((a) => a.id === record.agent_id);
         const isManager =
@@ -259,32 +283,6 @@ export const useTasksPage = () => {
 
         return (
           <Space size="small">
-            {/* Delegate Subtask Button (for Managers) */}
-            {isManager && (
-              <Tooltip title="Delegate subtask to subordinate">
-                <Button
-                  size="small"
-                  type="primary"
-                  disabled={!canOperate} icon={<BranchesOutlined />}
-                  onClick={() => handleOpenDelegate(record)}
-                  style={{ background: '#0284c7', borderColor: '#0284c7' }}
-                >
-                  Delegate
-                </Button>
-              </Tooltip>
-            )}
-
-            {/* View Execution Tree */}
-            <Tooltip title="View subtask execution tree">
-              <Button
-                size="small"
-                icon={<ApartmentOutlined />}
-                onClick={() => handleOpenTree(record)}
-              >
-                Tree
-              </Button>
-            </Tooltip>
-
             {/* View Details / Logs */}
             <Button
               size="small"
@@ -306,38 +304,27 @@ export const useTasksPage = () => {
               Logs
             </Button>
 
-            {record.status === 'running' && (
-              <Button
-                size="small"
-                danger
-                disabled={!canOperate} icon={<SyncOutlined />}
-                onClick={() => {
-                  cancelTask(record.id)
-                    .then(() => {
-                      message.success('Task cancelled');
-                      refresh();
-                    })
-                    .catch(() => message.error('Failed to cancel task'));
-                }}
-              >
-                Cancel
-              </Button>
-            )}
-
-            <Button
-              size="small"
-              danger
-              disabled={!canOperate} icon={<DeleteOutlined />}
-              title="Delete task"
-              onClick={() => {
-                deleteTask(record.id)
-                  .then(() => {
-                    message.success('Task deleted');
-                    refresh();
-                  })
-                  .catch(() => message.error('Failed to delete task'));
-              }}
-            />
+            <RowActionMenu label={`Actions for task ${record.id}`} items={[
+              ...(isManager ? [{ key: 'delegate', label: 'Delegate subtask', icon: <BranchesOutlined />,
+                disabled: !canOperate, onClick: () => handleOpenDelegate(record) }] : []),
+              { key: 'tree', label: 'Execution tree', icon: <ApartmentOutlined />, onClick: () => handleOpenTree(record) },
+              { type: 'divider' },
+              ...(record.status === 'running' ? [{ key: 'cancel', label: 'Cancel task', icon: <SyncOutlined />,
+                danger: true, disabled: !canOperate, onClick: () => Modal.confirm({
+                  title: 'Cancel this task?', okText: 'Cancel task', cancelText: 'Keep running',
+                  okButtonProps: { danger: true },
+                  onOk: () => cancelTask(record.id).then(() => {
+                    message.success('Task cancelled'); refresh();
+                  }).catch(() => message.error('Failed to cancel task')),
+                }) }] : []),
+              { key: 'delete', label: 'Delete task', icon: <DeleteOutlined />, danger: true, disabled: !canOperate,
+                onClick: () => Modal.confirm({
+                  title: 'Delete this task?', okText: 'Delete', cancelText: 'Cancel', okButtonProps: { danger: true },
+                  onOk: () => deleteTask(record.id).then(() => {
+                    message.success('Task deleted'); refresh();
+                  }).catch(() => message.error('Failed to delete task')),
+                }) },
+            ]} />
           </Space>
         );
       },
@@ -368,7 +355,7 @@ export const useTasksPage = () => {
     taskDetail,
     setTaskDetail,
     detailVisible,
-    setDetailVisible,
+    setDetailVisible: closeTaskDetail,
     delegatingTask,
     setDelegatingTask,
     delegateModalVisible,

@@ -1,3 +1,7 @@
+import { Link } from 'react-router-dom';
+import { CalendarRun } from './CalendarRun';
+import { getWorkflowExecutions } from '../services/workflowsApi';
+import type { WorkflowExecution } from '../types/mcp';
 import { usePermissions } from '../hooks/usePermissions';
 import { useAuth } from '../context/AuthContext';
 import { useRequestGeneration } from '../hooks/useRequestGeneration';
@@ -19,6 +23,7 @@ export const useCalendarViewPage = () => {
   const [schedules, setSchedules] = useState<ScheduledJob[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [executions, setExecutions] = useState<WorkflowExecution[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [pendingApprovals, setPendingApprovals] = useState<ApprovalRequest[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -35,8 +40,8 @@ export const useCalendarViewPage = () => {
 
   const [resourceErrors, setResourceErrors] = useState<{
     schedules: string | null; agents: string | null; projects: string | null;
-    tasks: string | null; approvals: string | null;
-  }>({ schedules: null, agents: null, projects: null, tasks: null, approvals: null });
+    executions: string | null; tasks: string | null; approvals: string | null;
+  }>({ executions: null, schedules: null, agents: null, projects: null, tasks: null, approvals: null });
 
   const { begin, invalidate } = useRequestGeneration();
   const fetchData = async () => {
@@ -44,17 +49,18 @@ export const useCalendarViewPage = () => {
     if (!current()) return;
     try {
       setLoading(true);
-      const [schedulesError, agentsError, projectsError, tasksError, approvalsError] = await Promise.all([
+      const [schedulesError, agentsError, projectsError, tasksError, executionsError, approvalsError] = await Promise.all([
         readResource(getSchedules(), response => { if (current()) setSchedules(response.data || []); }, 'Schedules'),
         readResource(getAgents(), response => { if (current()) setAgents(response.data || []); }, 'Agents'),
         readResource(getProjects(), response => { if (current()) setProjects(response.data || []); }, 'Projects'),
         readResource(getTasks(), response => { if (current()) setTasks(response.data || []); }, 'Task history'),
+        readResource(getWorkflowExecutions(undefined, 200, activeDepartmentId), response => { if (current()) setExecutions(response.data || []); }, 'Workflow executions'),
         readResource(getPendingApprovals(), response => { if (current()) setPendingApprovals(response.data || []); }, 'Approvals'),
       ]);
       if (!current()) return;
       setResourceErrors({
         schedules: schedulesError, agents: agentsError, projects: projectsError,
-        tasks: tasksError, approvals: approvalsError,
+        executions: executionsError, tasks: tasksError, approvals: approvalsError,
       });
     } catch (err) {
       console.error('Failed to load scheduler data:', err);
@@ -121,22 +127,29 @@ export const useCalendarViewPage = () => {
 
     // 2. Tasks executed on this day
     const dayTasks = resourceErrors.tasks ? [] : tasks.filter((t) => {
-      const createdAt = t.created_at || (t as any).timestamp;
+      const createdAt = t.started_at || t.created_at;
       if (!createdAt) return false;
       return calendarDay(createdAt).format('YYYY-MM-DD') === dateStr;
     });
 
-    if (dueJobs.length === 0 && dayTasks.length === 0) return null;
+    const dayExecutions = resourceErrors.executions ? [] : executions.filter(run =>
+      (run.started_at || run.created_at) && calendarDay(run.started_at || run.created_at).format('YYYY-MM-DD') === dateStr);
+
+    if (dueJobs.length === 0 && dayTasks.length === 0 && dayExecutions.length === 0) return null;
 
     return (
       <div
-        style={{ fontSize: '11px', maxHeight: '72px', overflow: 'hidden' }}
+        style={{ fontSize: '11px', maxHeight: '100px', overflowY: 'auto' }}
         onClick={(e) => {
           e.stopPropagation();
           setSelectedDate(value);
           setDateModalVisible(true);
         }}
       >
+        <Button type="link" size="small" style={{ padding: 0, height: 'auto' }}
+          onClick={event => { event.stopPropagation(); setSelectedDate(value); setDateModalVisible(true); }}>
+          View day activity
+        </Button>
         {dueJobs.map((j) => (
           <div
             key={j.id}
@@ -162,9 +175,13 @@ export const useCalendarViewPage = () => {
           const isRun = status === 'running';
 
           return (
-            <div
+            <Link
+              to={`/tasks?taskId=${encodeURIComponent(t.id)}`}
+              onClick={event => event.stopPropagation()}
+              title={`Open logs for task ${t.id}`}
               key={t.id}
               style={{
+                display: 'block',
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
@@ -182,12 +199,13 @@ export const useCalendarViewPage = () => {
               }}
             >
               {isDone ? '✓' : isFail ? '✗' : isRun ? '⟳' : '•'} {t.agent_id}: Task #{t.id}
-            </div>
+            </Link>
           );
         })}
-        {dayTasks.length > 2 && (
+        {dayExecutions.slice(0, 2).map(run => <CalendarRun key={run.id} execution={run} compact />)}
+        {(dayTasks.length > 2 || dayExecutions.length > 2) && (
           <div style={{ color: '#8b949e', fontSize: '10px' }}>
-            +{dayTasks.length - 2} more...
+            +{Math.max(0, dayTasks.length - 2) + Math.max(0, dayExecutions.length - 2)} more...
           </div>
         )}
       </div>
@@ -311,6 +329,7 @@ export const useCalendarViewPage = () => {
   ];
 
   return {
+    executions: resourceErrors.executions ? [] : executions,
     schedules: resourceErrors.schedules ? [] : schedules,
     resourceErrors,
     setSchedules,
