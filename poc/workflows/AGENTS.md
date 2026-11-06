@@ -20,7 +20,7 @@ The **Workflows Engine & Playbooks Service** (`poc/workflows/` and `poc/backend/
 * **Idempotency & Deduplication Engine (`compute_execution_hash`)**: Generates deterministic SHA-256 payload hashes (`workflow_id + payload`). Detects matching active (`QUEUED`, `RUNNING`) or recently `COMPLETED` runs, returning cached deduplicated results to eliminate duplicate compute and prevent token waste.
 * **Asynchronous Queue Dispatch**: Integrates with RabbitMQ (`platform.workflows.execution`) for decoupled execution of heavy playbooks with fast HTTP `202 Accepted` response times.
 * **Maker-Checker Reviews & Evaluations**: Intercepts critical milestones requiring human or managerial sign-off before downstream stages proceed. Captures `RunEvaluation` ratings and feedback.
-* **Active HITL ChatOps Gating**: When a step enters `WAITING_INPUT` or `PENDING_APPROVAL`, automatically formats and dispatches interactive approval messages (Telegram Inline Keyboards and Slack Block Kit buttons) to bound channels, extending step timeouts until human resolution.
+* **Human approval authority**: The existing terminal workflow approval slice persists scoped decisions and uses authenticated dashboard links when configured. Legacy Telegram/Slack shared-secret callbacks remain disabled; channel membership, receipt of a link and model output cannot approve an action. Generic channel-native approval and mid-DAG continuation remain later-phase work; see [P01 authority limits](../../docs/architecture/p01-policy-algebra.md).
 * **Channel Notifications**: Formats and dispatches execution lifecycle events (started, step completed, failed, finished) to bound Slack and Telegram channels via integrated MCP connectors.
 
 ### 2. Workflow Parser (`parser.py`)
@@ -217,3 +217,6 @@ approval_config validates one terminal human_approval with all other steps as an
 
 
 AI-15 specifies future provider-neutral action intents and checkpointed approval continuation. Current terminal-only approval_config/human_approval behavior is unchanged; do not claim middle-DAG/quorum/restart resume until P07 implements/tests it. Approval, execution and external receipt states remain separate; repeated current policy/evidence checks are mandatory before dispatch.
+
+## AI-18 policy and agent scope
+Read ../../docs/architecture/p01-policy-algebra.md before changing admission or planning. Preserve current and captured policy plus declared scope at existing step/tool/workspace/notification/merge guards. Do not expand scope or replace agents/connectors to work around denial, rewrite workflow/captured revisions, auto-retry unknown external writes or treat approval as permission/success. Generic conditional actions without a supported continuation remain blocked; the terminal PR gate does not implement arbitrary mid-DAG resume or channel-native approval. Source/CI evidence and rollout limits: ../../docs/governance-policy-guide.md.

@@ -6,6 +6,11 @@ It does not assert user approval of every detail, deployment or implemented futu
 Inputs: [AI-13 source/contract](connector-governance-contract.md),
 [API evidence](ai-13-api-audit.md), [AI-14 UX](../design/governance-ux.md).
 
+Implementation follow-up: [AI-18 P01 algebra and roles](p01-policy-algebra.md),
+[source API/schema contracts](p01-governance-api.md), and
+[configuration/rollout guide](../governance-policy-guide.md) describe the AI-16/17 slice.
+The remaining P00 target contracts below are not retrospectively marked implemented.
+
 ## Context and scope
 
 Organization members need to describe workflows using capabilities an administrator made

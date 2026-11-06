@@ -6,6 +6,10 @@ Metadata and arbitrary tool names cannot install executable code. Existing
 GitHub, Telegram and Slack implementations are reused, including the authenticated
 reviewed-SHA merge path from PR #27 and current-identity RBAC from PR #26.
 
+AI-18 consolidated references: [policy algebra/role matrix](p01-policy-algebra.md),
+[exact API/schema](p01-governance-api.md), [configuration/rollout guide](../governance-policy-guide.md).
+This original implementation note remains source context, not a deployed-service claim.
+
 ## Authority and compatibility
 
 Effective access intersects the legacy department/tool ceiling, exact configured
@@ -99,8 +103,8 @@ Merge remains server-only and requires persisted authenticated approval plus fre
 checks; generic conditional read/write actions fail closed pending P07 continuation.
 PR edit/rerun and channel listen/approve descriptors explicitly say implemented:false
 and cannot be granted. New connectors require reviewed adapter implementations.
-AI-17 owns the settings UI, AI-18 the broader P01 guide/rollout, later tickets own
-provider action/event transports and generic human approval. This slice does not
+AI-17 supplies the settings UI; AI-18 documents P01 operation and rollout limits.
+Later tickets own provider action/event transports and generic human approval. This slice does not
 implement Telegram approval callbacks or event-trigger installation.
 
 ## Verification boundary
@@ -112,4 +116,4 @@ resource/subject isolation, provider-independent channel rules, legacy ceiling,
 frozen/current intersections, time windows, optimistic concurrency and AI catalog
 narrowing. It does not establish live provider or worker integration success.
 
-AI-17 additive read projection: organization/department policy GET responses now include resource_options (capability_id, connector_id, connector_name, resource_type, resource_ids), including typed-policy-denied configured resources. Department options require active legacy connector grants; organization options remain admin-only. Only implemented trusted descriptors appear; no configuration/credentials or foreign resources. PUT/history contracts are unchanged. See ../design/capability-policy-editor.md.
+AI-17 additive read projection: organization/department policy GET responses include resource_options (capability_id, connector_id, connector_name, resource_type, resource_ids), including typed-policy-denied configured resources. Department options require active legacy connector grants; organization options remain admin-only. Only implemented trusted descriptors appear; no configuration/credentials or foreign resources. PUT/history contracts are unchanged. See [editor contract](../design/capability-policy-editor.md).

@@ -147,3 +147,6 @@ AI-15 target identity/event/approval boundaries require proved provider identiti
 
 ## AI-16 policy admission
 request_policy includes governance in the reviewed domain inventory and rejects governance bodies >262144 bytes. route_permissions maps descriptors/catalog/decisions to read, department policy/history to manage, organization policy to admin. Handler Resources/current Actor checks remain mandatory and foreign selected departments stay hidden. Manager restrictions cannot create a grant; no external channel membership or request actor is authority. See docs/architecture/capability-policy-v1.md.
+
+## AI-18 current identity and policy authority
+Follow ../../../docs/architecture/p01-policy-algebra.md: authenticate the session, then use current DB Actor/Resources and selected department. Never authorize by token role alone or grant rights from channel membership/links/model output. Personal policy mutations and approval decisions remain distinct from existing server-owned service authentication; do not synthesize service identity from a body. The full role/action and HTTP error matrix is in ../../../docs/architecture/p01-governance-api.md. Existing service handling is not a newly implemented generic service-principal registry.

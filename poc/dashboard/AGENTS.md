@@ -258,3 +258,6 @@ checks remain authoritative. See ../../docs/access-control-audit.md. No local ru
 
 ## AI-17 capability/resource UI
 OrganizationPage adds a Capabilities & resources tab. Non-admin DepartmentAccessPage embeds the same scoped CapabilityGovernancePanel without administrative requests. Components under org/ own effective access, policy/history, restriction-aware editor and before/after review. governanceApi/types/governance reuse authenticated transport and strict AI-16 contract; policy GET adds safe resource_options. EN/HE and explicit RTL are in i18n/governance.ts. Scope changes remount/abort/discard old work; 409 disables stale save pending reload. Exact ownership/limitations: docs/design/capability-policy-editor.md. Local tests are real API/SQLite only; frontend checks run in CI.
+
+## AI-18 P01 reference
+The contributor authority/role matrix is in docs/architecture/p01-policy-algebra.md; source HTTP DTOs are specified in docs/architecture/p01-governance-api.md and operator journeys in docs/governance-policy-guide.md. Keep browser presentation subordinate to current backend identity, exact resources and policy. Catalog/options/CONNECTED are not execution grants or provider verification. The review stack and CI do not establish deployed browser/RTL/accessibility behavior. No UI code or translation keys changed for AI-18.
