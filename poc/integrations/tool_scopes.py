@@ -96,15 +96,22 @@ def prepare_scope(db, task_id, execution_id, step, initiator_id=None, persist=Tr
             raise ToolAccessError('The step requests a connector tool that has no runtime implementation.')
         available = []
         for operation, tool in existing.items():
+            from .tool_definitions import WRITE_OPERATIONS
+            if provider == 'github' and operation in WRITE_OPERATIONS and operation not in requested:
+                continue  # Legacy resource-only steps do not acquire newly added writes.
             if requested and operation not in requested:
                 continue
             if not db.check_department_mcp_permission(workflow.department_id, identifier, operation)['allowed']:
                 continue
             if not agent_tool_allowed(db, agent, connector, tool):
                 continue
+            operation_selected = ({r[field] for r in refs if r.get(field) and r.get('tool_name') in (None, operation)}
+                                  if references is not None else selected)
+            if not operation_selected:
+                continue
             from governance.enforcement import require_capability
             try:
-                for resource in selected:
+                for resource in operation_selected:
                     require_capability(db, execution_id, agent, connector, operation, resource)
             except ToolAccessError:
                 continue
@@ -112,8 +119,8 @@ def prepare_scope(db, task_id, execution_id, step, initiator_id=None, persist=Tr
             available.append({'name': operation + '_' + suffix, 'operation': operation, 'tool_id': tool.id,
                 'connector_id': identifier, 'provider': provider,
                 'required_operation': bool(requested),
-                'repositories': sorted(selected) if provider == 'github' else [],
-                'channels': sorted(selected) if provider != 'github' else []})
+                'repositories': sorted(operation_selected) if provider == 'github' else [],
+                'channels': sorted(operation_selected) if provider != 'github' else []})
         if not available or requested - {e['operation'] for e in available}:
             raise ToolAccessError('Required connector tools are not granted to this department. Update the tool whitelist before execution.')
         entries.extend(available)

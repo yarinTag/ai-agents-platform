@@ -355,3 +355,6 @@ GET /api/v1/governance/organization/policy and GET /departments/{department_id}/
 
 ## AI-18 consolidated API reference
 ../../../docs/architecture/p01-governance-api.md records all governance routes, model bounds/defaults, PolicyRecord/resource_options/catalog/decision shapes, reasons, status codes, CAS and exact additive SQLite keys. Decision probes use the current caller even with execution_id; frozen policy is server-loaded, and the result is not step authority or a complete execution replay. Do not add client actor/approved/frozen authority fields, infer grants from options or bypass current DB checks. See ../../../docs/architecture/p01-policy-algebra.md for roles/algebra and ../../../docs/governance-policy-guide.md for operations. No executable contract changed in AI-18.
+
+## AI-19 shared governance projection
+Existing /api/v1/governance/capabilities adds descriptor requires_capabilities for aggregate/narrow PR reads, correct write effects and strict head/body/event schemas. /decisions can return DEPENDENT_CAPABILITY_DENIED; catalog/AI authoring prune missing or denied dependencies and keep writes behind explicit grants. Existing approval reads expose richer audit receipts through unchanged scoped receipts JSON; no new execution/approval endpoint or caller authority field. Exact adapter/audit contracts: ../../../docs/github-pr-governance.md.

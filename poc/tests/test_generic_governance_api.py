@@ -10,7 +10,7 @@ from config import AgentConfig, ConfigManager
 from persistence import DatabaseManager
 
 PROVIDERS = ('github', 'telegram', 'slack')
-TOOLS = {'github': ['list_open_pull_requests', 'get_pull_request_review'],
+TOOLS = {'github': ['list_open_pull_requests', 'get_pull_request_review', 'get_pull_request', 'get_pull_request_diff', 'get_pull_request_checks'],
          'telegram': ['send_message'], 'slack': ['post_chat_message']}
 
 

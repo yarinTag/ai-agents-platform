@@ -145,7 +145,7 @@ def test_explicit_merge_grant_never_inherits_wildcard(state):
     db.grant_department_mcp_access('own', 'github', allowed_tools='*', organization_id='own')
     with pytest.raises(ToolAccessError, match='explicit'):
         authorize_subject(db, approval, subject, merge=True)
-    db.grant_department_mcp_access('own', 'github', allowed_tools=['get_pull_request_review', 'merge_pull_request'], organization_id='own')
+    db.grant_department_mcp_access('own', 'github', allowed_tools=['get_pull_request_review', 'get_pull_request', 'get_pull_request_diff', 'get_pull_request_checks', 'merge_pull_request'], organization_id='own')
     assert authorize_subject(db, approval, subject, merge=True).id == 'github'
     db.update_user('ownORG_ADMIN', status='DISABLED')
     with pytest.raises(ToolAccessError, match='initiator'):
@@ -162,7 +162,8 @@ def test_only_successful_persisted_review_receipts_can_pin_candidates(state):
     with db._get_connection() as conn:
         conn.execute("INSERT INTO workflow_step_runs(id,execution_id,step_key,agent_id,status,task_run_id) VALUES ('source','exec','review','agent','COMPLETED','reviewtask')")
     assert pinned_subjects(db, 'exec', 'review') == []
-    facts = {'repository': 'owner/repo', 'candidate_ready': True, 'partial': False,
+    facts = {'repository': 'owner/repo', 'candidate_ready': True, 'partial': False, 'evidence_version': 2,
+             'review_approved': True, 'base_up_to_date': True, 'required_checks_satisfied': True,
              'pull_request': {'number': 7, 'head': {'sha': 'a' * 40}, 'base': {'sha': 'b' * 40},
                               'url': 'https://github.com/owner/repo/pull/7', 'author': 'dependabot[bot]'}}
     call = {'id': 'receipt', 'connector_id': 'github', 'tool_id': 'reviewtool', 'agent_id': 'agent',

@@ -65,7 +65,9 @@ def pinned_subjects(db, execution_id, source_step):
     subjects = {}
     for call in calls:
         value = json.loads(call['result'] or '{}')
-        if value.get('candidate_ready') is not True or value.get('partial') is not False:
+        if (value.get('candidate_ready') is not True or value.get('partial') is not False or value.get('evidence_version') != 2
+                or value.get('review_approved') is not True or value.get('base_up_to_date') is not True
+                or value.get('required_checks_satisfied') is not True):
             continue
         pull = value['pull_request']
         subject = {'repository': value['repository'], 'pull_number': pull['number'],
@@ -78,13 +80,18 @@ def pinned_subjects(db, execution_id, source_step):
     return list(subjects.values())
 
 
-def fresh_review(db, approval, subject, merge):
-    authorize = lambda: authorize_subject(db, approval, subject, merge)
+def fresh_review(db, approval, subject, merge, extra_authorize=None):
+    def authorize():
+        if extra_authorize:
+            extra_authorize()
+        return authorize_subject(db, approval, subject, merge)
     connector = authorize()
     client = GitHubReads(connector.configuration or {}, subject['repository'], authorize)
     result = client.review(subject['pull_number'])
     pull = result['pull_request']
-    if (not result['candidate_ready'] or result['partial'] or pull['head']['sha'] != subject['head_sha']
+    if (not result['candidate_ready'] or result['partial'] or result.get('evidence_version') != 2
+            or result.get('review_approved') is not True or result.get('base_up_to_date') is not True
+            or result.get('required_checks_satisfied') is not True or pull['head']['sha'] != subject['head_sha']
             or pull['base']['sha'] != subject['base_sha']):
         raise ToolAccessError('PR commits/checks/reviews changed or are not merge-ready. Create a fresh review and approval.')
     return client

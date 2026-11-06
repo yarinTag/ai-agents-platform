@@ -1,6 +1,7 @@
 """Executable connector tools, separate from descriptive/unimplemented catalog entries."""
 import hashlib
 import re
+from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -26,6 +27,16 @@ class OpenPullRequestsInput(BaseModel):
     author: str | None = Field(default=None, pattern=r'^[A-Za-z0-9_\[\]-]{1,100}$')
 
 
+class PullRequestCommentInput(PullRequestInput):
+    head_sha: str = Field(pattern=r'^(?:[0-9a-f]{40}|[0-9a-f]{64})$')
+    body: str = Field(min_length=1, max_length=12000)
+
+
+class PullRequestReviewInput(PullRequestCommentInput):
+    # A model can comment/request changes; it cannot manufacture a human approval.
+    event: Literal['COMMENT', 'REQUEST_CHANGES']
+
+
 class MessageInput(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
     channel_id: str = Field(min_length=1, max_length=200)
@@ -40,11 +51,29 @@ OPERATIONS = {
         'list_pull_requests': 'Read recently updated open and closed GitHub pull requests, including author, labels, draft and branches.',
         'list_open_pull_requests': 'List open pull requests regardless of age, optionally filtering exact author login (dependabot[bot]). Bounded pagination reports partial results.',
         'get_pull_request_review': 'Read one PR, pinned head/base SHA, file patches, reviews, CI checks/statuses and mergeability. Unknown/incomplete facts never mean merge-ready. No writes, merge or CI triggering.',
+        'get_pull_request': 'Read the exact PR metadata and immutable head/base revisions.',
+        'get_pull_request_diff': 'Read bounded file patches for one pinned PR. Missing patches or changing revisions are explicit partial evidence.',
+        'get_pull_request_checks': 'Read CI/status, review and branch-rule evidence for one pinned PR. This cannot run or rerun CI.',
+        'comment_pull_request': 'Post one comment on an open PR at an explicitly pinned head, with a provider-confirmed receipt. Requires an explicit write grant.',
+        'review_pull_request': 'Submit COMMENT or REQUEST_CHANGES review at an explicitly pinned head. Cannot APPROVE, merge or satisfy a human approval gate. Requires an explicit write grant.',
         'list_releases': 'Read recently published GitHub releases.',
     },
     'telegram': {'send_message': 'Send plain text once to an explicitly approved Telegram chat ID.'},
     'slack': {'post_chat_message': 'Send plain text once to an explicitly approved Slack channel ID.'},
 }
+
+WRITE_OPERATIONS = frozenset({'comment_pull_request', 'review_pull_request'})
+
+
+def operation_effect(provider, operation):
+    return 'write' if provider != 'github' or operation in WRITE_OPERATIONS else 'read'
+
+
+def operation_requirements(provider, operation):
+    if provider != 'github': return ()
+    return {'get_pull_request_review': ('get_pull_request', 'get_pull_request_diff', 'get_pull_request_checks'),
+            'get_pull_request_diff': ('get_pull_request',),
+            'get_pull_request_checks': ('get_pull_request',)}.get(operation, ())
 
 
 def resource_values(config, kind):
@@ -99,9 +128,13 @@ def ensure_tools(db, connector):
 
 
 def input_model(entry):
+    if entry['operation'] not in OPERATIONS.get(entry['provider'], {}):
+        raise ToolAccessError('Unknown connector operation has no executable input contract.')
     if entry['provider'] != 'github':
         return MessageInput
-    return {'get_pull_request_review': PullRequestInput,
+    return {'get_pull_request_review': PullRequestInput, 'get_pull_request': PullRequestInput,
+            'get_pull_request_diff': PullRequestInput, 'get_pull_request_checks': PullRequestInput,
+            'comment_pull_request': PullRequestCommentInput, 'review_pull_request': PullRequestReviewInput,
             'list_open_pull_requests': OpenPullRequestsInput}.get(entry['operation'], RepositoryInput)
 
 

@@ -129,7 +129,7 @@ CONNECTOR_UNAVAILABLE, RESOURCE_NOT_CONFIGURED, CREDENTIALS_NOT_CONFIGURED,
 LEGACY_CEILING_DENIED, EXPLICIT_CAPABILITY_GRANT_REQUIRED, AGENT_OUTSIDE_SCOPE,
 AGENT_CAPABILITY_DENIED, WORKFLOW_OUTSIDE_SCOPE, DEPARTMENT_BUDGET_DENIED,
 FROZEN_SCOPE_MISMATCH, POLICY_DENIED, APPROVAL_REQUIRED,
-WITHIN_CURRENT_AND_CAPTURED_SCOPE. Resource admission can reject a request with HTTP404
+WITHIN_CURRENT_AND_CAPTURED_SCOPE. AI-19 adds DEPENDENT_CAPABILITY_DENIED for trusted read dependencies and descriptor requires_capabilities; see [PR adapter contract](../github-pr-governance.md). Resource admission can reject a request with HTTP404
 before a reason is returned. Unknown future codes must not render as success.
 
 ## Illustrative payloads, not commands

@@ -116,5 +116,13 @@ def decide(db, organization_id, department_id, connector_id, capability_id, reso
             if result == 'denied':
                 return _result('denied', 'POLICY_DENIED', revisions)
             approval |= result == 'requires_approval'
+    from integrations.tool_definitions import operation_requirements
+    for operation in operation_requirements(cap.provider, cap.operation):
+        required = decide(db, organization_id, department_id, connector_id, cap.provider + '.' + operation,
+                          resource_id, user_id=user_id, agent_id=agent_id, workflow_id=workflow_id,
+                          purpose=purpose, service=service, branch=branch, frozen=frozen)
+        if required['decision'] == 'denied':
+            return _result('denied', 'DEPENDENT_CAPABILITY_DENIED', revisions)
+        approval |= required['decision'] == 'requires_approval'
     return _result('requires_approval' if approval else 'allowed',
                    'APPROVAL_REQUIRED' if approval else 'WITHIN_CURRENT_AND_CAPTURED_SCOPE', revisions)

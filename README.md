@@ -248,6 +248,7 @@ Detailed technical contracts and module guides are maintained across the reposit
   * [Runtime Provider Setup](docs/runtime-provider-setup.md)
   * [Security Configuration](docs/security-configuration.md)
   * [Governed Connector Execution](docs/connector-execution.md)
+  * [Governed GitHub PR Actions & Merge Evidence](docs/github-pr-governance.md)
   * [Capability Policy Configuration & Rollout (P01)](docs/governance-policy-guide.md)
   * [Policy Algebra, Roles & Agent Authority](docs/architecture/p01-policy-algebra.md)
   * [Governance API & Schema](docs/architecture/p01-governance-api.md)

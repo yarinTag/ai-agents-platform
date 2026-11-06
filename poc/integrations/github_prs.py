@@ -1,5 +1,4 @@
 """Bounded GitHub PR facts, with pinned revisions and conservative readiness."""
-import re
 from .provider_http import request_json
 from .tool_definitions import ToolAccessError, valid_repository
 
@@ -39,17 +38,18 @@ class GitHubReads:
         return value
 
     def pages(self, suffix, key=None, maximum=3, params=None):
-        items, complete = [], False
+        items, complete, malformed = [], False, False
         for page in range(1, maximum + 1):
             value = self.get(suffix, {**(params or {}), 'per_page': 100, 'page': page})
             rows = value.get(key) if key and isinstance(value, dict) else value
             if not isinstance(rows, list):
                 raise ToolAccessError('GitHub returned an unexpected PR response.')
+            malformed |= any(not isinstance(row, dict) for row in rows)
             items.extend(row for row in rows if isinstance(row, dict))
             if len(rows) < 100:
                 complete = True
                 break
-        return items, not complete
+        return items, not complete or malformed
 
     def open_pulls(self, author=None):
         rows, partial = self.pages('pulls', params={'state': 'open', 'sort': 'updated', 'direction': 'desc'})
@@ -59,62 +59,29 @@ class GitHubReads:
                 'limits': 'Up to 300 open PRs across the repository; no lookback cutoff. Filtering is by exact author login.'}
 
     def review(self, number):
-        row = self.get(f'pulls/{number}')
-        if not isinstance(row, dict) or row.get('number') != number:
-            raise ToolAccessError('GitHub returned an unexpected PR identity.')
-        pull = project_pull(row, self.repository)
-        sha = pull['head']['sha']
-        base_sha = pull['base']['sha']
-        if not all(isinstance(value, str) and re.fullmatch(r'[0-9a-f]{40,64}', value) for value in (sha, base_sha)):
-            raise ToolAccessError('GitHub did not return immutable PR revisions.')
-        files, files_partial = self.pages(f'pulls/{number}/files')
-        reviews, reviews_partial = self.pages(f'pulls/{number}/reviews')
-        checks, checks_partial = self.pages(f'commits/{sha}/check-runs', 'check_runs', params={'filter': 'latest'})
-        statuses, statuses_partial = self.pages(f'commits/{sha}/statuses')
-        # GitHub can attach required checks to the synthetic merge commit instead of HEAD.
-        merge_sha = row.get('merge_commit_sha')
-        if row.get('mergeable') is True and isinstance(merge_sha, str) and re.fullmatch(r'[0-9a-f]{40,64}', merge_sha):
-            merge_checks, merge_partial = self.pages(f'commits/{merge_sha}/check-runs', 'check_runs', params={'filter': 'latest'})
-            checks += merge_checks
-            checks_partial |= merge_partial
-        partial = any((files_partial, reviews_partial, checks_partial, statuses_partial)) or row.get('changed_files') != len(files)
-        patches, size = [], 0
-        for file in files:
-            patch = file.get('patch')
-            if not isinstance(patch, str) or size + len(patch) > 60000:
-                partial = True
-                patch = None  # Missing binary/large patches are explicit, never a complete review.
-            else:
-                size += len(patch)
-            patches.append({'filename': file.get('filename'), 'previous_filename': file.get('previous_filename'),
-                            'status': file.get('status'), 'additions': file.get('additions'),
-                            'deletions': file.get('deletions'), 'patch': patch})
-        latest_status = {}
-        for status in statuses:  # API newest first.
-            latest_status.setdefault(status.get('context'), status)
-        latest_reviews = {}
-        for review in reviews:
-            if review.get('state') in ('APPROVED', 'CHANGES_REQUESTED', 'DISMISSED'):
-                latest_reviews[(review.get('user') or {}).get('login')] = review
-        ci = bool(checks or latest_status) and all(c.get('status') == 'completed' and c.get('conclusion') in ('success', 'neutral', 'skipped') for c in checks)
-        ci = ci and all(s.get('state') == 'success' for s in latest_status.values())
-        end = self.get(f'pulls/{number}')
-        changed = not isinstance(end, dict) or (end.get('head') or {}).get('sha') != sha or (end.get('base') or {}).get('sha') != base_sha
-        if isinstance(end, dict):
-            pull = project_pull(end, self.repository)
-        blockers = readiness_blockers(pull, partial, changed, ci, latest_reviews.values())
-        return {'repository': self.repository, 'pull_request': pull, 'partial': partial or changed,
-                'files': patches, 'checks': [{k: c.get(k) for k in ('name', 'status', 'conclusion', 'head_sha')} for c in checks],
-                'statuses': [{k: s.get(k) for k in ('context', 'state', 'sha')} for s in latest_status.values()],
-                'reviews': [{'author': (r.get('user') or {}).get('login'), 'state': r.get('state'),
-                             'commit_id': r.get('commit_id')} for r in latest_reviews.values()],
-                'candidate_ready': not blockers, 'blockers': blockers, 'untrusted_external_data': True,
-                'limitations': 'Readiness is conservative evidence, not a guarantee of code correctness. GitHub branch rules still govern merging.'}
+        from .github_pr_evidence import collect
+        return collect(self, number)
 
 
 def execute_read(configuration, operation, inputs, authorize):
     client = GitHubReads(configuration, inputs.repository, authorize)
-    return client.open_pulls(inputs.author) if operation == 'list_open_pull_requests' else client.review(inputs.pull_number)
+    if operation == 'list_open_pull_requests':
+        return client.open_pulls(inputs.author)
+    from .github_pr_evidence import collect, file_evidence, pinned_pull
+    if operation == 'get_pull_request_review':
+        return client.review(inputs.pull_number)
+    if operation == 'get_pull_request_checks':
+        return {**collect(client, inputs.pull_number, include_files=False), 'files_included': False}
+    if operation in ('get_pull_request', 'get_pull_request_diff'):
+        row, pull = pinned_pull(client, inputs.pull_number)
+        value = {'repository': client.repository, 'pull_request': pull, 'partial': False, 'untrusted_external_data': True}
+        if operation == 'get_pull_request_diff':
+            files, partial = file_evidence(client, inputs.pull_number, row)
+            _, end = pinned_pull(client, inputs.pull_number)
+            changed = end['head'] != pull['head'] or end['base'] != pull['base']
+            value.update(files=files, partial=partial or changed, revisions_changed=changed)
+        return value
+    raise ToolAccessError('Unknown GitHub PR read operation.')
 
 
 def readiness_blockers(pull, partial, changed, ci, reviews):
