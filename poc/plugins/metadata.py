@@ -11,7 +11,8 @@ def extract_skill_meta_from_text(
     parent_name: str,
     default_plugin: str,
     default_domain: str = "",
-    default_version: str = "1.0.0"
+    default_version: str = "1.0.0",
+    content_complete: bool = True
 ) -> dict:
     from skills_service import _SKILL_CACHE
 
@@ -50,8 +51,11 @@ def extract_skill_meta_from_text(
         m_ver = re.search(r"version:\s*[\"']?([^\s\"'\n\r]+)[\"']?", content)
         if m_ver:
             version = m_ver.group(1).strip()
+
+        m_role = re.search(r"role:\s*[\"']?([^\s\"'\n\r]+)[\"']?", content)
+        role = m_role.group(1).strip() if m_role else ""
     except Exception:
-        pass
+        role = ""
 
     final_desc = desc or f"Skill provided by {plugin_name}"
     cache_entry = {
@@ -73,16 +77,21 @@ def extract_skill_meta_from_text(
         "plugin": plugin_name,
         "domain": domain,
         "version": version,
+        "role": role,
         "content_preview": content[:1500] if content else "",
+        "_raw_content": (content or "") if content_complete else None,
     }
 
 
 
 def extract_skill_meta(file_path: Path, default_plugin: str, default_domain: str = "", default_version: str = "1.0.0") -> dict:
     content = ""
+    content_complete = False
     try:
         with open(file_path, "r", encoding="utf-8") as f:
-            content = f.read(16384)
+            content = f.read(1_000_001)
+            content_complete = len(content) <= 1_000_000
+            content = content[:1_000_000]
     except Exception:
         pass
     return extract_skill_meta_from_text(
@@ -92,7 +101,8 @@ def extract_skill_meta(file_path: Path, default_plugin: str, default_domain: str
         parent_name=file_path.parent.name,
         default_plugin=default_plugin,
         default_domain=default_domain,
-        default_version=default_version
+        default_version=default_version,
+        content_complete=content_complete
     )
 
 

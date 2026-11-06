@@ -1,7 +1,13 @@
 """Canonical discovered-plugin projection, independent of source transport."""
 
+from .connections import enrich_skill_connections
 
-def summarize_plugins(plugins_map):
+# Compatibility name retained for existing imports.
+_enrich_skill_connections = enrich_skill_connections
+
+
+def summarize_plugins(plugins_map, flow_documents=None):
+    _enrich_skill_connections(plugins_map, flow_documents)
     return [{
         "name": name,
         "display_name": info.get("display_name", name),

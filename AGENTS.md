@@ -250,3 +250,18 @@ ci.yml now owns tests, PR/manual build-only validation and gated main/master/v* 
 
 ## PR #18 master synchronization (2026-11-05)
 Documentation conflicts retain organization-scoped Anthropic Message Threads contracts and master frontend regression/unified-CI guidance. The unified workflow keeps the branch-specific 16-file backend suite and all frontend tests. No feature was activated; local runtime verification remains unperformed.
+
+## Generic Connection Canvas Diagram for Organization Workflows & Skills/Plugins (2026-11-03)
+`poc/dashboard/src/components/common/ConnectionCanvas/` (`ConnectionCanvasDiagram.tsx`, `ConnectionCanvasNodeCard.tsx`, `connectionCanvasTypes.ts`) provides a generic, domain-agnostic pan-and-zoom connection canvas with strict text-overflow containment (`ContainedTag`, `wordBreak: 'break-word'`, `WebkitLineClamp`). It powers both the **Workflows Canvas** tab in `OrganizationPage.tsx` / `OrgHierarchyModal.tsx` (`OrgWorkflowsCanvasTab.tsx`) and the **Skills & Plugins Canvas** tab in `SkillsCatalogTabs.tsx` (`PluginsConnectionCanvas.tsx`).
+
+## Generic Connection Canvas & Multi-Stage Plugin Skill Flow (2026-11-03)
+`poc/dashboard/src/components/common/ConnectionCanvas/` provides a domain-agnostic connection canvas engine with zero-re-render GPU pan/zoom (`translate3d` + `requestAnimationFrame`), memoized native HTML/CSS node cards (`ConnectionCanvasNodeCard`), per-group expand/collapse, multi-stage horizontal columns (`useStageColumnsLayout`), and interactive upstream/downstream hover highlighting. Mounted in `/organization` (`OrgWorkflowsCanvasTab`) for Organization ➔ Department ➔ Workflow connections and in `/skills` (`PluginsConnectionCanvas` + `pluginsFlowModel.ts` + `poc/plugins/packages.py:_enrich_skill_connections`) under the single **Skills & Plugins Canvas** tab to visualize multi-stage skill pipelines (e.g., `core` plugin routing ➔ discovery/research ➔ PRD/design ➔ architecture/review ➔ implementation ➔ QA/governance gates).
+
+
+## Evidence-backed plugin skill canvas (2026-11-05)
+The plugin canvas separates explicit/conditional instruction handoffs, declared lifecycle
+transitions and optional ordinary references, each with source evidence. Strict package
+selection clears prior focus and its pending reveals. The source audit of the configured
+Git repository and limitations are in [Plugin skill flow audit](docs/plugin-skill-flow-audit.md);
+projection/scanner contracts are in the plugin and dashboard component guides. No local
+runtime verification performed; no plugin instructions were edited or executed.

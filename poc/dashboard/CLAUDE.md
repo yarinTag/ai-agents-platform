@@ -260,3 +260,6 @@ Thread transport controls must remain Anthropic-only, organization-scoped and op
 
 ## Logic regression command
 npm test runs all tests/*.test.mjs with Node22 native TypeScript stripping and locked npm dependencies. The same glob is used by master CI. See tests/AGENTS.md for scope, deterministic race fixtures and limitations; no API keys or external requests are required. No local execution was performed under the current runtime restriction.
+
+## Connection canvas views
+Organization workflow and Skills & Plugins canvases share common/ConnectionCanvas. Keep domain graph projection in org/orgWorkflowsCanvasModel.ts and skills/pluginsFlowModel.ts, preserve IDs and configured resource boundaries, and use the existing organization-scoped APIs. Organization canvas copy is paired EN/HE in i18n/orgWorkflowsCanvas.ts. Runtime validation is performed through GitHub CI; no local application startup was performed.

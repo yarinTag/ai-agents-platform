@@ -13,9 +13,11 @@ import {
   UserOutlined,
   SafetyCertificateOutlined,
   DollarCircleOutlined,
+  ApartmentOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext';
 import { useTranslation } from '../../i18n';
+import { useOrgWorkflowsCanvasText } from '../../i18n/orgWorkflowsCanvas';
 import {
   getDepartments,
   createDepartment,
@@ -23,9 +25,11 @@ import {
   bulkInviteDepartmentMembers,
   removeDepartmentMember,
   getOrganizationUsers,
+  getWorkflows,
 } from '../../services/api';
 import { Department, DepartmentMember, OrganizationUser, InvitationRecord } from '../../types/auth';
-import { DepartmentsBudgetTab, TeamInvitationsTab, OrgUsersTab } from '../org';
+import { PlatformWorkflow } from '../../types/mcp';
+import { DepartmentsBudgetTab, TeamInvitationsTab, OrgUsersTab, OrgWorkflowsCanvasTab } from '../org';
 
 const { Text } = Typography;
 
@@ -37,11 +41,14 @@ export interface OrgHierarchyModalProps {
 export const OrgHierarchyModal: React.FC<OrgHierarchyModalProps> = ({ visible, onClose }) => {
   const { organization, user, refreshUserProfile } = useAuth();
   const { t } = useTranslation();
+  const canvasText = useOrgWorkflowsCanvasText();
 
-  const [activeTab, setActiveTab] = useState<'departments' | 'team' | 'users'>('departments');
+  const [activeTab, setActiveTab] = useState<'departments' | 'workflows' | 'team' | 'users'>('departments');
   const [departmentsList, setDepartmentsList] = useState<Department[]>([]);
   const [loadingDepts, setLoadingDepts] = useState<boolean>(false);
   const [creatingDept, setCreatingDept] = useState<boolean>(false);
+  const [workflowsList, setWorkflowsList] = useState<PlatformWorkflow[]>([]);
+  const [loadingWorkflows, setLoadingWorkflows] = useState<boolean>(false);
 
   // Team tab state
   const [selectedDeptId, setSelectedDeptId] = useState<string | null>(null);
@@ -98,12 +105,26 @@ export const OrgHierarchyModal: React.FC<OrgHierarchyModalProps> = ({ visible, o
     }
   }, [organization?.id, t]);
 
+  const loadWorkflows = useCallback(async () => {
+    setLoadingWorkflows(true);
+    try {
+      const res = await getWorkflows();
+      const data = res.data as any;
+      setWorkflowsList(Array.isArray(data) ? data : (data?.workflows || []));
+    } catch {
+      setWorkflowsList([]);
+    } finally {
+      setLoadingWorkflows(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (visible && organization?.id) {
       loadDepartments();
       loadOrgUsers();
+      loadWorkflows();
     }
-  }, [visible, organization?.id, loadDepartments, loadOrgUsers]);
+  }, [visible, organization?.id, loadDepartments, loadOrgUsers, loadWorkflows]);
 
   useEffect(() => {
     if (selectedDeptId) {
@@ -261,6 +282,28 @@ export const OrgHierarchyModal: React.FC<OrgHierarchyModalProps> = ({ visible, o
                 loading={loadingDepts}
                 onCreateDepartment={handleCreateDepartment}
                 creating={creatingDept}
+                onManageTeam={handleManageTeam}
+              />
+            ),
+          },
+          {
+            key: 'workflows',
+            label: (
+              <span style={{ fontSize: 13, fontWeight: 600 }}>
+                <ApartmentOutlined style={{ marginRight: 6 }} />
+                {canvasText.tabLabel} ({workflowsList.length})
+              </span>
+            ),
+            children: (
+              <OrgWorkflowsCanvasTab
+                organization={organization}
+                departments={departmentsList}
+                workflows={workflowsList}
+                loading={loadingDepts || loadingWorkflows}
+                onRefresh={() => {
+                  loadDepartments();
+                  loadWorkflows();
+                }}
                 onManageTeam={handleManageTeam}
               />
             ),

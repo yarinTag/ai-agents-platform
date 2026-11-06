@@ -4,6 +4,7 @@ from .packages import summarize_plugins
 from typing import List, Optional, Dict, Any
 import re
 import json
+import base64
 import httpx
 from .metadata import extract_skill_meta_from_text
 
@@ -50,7 +51,7 @@ async def _scan_git_repo_via_api(repo_url: str, token: Optional[str], force_refr
 
         tree_json = tree_resp.json()
         tree_sha = tree_json.get("sha") or "HEAD"
-        cache_key = (owner.lower(), repo.lower(), tree_sha)
+        cache_key = (owner.lower(), repo.lower(), tree_sha, "evidence-flow-v1")
         if not force_refresh and cache_key in _GIT_TREE_SCAN_CACHE:
             return _GIT_TREE_SCAN_CACHE[cache_key], f"https://github.com/{owner}/{repo}"
 
@@ -62,18 +63,20 @@ async def _scan_git_repo_via_api(repo_url: str, token: Optional[str], force_refr
         blob_set = set(blobs)
 
         sem = asyncio.Semaphore(15)
-        raw_headers = dict(headers)
-        raw_headers["Accept"] = "application/vnd.github.raw+json"
+        blob_shas = {item["path"]: item["sha"] for item in tree_json.get("tree", [])
+                     if item.get("type") == "blob" and item.get("sha")}
 
         async def fetch_raw(blob_path: str) -> str:
             async with sem:
                 try:
                     r = await client.get(
-                        f"https://api.github.com/repos/{owner}/{repo}/contents/{blob_path}",
-                        headers=raw_headers
+                        f"https://api.github.com/repos/{owner}/{repo}/git/blobs/{blob_shas[blob_path]}",
+                        headers=headers
                     )
                     if r.status_code == 200:
-                        return r.text
+                        payload = r.json()
+                        if payload.get("encoding") == "base64":
+                            return base64.b64decode(payload["content"]).decode("utf-8")
                 except Exception:
                     pass
                 return ""
@@ -188,7 +191,18 @@ async def _scan_git_repo_via_api(repo_url: str, token: Optional[str], force_refr
                 if not any(s["id"] == meta["id"] for s in plugins_map[p_name]["skills"]):
                     plugins_map[p_name]["skills"].append(meta)
 
-        plugins_data = summarize_plugins(plugins_map)
+        for pkg in plugins_map.values():
+            for skill in pkg["skills"]:
+                skill["source_revision"] = tree_sha
+
+        # Read declarative transitions, never execute the referenced routing scripts.
+        package_prefixes = [pkg["path"].removeprefix(f"github://{owner}/{repo}/") + "/" for pkg in plugins_map.values()]
+        flow_paths = [path for path in blobs if path.endswith("/references/skill-dependency-dag.json")
+                      and any(path.startswith(prefix) for prefix in package_prefixes)]
+        flow_contents = await asyncio.gather(*(fetch_raw(path) for path in flow_paths))
+        flow_documents = {f"github://{owner}/{repo}/{path}": raw for path, raw in zip(flow_paths, flow_contents)
+                          if raw and len(raw) <= 1_000_000}
+        plugins_data = summarize_plugins(plugins_map, flow_documents)
 
         _GIT_TREE_SCAN_CACHE[cache_key] = plugins_data
         return plugins_data, f"https://github.com/{owner}/{repo}"

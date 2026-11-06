@@ -39,3 +39,16 @@ rendering, live integration connectivity or complete application coverage.
 Use explicit expected outputs, frozen/serialized inputs to check non-mutation, deferred
 Promises for races and direct scene ticks for animation. No arbitrary sleeps or wall-clock
 TTL assumptions. Cache tests clear shared state after every case. No production state is read.
+
+
+pluginsFlowModel.test.mjs covers cross-plugin incoming references, cycles, deduplication,
+self/unknown target exclusion, empty packages, immutable inputs, and the absence of fabricated
+Core lifecycle/preview edges. Added for CI; not executed locally. This does not verify graph
+layout, panning, zoom, selection or browser accessibility.
+
+
+The audited pluginsFlowModel cases now use typed evidence-backed connections and reject
+legacy/reference-only edges. pluginGraphModel.test.mjs adds strict package/search filters,
+cross-package direction, conditional flags, opt-in references, evidence aggregation and
+self/unknown/wrong-owner exclusion. These pure contracts do not replace DOM event/scroll
+verification. Added but not run under the local runtime restriction.

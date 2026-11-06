@@ -220,3 +220,25 @@ Anthropic provider settings support organization Message Threads opt-in in both 
 
 ## Frontend logic tests
 [tests/AGENTS.md](tests/AGENTS.md) owns npm test (Node22 built-in runner) and the domain coverage map. Tests execute real TypeScript helpers with immutable fixtures/deferred promises, without external APIs or new test dependencies. CI discovers tests/*.test.mjs automatically; frontend checks still include lint, tsc and build. This suite does not replace browser/DOM or live integration testing.
+
+## Generic Connection Canvas Diagram for Organization Workflows & Skills/Plugins (2026-11-03)
+`src/components/common/ConnectionCanvas/` (`ConnectionCanvasDiagram.tsx`, `ConnectionCanvasNodeCard.tsx`, `connectionCanvasTypes.ts`) provides a reusable, domain-agnostic connection canvas with zero-re-render GPU pan/zoom (`translate3d` + `requestAnimationFrame`), memoized native HTML/CSS tag cards (`ContainedTag`), per-group collapse/expand, multi-stage horizontal flow columns (`useStageColumnsLayout`), and upstream/downstream hover connection highlighting. `OrganizationPage.tsx` (`/organization`) and `OrgHierarchyModal.tsx` mount `OrgWorkflowsCanvasTab.tsx` for Organization ➔ Department ➔ Workflow connections, and `SkillsCatalogTabs.tsx` (`/skills`) mounts `PluginsConnectionCanvas.tsx` (`pluginsFlowModel.ts`) in the single **Skills & Plugins Canvas** tab for Plugins Source ➔ Package ➔ Multi-Stage Connected Skill Flows.
+
+
+## Plugin canvas directed references (2026-11-05)
+The Skills canvas now uses skills/PluginSkillFlowGraph.tsx through the existing
+PluginsConnectionCanvas props. SVG arrow edges connect individual skill nodes; click focus
+persists incoming/outgoing highlighting and exposes connected-skill navigation plus separate
+instruction inspection. Global references include cross-plugin inbound links. Search/package
+filters retain focused neighbours; role columns do not assert execution ordering. Edges use
+server-extracted connected_skills only, without hardcoded lifecycle links. Organization canvases
+retain common/ConnectionCanvas. See components/AGENTS.md for interactions and tests/AGENTS.md
+for source-only regression coverage; no local runtime verification performed.
+
+
+The 2026-11-05 source audit supersedes mention-based graph edges: typed skill_connections
+carry handoff/conditional_handoff/declared_transition/reference evidence. References are
+opt-in dotted edges; explicit conditional flow remains dashed. Package/search visibility
+is strict, package changes clear focus and pending reveals, and cross-package traversal
+updates the selected package. See docs/plugin-skill-flow-audit.md and component guide.
+No tests/build/typecheck/browser verification performed.

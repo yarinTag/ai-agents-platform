@@ -239,3 +239,52 @@ StepEventTimeline recognizes completion_validation with a warning label, validat
 WorkflowModelSelect filterOption checks for a value property before reading it because provider groups carry only label/options. Both group labels and leaf labels/IDs remain searchable. No any cast or disabled type check.
 
 RuntimeSetupModal and RuntimeSettingsPanel expose the Anthropic-only Message Threads beta checkbox and retention/pricing notice. Both load providers[].config.message_threads_enabled and send message_threads_enabled on selection save. The Settings panel now reloads per user/org, clears submitted keys and restricts editing to administrators; backend remains authoritative. StepEventTimeline renders conversation_transport mode/reason/message count/request bytes, without thread IDs or message bodies. No build/typecheck/UI execution performed.
+
+## Generic Connection Canvas & Organization/Skills Diagrams (`common/ConnectionCanvas/`, `org/`, `skills/`) (2026-11-03)
+* `common/ConnectionCanvas/connectionCanvasTypes.ts`: Domain-agnostic topology contracts (`CanvasRootNode`, `CanvasGroupNode<T>`, `CanvasLeafNode<T>`, `CanvasStageGroup`, `CanvasBadgeItem`, `CanvasLegendItem`, `ConnectionCanvasLabels`) including `flowStageIndex`, `flowStageLabel`, `connectedToIds`, `connectedFromIds`, `useStageColumnsLayout`, and `defaultCollapsed`.
+* `common/ConnectionCanvas/ConnectionCanvasNodeCard.tsx`: Memoized (`React.memo`) generic leaf node card using lightweight native HTML/CSS badges (`ContainedTag` with `title` attribute) instead of heavy Ant Design `<Tooltip>`/`<Tag>` instances, strict text-containment (`boxSizing: 'border-box'`, `minWidth: 0`, `overflow: 'hidden'`, `wordBreak: 'break-word'`, `WebkitLineClamp: 2`), `compactMode`, and interactive `highlightState` (`'selected' | 'upstream' | 'downstream' | 'dimmed'`).
+* `common/ConnectionCanvas/ConnectionCanvasDiagram.tsx`: Reusable high-performance connection diagram with zero-re-render GPU pan/zoom (`requestAnimationFrame` + `translate3d(x, y, 0) scale(zoom)` applied directly to DOM refs), per-group collapse/expand (`collapsedGroupIds`), horizontal multi-stage flow columns (`useStageColumnsLayout`), upstream/downstream hover connection highlighting, and top-bar + floating bottom-right `+` / `-` zoom controls (`35%`–`200%`).
+* `org/orgWorkflowsCanvasModel.ts`, `org/OrgWorkflowsCanvasTab.tsx`, `org/OrgWorkflowNodeCard.tsx`, `org/OrgWorkflowInspectorDrawer.tsx`: Organization & Department Workflows Canvas adapter mounted in `pages/OrganizationPage.tsx` and `common/OrgHierarchyModal.tsx`.
+* `skills/pluginsFlowModel.ts` & `skills/PluginsConnectionCanvas.tsx`: Skills & Plugins Ecosystem adapter that classifies plugin skills into logical pipeline stages (`1. Entry & Routing ➔ 2. Discovery & Research ➔ 3. Spec, PRD & Design ➔ 4. Architecture & Eng ➔ 5. Planning & Build ➔ 6. QA & Governance Gates`) and resolves directed skill-to-skill flow edges (`connectedToIds`, `connectedFromIds`), mounted solely in the dedicated `Skills & Plugins Canvas` tab of `pages/SkillsCatalogTabs.tsx`.
+
+## Plugin skill reference graph (2026-11-05)
+`skills/PluginsConnectionCanvas.tsx` retains its public props and projects discovered packages
+into `skills/PluginSkillFlowGraph.tsx`, replacing only the Skills canvas renderer. Organization
+canvases retain the generic ConnectionCanvas implementation. The new graph uses fixed-size
+skill buttons and SVG directed edges in the same scaled scroll surface; drag-background pan,
+zoom (35–150%, reset 80%), search, package filtering, edge visibility and refresh are available.
+Role columns are presentation categories, not enforced runtime ordering. A → B means A's
+SKILL.md references B according to the server's connected_skills extraction. Hardcoded Core
+lifecycle edges and frontend substring inference are removed. `pluginsFlowModel.ts` scans all
+loaded packages for both incoming and outgoing links, deduplicates and ignores self/unknown
+references. No API or skill definitions change.
+Clicking a skill persists focus, highlights incoming edges/nodes amber and outgoing edges/nodes
+green, and dims unrelated context. A detail panel shows package, role category, description,
+clickable incoming/outgoing skills and a separate Open SKILL.md action using the existing
+inspection callback. Filtered views include the focused skill's immediate neighbours across
+package boundaries; Clear focus restores the filter alone. Custom registry skills remain visible
+without invented relationships or plugin-instruction actions. No local tests/build/typecheck or
+browser rendering were executed under the current runtime restriction.
+
+## Skill connection audit and strict package filters (2026-11-05; supersedes reference-only flow)
+`skills/pluginGraphModel.ts` owns pure `collectPluginGraphEdges` and
+`visiblePluginSkills` projections. `PluginSkillFlowGraph` now uses optional typed
+PluginSkill.skill_connections evidence, not legacy connected_skills or frontend preview
+inference. Solid lines indicate instruction handoffs/declared lifecycle transitions;
+dashed lines preserve conditional handoffs/optional DAG nodes. Include references is
+off initially; enabling it adds dotted documentation/ordinary reference links. Aggregate
+edges retain all evidence and conditions. Incoming/outgoing lists follow the selected
+relationship view. Connection evidence and conditions expands exact source paths,
+line numbers or JSON node IDs and source text. Missing legacy evidence prompts Refresh;
+connection_warnings remain visible. Role columns are still presentation, not ordering.
+
+Package filtering is now strict. Dropdown changes clear old focus/search, invalidate
+pending reveal animation frames, end dragging and reset scrolling; search clears focus.
+Cross-package inspector navigation explicitly selects the target package, rather than
+injecting old-neighbour nodes. Source mode/path/repo changes remount the graph. These
+rules supersede the earlier focused-neighbours-across-filters behavior. Existing props
+and separate SKILL.md inspector callback remain. Tests are source-only, not executed.
+
+Aggregated edges stay dashed if any declaration supplies a condition/optional flag;
+another unconditional source must not visually erase that condition. Reference-only
+edges remain dotted, and all individual declarations remain in the evidence panel.

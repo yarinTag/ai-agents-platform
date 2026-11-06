@@ -22,3 +22,38 @@ only within that catalog; unavailable/ambiguous references fail. No global skill
 content cache supplies workflow instructions. Combined content is <=120000 chars,
 local files <=100000 bytes; empty/missing content fails. No clone, tool grant or
 script execution is implied. Runtime verification was not performed.
+
+## Inter-skill flow connection extraction (2026-11-03)
+`metadata.py:extract_skill_meta_from_text` extracts optional `role` from YAML frontmatter and retains `_raw_content` transiently during package assembly. `packages.py:_enrich_skill_connections` resolves cross-skill references across discovered skills (matching both full skill IDs such as `product-prd-writer` and category-prefix-stripped aliases such as `prd-writer`, `idea-to-blueprint`, `architecture-designer`, `google-docs-prd-publisher`), populates `connected_skills: List[str]` on each skill summary, and strips `_raw_content` before returning `PluginPackage` payloads.
+
+## Evidence-backed skill relationships (2026-11-05; supersedes mention-as-flow)
+`connections.py` owns `enrich_skill_connections(plugins_map, flow_documents=None)`;
+`packages.py` retains `_enrich_skill_connections` as a compatibility alias and forwards
+optional named DAG documents from local/Git adapters. Each summary adds `skill_connections`
+objects with source/target, kind (`handoff`, `conditional_handoff`, `declared_transition`,
+`reference`), optional conditional:boolean, and evidence {path,line?,node_id?,text,section?,
+revision?}. `connected_skills` remains a deduplicated compatibility mention/transition list;
+it must not be interpreted as execution order. `connection_warnings` reports duplicate
+IDs, missing/incomplete full content and unresolved declarative targets. Full raw content
+is removed before responding. Unique full IDs/short aliases resolve globally; ambiguous
+aliases, self edges and unknown targets never establish a relationship.
+
+Positive imperative handoffs (including coordinated targets) and explicit Routing table
+rows establish instruction flow; if/when/once/etc. in the source line/heading retain
+conditional semantics, including conditions before a sentence boundary. Negations,
+frontmatter, fenced examples, non-goals and resource paths cannot establish execution
+handoffs. Ordinary references remain a separate kind, never implicit prerequisites or
+reversed flow. Prose recognition is conservative, not exhaustive semantic certification.
+
+Only named `references/skill-dependency-dag.json` files inside discovered package roots
+supply machine-declared {nodes:[{id,skill,nextNodes,optional?,skipFlag?,...}]} transitions.
+Each edge retains from/to nodes (artifacts/flags included) in its evidence; optional nodes
+remain conditional. Unknown group names produce a warning rather than guessed skills.
+No referenced scripts execute. Git reads immutable blob SHAs from the selected tree,
+adds source_revision (tree SHA), and versions the scan cache key with evidence-flow-v1.
+Local reads are bounded at one million characters rather than 16 KiB; truncated/unreadable
+content cannot establish prose flow. Local DAG reads are source-root/package-contained,
+limited to one million bytes. Tree fetch/blob and existing organization credentials remain
+in the adapters; no new API route, grant or model call. Sources may describe different
+modes and are not combined into a claimed universal execution sequence. See
+[the pinned-source audit](../../docs/plugin-skill-flow-audit.md). No local runtime checks.

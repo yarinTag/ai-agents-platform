@@ -8,6 +8,14 @@ export interface Skill {
   updated_at?: string;
 }
 
+export interface PluginSkillConnection {
+  source: string;
+  target: string;
+  kind: 'handoff' | 'conditional_handoff' | 'declared_transition' | 'reference';
+  conditional?: boolean;
+  evidence: { path: string; line?: number; node_id?: string; text: string; section?: string; revision?: string | null };
+}
+
 export interface PluginSkill {
   id: string;
   name: string;
@@ -17,7 +25,12 @@ export interface PluginSkill {
   plugin: string;
   domain?: string;
   version?: string;
+  role?: string;
   content_preview?: string;
+  connected_skills?: string[];
+  skill_connections?: PluginSkillConnection[];
+  connection_warnings?: string[];
+  source_revision?: string;
 }
 
 export interface PluginPackage {
