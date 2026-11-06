@@ -36,14 +36,15 @@ class DirectTools:
                 self.sandbox = SandboxTools(self.args.sandbox_container, self._shell_env(),
                                             getattr(self.args, 'sandbox_redactions', None))
             organization = os.getenv('PLATFORM_PROVIDER_ORGANIZATION')
-            if organization and self.sandbox is None:
+            local_tools_enabled = not self.args.restricted and self.args.tools != ''
+            if organization and self.sandbox is None and local_tools_enabled:
                 from .tenant_workspace import tenant_workspace
                 tenant_workspace(organization, os.getenv('PLATFORM_PROVIDER_DEPARTMENT'), str(self.root),
                                  shared=not bool(os.getenv('PLATFORM_PROVIDER_DEPARTMENT')))
             config = json.loads(self.args.mcp_config or '{"mcpServers":{}}')
             if config.get('mcpServers'):
                 raise ValueError('Unsupported MCP server in direct API runtime.')
-            if not self.args.restricted and self.args.tools != '':
+            if local_tools_enabled:
                 self._add_local_tools()
             return self
         except BaseException:

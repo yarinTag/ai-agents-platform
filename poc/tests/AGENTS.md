@@ -145,3 +145,5 @@ are prepared but not run. Runtime tests/commands remain unexecuted under the pro
 Playground diagnostic fixtures now persist agent/task organization and department identity, preserving the intended missing-application-agent failure rather than failing tenant admission earlier. No fixture was executed.
 
 CI repair: provider credential fixtures override the current database authentication dependency; disabled identities expect401. Local plugin fixtures live inside the temporary tenant shared root. Workflow exception compatibility and organization-list isolation remain enforced by existing contracts. No local runtime verification performed.
+
+test_direct_runtime.py covers organization-scoped authoring from an ephemeral non-tenant directory with empty tools or restricted mode: no file/shell inventory or calls, no MCP escape, and local-tool re-enablement still rejects the outside path. No local test execution; GitHub CI verifies the contracts.

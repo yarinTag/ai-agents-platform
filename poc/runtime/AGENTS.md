@@ -241,3 +241,5 @@ ownership or the organization's configured plugin source, never shared global ca
 These are containment checks, not an OS sandbox claim. No model/worker/test execution performed.
 
 An organization-wide agent can access an explicitly supplied organization-shared project root; without a valid department/shared-project context it cannot inherit another workspace.
+
+Tool-free Direct API authoring (--tools empty or restricted) skips unused host workspace validation, allowing its ephemeral subprocess directory. Its inventory remains empty and all tool calls fail; configured MCP servers are still rejected. Runs enabling local tools continue to enforce tenant workspace containment. No local test execution; GitHub CI verifies the contracts.
