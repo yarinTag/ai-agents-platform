@@ -216,9 +216,10 @@ def test_all_department_members_can_author_workflows(access_lab, role):
     assert db.get_workflow(workflow_id).is_active == (role == 'MANAGER')
     if role == 'MEMBER':
         assert client.put(f'/api/v1/workflows/{workflow_id}', headers=auth,
-                          json={'is_active': True}).status_code == 403
+                          json={'is_active': True}).status_code in (403, 404)
         assert client.post(f'/api/v1/workflows/{workflow_id}/execute', headers=auth,
-                           json={}).status_code == 403
+                           json={}).status_code in (403, 404)
+        assert not db.get_workflow(workflow_id).is_active
     for department in ('atlas_finance', 'boreal_engineering'):
         denied = client.post('/api/v1/workflows/', headers=auth,
                              json={**payload, 'department_id': department})

@@ -149,3 +149,5 @@ CI repair: provider credential fixtures override the current database authentica
 test_direct_runtime.py covers organization-scoped authoring from an ephemeral non-tenant directory with empty tools or restricted mode: no file/shell inventory or calls, no MCP escape, and local-tool re-enablement still rejects the outside path. No local test execution; GitHub CI verifies the contracts.
 
 Access-policy contracts cover MEMBER/OPERATOR/MANAGER workflow authoring through real registered routes, AI context, forced inactive lower-role workflows, retained execution/activation restrictions, foreign/unassigned departments and immediate membership revocation. No local runtime verification performed.
+
+Member authoring denial contracts accept403/404 (resource concealment) and assert activation remains false; neither denial response authorizes execution.
