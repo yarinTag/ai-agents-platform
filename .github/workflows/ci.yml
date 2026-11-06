@@ -47,6 +47,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - suite: api
+            files: poc/tests/test_generic_governance_api.py
           - suite: core
             files: >-
               poc/tests/test_workflow_revisions.py
@@ -92,7 +94,11 @@ jobs:
         run: uv sync --frozen --extra dev --no-install-project
       - name: Check Python syntax
         run: uv run --no-sync python -m compileall -q poc
+      - name: Run API-only contracts without agents or provider I/O
+        if: matrix.suite == 'api'
+        run: uv run --no-sync python poc/tests/run_api_audit.py --report-dir "$RUNNER_TEMP/ai13-api-audit"
       - name: Run isolated backend tests
+        if: matrix.suite != 'api'
         env:
           TEST_FILES: ${{ matrix.files }}
         run: |
@@ -103,7 +109,10 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: backend-tests-${{ matrix.suite }}
-          path: reports/backend.xml
+          path: |
+            reports/backend.xml
+            ${{ runner.temp }}/ai13-api-audit/api-audit.xml
+            ${{ runner.temp }}/ai13-api-audit/api-audit-summary.json
           if-no-files-found: ignore
           retention-days: 14
   frontend:

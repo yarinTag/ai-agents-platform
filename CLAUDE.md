@@ -252,3 +252,6 @@ Local runtime verification remains restricted; data maintenance is explicitly us
 
 
 Workflow PR review and merging now use explicit terminal human_approval gates and server-only merge authority. Do not add model-callable merge tools or treat a notification as approval. Read docs/workflow-pr-approvals.md before changing these contracts.
+
+
+AI-13 defines the generic connector baseline in docs/architecture/connector-governance-contract.md. Explicit user authorization now permits local API-only verification: use poc/tests/run_api_audit.py with an external --report-dir. It isolates legacy import-time singletons in a source snapshot and blocks network/child processes inside pytest. This does not authorize agents, models, provider actions or startup.

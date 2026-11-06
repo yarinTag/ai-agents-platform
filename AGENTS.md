@@ -284,3 +284,7 @@ model keys, live sends or executions were changed/created. See the access-contro
 
 ## Governed PR review and terminal human approval
 New read tools list_open_pull_requests and get_pull_request_review expose bounded PR identity/diffs/checks/reviews with incomplete evidence blocking readiness. AI authors explicit terminal human_approval steps; approvals persist WAITING_APPROVAL and are resolved in Workflow Logs by authenticated managers/admins. Optional server-only SHA-pinned squash merges require explicit merge_pull_request grants (wildcards denied), fresh evidence/current authority, and durable per-PR receipts. Telegram/Slack deliver authenticated links; bot callbacks remain disabled. See docs/workflow-pr-approvals.md. No saved workflows/grants/provider keys changed; no runtime/live actions performed.
+
+
+## AI-13 generic connector governance baseline (2026-11-06)
+[Shared contract and source audit](docs/architecture/connector-governance-contract.md) distinguishes implemented, partial and missing capabilities across identity, action/resource policy, adapters, channels, triggers, approvals and receipts. It is a proposed provider-neutral contract, not new executable APIs/schema. [API audit evidence](docs/architecture/ai-13-api-audit.md) records isolated HTTP verification. By explicit user authorization on November6, local API-only tests against disposable real FastAPI/SQLite are allowed; agent/model/provider execution, server startup and unrelated runtime verification remain restricted. Tests must not touch the working database.

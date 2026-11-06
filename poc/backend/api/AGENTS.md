@@ -341,3 +341,6 @@ All active recognized-role department members may create workflows, use AI conte
 
 
 workflow_chat ChatStep adds optional human_approval {source_step,connector_id,channel_id,kind:report|pull_requests,merge_after_approval:false,expires_hours:1..72(default24)}. Catalog exposes human_approval readiness, connector tool_capabilities/server_operations and per-agent server_operations; missing tools/grants/public URL are proposal errors. Native human gates are terminal. GET /api/v1/workflows/executions/{execution_id}/approval returns null or scoped gate/report/subjects/receipts; POST same path {approve:boolean} requires a current signed-in department manager/admin, atomically claims PENDING->RESOLVING and records the actual user, then runs server-only resolution. No submitted responder identity, tokenized approval URL or model-callable merge action. WAITING_APPROVAL is active for execute/webhook dedup.
+
+
+AI-13 source/HTTP baseline is docs/architecture/connector-governance-contract.md. Its v1 entities are proposals for later tickets, not newly registered endpoints. Current catalog execution_supported is configuration-only; CONNECTED/test_connector is not verified provider connectivity, and saved trigger_enabled does not establish an inbound listener. API-only audit exercises real registered guards without application lifespan or external actions.
