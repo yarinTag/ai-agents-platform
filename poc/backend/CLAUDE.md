@@ -187,3 +187,6 @@ inventory plus pre-side-effect admission and response scoping. Keep direct-ID, n
 secret, conversation, memory and selected-department checks intact. No automatic orphan
 claiming on auth. Organization roles do not authorize broker/host-wide operations. Exact
 contracts/limitations: docs/access-control-audit.md. No local runtime verification performed.
+
+
+Workflow approval POSTs must preserve the current personal manager/admin identity check, atomic decision claim and repeated current-policy checks. Keep Telegram callbacks disabled until a separate verified user-binding transport exists; links alone never authorize a decision. See docs/workflow-pr-approvals.md.
