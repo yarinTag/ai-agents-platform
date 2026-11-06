@@ -142,7 +142,7 @@ def test_explicit_merge_grant_never_inherits_wildcard(state):
     tool = db.save_mcp_tool({'id': 'reviewtool', 'connector_id': 'github', 'name': 'get_pull_request_review', 'description': 'Review'})
     approval = {'execution_id': 'exec', 'organization_id': 'own', 'department_id': 'own', 'workflow_revision': 1}
     subject = {'repository': 'owner/repo', 'connector_id': 'github', 'agent_id': 'agent', 'tool_id': tool.id}
-    db.grant_department_mcp_access('own', 'github', allowed_tools=['*'], organization_id='own')
+    db.grant_department_mcp_access('own', 'github', allowed_tools='*', organization_id='own')
     with pytest.raises(ToolAccessError, match='explicit'):
         authorize_subject(db, approval, subject, merge=True)
     db.grant_department_mcp_access('own', 'github', allowed_tools=['get_pull_request_review', 'merge_pull_request'], organization_id='own')

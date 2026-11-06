@@ -156,3 +156,5 @@ Member authoring denial contracts accept403/404 (resource concealment) and asser
 test_workflow_pr_approvals.py covers rich PR projection, conservative readiness, strict read tool schema/no model merge tool, terminal graph/channel validation, real SQLite/FastAPI personal actor/tenant/role decision and expiry contracts, duplicate claims and explicit merge grants versus wildcard/revocation. No mocks or provider/model calls; local execution not performed.
 
 PR gate fixtures additionally prove failed/missing/partial read receipts cannot pin candidates; only completed full provider-fact records in the source task qualify. No network or model simulation is used.
+
+The explicit-merge rejection fixture uses the canonical stored wildcard string (*), preserving the production distinction from an explicit JSON tool-name list.
