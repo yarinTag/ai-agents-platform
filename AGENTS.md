@@ -300,3 +300,6 @@ New read tools list_open_pull_requests and get_pull_request_review expose bounde
 
 ## AI-16 capability policy backend
 [Capability governance](poc/governance/AGENTS.md) owns provider-neutral versioned policy and repeated authorization. [Exact P01 contracts](docs/architecture/capability-policy-v1.md) document additive policy/history tables, protected governance APIs, admin expansion versus restrictive manager edits, frozen/current policy intersections and implementation-only descriptors. AI catalogs and existing tool/workspace/notification/merge adapters share the evaluator. Existing grants/credentials/workflows are not migrated or broadened. Only isolated HTTP/SQLite API verification was performed; no local agents/providers/messages. AI-17 UI and later event/generic approval phases remain separate.
+
+## AI-17 capability policy interface
+The /organization route now presents capabilities/resources to all department readers and policy editors according to effective role, reusing AI-16 APIs. Admins can edit organization/department policy; managers append department restrictions only. Protected policy GET adds credential-free resource_options for exact configured resources, never grants. See docs/design/capability-policy-editor.md. Local verification is API-only; UI validation is through GitHub CI, without local startup/browser/provider execution.

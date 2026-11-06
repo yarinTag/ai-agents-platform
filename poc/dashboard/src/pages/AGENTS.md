@@ -281,3 +281,6 @@ WorkflowLogs mounts WorkflowApprovalPanel keyed by execution ID; Telegram links 
 
 
 AI-14 defines proposed page composition and role journeys in docs/design/governance-ux.md; existing /organization non-admin DepartmentAccessPage must not be replaced by an admin-requesting component just to display permissions. Empty context with an authorized header department is a load mismatch, not an instruction to join the department. No page behavior changed in P00.
+
+## AI-17 organization capabilities
+OrganizationPage adds capabilities to its tab state and mounts CapabilityGovernancePanel on the existing /organization route. Non-admins retain the router-provided DepartmentAccessPage, which embeds the same panel without org-user/runtime/admin data requests. Header selection controls one explicit department. See docs/design/capability-policy-editor.md; no new route/sidebar.

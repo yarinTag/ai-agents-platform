@@ -238,3 +238,29 @@ def test_ready_chat_destination_is_revalidated_by_exact_channel_before_creation(
     with db._get_connection() as conn:
         assert conn.execute('SELECT COUNT(*) FROM workflow_executions').fetchone()[0] == 0
         assert conn.execute('SELECT COUNT(*) FROM mcp_tool_calls').fetchone()[0] == 0
+
+
+def test_editor_options_are_secret_free_and_include_policy_denied_resources(baseline):
+    _, client = baseline
+    assert save(client, [rule()]).status_code == 200
+    response = client.get(DEPT + '/policy', headers=auth('MANAGER'))
+    assert response.status_code == 200
+    assert 'private-fixture-secret' not in response.text and 'configuration' not in response.text
+    options = response.json()['resource_options']
+    selected = next(value for value in options if value['capability_id'] == READ)
+    assert selected == {'capability_id': READ, 'connector_id': 'atlas_github', 'connector_name': 'github',
+                        'resource_type': 'repository', 'resource_ids': ['owner/repository']}
+    assert decision(client).json()['decision'] == 'denied'  # Options are never grants.
+    assert all(not value['connector_id'].startswith('boreal') for value in options)
+    assert all(value['capability_id'] not in ('telegram.listen_channel', 'github.rerun_checks') for value in options)
+    assert client.get(DEPT + '/policy', headers=auth('MEMBER')).status_code == 404
+
+
+def test_editor_options_respect_department_grants_and_org_admin_scope(baseline):
+    _, client = baseline
+    response = client.get(BASE + '/departments/atlas_finance/policy', headers=auth(department='finance'))
+    assert response.status_code == 200 and response.json()['resource_options'] == []
+    organization = client.get(BASE + '/organization/policy', headers=auth())
+    assert organization.status_code == 200
+    assert {value['connector_id'] for value in organization.json()['resource_options']} == {'atlas_github', 'atlas_telegram', 'atlas_slack'}
+    assert client.get(BASE + '/organization/policy', headers=auth('MANAGER')).status_code == 403

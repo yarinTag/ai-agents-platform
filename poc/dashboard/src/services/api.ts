@@ -19,6 +19,7 @@ export * from './mcpApi';
 export * from './workflowsApi';
 export * from './organizationApi';
 export * from './capabilitiesApi';
+export * from './governanceApi';
 export type { DiscoveredModel, ModelTierOption } from '../types/model';
 export type { FolderItem, QuickAccessItem, BrowseResponse, PickFolderResponse } from '../types/filesystem';
 export * from './queueApi';

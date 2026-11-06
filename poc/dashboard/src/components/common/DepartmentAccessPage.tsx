@@ -1,19 +1,23 @@
 import React from 'react';
 import { Alert, Card, Descriptions, Space } from 'antd';
 import { useAuth } from '../../context/AuthContext';
+import CapabilityGovernancePanel from '../org/CapabilityGovernancePanel';
+import { useGovernanceText } from '../../i18n/governance';
 
 export default function DepartmentAccessPage() {
   const { user, organization, departments, activeDepartmentId } = useAuth();
+  const text = useGovernanceText();
   const visible = departments.filter(department => !activeDepartmentId || (department.id || department.department_id) === activeDepartmentId);
   return <Space direction="vertical" style={{ width: '100%' }}>
-    <Alert type="info" showIcon message="Organization access" description="Organization settings, credentials, membership changes and connector grants are managed by your organization administrator." />
+    <Alert type="info" showIcon message={text.organization} description={text.ceiling} />
     {visible.map(department => <Card key={department.id} title={department.name}>
       <Descriptions column={1} items={[
-        { key: 'organization', label: 'Organization', children: organization?.name },
-        { key: 'account', label: 'Account role', children: user?.role },
-        { key: 'membership', label: 'Department role', children: department.department_role },
-        { key: 'budget', label: 'Monthly budget', children: `$${department.monthly_budget_usd}` },
+        { key: 'organization', label: text.organization, children: organization?.name },
+        { key: 'account', label: text.currentRole, children: <bdi dir="ltr">{user?.role}</bdi> },
+        { key: 'membership', label: text.membershipRole, children: <bdi dir="ltr">{department.department_role}</bdi> },
+        { key: 'budget', label: text.budget, children: <bdi dir="ltr">${department.monthly_budget_usd}</bdi> },
       ]} />
     </Card>)}
+    <CapabilityGovernancePanel />
   </Space>;
 }

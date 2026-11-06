@@ -111,3 +111,5 @@ roles, two organizations/three departments each, supported/unsupported capabilit
 resource/subject isolation, provider-independent channel rules, legacy ceiling,
 frozen/current intersections, time windows, optimistic concurrency and AI catalog
 narrowing. It does not establish live provider or worker integration success.
+
+AI-17 additive read projection: organization/department policy GET responses now include resource_options (capability_id, connector_id, connector_name, resource_type, resource_ids), including typed-policy-denied configured resources. Department options require active legacy connector grants; organization options remain admin-only. Only implemented trusted descriptors appear; no configuration/credentials or foreign resources. PUT/history contracts are unchanged. See ../design/capability-policy-editor.md.
