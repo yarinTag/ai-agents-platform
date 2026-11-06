@@ -288,3 +288,7 @@ New read tools list_open_pull_requests and get_pull_request_review expose bounde
 
 ## AI-13 generic connector governance baseline (2026-11-06)
 [Shared contract and source audit](docs/architecture/connector-governance-contract.md) distinguishes implemented, partial and missing capabilities across identity, action/resource policy, adapters, channels, triggers, approvals and receipts. It is a proposed provider-neutral contract, not new executable APIs/schema. [API audit evidence](docs/architecture/ai-13-api-audit.md) records isolated HTTP verification. By explicit user authorization on November6, local API-only tests against disposable real FastAPI/SQLite are allowed; agent/model/provider execution, server startup and unrelated runtime verification remain restricted. Tests must not touch the working database.
+
+
+## AI-14 governance UX baseline (P00)
+[UX specification and role journeys](docs/design/governance-ux.md) and [static wireframes](docs/design/governance-wireframes.png) map the generic AI-13 contract to proposed department capabilities, channel triggers, workflow preview and human decisions. No production FE changes or new capabilities are introduced; AI-15 records the cross-module architecture decisions.

@@ -302,3 +302,6 @@ component execution or tests performed; contracts are in docs/access-control-aud
 
 
 WorkflowApprovalPanel polls the scoped per-execution approval API and renders report, pinned PR SHAs, expiry, actual merge receipts/status and authenticated manager/admin approve/reject confirmations. No bearer token is embedded in external links. WorkflowChatModal displays human gate/merge intent in preview. UI does not implement Telegram callbacks.
+
+
+AI-14 static governance wireframes (docs/design/governance-wireframes.{svg,png}) use existing Ant Design palette/cards/tags/tabs. Actual robotic exports are DepartmentSelect/ModelSelector/CollapsiblePluginCard, not historical nonexistent RoboticHeader/Card names. Shared approval UI must separate decision from action/provider receipt; proposed middle-DAG continuation is not shipped by this design.

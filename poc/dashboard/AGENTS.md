@@ -251,3 +251,7 @@ page state cannot persist across a scope switch. New usePermissions caps account
 rank. Primary mutation controls are gated; Settings is admin-only and non-admin Org & Teams
 renders DepartmentAccessPage. Unknown/unassigned users receive an access explanation. All backend
 checks remain authoritative. See ../../docs/access-control-audit.md. No local runtime checks.
+
+
+## AI-14 P00 governance UX specification
+[Governance UX and role journeys](../../docs/design/governance-ux.md) defines proposed department capability/resource, channel/trigger, approval and authoring surfaces with static PNG/SVG wireframes. It reuses the actual Ant Design theme/robotic selectors; no new production route/component/request or capability is implemented. Roles remain effective current scope; Member authors inactive, operators run only authorized work, managers manage/approve per policy, admins configure own-org grants. Proposed future features must not appear as current readiness. API-only tests remain authorized; browser/runtime/provider checks remain separate.
