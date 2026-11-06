@@ -41,7 +41,7 @@ def telegram_rejection(raw, status):
     return f'Telegram rejected the request (HTTP {status}). {hint} No automatic retry was made.'
 
 
-def request_json(host, path, headers=None, params=None, payload=None, accepted=(200,)):
+def request_json(host, path, headers=None, params=None, payload=None, accepted=(200,), method=None):
     if host not in _HOSTS or not path.startswith('/'):
         raise ToolAccessError('Unsupported integration endpoint.')
     if params:
@@ -49,7 +49,10 @@ def request_json(host, path, headers=None, params=None, payload=None, accepted=(
     connection = http.client.HTTPSConnection(host, timeout=10, context=ssl.create_default_context())
     try:
         body = json.dumps(payload, ensure_ascii=False).encode() if payload is not None else None
-        connection.request('POST' if body is not None else 'GET', path, body=body,
+        verb = method or ('POST' if body is not None else 'GET')
+        if verb not in ('GET', 'POST', 'PUT') or (verb == 'PUT' and host != 'api.github.com'):
+            raise ToolAccessError('Unsupported integration method.')
+        connection.request(verb, path, body=body,
             headers={'Accept': 'application/json', 'Content-Type': 'application/json; charset=utf-8',
                      'User-Agent': 'AI-Agents-Platform', **(headers or {})})
         response = connection.getresponse()

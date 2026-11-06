@@ -322,7 +322,7 @@ class WorkflowEngine:
         )
 
         # Optional delivery must not change the authoritative execution result.
-        if self.notifier and not playground:
+        if self.notifier and not playground and final_status in {"COMPLETED", "FAILED", "CANCELLED"}:
             try:
                 self.notifier.notify(
                     workflow_id, execution_id, trigger_type, final_status, step_outputs,

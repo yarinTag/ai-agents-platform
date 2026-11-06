@@ -24,7 +24,9 @@ def preflight_backends(definition, *, playground=False, db=None, workflow=None):
     settings = validate_settings(definition.settings)
     for step in definition.steps:
         selected = step_backend(settings, step)
-        if step.params.get('channel_action') is not None:
+        if playground and step.params.get('human_approval') is not None:
+            raise ValueError('Human approval and merging are unavailable in Playground.')
+        if step.params.get('channel_action') is not None or step.params.get('human_approval') is not None:
             continue  # Deterministic server delivery does not start an agent runtime.
         try:
             require_backend(selected, playground=playground,

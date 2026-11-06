@@ -17,6 +17,7 @@ import {
 import axios from 'axios';
 import { getWorkflow, getWorkflowExecutions, getWorkflowExecution } from '../services/api';
 import { PlatformWorkflow, WorkflowExecution } from '../types/mcp';
+import { WorkflowApprovalPanel } from '../components/workflows/WorkflowApprovalPanel';
 import { StepEventTimeline } from '../components/workflows/StepEventTimeline';
 
 const { Text, Title } = Typography;
@@ -156,6 +157,8 @@ export const WorkflowLogsPage: React.FC = () => {
             Refresh
           </Button>
         </div>
+
+        {execution && <WorkflowApprovalPanel key={execution.id} executionId={execution.id} />}
 
         {error && <Alert type="error" showIcon message="Unable to load logs" description={error} />}
 

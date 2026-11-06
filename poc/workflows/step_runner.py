@@ -81,7 +81,7 @@ class WorkflowStepRunner:
         workflow_for_skills = self.db.get_workflow(execution_for_skills.workflow_id)
         configured_skills = workflow_skill_ids(json.loads(workflow_for_skills.definition_json))
         # Server delivery uses predecessor text directly and performs no inference.
-        if (step.params or {}).get('channel_action') is not None:
+        if (step.params or {}).get('channel_action') is not None or (step.params or {}).get('human_approval') is not None:
             configured_skills = []
         step_skills = []
         for sk in configured_skills:
@@ -153,6 +153,11 @@ class WorkflowStepRunner:
             "started_at": now_dt.isoformat(), "completed_at": None,
             "output_data": None, "input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0,
         })
+
+        if (step.params or {}).get('human_approval') is not None:
+            from .approval_runner import execute_gate
+            return execute_gate(self.db, step, step_run, step_record_id, execution_id,
+                                step_outputs, playground_workspace)
 
         # A missing runtime, failure, pause or timeout is never a completed step.
         updated_run = step_run

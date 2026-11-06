@@ -55,6 +55,9 @@ def fetch_activity(configuration, operation, repository, days, authorize):
                     item = {'number': row.get('number'), 'title': str(row.get('title') or '')[:300],
                         'state': row.get('state'), 'created_at': row.get('created_at'),
                         'updated_at': date, 'closed_at': row.get('closed_at')}
+                    if group == 'pulls':
+                        from .github_prs import project_pull
+                        item.update(project_pull(row, repository))
                 size = len(str(item))
                 if total_chars + size > 45000:
                     result['partial'] = True

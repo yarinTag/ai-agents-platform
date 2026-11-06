@@ -11,9 +11,9 @@ def require_initiator(db, user_id, organization_id, department_id):
     user = db.get_user(user_id)
     if not user or user.status != 'ACTIVE' or user.organization_id != organization_id:
         raise ToolAccessError('The workflow initiator is no longer authorized.')
-    if user.role != 'ORG_ADMIN' and not any(m['department_id'] == department_id and
+    if user.role != 'ORG_ADMIN' and (user.role not in ('MANAGER', 'OPERATOR') or not any(m['department_id'] == department_id and
             m['organization_id'] == organization_id and m['department_role'] in ('MANAGER', 'OPERATOR')
-            for m in db.get_user_departments(user_id)):
+            for m in db.get_user_departments(user_id))):
         raise ToolAccessError('The workflow initiator no longer has execution access to this department.')
 
 
@@ -185,6 +185,8 @@ def prepare_execution_context(db, execution, workflow, definition, user_context=
             notification_target(db, workflow, execution.id)
         except ToolAccessError as error:
             record_notification_error(db, execution.id, str(error))
+    from workflows.human_approval import preflight as approval_preflight
+    approval_preflight(db, execution, workflow, definition)
     from .repo_workspace import authorize_workspace, workspace_configuration
     from workflows.channel_action import action_configuration
     for step in definition.steps:

@@ -249,3 +249,6 @@ poc/create_access_lab.py is an explicit additive setup command requiring --datab
 --credentials outside the checkout, and --apply; it calls the single demo_data registration
 entry. It never runs on startup or copies credentials from an existing organization.
 Local runtime verification remains restricted; data maintenance is explicitly user-authorized.
+
+
+Workflow PR review and merging now use explicit terminal human_approval gates and server-only merge authority. Do not add model-callable merge tools or treat a notification as approval. Read docs/workflow-pr-approvals.md before changing these contracts.

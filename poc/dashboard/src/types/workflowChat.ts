@@ -16,6 +16,8 @@ export interface ChatWorkflow {
     workspace?: { connector_id: string; repository: string; ref?: string | null;
       mode: 'read' | 'write'; pr_title?: string | null } | null;
     required_outcome?: 'analysis' | 'pull_request';
+    human_approval?: { source_step: string; connector_id: string; channel_id: string;
+      kind: 'report' | 'pull_requests'; merge_after_approval: boolean; expires_hours: number } | null;
   }>;
   destination: { connector_id: string; channel_id: string;
     notify_mode?: 'COMPLETION_ONLY' | 'START_AND_COMPLETE' | 'EACH_STEP' | 'NONE' } | null;
@@ -25,10 +27,12 @@ export interface WorkflowChatContext {
   departments: Array<{ id: string; name: string }>;
   selection: { provider_id: string; model_id: string; cost_source: string } | null;
   catalog: {
+    human_approval?: { configured: boolean; terminal_only: boolean; delivery: string; missing_setup?: string | null };
     workspace_readiness?: { configured: boolean; errors: string[]; verification: 'configuration_only' };
     agents: Array<{ id: string; name: string; provision_on_create?: boolean; connector_tools: Record<string, string[]>;
       workspace_operations?: Record<string, string[]> }>;
     connectors: Array<{ id: string; name: string; provider: string;
+      tool_capabilities?: Record<string, string>; server_operations?: string[];
       tools: string[]; repositories: string[]; channels: string[]; channel_labels?: Record<string, string>; execution_supported: boolean;
       workspace_operations?: string[] }>;
     skills?: Array<{ id: string; name: string; plugin: string; description: string }>;

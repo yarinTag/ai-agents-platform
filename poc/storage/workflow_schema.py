@@ -161,3 +161,6 @@ def initialize(conn, insert_revision):
         FOREIGN KEY (task_id) REFERENCES task_runs(run_id) ON DELETE CASCADE,
         FOREIGN KEY (execution_id) REFERENCES workflow_executions(id) ON DELETE CASCADE
     )""")
+
+    from .workflow_approvals_schema import initialize as initialize_approvals
+    initialize_approvals(conn)

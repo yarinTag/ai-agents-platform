@@ -291,3 +291,6 @@ in-memory selected department; API routes independently authorize it. Scope chan
 instances, and async profile/401 results must not overwrite a newer login. Do not restore token
 secrets in URL/cache keys or host-wide queue/native picker controls. No local tests/build/lint/
 typecheck/startup were performed. See docs/access-control-audit.md for exact backend constraints.
+
+
+WorkflowApprovalPanel is a presentation of backend approval authority: never resolve from local state or URL parameters, expose bearer tokens in Telegram links, or bypass existing department-scoped HTTP transport. Matched EN/HE copy lives in workflowApproval.ts.

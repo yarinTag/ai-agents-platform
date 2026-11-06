@@ -266,3 +266,6 @@ accessPermissions.ts is the pure four-role rank/intersection helper, tested by s
 Manual plugin repository tokens use POST /mcp/discover-resources bodies without token cache keys;
 credential-free GET /skills/plugins/git-repos stays admin-only. No endpoint credential value is
 stored in localStorage by these changes. No local application or test execution performed.
+
+
+workflowApprovals.ts exposes typed getWorkflowApproval(executionId) and decideWorkflowApproval(executionId,approve) via existing auth/department-scoped httpClient; no secret query or transport bypass. types/workflowChat adds human_approval config/readiness and tool_capabilities/server_operations metadata.
