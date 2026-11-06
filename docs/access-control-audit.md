@@ -176,3 +176,5 @@ This SQL/data setup check is not application login, authorization-test or runtim
 Queued workflow admission rechecks the current active database account and department membership before budget/run creation, including empty DAGs. Request-local department claims are refreshed from current capped memberships; signed login claims do not retain revoked privileges.
 
 Policy update: every active department member can author workflows through visual/API or AI creation. This supersedes manager-only creation in the earlier matrix. Department/resource grants remain required. Creation below effective MANAGER is inactive; activation/edit/delete still require management and manual execution requires operation rights. Accounts without department membership must first be assigned to a department. No local runtime verification performed.
+
+Nested response collections are authorized by their own resource type (for example departments inside workflow AI context), rather than the outer endpoint domain. The authoring context retains readable department choices.

@@ -136,3 +136,5 @@ Queued workflow admission rechecks the current active database account and depar
 Tenant response projection is applied to direct and lazy included routes; organization collection filtering must run with current request actor/resources on every registered response. No local runtime verification performed.
 
 Workflow authoring endpoints require level1 department access, including nested resource references. This exception does not grant management or execution. Default path-scope calculation uses readable membership rather than requiring manager status for unrelated requests. No local runtime verification performed.
+
+Nested response collections are authorized by their own resource type (for example departments inside workflow AI context), rather than the outer endpoint domain. The authoring context retains readable department choices.

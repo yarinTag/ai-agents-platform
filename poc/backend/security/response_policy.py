@@ -121,17 +121,17 @@ def filter_payload(request, payload):
         return sanitize(prune_tree(payload) or {})
     if domain == "tasks" and path.endswith("/subtasks") and isinstance(payload, list):
         return sanitize([row for row in payload if resources.allows("task", row.get("run_id") or row.get("id"))])
-    def allowed(row):
+    def allowed(row, resource_kind=kind):
         if not isinstance(row, dict):
             return False
-        identifier = (row.get("run_id") or row.get("id")) if kind == "task" else (row.get("id") or row.get("agent_id"))
-        return resources.allows(kind, identifier)
+        identifier = (row.get("run_id") or row.get("id")) if resource_kind == "task" else (row.get("id") or row.get("agent_id"))
+        return resources.allows(resource_kind, identifier)
     if kind and isinstance(payload, list) and not request.path_params:
         payload = [row for row in payload if allowed(row)]
     elif isinstance(payload, dict):
         for key in ("workflows", "executions", "connectors", "tasks", "agents", "departments", "projects", "schedules", "teams", "sessions"):
             if isinstance(payload.get(key), list) and kind:
-                payload[key] = [row for row in payload[key] if allowed(row)]
+                payload[key] = [row for row in payload[key] if allowed(row, {**COLLECTIONS, "executions": "execution"}.get(key, kind))]
         if domain == "agents":
             def prune(node):
                 if not isinstance(node, dict) or not resources.allows("agent", node.get("id") or node.get("agent_id")):
