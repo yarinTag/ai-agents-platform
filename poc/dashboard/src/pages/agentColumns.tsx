@@ -16,7 +16,7 @@ export const createAgentColumns = (model: Pick<
   | 'setChatAgent'
   | 'setChatVisible'
   | 'fetchAgents'
->) => {
+>, access: { canManage: boolean; canOperate: boolean }) => {
   const {
     departments,
     organization,
@@ -221,7 +221,7 @@ export const createAgentColumns = (model: Pick<
           </Button>
           <Button
             size="small"
-            icon={<EditOutlined />}
+            disabled={!access.canManage} icon={<EditOutlined />}
             onClick={() => {
               const matchedDept = departments.find(
                 (d) => d.id === record.department_id || d.name === record.department
@@ -254,7 +254,7 @@ export const createAgentColumns = (model: Pick<
           <Button
             size="small"
             danger
-            icon={<DeleteOutlined />}
+            disabled={!access.canManage} icon={<DeleteOutlined />}
             onClick={() => {
               deleteAgent(record.id)
                 .then(() => {

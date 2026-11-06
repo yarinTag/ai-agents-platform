@@ -15,6 +15,8 @@ def state(tmp_path):
     db = DatabaseManager(str(tmp_path / 'revisions.sqlite'))
     db.create_organization(id='org-a', name='A', slug='a')
     db.create_organization(id='org-b', name='B', slug='b')
+    db.create_user(id='editor', organization_id='org-a', email='editor@a.test', full_name='Editor', role='ORG_ADMIN')
+    db.create_user(id='editor-other', organization_id='org-b', email='editor@b.test', full_name='Other editor', role='ORG_ADMIN')
     definition = {'id': 'wf', 'name': 'Original', 'steps': [
         {'key': 'first_step', 'agent_id': 'agent', 'prompt_template': 'Original prompt', 'depends_on': [],
          'custom_step_setting': {'keep': True}}],
@@ -26,7 +28,7 @@ def state(tmp_path):
     app = FastAPI()
     @app.middleware('http')
     async def identity(request: Request, call_next):
-        request.state.user = {'sub': 'editor', 'name': 'Editor', 'role': 'ORG_ADMIN',
+        request.state.user = {'sub': 'editor' if request.headers.get('x-test-org', 'org-a') == 'org-a' else 'editor-other', 'name': 'Editor', 'role': 'ORG_ADMIN',
                               'org_id': request.headers.get('x-test-org', 'org-a')}
         return await call_next(request)
     app.include_router(router, prefix='/workflows')

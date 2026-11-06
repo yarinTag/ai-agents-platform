@@ -1,3 +1,4 @@
+import { usePermissions } from '../../hooks/usePermissions';
 import { ResourceWarning } from '../common/ResourceWarning';
 import type { AgentMiniChatDrawerProps } from './agentChatTypes';
 import React from 'react';
@@ -17,6 +18,7 @@ import { useAgentChat } from './useAgentChat';
 import { AgentChatContent } from './AgentChatContent';
 
 export const AgentMiniChatDrawer: React.FC<AgentMiniChatDrawerProps> = (props) => {
+  const { canOperate } = usePermissions();
   const model = useAgentChat(props);
   const {
     agent, visible, onClose, sessions, currentSessionId,
@@ -53,9 +55,9 @@ export const AgentMiniChatDrawer: React.FC<AgentMiniChatDrawerProps> = (props) =
             ) : (
               <Tag color="success">READY / IDLE</Tag>
             )}
-            <Popconfirm title="Clear conversation history?" onConfirm={handleClear} okText="Yes" cancelText="No">
+            <Popconfirm disabled={!canOperate} title="Clear conversation history?" onConfirm={handleClear} okText="Yes" cancelText="No">
               <Tooltip title="Clear History">
-                <Button type="text" icon={<ClearOutlined style={{ color: '#8b949e' }} />} />
+                <Button type="text" disabled={!canOperate} icon={<ClearOutlined style={{ color: '#8b949e' }} />} />
               </Tooltip>
             </Popconfirm>
           </Space>
@@ -154,7 +156,7 @@ export const AgentMiniChatDrawer: React.FC<AgentMiniChatDrawerProps> = (props) =
                 key={sess.id}
                 size="small"
                 type={isSelected ? 'primary' : 'default'}
-                onClick={() => handleSelectSession(sess.id)}
+                disabled={!canOperate} onClick={() => handleSelectSession(sess.id)}
                 style={{
                   fontSize: '11px',
                   borderRadius: '5px',
@@ -182,7 +184,7 @@ export const AgentMiniChatDrawer: React.FC<AgentMiniChatDrawerProps> = (props) =
             size="small"
             icon={<PlusOutlined />}
             loading={creatingSession}
-            onClick={() => handleCreateNewSession()}
+            disabled={!canOperate} onClick={() => handleCreateNewSession()}
             style={{
               borderRadius: '5px',
               background: '#21262d',
@@ -254,7 +256,7 @@ export const AgentMiniChatDrawer: React.FC<AgentMiniChatDrawerProps> = (props) =
             key={idx}
             size="small"
             onClick={() => handleSend(qp.replace(/^[^\s]+\s/, ''))}
-            disabled={sending}
+            disabled={!canOperate || sending}
             style={{
               fontSize: '11px',
               borderRadius: '6px',
@@ -279,6 +281,7 @@ export const AgentMiniChatDrawer: React.FC<AgentMiniChatDrawerProps> = (props) =
       >
         <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
           <Input.TextArea
+            disabled={!canOperate}
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={(e) => {
@@ -305,7 +308,7 @@ export const AgentMiniChatDrawer: React.FC<AgentMiniChatDrawerProps> = (props) =
             type="primary"
             icon={<SendOutlined />}
             loading={sending}
-            disabled={!inputText.trim()}
+            disabled={!canOperate || !inputText.trim()}
             onClick={() => handleSend()}
             style={{
               background: '#2563eb',

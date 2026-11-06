@@ -125,3 +125,12 @@ def initialize(conn):
 
     from .hosted_budget import initialize as initialize_hosted_budget
     initialize_hosted_budget(conn)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS access_resource_owners (
+            resource_type TEXT NOT NULL,
+            resource_id TEXT NOT NULL,
+            organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+            PRIMARY KEY(resource_type, resource_id)
+        )
+    """)

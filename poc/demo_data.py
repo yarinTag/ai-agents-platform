@@ -1,10 +1,10 @@
 """Canonical demo registration, used only by explicit setup/demo entry points."""
 import os
-from config import config_manager, AgentConfig, ProjectConfig, Skill
-from persistence import db_manager
 
 def setup_demo_data():
     """Set up demo agent, project, and skill."""
+    from config import config_manager, AgentConfig, ProjectConfig, Skill
+    from persistence import db_manager
     print("=== Setting up demo data ===")
 
     # Create a general task agent
@@ -80,3 +80,9 @@ When asked to read or analyze content:
     db_manager.save_skill(skill)
     print(f"✓ Created skill: {skill.name}")
 
+
+
+def setup_access_lab(database_path, credentials_path):
+    """Explicit, additive permission-lab registration; no application/services startup."""
+    from storage.access_lab import create_access_lab
+    return create_access_lab(database_path, credentials_path)

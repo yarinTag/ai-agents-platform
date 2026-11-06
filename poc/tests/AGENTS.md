@@ -118,3 +118,36 @@ conditions before a sentence boundary, coordinated targets, routing tables, alia
 duplicate IDs, preview-only incompleteness, DAG direction/optional flags/unresolved group
 warnings and malformed documents. Fixtures are plain Markdown/JSON data, not mocked API,
 database or runtime services. No tests/scanners/application scripts were executed.
+
+
+The existing real SQLite/FastAPI organization auth case now asserts that an admin's old
+token can refresh /auth/me and see a newly created department without membership; foreign
+organization departments remain excluded, login agrees, JWT claims remain membership-only,
+and invited operators still see only their assigned department. Added assertions were not
+executed under the local runtime restriction.
+
+
+## Current identity/role isolation contracts (2026-11-05)
+test_access_policy.py creates real SQLite organizations, departments, users, agents and workflows,
+registers the real guarded FastAPI routers and signs real JWTs. It covers read/detail selection,
+stale admin claims, disabled users, capped mixed memberships, revocation, nested foreign references,
+manager updates versus operator/member denial, own-organization boundaries, unsafe host/queue
+operations, unattributed activity, unknown endpoint fail-closed behavior and path/symlink containment.
+test_access_lab_setup.py checks additive2-org fixture registration,26 accounts, exact canonical
+password verification,0600 output and disabled/inactive resources. These are not provider/runtime
+mocks. Existing revision/origin/playground fixtures now create real user identities for the current
+DB-based scope contract. New cases are selected in CI but were not executed locally.
+
+Access-policy cases additionally cover engine admission with fresh DB roles, admin rejection of
+cross-department step assignments and409 on implicit department/history transfer. These cases
+are prepared but not run. Runtime tests/commands remain unexecuted under the project restriction.
+
+Playground diagnostic fixtures now persist agent/task organization and department identity, preserving the intended missing-application-agent failure rather than failing tenant admission earlier. No fixture was executed.
+
+CI repair: provider credential fixtures override the current database authentication dependency; disabled identities expect401. Local plugin fixtures live inside the temporary tenant shared root. Workflow exception compatibility and organization-list isolation remain enforced by existing contracts. No local runtime verification performed.
+
+test_direct_runtime.py covers organization-scoped authoring from an ephemeral non-tenant directory with empty tools or restricted mode: no file/shell inventory or calls, no MCP escape, and local-tool re-enablement still rejects the outside path. No local test execution; GitHub CI verifies the contracts.
+
+Access-policy contracts cover MEMBER/OPERATOR/MANAGER workflow authoring through real registered routes, AI context, forced inactive lower-role workflows, retained execution/activation restrictions, foreign/unassigned departments and immediate membership revocation. No local runtime verification performed.
+
+Member authoring denial contracts accept403/404 (resource concealment) and assert activation remains false; neither denial response authorizes execution.

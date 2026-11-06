@@ -248,3 +248,30 @@ McpTelegramSelection renders each discovered chat in a keyed native span with ti
 
 ## Organization & Department Workflows Canvas & Skills Canvas Diagrams (2026-11-03)
 `OrganizationPage.tsx` (`/organization`) loads organization workflows via `getWorkflows()` alongside `getDepartments()` and `getOrganizationUsers()` and mounts `OrgWorkflowsCanvasTab` under the **Workflows Canvas** (`key: 'workflows'`) tab, powered by the generic `ConnectionCanvasDiagram` (`src/components/common/ConnectionCanvas/`). `SkillsCatalogTabs.tsx` (`/skills`) mounts `PluginsConnectionCanvas` exclusively under the top-level **Skills & Plugins Canvas** (`key: 'canvas'`) tab (with no duplicate canvas toggle inside `Skills Repository Hub`), rendering multi-stage skill flows and inter-skill connections.
+
+
+## Workflow hub department selection (2026-11-05)
+`useWorkflowsPage` reads AuthContext.activeDepartmentId and scopes workflow-list and
+execution-history requests with department_id. Null (All Departments) omits the filter;
+server tenant/role authorization continues to apply. Organization/user/department changes
+immediately hide old rows, clear detail/editor/history/settings/run selections and reload
+both lists. A scope key plus request version rejects late previous-scope responses and
+superseded polls; unmount invalidates pending list commits. Detail polling and successful
+run/canvas updates also ignore previous-scope responses. Open UI is reset on scope changes;
+this does not cancel already submitted executions. Counts derive from scoped rows.
+No local tests/build/typecheck/browser or server execution performed.
+
+
+## Permission-aware pages (2026-11-05)
+Agent/workflow create/edit/delete, hierarchy/template and schedule configuration require management;
+Tasks/workflow runs, triggers, delegation/cancel and chat mutations require operation rights.
+Projects/custom skill/template/connector/source configuration and direct integration tests require
+organization administration. Inspection/history/logs remain readable in authorized scope. A mixed
+manager in a MEMBER department sees read-only controls via usePermissions. Plugin read-only scans
+omit source-changing query parameters; non-admins cannot load private repository discovery or edit
+source config. QueuePanel explains why broker-wide metrics/DLQ actions are unavailable rather than
+polling global endpoints. App supplies a read-only department access view to non-admin Org & Teams
+and denies direct Settings navigation. Each feature remounts on scope/role changes. No runtime
+checks were performed; exact exceptions/limitations are in docs/access-control-audit.md.
+
+Workflow create and Create with AI entry points and recovery modal are enabled for canRead. Existing editing/deletion/settings and execution controls retain their respective roles. No local runtime verification performed.

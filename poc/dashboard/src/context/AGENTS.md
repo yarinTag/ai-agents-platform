@@ -84,3 +84,14 @@ const MyComponent: React.FC = () => {
 
 ## Department ID normalization (2026-11-01)
 `AuthContext.tsx` normalizes hydrated and refreshed `departments` entries via `normalizeDepartments` so every entry carries both `id` and `department_id` (`d.id || d.department_id`), and preserves the existing selected `activeDepartmentId` across `initAuth`/`refreshUserProfile` when still valid.
+
+
+## Selected scope and session races (2026-11-05)
+AuthProvider updates the in-memory request department shared by HTTP/SSE, reconnects SSE on
+selection/token changes and refreshes current profile on focus. Empty refreshed membership clears
+the selection; an admin's explicit All Departments selection survives profile refresh. A profile
+response/401 applies only while its captured token still matches localStorage. Cross-tab token
+storage changes clear previous user/org/departments, selected scope and SSE before validating the
+new profile. Pages remount by user/org/department/effective role. Profile department options remain
+independent of the header's selected department; revocation cannot trap profile refresh on a
+forbidden old header. Local session storage keys are unchanged. No local runtime verification.

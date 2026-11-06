@@ -35,10 +35,16 @@ class DirectTools:
                 from .sandbox_tools import SandboxTools
                 self.sandbox = SandboxTools(self.args.sandbox_container, self._shell_env(),
                                             getattr(self.args, 'sandbox_redactions', None))
+            organization = os.getenv('PLATFORM_PROVIDER_ORGANIZATION')
+            local_tools_enabled = not self.args.restricted and self.args.tools != ''
+            if organization and self.sandbox is None and local_tools_enabled:
+                from .tenant_workspace import tenant_workspace
+                tenant_workspace(organization, os.getenv('PLATFORM_PROVIDER_DEPARTMENT'), str(self.root),
+                                 shared=not bool(os.getenv('PLATFORM_PROVIDER_DEPARTMENT')))
             config = json.loads(self.args.mcp_config or '{"mcpServers":{}}')
             if config.get('mcpServers'):
                 raise ValueError('Unsupported MCP server in direct API runtime.')
-            if not self.args.restricted and self.args.tools != '':
+            if local_tools_enabled:
                 self._add_local_tools()
             return self
         except BaseException:
@@ -71,6 +77,8 @@ class DirectTools:
         }
         allowed = self.allowed()
         for name, (description, properties, required) in definitions.items():
+            if name == 'Bash' and self.sandbox is None and os.getenv('PLATFORM_PROVIDER_ORGANIZATION'):
+                continue  # An allowedTools string is not host process isolation.
             if self.args.allowedTools is not None and name not in allowed:
                 continue
             self.inventory.append({'name': name, 'description': description,

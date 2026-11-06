@@ -17,8 +17,9 @@ def workspace(db, claims, department_id=None):
     departments = db.list_departments(organization_id=user.organization_id)
     membership = {m['department_id']: m['department_role'] for m in db.get_user_departments(user.id)
                   if m['organization_id'] == user.organization_id}
-    allowed = [d for d in departments if user.role == 'ORG_ADMIN' or
-               membership.get(d.id) in ('MANAGER', 'OPERATOR')]
+    roles = ('MEMBER', 'OPERATOR', 'MANAGER', 'ORG_ADMIN')
+    allowed = [d for d in departments if user.role in roles and (user.role == 'ORG_ADMIN' or
+               membership.get(d.id) in roles)]
     if department_id and department_id not in {d.id for d in allowed}:
         raise HTTPException(403, 'You no longer have permission to create workflows in this department.')
     return user, allowed

@@ -1,3 +1,4 @@
+import { usePermissions } from '../hooks/usePermissions';
 import { Card, Row, Col, Tag, Button, Input, Spin } from 'antd';
 import { CheckCircleOutlined, PlusOutlined, SettingOutlined, ToolOutlined, SearchOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import type { useMcpPage } from './useMcpPage';
@@ -18,6 +19,7 @@ export const McpMarketplace = (model: Pick<
   | 'filteredCatalog'
   | 'getProviderIcon'
 >) => {
+  const { isAdmin } = usePermissions();
   const {
     loading,
     connectors,
@@ -280,7 +282,7 @@ export const McpMarketplace = (model: Pick<
                                   <Button
                                     size="small"
                                     icon={<SettingOutlined />}
-                                    onClick={() => handleOpenConnect(item, installed)}
+                                    disabled={!isAdmin} onClick={() => handleOpenConnect(item, installed)}
                                     style={{ background: '#1c2128', borderColor: '#30363d', color: '#f0f6fc' }}
                                   >
                                     Configure
@@ -290,7 +292,7 @@ export const McpMarketplace = (model: Pick<
                                       size="small"
                                       icon={<ThunderboltOutlined />}
                                       loading={testingMap[installed.id]}
-                                      onClick={() => handleTestConnection(installed)}
+                                      disabled={!isAdmin} onClick={() => handleTestConnection(installed)}
                                       style={{ background: '#064e3b', borderColor: '#059669', color: '#34d399' }}
                                     >
                                       Ping
@@ -310,7 +312,7 @@ export const McpMarketplace = (model: Pick<
                                   type="primary"
                                   block
                                   icon={<PlusOutlined />}
-                                  onClick={() => handleOpenConnect(item)}
+                                  disabled={!isAdmin} onClick={() => handleOpenConnect(item)}
                                   style={{
                                     background: '#10b981',
                                     borderColor: '#10b981',

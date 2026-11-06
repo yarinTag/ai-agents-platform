@@ -65,3 +65,13 @@ EventService.emit enriches task event payloads with workflow_execution_id/workfl
 
 ## Tenant-scoped streaming
 GET /api/v1/events/stream builds events/scope.EventScope from get_authorized_scope. Each replayed and live event resolves its owner with storage get_event_owner(task_id, agent_id, project_id), checking the task first (org plus its agent's department), then the agent, then the project, cached per connection. It streams only owner.organization_id == caller org, and for non-admins only when the department is null or among their departments. Unattributable events are dropped. Lookups run via asyncio.to_thread in the consumer, never in the publisher's filter. /system/stats requires an org and filters agents, projects, task runs and active runs by organization; skills are global or belong to the org's projects. /system/health messages carry no cross-tenant counts.
+
+
+## Current stream and department boundaries (2026-11-05)
+EventScope now rechecks active user, organization, current memberships and current event subject
+ownership per event; the stale owner cache no longer authorizes a moved subject. Scope includes
+selected_department_id and JWT expires_at; unauthorized/expired/revoked events are dropped.
+A department query is accepted only for authenticated SSE and validated against current grants.
+Response policy scopes recent activity and statistics. Legacy /ws/system closes1008 until a
+separate tenant-authenticated websocket protocol exists; SSE remains supported. No streams,
+model calls, tests or application startup were executed locally.

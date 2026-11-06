@@ -1,3 +1,4 @@
+import { usePermissions } from '../hooks/usePermissions';
 import { useAuth } from '../context/AuthContext';
 import { useRequestGeneration } from '../hooks/useRequestGeneration';
 import { readResource } from './resourceLoading';
@@ -13,6 +14,7 @@ import { Task } from '../types/task';
 import { getSchedules, toggleSchedule, deleteSchedule, triggerScheduleNow, getAgents, getProjects, getTasks, getPendingApprovals } from '../services/api';
 
 export const useCalendarViewPage = () => {
+  const { canManage, canOperate } = usePermissions();
   const { organization, activeDepartmentId } = useAuth();
   const [schedules, setSchedules] = useState<ScheduledJob[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -271,6 +273,7 @@ export const useCalendarViewPage = () => {
       key: 'enabled',
       render: (enabled: boolean, record: ScheduledJob) => (
         <Switch
+          disabled={!canManage}
           checked={enabled}
           onChange={(checked) => handleToggle(record, checked)}
           checkedChildren="ON"
@@ -287,10 +290,10 @@ export const useCalendarViewPage = () => {
             <Button
               type="text"
               icon={<PlayCircleOutlined style={{ color: '#10b981', fontSize: '16px' }} />}
-              onClick={() => handleTriggerNow(record.id)}
+              disabled={!canOperate} onClick={() => handleTriggerNow(record.id)}
             />
           </Tooltip>
-          <Popconfirm
+          <Popconfirm disabled={!canManage}
             title="Delete this schedule?"
             onConfirm={() => handleDelete(record.id)}
             okText="Yes"
@@ -298,7 +301,7 @@ export const useCalendarViewPage = () => {
           >
             <Button
               type="text"
-              danger
+              danger disabled={!canManage}
               icon={<DeleteOutlined style={{ fontSize: '16px' }} />}
             />
           </Popconfirm>

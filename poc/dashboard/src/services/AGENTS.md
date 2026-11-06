@@ -250,3 +250,19 @@ Existing getWorkflowChatContext is reused once by useWorkflowResources for all m
 WorkflowChannelBinding.notify_mode union adds COMPLETION_ONLY, START_AND_COMPLETE and EACH_STEP. ChatWorkflow.destination adds the canonical optional notify_mode field. Existing service routes/signatures remain compatible. No new requests or tests.
 
 Runtime setup/selection/detection URLs remain unchanged but now scope to the authenticated organization. runtimeApi.ts adds revokeRuntimeCredential(providerId): DELETE /api/v1/runtimes/credentials/{encodedProviderId} -> RuntimeSetupState. Existing facade export applies. No build/typecheck performed.
+
+
+`getWorkflows(departmentId?: string|null)` now forwards department_id for a selected
+department. `getWorkflowExecutions(workflowId?,limit=50,departmentId?:string|null)` forwards
+the same query in addition to existing filters. Omitted/null values retain the prior
+all-authorized behavior for other consumers; no transport-wide default or authorization
+change. Existing backend routes already support these parameters. No runtime checks.
+
+
+requestScope.ts stores only the current in-memory department; httpClient attaches X-Department-ID
+for every request. Stale401 results cannot clear a newer login. eventStream adds department_id to
+SSE, resets its cursor on explicit disconnect and reconnects when auth selection changes.
+accessPermissions.ts is the pure four-role rank/intersection helper, tested by source-only cases.
+Manual plugin repository tokens use POST /mcp/discover-resources bodies without token cache keys;
+credential-free GET /skills/plugins/git-repos stays admin-only. No endpoint credential value is
+stored in localStorage by these changes. No local application or test execution performed.

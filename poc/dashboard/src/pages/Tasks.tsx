@@ -1,3 +1,4 @@
+import { usePermissions } from '../hooks/usePermissions';
 import { TaskQueuePanel } from './TaskQueuePanel';
 import React from 'react';
 import { Table, Form, Input, Button, Modal, Tag, Slider, message, Select, InputNumber, Tree, Card } from 'antd';
@@ -8,6 +9,7 @@ import { Agent } from '../types/agent';
 import { useTasksPage } from './useTasksPage';
 
 export const TasksPage: React.FC = () => {
+  const { canOperate } = usePermissions();
   const model = useTasksPage();
   const {
     tasks,
@@ -52,7 +54,7 @@ export const TasksPage: React.FC = () => {
         <Button
           type="primary"
           icon={<PlusOutlined />}
-          onClick={handleCreate}
+          disabled={!canOperate} onClick={handleCreate}
           style={{ background: '#10b981', borderColor: '#10b981', borderRadius: '8px' }}
         >
           Dispatch New Task

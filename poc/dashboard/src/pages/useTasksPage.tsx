@@ -1,3 +1,4 @@
+import { usePermissions } from '../hooks/usePermissions';
 import { useState } from 'react';
 import { Form, Button, Modal, Tag, message, Space, Tree, Tooltip } from 'antd';
 import { DeleteOutlined, SyncOutlined, EyeOutlined, BranchesOutlined, ApartmentOutlined, CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined } from '@ant-design/icons';
@@ -7,6 +8,7 @@ import { createTask, getTask, updateTask, deleteTask, cancelTask, delegateTask, 
 import { useOfficeEvents } from '../hooks/useOfficeEvents';
 
 export const useTasksPage = () => {
+  const { canManage, canOperate } = usePermissions();
   const { tasks, agents, loading, refresh } = useOfficeEvents();
   const [visible, setVisible] = useState<boolean>(false);
   const [form] = Form.useForm();
@@ -263,7 +265,7 @@ export const useTasksPage = () => {
                 <Button
                   size="small"
                   type="primary"
-                  icon={<BranchesOutlined />}
+                  disabled={!canOperate} icon={<BranchesOutlined />}
                   onClick={() => handleOpenDelegate(record)}
                   style={{ background: '#0284c7', borderColor: '#0284c7' }}
                 >
@@ -308,7 +310,7 @@ export const useTasksPage = () => {
               <Button
                 size="small"
                 danger
-                icon={<SyncOutlined />}
+                disabled={!canOperate} icon={<SyncOutlined />}
                 onClick={() => {
                   cancelTask(record.id)
                     .then(() => {
@@ -325,7 +327,7 @@ export const useTasksPage = () => {
             <Button
               size="small"
               danger
-              icon={<DeleteOutlined />}
+              disabled={!canOperate} icon={<DeleteOutlined />}
               title="Delete task"
               onClick={() => {
                 deleteTask(record.id)

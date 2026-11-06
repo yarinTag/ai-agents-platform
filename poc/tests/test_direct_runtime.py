@@ -101,3 +101,32 @@ def test_local_tools_enforce_inventory_and_workspace(tmp_path):
             assert tools.inventory == []
 
     asyncio.run(check())
+
+
+@pytest.mark.parametrize('restricted,tool_flag', [(False, ''), (True, None)])
+def test_tool_free_authoring_has_no_workspace_or_tool_access(tmp_path, monkeypatch, restricted, tool_flag):
+    monkeypatch.setenv('PLATFORM_TENANT_STORAGE_ROOT', str(tmp_path / 'tenants'))
+    monkeypatch.setenv('PLATFORM_PROVIDER_ORGANIZATION', 'org-authoring')
+    monkeypatch.setenv('PLATFORM_PROVIDER_DEPARTMENT', '')
+    # The authoring subprocess uses an ephemeral directory outside file-tool partitions.
+    args = Namespace(add_dir=str(tmp_path / 'authoring-temp'), mcp_config=None,
+        restricted=restricted, tools=tool_flag, allowedTools='Read,Write,Bash',
+        dangerously_skip_permissions=True)
+
+    async def check():
+        async with DirectTools(args) as tools:
+            assert tools.inventory == []
+            for name in ('Read', 'Write', 'Bash'):
+                with pytest.raises(ValueError, match='inventory'):
+                    await tools.call(name, {})
+        args.mcp_config = '{"mcpServers":{"unapproved":{}}}'
+        with pytest.raises(ValueError, match='Unsupported MCP'):
+            async with DirectTools(args):
+                pass
+        args.mcp_config = None
+        args.restricted, args.tools = False, None
+        with pytest.raises(ValueError, match='limited to'):
+            async with DirectTools(args):
+                pass
+
+    asyncio.run(check())

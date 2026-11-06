@@ -118,3 +118,25 @@ Execution tool context JSON additionally stores nullable notification_error thro
 
 ## Hosted request budget ledger
 hosted_budget.py is initialized by organization_schema. hosted_model_requests columns: id PK; organization_id/department_id FKs cascade; execution_id/task_id/model; reserved_micros INTEGER>=0; charged_micros nullable; state RESERVED/SETTLED/UNKNOWN; pricing_json,usage_json,created_at; department/date index. reserve uses BEGIN IMMEDIATE plus current spend and held reservations; settle is repeat-safe from RESERVED only. UNKNOWN/crash reservations never expire automatically. Settled configured-rate estimates not yet booked by workflow totals add to monthly spend; unsettled reservations are separate reserved_usd in check_department_budget and never shown as actual spend. No prompts, provider keys or response bodies are stored. Existing Direct API calls do not yet reserve per call; global mixed-backend race-free budgeting is not claimed. No migration/runtime executed.
+
+
+## Catalog ownership and explicit access lab (2026-11-05)
+organization_schema adds access_resource_owners(resource_type TEXT,resource_id TEXT,
+organization_id TEXT NOT NULL FK organizations ON DELETE CASCADE; composite PK type/id).
+Only new explicit tenant-owned custom skills/templates receive rows; legacy globals are not
+automatically assigned. Project skills inherit their existing project's owner. Catalog ID
+namespacing prevents new cross-tenant collision/upsert. No auth action auto-claims orphaned data.
+
+access_lab.create_access_lab(existing_database, new_credentials_path) uses one BEGIN IMMEDIATE
+transaction, INSERT-only unique fixture IDs, canonical password hashing loaded without backend
+startup and a private O_EXCL0600 credential file outside the checkout. It creates2 orgs,6 depts,
+26 users,12 agents,6 inactive workflows/revision1 snapshots,2 shared projects,2 private skills,
+2 templates and2 disconnected connector fixtures with Engineering-only read grants. No existing
+rows/grants are modified. No provider keys, cron, webhooks, executions or sends. Entry is the
+single demo_data.setup_access_lab registration function via create_access_lab.py --apply.
+See ../../docs/access-control-audit.md. The user explicitly authorized this additive data setup;
+local runtime verification remains prohibited.
+
+The user-requested lab data was explicitly inserted with marker10da4d25; read-only SQL confirmed
+2 new organizations,3 departments/13 users each and no model keys, connected connectors or runs.
+The private credential file is outside source control. No application/tests were started.

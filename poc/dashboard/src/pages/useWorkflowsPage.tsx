@@ -2,17 +2,24 @@ import axios from 'axios';
 import { useWorkflowRunText } from '../i18n/workflowRun';
 import { useWorkflowSettingsText } from '../i18n/workflowSettings';
 import { removeWorkflowStep } from '../services/workflowDefinitions';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
+import { useAuth } from '../context/AuthContext';
 import { Table, Modal, Input, message, Drawer, Form } from 'antd';
 import { getWorkflows, updateWorkflow, deleteWorkflow, executeWorkflow, executeWorkflowPlayground, getWorkflowExecution, getWorkflowExecutions, getMCPConnectors } from '../services/api';
 import { PlatformWorkflow, WorkflowExecution, MCPConnector } from '../types/mcp';
 import { WorkflowCanvasStep } from '../components/workflows/WorkflowCanvasGraph';
 
 export const useWorkflowsPage = () => {
+  const { activeDepartmentId, organization, user } = useAuth();
+  const scopeKey = JSON.stringify([organization?.id, user?.id, activeDepartmentId]);
+  const currentScope = useRef(scopeKey);
+  currentScope.current = scopeKey;
+  const requestVersion = useRef(0);
+  const [loadedScope, setLoadedScope] = useState<string | null>(null);
   const runText = useWorkflowRunText();
   const settingsText = useWorkflowSettingsText();
-  const [workflows, setWorkflows] = useState<PlatformWorkflow[]>([]);
-  const [executions, setExecutions] = useState<WorkflowExecution[]>([]);
+  const [workflowRows, setWorkflows] = useState<PlatformWorkflow[]>([]);
+  const [executionRows, setExecutions] = useState<WorkflowExecution[]>([]);
   const [connectors, setConnectors] = useState<MCPConnector[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<string>('workflows');
@@ -39,15 +46,44 @@ export const useWorkflowsPage = () => {
   const [detailDrawerOpen, setDetailDrawerOpen] = useState<boolean>(false);
   const [selectedExecution, setSelectedExecution] = useState<WorkflowExecution | null>(null);
 
+  // Hide previous scope immediately, including during a failed replacement request.
+  const workflows = loadedScope === scopeKey ? workflowRows : [];
+  const executions = loadedScope === scopeKey ? executionRows : [];
+
+  useLayoutEffect(() => {
+    setWorkflows([]);
+    setExecutions([]);
+    setConnectors([]);
+    setLoadedScope(null);
+    setEditingWorkflow(null);
+    setHistoryWorkflow(null);
+    setSettingsWorkflow(null);
+    setSelectedWorkflow(null);
+    setRunningWorkflow(null);
+    setSelectedExecution(null);
+    setCreateModalOpen(false);
+    setCanvasModalOpen(false);
+    setRunModalOpen(false);
+    setExecuting(false);
+    setViewDefModalOpen(false);
+    setDetailDrawerOpen(false);
+    runForm.resetFields();
+  }, [scopeKey, runForm]);
+
   // Load Workflows and Executions
   const loadData = useCallback(async () => {
+    if (!organization?.id || currentScope.current !== scopeKey) return;
+    const version = ++requestVersion.current;
+    const isCurrent = () => currentScope.current === scopeKey && requestVersion.current === version;
     setLoading(true);
     try {
       const [wfRes, execRes, connRes] = await Promise.allSettled([
-        getWorkflows(),
-        getWorkflowExecutions(undefined, 100),
+        getWorkflows(activeDepartmentId),
+        getWorkflowExecutions(undefined, 100, activeDepartmentId),
         getMCPConnectors(),
       ]);
+      if (!isCurrent()) return;
+      setLoadedScope(scopeKey);
       if (wfRes.status === 'fulfilled') {
         const wfData = wfRes.value.data as any;
         setWorkflows(Array.isArray(wfData) ? wfData : (wfData?.workflows || []));
@@ -68,17 +104,18 @@ export const useWorkflowsPage = () => {
         console.warn('Failed to load MCP connectors:', connRes.reason);
       }
     } catch (err: any) {
+      if (!isCurrent()) return;
       console.error('Failed to load workflows data:', err);
       message.error('Failed to fetch workflows data');
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
-  }, []);
+  }, [scopeKey, organization?.id, activeDepartmentId]);
 
   useEffect(() => {
     loadData();
     const interval = setInterval(loadData, 10000); // Polling every 10s for active runs
-    return () => clearInterval(interval);
+    return () => { ++requestVersion.current; clearInterval(interval); };
   }, [loadData]);
 
   useEffect(() => {
@@ -87,15 +124,15 @@ export const useWorkflowsPage = () => {
     const refresh = async () => {
       try {
         const response = await getWorkflowExecution(selectedExecution.id);
-        if (!disposed) setSelectedExecution(response.data);
+        if (!disposed && currentScope.current === scopeKey) setSelectedExecution(response.data);
       } catch {
-        if (!disposed) message.error('Failed to refresh execution details');
+        if (!disposed && currentScope.current === scopeKey) message.error('Failed to refresh execution details');
       }
     };
     void refresh();
     const interval = setInterval(refresh, 3000);
     return () => { disposed = true; clearInterval(interval); };
-  }, [detailDrawerOpen, selectedExecution?.id]);
+  }, [detailDrawerOpen, selectedExecution?.id, scopeKey]);
 
   // Handle Delete
   const handleDelete = async (id: string) => {
@@ -150,6 +187,7 @@ export const useWorkflowsPage = () => {
         values.dispatch_mode !== 'queue'
       );
 
+      if (currentScope.current !== scopeKey) return;
       const execData = res.data;
       if (execData.is_deduplicated) {
         message.info(
@@ -219,6 +257,7 @@ export const useWorkflowsPage = () => {
         expected_revision: selectedWorkflow.revision || 1,
         change_summary: `Removed step ${stepKey}`,
       });
+      if (currentScope.current !== scopeKey) return;
       const updatedWf = res.data || {
         ...selectedWorkflow,
         definition_json: newJson,

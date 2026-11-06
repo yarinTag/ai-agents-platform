@@ -1,3 +1,4 @@
+import { usePermissions } from '../../hooks/usePermissions';
 import React, { useEffect, useState } from 'react';
 import { Card, Tag, Button, Tree, Modal, Form, Select, InputNumber, message, Spin, Tooltip, Badge } from 'antd';
 import {
@@ -16,6 +17,7 @@ interface HierarchyEditorProps {
 }
 
 export const HierarchyEditor: React.FC<HierarchyEditorProps> = ({ onHierarchyUpdated }) => {
+  const { canManage } = usePermissions();
   const [treeData, setTreeData] = useState<any[]>([]);
   const [allAgents, setAllAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -131,7 +133,7 @@ export const HierarchyEditor: React.FC<HierarchyEditorProps> = ({ onHierarchyUpd
             <Button
               size="small"
               type="text"
-              icon={<EditOutlined style={{ color: '#94a3b8' }} />}
+              disabled={!canManage} icon={<EditOutlined style={{ color: '#94a3b8' }} />}
               onClick={(e) => {
                 e.stopPropagation();
                 handleEditAgent(node);

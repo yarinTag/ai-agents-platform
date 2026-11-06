@@ -1,4 +1,5 @@
 import React from 'react';
+import { usePermissions } from '../../hooks/usePermissions';
 import { useTranslation } from '../../i18n';
 import { Link, useLocation } from 'react-router-dom';
 import { Tooltip, Button } from 'antd';
@@ -38,6 +39,7 @@ interface NavSection {
 
 export const AppSidebar: React.FC<AppSidebarProps> = ({ collapsed, onToggleCollapse }) => {
   const location = useLocation();
+  const { isAdmin } = usePermissions();
   const { t } = useTranslation();
 
   const sections: NavSection[] = [
@@ -193,7 +195,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ collapsed, onToggleColla
 
             {/* Nav Items */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-              {section.items.map((item) => {
+              {section.items.filter((item) => isAdmin || item.to !== '/settings').map((item) => {
                 const isActive = location.pathname === item.to || (item.to !== '/' && location.pathname.startsWith(`${item.to}/`));
 
                 const linkElement = (

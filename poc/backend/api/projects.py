@@ -94,7 +94,7 @@ async def create_project(
     org_id = project_data.organization_id or get_current_org_id(request)
 
     # Check if already exists
-    existing = config_manager.get_project(project_id) or db_manager.get_project(project_id)
+    existing = db_manager.get_project(project_id) or config_manager.get_project(project_id)
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -126,7 +126,7 @@ async def get_project(
     db_manager = Depends(get_db_manager)
 ):
     """Get a specific project by ID."""
-    project = config_manager.get_project(project_id) or db_manager.get_project(project_id)
+    project = db_manager.get_project(project_id) or config_manager.get_project(project_id)
     if not project:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -148,7 +148,7 @@ async def update_project(
 ):
     """Update an existing project."""
     # Get existing project
-    existing = config_manager.get_project(project_id) or db_manager.get_project(project_id)
+    existing = db_manager.get_project(project_id) or config_manager.get_project(project_id)
     if not existing:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -179,7 +179,7 @@ async def delete_project(
 ):
     """Delete a project."""
     # Check if exists
-    existing = config_manager.get_project(project_id) or db_manager.get_project(project_id)
+    existing = db_manager.get_project(project_id) or config_manager.get_project(project_id)
     if not existing:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

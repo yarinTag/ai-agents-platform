@@ -54,3 +54,13 @@ Creating a persisted approval/question no longer requires an unused live runtime
 
 ## Callback authenticity and permission grants
 approvals/callback_auth.py: /telegram-callback requires X-Telegram-Bot-Api-Secret-Token == TELEGRAM_WEBHOOK_SECRET; /slack-callback requires a Slack v0 HMAC (SLACK_SIGNING_SECRET) with a timestamp within 300s. Both use constant-time comparison. A missing secret returns 503 and a bad signature returns 401, before the body is interpreted. respond_to_interaction resumes approved tasks with resume_task(..., grant_permissions=True). This is the only path that widens permissions; RuntimeAdapter.resume_task no longer infers grants from answer text.
+
+
+## Approval actor enforcement (2026-11-05)
+Registry policy validates task/requester ownership and current department roles before reads or
+side effects. Create-request is operational; formal respond requires department management.
+respond_to_interaction receives the HTTP Request, requires its verified actor and stamps responder
+from user_id/service rather than the submitted string. Chat cannot bypass a pending formal
+approval with an operator reply. Legacy shared-secret Telegram/Slack callbacks and arbitrary-target
+dispatch are denied until tenant-bound actor/channel authorization exists. Ordinary governed
+workflow notifications remain separate. No approvals resumed or messages/tests executed locally.

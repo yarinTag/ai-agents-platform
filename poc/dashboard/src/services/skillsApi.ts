@@ -31,9 +31,12 @@ export const updatePluginsConfig = async (data: { source_mode: 'local' | 'git'; 
   invalidateRequestCache('plugins:');
   return response;
 };
-export const getPluginGitRepos = (token?: string) => cachedRequest(pluginCacheKey('repos', token),
-  () => api.get<{ repositories: any[]; has_token: boolean; provider?: string }>('/api/v1/skills/plugins/git-repos', {
-    params: token ? { token } : {},
-  }), 60_000);
+export const getPluginGitRepos = (token?: string) => token
+  ? api.post<{ repositories: any[]; has_token?: boolean; provider?: string }>('/api/v1/mcp/discover-resources', {
+      provider: /^glpat[-_]/.test(token) ? 'gitlab' : 'github', token,
+    }).then(response => ({ ...response, data: { ...response.data, has_token: true } }))
+  : cachedRequest(pluginCacheKey('repos'),
+      () => api.get<{ repositories: any[]; has_token: boolean; provider?: string }>('/api/v1/skills/plugins/git-repos'), 60_000);
+
 export const getPluginSkillContent = (path: string) => api.get<{ path: string; content: string }>('/api/v1/skills/plugins/content', { params: { path } });
 

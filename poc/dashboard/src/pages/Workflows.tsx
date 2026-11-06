@@ -1,3 +1,4 @@
+import { usePermissions } from '../hooks/usePermissions';
 import React, { useState } from 'react';
 import { WorkflowChatModal } from '../components/workflows/WorkflowChatModal';
 import { useWorkflowChatText } from '../i18n/workflowChat';
@@ -16,6 +17,7 @@ import { createWorkflowExecutionColumns } from './workflowExecutionColumns';
 import { WorkflowExecutionDrawer } from './WorkflowExecutionDrawer';
 
 export const WorkflowsPage: React.FC = () => {
+  const { canRead, canManage, canOperate } = usePermissions();
   const model = useWorkflowsPage();
   const [chatSearch, setChatSearch] = useSearchParams();
   const [chatOpen, setChatOpen] = useState(() => chatSearch.has('workflowChat'));
@@ -61,7 +63,7 @@ export const WorkflowsPage: React.FC = () => {
     queuedRuns,
     deduplicatedRuns,
   } = model;
-  const workflowColumns = createWorkflowColumns(model);
+  const workflowColumns = createWorkflowColumns(model, { canManage, canOperate });
   const executionColumns = createWorkflowExecutionColumns(model);
   return (
     <div style={{ padding: '24px', minHeight: '100vh', background: '#0a0d12' }}>
@@ -96,7 +98,7 @@ export const WorkflowsPage: React.FC = () => {
         </div>
 
         <Space size={10}>
-          <Button onClick={() => setChatOpen(true)}>{chatText.entry}</Button>
+          <Button disabled={!canRead} onClick={() => setChatOpen(true)}>{chatText.entry}</Button>
           <Button
             icon={<ReloadOutlined spin={loading} />}
             onClick={() => loadData()}
@@ -111,7 +113,7 @@ export const WorkflowsPage: React.FC = () => {
           <Button
             type="primary"
             icon={<PlusOutlined />}
-            onClick={() => { setEditingWorkflow(null); setCreateModalOpen(true); }}
+            disabled={!canRead} onClick={() => { setEditingWorkflow(null); setCreateModalOpen(true); }}
             style={{
               background: '#8b5cf6',
               borderColor: '#8b5cf6',
@@ -317,7 +319,7 @@ export const WorkflowsPage: React.FC = () => {
             channelBinding={selectedWorkflow.channel_binding}
             skills={[]}
             allowedMcps={[]}
-            onDeleteStep={handleDeleteStepFromCanvas}
+            onDeleteStep={canManage ? handleDeleteStepFromCanvas : undefined}
           />
         )}
       </Modal>
@@ -370,7 +372,7 @@ export const WorkflowsPage: React.FC = () => {
         </pre>
       </Modal>
 
-      {chatOpen && <WorkflowChatModal onClose={closeChat} onCreated={() => { void loadData(); }} />}
+      {chatOpen && canRead && <WorkflowChatModal onClose={closeChat} onCreated={() => { void loadData(); }} />}
       <WorkflowExecutionDrawer {...model} />
 
       {/* Create Workflow Modal */}

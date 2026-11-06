@@ -4,6 +4,9 @@ from importlib import import_module
 import logging
 
 from fastapi import Depends, HTTPException, Request
+from fastapi.routing import APIRoute, request_response
+from .security.request_policy import authorize_request
+from .security.response_policy import protect_response
 
 from .capabilities import capabilities
 from .security import authenticate_request
@@ -67,6 +70,28 @@ def _register_unavailable(app, name, prefix):
         )
 
 
+def _protect_routes(route):
+    """Wrap direct routes and lazy included routers, retaining effective dependencies."""
+    if isinstance(route, APIRoute):
+        if getattr(route, "_tenant_response_guard", False):
+            return
+        original_factory = route.get_route_handler
+        def guarded_factory():
+            handler = original_factory()
+            async def handle(request):
+                response = await handler(request)
+                return protect_response(request, response)
+            return handle
+        route.get_route_handler = guarded_factory
+        route.app = request_response(route.get_route_handler())
+        route._tenant_response_guard = True
+        return
+    included = getattr(route, "original_router", None)
+    if included is not None:
+        for child in included.routes:
+            _protect_routes(child)
+
+
 def register_routers(app):
     for name, module_name, prefix, required in ROUTERS:
         if required and not capabilities.enabled(name):
@@ -75,15 +100,20 @@ def register_routers(app):
             capabilities.mark(name, "DISABLED")
             _register_unavailable(app, name, prefix)
             continue
+        before = len(app.routes)
         try:
             router = import_module(module_name, __package__).router
+            before = len(app.routes)
             app.include_router(
                 router, prefix=prefix, tags=[name],
-                dependencies=[Depends(authenticate_request), Depends(_availability_guard(name))],
+                dependencies=[Depends(authenticate_request), Depends(authorize_request), Depends(_availability_guard(name))],
             )
+            for route in app.routes[before:]:
+                _protect_routes(route)
             capabilities.mark(name, "READY")
         except Exception:
-            if required:
+            # Never leave partially registered routes behind without their policy wrapper.
+            if required or len(app.routes) > before:
                 raise
             logger.exception("Optional router %s could not be registered", name)
             capabilities.mark(name, "UNAVAILABLE", "Module could not be loaded")

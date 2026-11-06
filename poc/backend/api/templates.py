@@ -2,7 +2,7 @@
 Agent template management and instantiation API endpoints.
 """
 
-from fastapi import APIRouter, HTTPException, Depends, status, Query
+from fastapi import APIRouter, HTTPException, Depends, status, Query, Request
 from typing import List, Optional
 from pydantic import BaseModel, Field
 from datetime import datetime
@@ -106,10 +106,14 @@ async def get_template(
 @router.post("", response_model=TemplateResponse, status_code=status.HTTP_201_CREATED)
 async def create_template(
     data: TemplateCreate,
+    request: Request,
     db_manager = Depends(get_db_manager)
 ):
     """Create a new reusable agent template."""
-    template_id = data.id or data.name.lower().replace(" ", "-").replace("_", "-")
+    from ..security.catalog_ownership import tenant_identifier, register_owner
+    actor = request.state.access_actor
+    template_id = tenant_identifier(actor, data.id or data.name)
+    register_owner(db_manager, actor, "template", template_id)
     existing = db_manager.get_template(template_id)
     if existing:
         raise HTTPException(
@@ -154,6 +158,7 @@ async def delete_template(
 async def instantiate_agent_from_template(
     template_id: str,
     request: TemplateInstantiateRequest,
+    http_request: Request,
     db_manager = Depends(get_db_manager),
     config_manager = Depends(get_config_manager),
     event_service: EventService = Depends(get_event_service)
@@ -166,10 +171,14 @@ async def instantiate_agent_from_template(
             detail=f"Template not found: {template_id}"
         )
 
-    agent_id = request.name.lower().replace(" ", "-").replace("_", "-")
+    from ..security.catalog_ownership import tenant_identifier
+    actor = http_request.state.access_actor
+    agent_id = tenant_identifier(actor, request.name)
+    department_id = actor.default_department(3)
+    actor.require(department_id, 3)
 
     max_agents = getattr(db_manager, "max_agents", 18)
-    if len(db_manager.list_agents()) >= max_agents:
+    if len(db_manager.list_agents(organization_id=actor.organization_id)) >= max_agents:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Platform agent capacity reached: maximum {max_agents} agents allowed"
@@ -198,6 +207,8 @@ async def instantiate_agent_from_template(
 
     agent_config = AgentConfig(
         id=agent_id,
+        organization_id=actor.organization_id,
+        department_id=department_id,
         name=request.name,
         description=template.description,
         system_prompt=request.system_prompt_override or template.system_prompt,
@@ -214,7 +225,7 @@ async def instantiate_agent_from_template(
         role_type=role_type,
         max_concurrent_children=3,
         delegation_strategy="hierarchical",
-        allowed_child_ids=list(template.suggested_children or []),
+        allowed_child_ids=[],
         allowed_tools=list(template.tools or []),
         template_id=template.id
     )

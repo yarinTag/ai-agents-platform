@@ -1,3 +1,4 @@
+import { usePermissions } from '../hooks/usePermissions';
 import React, { useEffect, useState } from 'react';
 import {
   Table,
@@ -13,6 +14,7 @@ import { getProjects, createProject, updateProject, deleteProject } from '../ser
 import FolderPickerModal from '../components/common/FolderPickerModal';
 
 export const ProjectsPage: React.FC = () => {
+  const { isAdmin } = usePermissions();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [visible, setVisible] = useState<boolean>(false);
@@ -119,7 +121,7 @@ export const ProjectsPage: React.FC = () => {
         <div style={{ display: 'flex', gap: '8px' }}>
           <Button
             size="small"
-            icon={<EditOutlined />}
+            disabled={!isAdmin} icon={<EditOutlined />}
             onClick={() => {
               form.setFieldsValue({
                 name: record.name,
@@ -135,7 +137,7 @@ export const ProjectsPage: React.FC = () => {
           <Button
             size="small"
             danger
-            icon={<DeleteOutlined />}
+            disabled={!isAdmin} icon={<DeleteOutlined />}
             onClick={() => {
               deleteProject(record.id)
                 .then(() => {
@@ -171,14 +173,14 @@ export const ProjectsPage: React.FC = () => {
           <Button
             type="primary"
             icon={<FolderOpenOutlined />}
-            onClick={handlePickProjectFromComputer}
+            disabled onClick={handlePickProjectFromComputer}
             style={{ background: '#0284c7', borderColor: '#0284c7', fontWeight: 600 }}
           >
             📁 Select Project from Computer
           </Button>
           <Button
             icon={<PlusOutlined />}
-            onClick={handleCreate}
+            disabled={!isAdmin} onClick={handleCreate}
             style={{ background: '#238636', borderColor: '#238636', color: '#fff' }}
           >
             Add Manually

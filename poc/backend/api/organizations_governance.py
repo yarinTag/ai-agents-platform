@@ -1,6 +1,6 @@
 """Organizations: governance ownership."""
 
-from fastapi import HTTPException, Depends, status, Query
+from fastapi import HTTPException, Depends, status, Query, Request
 from typing import List, Optional
 import json
 from ..dependencies import get_db_manager, DatabaseManager
@@ -42,6 +42,7 @@ def _format_access_response(access: DepartmentMCPAccess) -> DepartmentMCPAccessR
 def grant_department_mcp_access(
     dept_id: str,
     req: DepartmentMCPAccessRequest,
+    request: Request,
     db: DatabaseManager = Depends(get_db_manager)
 ):
     """
@@ -56,8 +57,8 @@ def grant_department_mcp_access(
         department_id=dept_id,
         connector_id=req.connector_id,
         allowed_tools=req.allowed_tools,
-        organization_id=req.organization_id or dept.organization_id,
-        granted_by_user_id=req.granted_by_user_id
+        organization_id=dept.organization_id,
+        granted_by_user_id=request.state.access_actor.user_id
     )
     return _format_access_response(access)
 

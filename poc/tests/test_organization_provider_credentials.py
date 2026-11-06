@@ -7,6 +7,7 @@ from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
 from backend.api import runtimes, models
+from backend.dependencies import get_db_manager
 from backend.security import authenticate_request, create_access_token
 from config import AgentConfig
 from persistence import DatabaseManager
@@ -27,6 +28,7 @@ def setup(tmp_path, monkeypatch):
                        full_name=org, role='ORG_ADMIN')
     monkeypatch.setattr(runtimes, 'db_manager', db)
     app = FastAPI()
+    app.dependency_overrides[get_db_manager] = lambda: db
     app.include_router(runtimes.router, prefix='/api/v1/runtimes', dependencies=[Depends(authenticate_request)])
     app.include_router(models.router, prefix='/api/v1/models', dependencies=[Depends(authenticate_request)])
     client = TestClient(app)
@@ -77,7 +79,7 @@ def test_stale_admin_disabled_user_and_secret_validation(setup):
     db.update_user('a', role='MEMBER')
     assert save(client, 'a', 'must-not-save').status_code == 403
     db.update_user('a', role='ORG_ADMIN', status='INACTIVE')
-    assert save(client, 'a', 'must-not-save').status_code == 403
+    assert save(client, 'a', 'must-not-save').status_code == 401
     response = client.put('/api/v1/runtimes/selection', headers=headers('b'), json={
         'provider_id': 'direct_openai', 'api_key': {'value': 'never-echo-secret'}})
     assert response.status_code == 422

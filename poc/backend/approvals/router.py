@@ -115,12 +115,16 @@ async def respond_to_interaction(
     payload: InteractionResponse,
     db: DatabaseManager = Depends(get_db_manager),
     runtime: RuntimeAdapter = Depends(get_runtime_adapter),
-    event_bus: EventBus = Depends(get_event_bus)
+    event_bus: EventBus = Depends(get_event_bus),
+    request: Request = None
 ):
     """
     Answer an agent's question or approve/reject its action.
     Unblocks the task and resumes execution.
     """
+    if request is None or not getattr(request.state, "access_actor", None):
+        raise HTTPException(403, "A current tenant approver identity is required.")
+    payload.responder = request.state.access_actor.user_id or "organization_service"
     interaction = db.get_interaction(payload.interaction_id)
     if not interaction:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Interaction not found")

@@ -1,3 +1,4 @@
+import { usePermissions } from '../hooks/usePermissions';
 import { useConnectorResourceText } from '../i18n/connectorResources';
 import { ResourceSection } from './ResourceSection';
 import { Card, Row, Col, Tag, Button, Badge, Popconfirm } from 'antd';
@@ -23,6 +24,7 @@ export const McpInstalledConnectors = (model: Pick<
   | 'handleOpenPermissions'
   | 'getProviderIcon'
 >) => {
+  const { isAdmin } = usePermissions();
   const {
     loading,
     catalog,
@@ -161,8 +163,7 @@ export const McpInstalledConnectors = (model: Pick<
                                         {conn.configuration?.channel_labels?.[ch] || ch}
                                       </Tag>
                                       <Button size="small" loading={testingChannelMap[`${conn.id}:${ch}`]}
-                                        disabled={!isConnected}
-                                        onClick={() => void handleTestChannelMessage(conn.provider, ch, conn.id)}>
+                                        disabled={!isAdmin || !isConnected} onClick={() => void handleTestChannelMessage(conn.provider, ch, conn.id)}>
                                         {text.sendTest}
                                       </Button>
                                       </div>
@@ -180,7 +181,7 @@ export const McpInstalledConnectors = (model: Pick<
                                   size="small"
                                   icon={<ThunderboltOutlined />}
                                   loading={testingMap[conn.id]}
-                                  onClick={() => handleTestConnection(conn)}
+                                  disabled={!isAdmin} onClick={() => handleTestConnection(conn)}
                                   style={{ background: '#064e3b', borderColor: '#059669', color: '#34d399' }}
                                 >
                                   {text.connectionTest}
@@ -196,8 +197,7 @@ export const McpInstalledConnectors = (model: Pick<
                                 <Button
                                   size="small"
                                   icon={<SafetyCertificateOutlined />}
-                                  disabled={Boolean(resourceErrors.permissions || resourceErrors.agents)}
-                                  onClick={() => handleOpenPermissions(conn)}
+                                  disabled={!isAdmin || Boolean(resourceErrors.permissions || resourceErrors.agents)} onClick={() => handleOpenPermissions(conn)}
                                   style={{ background: '#1c2128', borderColor: '#30363d', color: '#c084fc' }}
                                 >
                                   Access
@@ -209,11 +209,11 @@ export const McpInstalledConnectors = (model: Pick<
                                   <Button
                                     size="small"
                                     icon={<SettingOutlined />}
-                                    onClick={() => handleOpenConnect(catDef, conn)}
+                                    disabled={!isAdmin} onClick={() => handleOpenConnect(catDef, conn)}
                                     style={{ background: '#1c2128', borderColor: '#30363d', color: '#f0f6fc' }}
                                   />
                                 )}
-                                <Popconfirm
+                                <Popconfirm disabled={!isAdmin}
                                   title="Uninstall this MCP connector?"
                                   description="This will remove the integration and its registered tools."
                                   onConfirm={() => handleUninstall(conn.id)}

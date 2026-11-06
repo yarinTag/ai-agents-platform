@@ -225,3 +225,21 @@ Chat-compatible and Responses wire parsing preserve raw platform_workflow_finish
 ## Opt-in Anthropic Message Threads
 `anthropic_threads.py` reads organization `runtime_message_threads_enabled` (default false) for direct_anthropic only. The existing httpx transport adds message-threads-2026-08-12; create sends full history, continue sends only the suffix and omits system/tools. Private DirectSession JSON adds thread_state (response cursor, acknowledged message count/prefix digest, configuration fingerprint, organization/credential-version binding, timestamp, pending marker); old records remain readable and forks discard cursors. Pending state is saved before network I/O; completed response/history/usage are committed together by the worker. Configuration changes, expiration, edited prefixes and interrupted attempts create anew; changed configuration removes thinking/redacted_thinking from the wire copy only. Resume/fork sources and active persistent sessions use nonblocking POSIX advisory leases acquired before history load. No cross-host locking is claimed.
 Only recognized pre-inference thread_not_found/thread_already_continued/thread_continue_in_flight permits one replay. thread_unsupported_request permits one full unthreaded request and disables threads for the worker lifetime. Generic 404/timeout/auth/rate-limit errors do not retry. Current connector policy and credential version are rechecked for each HTTP attempt. No connector tool is executed by replay. Refusal, truncated output and pause_turn clear cursors; pause_turn automatic continuation is deliberately unsupported. conversation_transport is checkpointed and rendered chronologically. No streaming, prompt caching, SDK transport or pricing change. No runtime verification performed.
+
+
+## Tenant workspace and host tool boundary (2026-11-05; supersedes global-root defaults)
+tenant_workspace.py resolves server-owned PLATFORM_TENANT_STORAGE_ROOT (default
+poc/workspaces/tenants) with organization/department partitions and explicit shared project
+storage. No tenant run falls back to a global default workspace. CommandBuilder stamps
+PLATFORM_PROVIDER_DEPARTMENT and resolves existing configured paths inside authorized partitions;
+external legacy paths fail closed. DirectTools revalidates roots and never exposes host Bash to
+organization workers, regardless of allowedTools/bypass flags. Governed sandbox/container tools
+continue through their existing execution admission. Manager-native shell delegation is therefore
+unavailable outside a governed container; it is not silently permitted on the host.
+Equipped skills use plugins.workflow_skills.agent_skill_context with explicit organization/project
+ownership or the organization's configured plugin source, never shared global cache fallback.
+These are containment checks, not an OS sandbox claim. No model/worker/test execution performed.
+
+An organization-wide agent can access an explicitly supplied organization-shared project root; without a valid department/shared-project context it cannot inherit another workspace.
+
+Tool-free Direct API authoring (--tools empty or restricted) skips unused host workspace validation, allowing its ephemeral subprocess directory. Its inventory remains empty and all tool calls fail; configured MCP servers are still rejected. Runs enabling local tools continue to enforce tenant workspace containment. No local test execution; GitHub CI verifies the contracts.

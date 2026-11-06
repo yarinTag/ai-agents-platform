@@ -52,3 +52,9 @@ legacy/reference-only edges. pluginGraphModel.test.mjs adds strict package/searc
 cross-package direction, conditional flags, opt-in references, evidence aggregation and
 self/unknown/wrong-owner exclusion. These pure contracts do not replace DOM event/scroll
 verification. Added but not run under the local runtime restriction.
+
+
+accessPermissions.test.mjs covers admin membership independence, account/membership rank caps,
+operator-versus-manager flags, read-only members and fail-closed unassigned/unknown roles. It is
+included by the existing *.test.mjs CI glob; not executed locally. No DOM/session/stream correctness
+claim is inferred from the pure helper cases.

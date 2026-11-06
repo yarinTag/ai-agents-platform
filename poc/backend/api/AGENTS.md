@@ -292,3 +292,49 @@ Saved workflow maintenance: user-requested repairs to missing runner reference a
 
 ## Anthropic thread opt-in
 GET /api/v1/runtimes includes providers[].config.message_threads_enabled (true only for direct_anthropic). PUT /api/v1/runtimes/selection accepts optional message_threads_enabled:boolean, persisted atomically as organization_runtime_settings key runtime_message_threads_enabled with values true/false; omission preserves the value. Existing current-DB ORG_ADMIN and credential/model validation remain mandatory. Default is disabled. No schema migration or API secrets returned.
+
+
+## Evidence-backed plugin scan metadata (2026-11-05)
+GET /api/v1/skills/plugins/scan retains request/auth/source behavior and adds optional
+per-skill skill_connections:[{source,target,kind,conditional?,evidence:{path,line?,node_id?,
+text,section?,revision?}}], connection_warnings:string[], and Git source_revision (tree SHA).
+Kinds: handoff, conditional_handoff, declared_transition, reference. connected_skills remains
+compatibility reference metadata, not authoritative execution flow. Projection lives in
+plugins/connections.py; declared DAG files and immutable Git blobs are read by adapters.
+There is no new route, execution, grant or credential handling. See plugin guide and
+[the source audit](../../../docs/plugin-skill-flow-audit.md). Runtime checks were not run.
+
+
+## Session department visibility (2026-11-05)
+`organizations_auth._session_departments` projects `departments` in POST /auth/login,
+POST /auth/org-register and GET /auth/me. Current DB ORG_ADMIN users receive all departments
+inside their organization, with both id and department_id; real membership department_role
+and joined_at are retained where present, without fabricated membership roles. Other roles
+retain get_user_departments membership-only results. JWT departments claims continue to
+contain actual memberships only. No memberships or grants are inserted during projection.
+This fixes the header missing newly created departments: OrganizationPage already calls
+refreshUserProfile after creation, but /auth/me previously returned only memberships.
+No local tests/build/application execution performed.
+
+
+## Tenant-wide endpoint hardening (2026-11-05)
+All registered API modules now pass security.request_policy before endpoint effects and
+security.response_policy before JSON release. Explicit endpoint-name rules are in
+security/route_permissions.py; resource ownership/path/query/body references are server-owned,
+not optional tenant hints. Roles and current memberships are reread from the DB. The full
+route/role/ownership contracts are in ../../../docs/access-control-audit.md.
+
+Login/profile/registration no longer claim orphaned records. Inactive login status is disclosed
+only after password verification. Skills/templates create safe tenant-prefixed IDs and ownership
+records; instantiation stamps real organization/department, caps capacity per tenant and omits
+inherited live child-agent IDs. Connector configuration reads redact credentials; updates retain
+masked saved values. Department grants stamp current actor and tenant; tools must match connector.
+Workflow settings/secret can_manage uses the same capped current membership policy. Filesystem
+browse defaults to own shared tenant root and never Home/cwd, refuses symlink escapes and foreign
+roots, and exposes only the tenant quick-access location. Native OS picker is denied. Plugin
+reads stay inside the configured source; non-admin scans cannot persist query source changes.
+No local test/build/typecheck/startup/provider operations were performed for verification.
+
+Auth profile/login/onboarding department lists are filtered to the current organization even if legacy membership rows are inconsistent. Project/detail and task agent lookup prefer persisted DB records over stale global config copies.
+
+All active recognized-role department members may create workflows, use AI context/chat/recovery/cancel/confirmed creation and generate definitions. Catalog grants, current membership and draft ownership still apply. Shared persistence forces newly authored workflows inactive below effective department MANAGER; activation/edit/delete remain management and execution remains operation permissions. No local runtime verification performed.

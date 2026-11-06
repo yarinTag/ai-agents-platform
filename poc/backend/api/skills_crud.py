@@ -1,6 +1,6 @@
 """Skills: crud ownership."""
 
-from fastapi import HTTPException, Depends, status
+from fastapi import HTTPException, Depends, status, Request
 from typing import List, Optional
 from ..dependencies import get_config_manager, get_db_manager, Skill
 from .skills_models import SkillCreate, SkillResponse, SkillUpdate
@@ -25,12 +25,16 @@ async def list_skills(
 @router.post("/", response_model=SkillResponse, status_code=status.HTTP_201_CREATED)
 async def create_skill(
     skill_data: SkillCreate,
+    request: Request,
     config_manager = Depends(get_config_manager),
     db_manager = Depends(get_db_manager)
 ):
     """Create a new skill."""
     # Generate ID from name
-    skill_id = skill_data.name.lower().replace(" ", "-").replace("_", "-")
+    from ..security.catalog_ownership import tenant_identifier, register_owner
+    actor = request.state.access_actor
+    skill_id = tenant_identifier(actor, skill_data.name)
+    register_owner(db_manager, actor, "skill", skill_id)
 
     # Check if already exists (global or in project)
     existing = db_manager.get_skill(skill_id)

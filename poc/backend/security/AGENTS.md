@@ -91,3 +91,50 @@ The assistant service adds current-database validation after authenticate_reques
 
 ## Fail-closed hardening (2026-11-01)
 tokens._get_jwt_secret requires JWT_SECRET_KEY >= 32 chars. PLATFORM_DEV_MODE=1 uses a random per-process key; there is no built-in secret. main.lifespan calls validate_token_configuration() before init_services. decode_access_token rejects malformed base64/non-ASCII tokens with None. authenticate_request accepts ?token= only on QUERY_TOKEN_PATHS (/api/v1/events/stream), drops ?api_key=, and compares API keys with hmac.compare_digest. API-key auth requires PLATFORM_API_KEY_ORG_ID; open dev auth requires PLATFORM_DEV_MODE=1, ALLOW_UNAUTHENTICATED_DEV=true and PLATFORM_DEV_ORG_ID. Both set request.state.user = {org_id, role: ORG_ADMIN, service} via _service_claims, so every authenticated request has an organization. get_authorized_scope reads non-admin departments from the database only (no JWT fallback, filtered to the caller's org); X-Department-ID only selects an already-authorized department. CORS origins come from PLATFORM_CORS_ORIGINS (default localhost:5173), and '*' is ignored. See docs/security-configuration.md. Static review only.
+
+
+## Unified current-identity role and resource policy (2026-11-05)
+identity.Actor loads an ACTIVE user matching the signed sub/org; unknown roles are rejected.
+Department rank is min(account role, membership role), with ORG_ADMIN limited to its own
+organization's departments. Non-user service identities are accepted only from authenticated
+api_key/open_development modes; user JWT service impersonation is rejected. X-Department-ID
+must already be authorized and narrows selection; profile refresh ignores an obsolete selector.
+get_authorized_scope has no unassigned-user default department fallback or stale-claim grants.
+
+route_permissions explicitly registers endpoint names per domain with levels1 read,2 operate,
+3 manage,4 organization administer; unknown names fail closed. request_policy validates current
+roles and all mapped path/query/body IDs, nested step/resource JSON/YAML aliases with bounded
+nesting, cross-organization updates, implicit department defaults and graph references before
+endpoint side effects. resource_access resolves exact organization ownership or inherited scope
+(tasks/schedules→agent/project; executions→workflow; teams/war rooms→all participating agents;
+interactions→task/requester; messages→participants/task). Missing/orphaned/foreign resources
+are indistinguishable404. Role/selection failures are403 and invalid identity401.
+
+response_policy filters collections/subtrees/activity and rebuilds scoped metrics; plugin/auth
+profiles retain their own source projection. Connector config credentials are redacted without
+prefixes and masked placeholders preserve saved values on update. Audit logs require attributable
+ownership. catalog_ownership generates safe organization-prefixed IDs (Unicode names retain safe
+hash suffixes) and records new skill/template ownership; legacy unowned global records cannot
+be silently claimed. New ownership table contract is documented in storage/AGENTS.md.
+
+Broker-wide queue APIs, global-secret legacy approval callbacks/dispatch, native OS folder picker
+and unauthenticated legacy websocket are denied to tenant sessions. File browsing/local plugin
+paths require tenant shared storage. Organization native Direct API tools cannot expose host
+Bash/bypass and must resolve scoped workspaces. Existing governed workflow container/connector
+execution remains separate. See ../../../docs/access-control-audit.md for exact matrix and limits.
+Prepared real SQLite/FastAPI cases are not executed locally; no zero-vulnerability claim.
+
+Department reassignment of existing agent/workflow records returns409 unless performed through
+an explicit ownership/history migration (not supplied by generic update routes). Workflow task
+scope intersects persisted execution scope and each referenced step agent/task before detail or
+evaluation; an old mixed-department record cannot bypass the new read boundary. Parser aliases
+agent/agentId/reviewerAgentId and connector-list aliases are included in reference admission.
+Execute/Playground bodies remain ordinary user data and cannot substitute for stored scope.
+
+Queued workflow admission rechecks the current active database account and department membership before budget/run creation, including empty DAGs. Request-local department claims are refreshed from current capped memberships; signed login claims do not retain revoked privileges.
+
+Tenant response projection is applied to direct and lazy included routes; organization collection filtering must run with current request actor/resources on every registered response. No local runtime verification performed.
+
+Workflow authoring endpoints require level1 department access, including nested resource references. This exception does not grant management or execution. Default path-scope calculation uses readable membership rather than requiring manager status for unrelated requests. No local runtime verification performed.
+
+Nested response collections are authorized by their own resource type (for example departments inside workflow AI context), rather than the outer endpoint domain. The authoring context retains readable department choices.

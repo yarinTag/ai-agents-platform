@@ -238,3 +238,14 @@ Optional Anthropic Message Threads is configured per organization in API provide
 
 ## Unified Actions execution
 CI runs backend/frontend checks once per trigger and then either validates images without publishing (PR/default manual) or builds/publishes after the aggregate gate (main/master/v* push). Manual publication needs publish=true and a supported ref. ci.yml replaces the duplicate images.yml orchestrator; .github/AGENTS.md owns the exact contracts. No local runtime verification performed.
+
+
+## Access policy and explicit test organizations
+Security policy now uses current database identities and capped membership roles via
+backend/security/{identity,route_permissions,request_policy,resource_access,response_policy}.py.
+Do not bypass the registry guards, restore stale JWT authorization or auto-claim orphaned
+records. See docs/access-control-audit.md for exact role boundaries and legacy restrictions.
+poc/create_access_lab.py is an explicit additive setup command requiring --database,
+--credentials outside the checkout, and --apply; it calls the single demo_data registration
+entry. It never runs on startup or copies credentials from an existing organization.
+Local runtime verification remains restricted; data maintenance is explicitly user-authorized.

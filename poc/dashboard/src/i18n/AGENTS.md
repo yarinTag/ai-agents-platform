@@ -136,3 +136,5 @@ runtimeSetup.ts adds matched EN/HE messageThreads/messageThreadsHelp labels desc
 
 ## Organization Workflows Canvas copy (2026-11-03)
 `orgWorkflowsCanvas.ts` exports `useOrgWorkflowsCanvasText` and `OrgWorkflowsCanvasText` with aligned English (`en`) and Hebrew (`he`) translations for the Organization & Department Workflows Canvas tab, filters, topology legend, triggers, expandable DAG stages, external resource/channel connections, and the workflow inspector drawer.
+
+workflowChat.noDepartments EN/HE now explains department membership rather than a manager-only workflow creation permission. No local runtime verification performed.
