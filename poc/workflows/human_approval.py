@@ -103,7 +103,6 @@ def finish(db, approval, status, error=None, receipts=None):
 
 def resolve(db, approval, approve, approver_check):
     from integrations.pr_approval_policy import fresh_review
-    from integrations.provider_http import request_json
     from integrations.tool_scopes import execution_context, require_initiator
     receipts = []
     try:
@@ -125,26 +124,11 @@ def resolve(db, approval, approve, approver_check):
         subjects = json.loads(approval['subjects_json'])
         for subject in subjects:
             approver_check()
-            fresh_review(db, approval, subject, config['merge_after_approval'])
+            fresh_review(db, approval, subject, config['merge_after_approval'], approver_check)
         if config['merge_after_approval']:
             for subject in subjects:
-                approver_check()
-                client = fresh_review(db, approval, subject, True)
-                client.authorize()
-                # Record intent BEFORE write. Unknown outcomes never automatically repeat.
-                receipts.append({'repository': subject['repository'], 'pull_number': subject['pull_number'],
-                                 'head_sha': subject['head_sha'], 'status': 'STARTED'})
-                with db._get_connection() as conn:
-                    conn.execute('UPDATE workflow_approvals SET receipts_json=? WHERE id=?', (json.dumps(receipts), approval['id']))
-                approver_check()
-                client.authorize()
-                value = request_json('api.github.com', f"/repos/{subject['repository']}/pulls/{subject['pull_number']}/merge",
-                    headers=client.headers, payload={'sha': subject['head_sha'], 'merge_method': 'squash'}, method='PUT')
-                if not isinstance(value, dict) or value.get('merged') is not True or not value.get('sha'):
-                    raise ToolAccessError('GitHub did not confirm the merge; no success or retry is assumed.')
-                receipts[-1].update(status='COMPLETED', merge_commit_sha=value['sha'])
-                with db._get_connection() as conn:
-                    conn.execute('UPDATE workflow_approvals SET receipts_json=? WHERE id=?', (json.dumps(receipts), approval['id']))
+                from integrations.pr_merge import merge_subject
+                merge_subject(db, approval, subject, approver_check, receipts)
         finish(db, approval, 'APPROVED', receipts=receipts)
     except Exception as exc:
         message = str(exc) if isinstance(exc, ToolAccessError) else 'Approval action failed; an external outcome may be unknown. No automatic retry.'

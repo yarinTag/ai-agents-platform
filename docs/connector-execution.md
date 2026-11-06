@@ -190,3 +190,6 @@ Connector tools never clone. Steps that must run or edit code use sandboxed repo
 
 ## Final answer reliability
 Connector completion now uses a strict internal finalization tool, optional single connector-free formatting pass and bounded redacted rejection diagnostics. Required current-policy/receipt checks remain unchanged. See [completion contract](connector-completion.md). No existing failed execution was retried or rewritten.
+
+## AI-19 governed PR operations
+Separate PR metadata/diff/check reads, explicit head-pinned comment/review writes and hardened server-only merge evidence/receipts are specified in [PR governance](github-pr-governance.md). Aggregate grants now require narrower read dependencies; no existing grants are migrated. Unknown provider rules, missing current-head review/required CI or strict protected-base enforcement block automatic merge. No live provider/agent verification was executed.

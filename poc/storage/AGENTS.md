@@ -152,3 +152,6 @@ organization_schema invokes governance_schema.initialize. capability_policies co
 
 ## AI-18 policy retention/rollback limits
 See ../../docs/architecture/p01-governance-api.md for exact table columns/keys and ../../docs/governance-policy-guide.md for rollout. Policy repair is a newly validated CAS revision by an authorized personal administrator, not SQL mutation/deletion of history or frozen contexts. New typed snapshots are stored in existing workflow_execution_tool_contexts.context_json; historical missing snapshots are not reconstructed. Additive SQLite tables do not imply a PostgreSQL/RLS migration or safe downgrade to a binary that ignores typed policy. No working DB migration or retention change was performed for AI-18.
+
+## AI-19 audit JSON additions
+No schema columns/tables change. Existing mcp_tool_calls records hold deterministic call_merge_ intent/acknowledgement; arguments/result include approval/actor/agent/resource/SHA/time evidence. workflow_approvals.receipts_json retains STARTED/COMPLETED/NOT_DISPATCHED/UNKNOWN detail. Existing call status FAILED can contain UNKNOWN in result; do not treat it as proof that no external write occurred. Preserve ambiguous claims and prior receipts across recovery. See ../../docs/github-pr-governance.md.

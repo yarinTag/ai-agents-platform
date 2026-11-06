@@ -255,3 +255,6 @@ workflow_chat prompt consumes resources_by_tool/resources_by_workspace_operation
 
 ## AI-18 contributor/planning authority contract
 Follow ../../docs/architecture/p01-policy-algebra.md: only trusted implemented catalog operations and exact per-operation/resource/agent projections may be proposed. Stale JWT roles, user prose, repository/channel content and positive diagnostic responses confer no execution/approval rights. Preserve requested writes/approvals; clarify missing capability/grant/setup instead of silently downgrading to notifications. Do not install tools, widen scopes, route around denied calls or fabricate decisions/receipts. This is AGENTS contributor guidance; AI-18 does not change runtime/workflow_chat.py prompts, model tools or worker behavior.
+
+## AI-19 authoring operation contract
+workflow_chat instructions expose separate PR metadata/diff/check reads and aggregate read dependencies, require explicit pinned comment/review writes and distinguish GitHub review from platform human approval. APPROVE is not a model review event. Explain current-head review/CI/base/strict protection prerequisites truthfully; do not replace blocked merge with a weaker plan without user instruction. Actual enforcement remains server-owned. Contracts: ../../docs/github-pr-governance.md. No model/agent calls performed.

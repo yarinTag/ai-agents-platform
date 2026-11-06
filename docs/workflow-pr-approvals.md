@@ -77,3 +77,6 @@ reads and the provider write; no application-level check replaces GitHub branch 
 - No CI reruns, arbitrary GitHub writes, merge bypass, new bot webhook, live sends or model
   calls were performed during implementation. Local runtime verification remains restricted.
   CI contracts use pure policies and real temporary SQLite/FastAPI without provider mocks.
+
+## AI-19 strict merge evidence and audit
+The existing gate now requires version2 complete aggregate evidence and a fresh current-head approved review, exact required CI and up-to-date strictly protected base. The merge adapter separately verifies the actual persisted personal RESOLVING claim and subject, reserves an immutable call_merge_ audit intent and records approver/agent/SHA/time receipts before completion. Historical evidence is not rewritten or silently promoted. See [exact contract, prerequisites and limitations](github-pr-governance.md); ruleset-only/unknown branches and unsupported requirements fail closed. No live merge was executed.

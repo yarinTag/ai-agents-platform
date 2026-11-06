@@ -7,7 +7,7 @@ from datetime import datetime
 from pydantic import ValidationError
 from .github_activity import fetch_activity
 from .scoped_channels import send_message
-from .tool_definitions import MessageInput, RepositoryInput, ToolAccessError, public_tool, require_credentials, resource_values, input_model
+from .tool_definitions import MessageInput, RepositoryInput, ToolAccessError, public_tool, require_credentials, resource_values, input_model, WRITE_OPERATIONS
 from .tool_scopes import agent_tool_allowed, connector_authorized, live_scope, load_scope
 
 
@@ -57,16 +57,18 @@ class WorkflowToolExecutor:
         return tools
 
     def _claim(self, entry, arguments):
-        identity = {key: value for key, value in arguments.items() if key != 'text'}
+        identity = {key: value for key, value in arguments.items() if key not in ('text', 'body')}
         canonical = json.dumps(identity, sort_keys=True, ensure_ascii=False)
         identifier = 'call_exec_' + hashlib.sha256(f'{self.task_id}:{entry["name"]}:{canonical}'.encode()).hexdigest()
         previous = self.db.get_mcp_tool_call(identifier)
         if previous:
             return identifier, previous
         # Never persist message bodies or provider credentials in the call arguments.
-        safe = {key: value for key, value in arguments.items() if key != 'text'}
+        safe = {key: value for key, value in arguments.items() if key not in ('text', 'body')}
         if 'text' in arguments:
             safe['message_sha256'] = hashlib.sha256(arguments['text'].encode()).hexdigest()
+        if 'body' in arguments:
+            safe['body_sha256'] = hashlib.sha256(arguments['body'].encode()).hexdigest()
         with self.db._get_connection() as conn:
             conn.execute('BEGIN IMMEDIATE')
             count = conn.execute('SELECT COUNT(*) FROM mcp_tool_calls WHERE task_id=? AND id LIKE ?',
@@ -110,6 +112,8 @@ class WorkflowToolExecutor:
         normalized = inputs.model_dump()
         identifier, previous = self._claim(entry, normalized)
         if previous:
+            if 'body' in normalized and (previous.arguments or {}).get('body_sha256') != hashlib.sha256(normalized['body'].encode()).hexdigest():
+                raise ToolAccessError('This PR write was already attempted for the pinned head. Changed content is not automatically sent.')
             if 'text' in normalized and (previous.arguments or {}).get('message_sha256') != hashlib.sha256(normalized['text'].encode()).hexdigest():
                 raise ToolAccessError('Delivery to this channel was already attempted for this step; another message will not be sent.')
             if previous.status == 'COMPLETED' and previous.result:
@@ -119,12 +123,16 @@ class WorkflowToolExecutor:
         try:
             authorize = lambda: self.authorize(entry, inputs)
             if entry['provider'] == 'github':
-                if entry['operation'] in ('list_open_pull_requests', 'get_pull_request_review'):
+                if entry['operation'] in WRITE_OPERATIONS:
+                    from .github_pr_writes import execute_write
+                    output = execute_write(connector.configuration or {}, entry['operation'], inputs, authorize)
+                elif entry['operation'] in ('list_open_pull_requests', 'get_pull_request_review', 'get_pull_request', 'get_pull_request_diff', 'get_pull_request_checks'):
                     from .github_prs import execute_read
                     output = execute_read(connector.configuration or {}, entry['operation'], inputs, authorize)
                 else:
                     output = fetch_activity(connector.configuration or {}, entry['operation'], inputs.repository, inputs.days, authorize)
-                self.authorize(entry, inputs)
+                if entry['operation'] not in WRITE_OPERATIONS:
+                    self.authorize(entry, inputs)
             else:
                 output = send_message(connector, inputs.channel_id, inputs.text, authorize)
             self.db.update_mcp_tool_call(identifier, status='COMPLETED', result=json.dumps(output, ensure_ascii=False),

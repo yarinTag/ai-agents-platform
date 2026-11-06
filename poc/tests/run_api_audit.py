@@ -14,6 +14,7 @@ import subprocess
 import tempfile
 
 API_CONTRACTS = [
+    'poc/tests/test_github_pr_governance_api.py',
     'poc/tests/test_capability_policy_api.py',
     'poc/tests/test_generic_governance_api.py',
     'poc/tests/test_access_policy.py::test_lists_details_and_selected_department_are_scoped',

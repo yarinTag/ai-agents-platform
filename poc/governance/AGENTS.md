@@ -24,3 +24,6 @@ subprocess and runtime disabled; no local worker/agent/model verification is aut
 
 ## AI-18 exact algebra
 Authoritative semantics: ../../docs/architecture/p01-policy-algebra.md; exact models/API/storage: ../../docs/architecture/p01-governance-api.md. Order is denied < requires_approval < allowed; default-deny needs a matching allow, deny overrides, and every current/captured layer intersects. Captured rule times use captured_at; current times are freshly captured. Missing selectors cannot evade restrictions. Generic decide is explanatory and does not replace declared step scopes/lifetime/adapter/approval/receipt checks. Never expose approval_path or server-owned snapshots/identity as client authority. The guide documents existing source, not a new runtime prompt or generic approval continuation.
+
+## AI-19 descriptor dependencies and effects
+registry.public adds requires_capabilities from trusted operation_requirements; new GitHub comment/review effects are write. policy.decide recursively intersects required narrower reads using the same subject/resource/current/frozen gates and returns DEPENDENT_CAPABILITY_DENIED when needed. Existing explicit aggregate grants require reviewed read dependencies; no grant is backfilled. See ../../docs/github-pr-governance.md.

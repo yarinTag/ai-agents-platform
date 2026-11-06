@@ -175,3 +175,6 @@ AI-17 adds real HTTP editor-option contracts to test_capability_policy_api.py: s
 
 ## AI-18 evidence scope
 The P01 documentation maps behavior to existing test_capability_policy_api.py/test_generic_governance_api.py and selected access/approval API contracts; AI-17 had 65 passing real HTTP/SQLite cases. The isolated runner/guard boundary, prior CI head and unverified provider/browser/runtime scope are recorded in ../../docs/governance-policy-guide.md. AI-18 changes documentation only and adds no tests that merely mirror prose; new behavior changes still require appropriate real API regression coverage. No new local runtime verification was performed for AI-18.
+
+## AI-19 API-only coverage
+run_api_audit includes test_github_pr_governance_api.py: actual guarded FastAPI/SQLite checks PR read/write descriptor schemas, required read dependencies, write wildcard denial, exact resource/current role, no grant backfill, inactive write-plan creation and authenticated merge resolution blocked before I/O when merge is ungranted. Baseline GitHub fixture now explicitly grants narrower read dependencies; existing receipt fixtures carry version2 proof as persisted subjects. No provider responses are mocked, agents dispatched or live PR actions run. Live evidence parsing/write success paths remain unverified. See ../../docs/github-pr-governance.md.

@@ -1,6 +1,6 @@
 """Implementation-owned descriptors. Connector metadata cannot register capabilities."""
 from dataclasses import dataclass, asdict
-from integrations.tool_definitions import OPERATIONS, input_model, resource_values, valid_channel, valid_repository
+from integrations.tool_definitions import OPERATIONS, input_model, resource_values, valid_channel, valid_repository, operation_effect, operation_requirements
 
 
 @dataclass(frozen=True)
@@ -21,6 +21,7 @@ class Capability:
         value['input_schema'] = (input_model({'provider': self.provider, 'operation': self.operation}).model_json_schema()
                                  if not self.server_only and self.implemented else None)
         value['verification'] = 'implementation_metadata_only'
+        value['requires_capabilities'] = [self.provider + '.' + operation for operation in operation_requirements(self.provider, self.operation)]
         return value
 
 
@@ -29,7 +30,7 @@ def descriptors():
     for provider, operations in OPERATIONS.items():
         for operation, description in operations.items():
             cap = Capability(f'{provider}.{operation}', provider, operation,
-                'read' if provider == 'github' else 'write', 'repository' if provider == 'github' else 'channel', description)
+                operation_effect(provider, operation), 'repository' if provider == 'github' else 'channel', description)
             result[cap.id] = cap
     for operation, description, effect, approval in (
         ('clone_repository', 'Read an approved repository in a governed workspace.', 'read', False),
