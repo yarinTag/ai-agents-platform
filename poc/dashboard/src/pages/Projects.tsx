@@ -1,3 +1,4 @@
+import { RowActionMenu } from './RowActionMenu';
 import { usePermissions } from '../hooks/usePermissions';
 import React, { useEffect, useState } from 'react';
 import {
@@ -117,12 +118,10 @@ export const ProjectsPage: React.FC = () => {
     {
       title: 'Actions',
       key: 'actions',
+      width: 90,
       render: (_: any, record: Project) => (
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <Button
-            size="small"
-            disabled={!isAdmin} icon={<EditOutlined />}
-            onClick={() => {
+        <RowActionMenu label={`Actions for project ${record.name}`} items={[
+            { key: 'edit', label: 'Edit', icon: <EditOutlined />, disabled: !isAdmin, onClick: () => {
               form.setFieldsValue({
                 name: record.name,
                 description: record.description,
@@ -130,29 +129,24 @@ export const ProjectsPage: React.FC = () => {
               });
               setEditingKey(record.id);
               setVisible(true);
-            }}
-          >
-            Edit
-          </Button>
-          <Button
-            size="small"
-            danger
-            disabled={!isAdmin} icon={<DeleteOutlined />}
-            onClick={() => {
-              deleteProject(record.id)
-                .then(() => {
-                  message.success('Project deleted');
-                  fetchProjects();
-                })
-                .catch((err) => {
-                  message.error('Failed to delete project');
-                  console.error(err);
-                });
-            }}
-          >
-            Delete
-          </Button>
-        </div>
+            } },
+            { type: 'divider' },
+            { key: 'delete', label: 'Delete', icon: <DeleteOutlined />, danger: true, disabled: !isAdmin,
+              onClick: () => Modal.confirm({
+                title: `Delete project "${record.name}"?`, okText: 'Delete', cancelText: 'Cancel',
+                okButtonProps: { danger: true }, onOk: () => {
+                  return deleteProject(record.id)
+                    .then(() => {
+                      message.success('Project deleted');
+                      fetchProjects();
+                    })
+                    .catch((err) => {
+                      message.error('Failed to delete project');
+                      console.error(err);
+                    });
+                },
+              }) },
+          ]} />
       ),
     },
   ];

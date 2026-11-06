@@ -5,7 +5,7 @@ import React from 'react';
 import { Calendar, Badge, Card, Row, Col, Statistic, Button, Table, Tag, Tabs, Empty, Modal } from 'antd';
 import { calendarDay } from './calendarDates';
 import { CalendarOutlined, ClockCircleOutlined, PlusOutlined, QuestionCircleOutlined, ThunderboltOutlined } from '@ant-design/icons';
-import { Task } from '../types/task';
+import { CalendarRun } from './CalendarRun';
 import { CronBuilderModal } from '../components/scheduler/CronBuilderModal';
 import { ApprovalModal } from '../components/approval/ApprovalModal';
 
@@ -17,6 +17,7 @@ export const CalendarView: React.FC = () => {
   const { canManage } = usePermissions();
   const model = useCalendarViewPage();
   const {
+    executions,
     schedules,
     resourceErrors,
     agents,
@@ -131,6 +132,7 @@ export const CalendarView: React.FC = () => {
       </Row>
 
       <ResourceSection error={resourceErrors.schedules} onRetry={fetchData}><span /></ResourceSection>
+      <ResourceSection error={resourceErrors.executions} onRetry={fetchData}><span /></ResourceSection>
       <ResourceSection error={resourceErrors.tasks} onRetry={fetchData}><span /></ResourceSection>
       <ResourceSection error={resourceErrors.agents || resourceErrors.projects} onRetry={fetchData}><span /></ResourceSection>
       {/* Main Tabs */}
@@ -337,14 +339,17 @@ export const CalendarView: React.FC = () => {
             {tasks
               .filter(
                 (t) =>
-                  calendarDay(t.created_at || (t as any).timestamp).format('YYYY-MM-DD') ===
+                  calendarDay(t.started_at || t.created_at).format('YYYY-MM-DD') ===
                   selectedDate.format('YYYY-MM-DD')
               )
               .map((t) => (
-                <div key={t.id} style={{ marginBottom: '8px' }}>
-                  <b>Task #{t.id}</b> ({t.agent_id}): {String(t.status).toUpperCase()}
-                </div>
+                <CalendarRun key={t.id} task={t} execution={executions.find(run => run.id === t.workflow_execution_id)} />
               ))}
+            <h4 style={{ color: '#38bdf8', marginTop: 16 }}>Workflow Executions:</h4>
+            <p>Showing up to the latest 200 authorized workflow runs.</p>
+            {executions.filter(run => (run.started_at || run.created_at) &&
+              calendarDay(run.started_at || run.created_at).format('YYYY-MM-DD') === selectedDate.format('YYYY-MM-DD')
+            ).map(run => <CalendarRun key={run.id} execution={run} />)}
           </div>
         </Modal>
       )}

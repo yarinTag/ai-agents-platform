@@ -108,6 +108,7 @@ export const createWorkflowExecutionColumns = (model: Pick<
     {
       title: 'Actions',
       key: 'actions',
+      width: 90,
       render: (_: any, record: WorkflowExecution) => (
         <Button
           size="small"

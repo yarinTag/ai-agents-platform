@@ -1,4 +1,5 @@
 import { usePermissions } from '../hooks/usePermissions';
+import { useAuth } from '../context/AuthContext';
 import React, { useState } from 'react';
 import { WorkflowChatModal } from '../components/workflows/WorkflowChatModal';
 import { useWorkflowChatText } from '../i18n/workflowChat';
@@ -17,6 +18,7 @@ import { createWorkflowExecutionColumns } from './workflowExecutionColumns';
 import { WorkflowExecutionDrawer } from './WorkflowExecutionDrawer';
 
 export const WorkflowsPage: React.FC = () => {
+  const { user, departments } = useAuth();
   const { canRead, canManage, canOperate } = usePermissions();
   const model = useWorkflowsPage();
   const [chatSearch, setChatSearch] = useSearchParams();
@@ -63,7 +65,9 @@ export const WorkflowsPage: React.FC = () => {
     queuedRuns,
     deduplicatedRuns,
   } = model;
-  const workflowColumns = createWorkflowColumns(model, { canManage, canOperate });
+  const workflowColumns = createWorkflowColumns(model, {
+    canManage, canOperate, isOrgAdmin: user?.role === 'ORG_ADMIN',
+  }, departments);
   const executionColumns = createWorkflowExecutionColumns(model);
   return (
     <div style={{ padding: '24px', minHeight: '100vh', background: '#0a0d12' }}>

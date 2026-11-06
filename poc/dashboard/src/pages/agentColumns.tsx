@@ -1,4 +1,5 @@
-import { Button, Tag, message, Tooltip, Space } from 'antd';
+import { RowActionMenu } from './RowActionMenu';
+import { Button, Tag, message, Tooltip, Space, Modal } from 'antd';
 import { EditOutlined, DeleteOutlined, FolderOpenOutlined, GithubOutlined, LaptopOutlined, CrownOutlined, StarOutlined, MessageOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { Agent } from '../types/agent';
 import { deleteAgent } from '../services/api';
@@ -205,6 +206,7 @@ export const createAgentColumns = (model: Pick<
     {
       title: 'Actions',
       key: 'actions',
+      width: 150,
       render: (_: any, record: Agent) => (
         <Space size="small">
           <Button
@@ -219,10 +221,8 @@ export const createAgentColumns = (model: Pick<
           >
             Chat
           </Button>
-          <Button
-            size="small"
-            disabled={!access.canManage} icon={<EditOutlined />}
-            onClick={() => {
+          <RowActionMenu label={`Actions for agent ${record.name}`} items={[
+            { key: 'edit', label: 'Edit', icon: <EditOutlined />, disabled: !access.canManage, onClick: () => {
               const matchedDept = departments.find(
                 (d) => d.id === record.department_id || d.name === record.department
               );
@@ -247,28 +247,24 @@ export const createAgentColumns = (model: Pick<
               });
               setEditingKey(record.id);
               setVisible(true);
-            }}
-          >
-            Edit
-          </Button>
-          <Button
-            size="small"
-            danger
-            disabled={!access.canManage} icon={<DeleteOutlined />}
-            onClick={() => {
-              deleteAgent(record.id)
-                .then(() => {
-                  message.success('Agent removed');
-                  fetchAgents();
-                })
-                .catch((err) => {
-                  const detail = err.response?.data?.detail || 'Failed to delete agent';
-                  message.error(detail);
-                });
-            }}
-          >
-            Delete
-          </Button>
+            } },
+            { type: 'divider' },
+            { key: 'delete', label: 'Delete', icon: <DeleteOutlined />, danger: true, disabled: !access.canManage,
+              onClick: () => Modal.confirm({
+                title: `Delete agent "${record.name}"?`, okText: 'Delete', cancelText: 'Cancel',
+                okButtonProps: { danger: true }, onOk: () => {
+                  return deleteAgent(record.id)
+                    .then(() => {
+                      message.success('Agent removed');
+                      fetchAgents();
+                    })
+                    .catch((err) => {
+                      const detail = err.response?.data?.detail || 'Failed to delete agent';
+                      message.error(detail);
+                    });
+                },
+              }) },
+          ]} />
         </Space>
       ),
     },
