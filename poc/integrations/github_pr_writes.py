@@ -20,7 +20,7 @@ def execute_write(configuration, operation, inputs, authorize):
     payload = {'body': body}
     if review:
         payload.update(commit_id=inputs.head_sha, event=inputs.event)
-    authorize()
+    client.authorize()
     value = request_json('api.github.com', f'/repos/{inputs.repository}/{suffix}', client.headers,
                          payload=payload, accepted=(200, 201), method='POST')
     expected_state = {'COMMENT': 'COMMENTED', 'REQUEST_CHANGES': 'CHANGES_REQUESTED'}

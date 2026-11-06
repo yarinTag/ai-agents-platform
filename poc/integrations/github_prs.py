@@ -1,4 +1,5 @@
 """Bounded GitHub PR facts, with pinned revisions and conservative readiness."""
+import hmac
 from .provider_http import request_json
 from .tool_definitions import ToolAccessError, valid_repository
 
@@ -27,7 +28,16 @@ class GitHubReads:
                       if isinstance(configuration.get(key), str) and configuration[key].strip()), None)
         if not token:
             raise ToolAccessError('The GitHub connector has no configured access token.')
-        self.repository, self.authorize = repository, authorize
+        self.repository = repository
+        def current_authority():
+            connector = authorize()
+            configuration = getattr(connector, 'configuration', None) or {}
+            current = next((configuration.get(key).strip() for key in ('token', 'personal_access_token', 'api_key', 'GITHUB_PERSONAL_ACCESS_TOKEN')
+                            if isinstance(configuration.get(key), str) and configuration[key].strip()), None)
+            if current is None or not hmac.compare_digest(token.strip().encode(), current.encode()):
+                raise ToolAccessError('GitHub credentials changed during this action. Start a fresh authorized request.')
+            return connector
+        self.authorize = current_authority
         self.headers = {'Authorization': 'Bearer ' + token.strip(), 'Accept': 'application/vnd.github+json',
                         'X-GitHub-Api-Version': '2026-03-10'}
 

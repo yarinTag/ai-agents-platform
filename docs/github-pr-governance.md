@@ -38,6 +38,9 @@ cannot create the missing grant. Unknown operation/schema lookup fails closed.
 
 The adapter uses fixed api.github.com REST paths with repeated current authorization,
 verified TLS, bounded JSON responses, no redirects/proxy inheritance and no retries.
+Each PR client also compares its captured credential with the currently authorized
+connector before using its headers; rotation/revocation blocks the next request rather
+than continuing with old headers. An already dispatched request cannot be recalled.
 PR/files/reviews/checks/statuses are bounded to three pages of100 each. File patches
 are capped at60000 total characters; missing/binary patches and malformed/truncated
 pages mark partial evidence. Detail/diff/check reads are separate capabilities.
