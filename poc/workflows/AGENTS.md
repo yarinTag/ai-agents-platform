@@ -209,3 +209,5 @@ subject/step scope is checked against the saved definition. Execution detail/eva
 persisted execution/step/task scopes, including legacy histories. No engine/model/tests executed.
 
 Queued workflow admission rechecks the current active database account and department membership before budget/run creation, including empty DAGs. Request-local department claims are refreshed from current capped memberships; signed login claims do not retain revoked privileges.
+
+Workflow engine retains the public UnauthorizedUserDepartmentError compatibility export used by REST execution/playground imports. No local runtime verification performed.

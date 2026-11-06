@@ -70,6 +70,28 @@ def _register_unavailable(app, name, prefix):
         )
 
 
+def _protect_routes(route):
+    """Wrap direct routes and lazy included routers, retaining effective dependencies."""
+    if isinstance(route, APIRoute):
+        if getattr(route, "_tenant_response_guard", False):
+            return
+        original_factory = route.get_route_handler
+        def guarded_factory():
+            handler = original_factory()
+            async def handle(request):
+                response = await handler(request)
+                return protect_response(request, response)
+            return handle
+        route.get_route_handler = guarded_factory
+        route.app = request_response(route.get_route_handler())
+        route._tenant_response_guard = True
+        return
+    included = getattr(route, "original_router", None)
+    if included is not None:
+        for child in included.routes:
+            _protect_routes(child)
+
+
 def register_routers(app):
     for name, module_name, prefix, required in ROUTERS:
         if required and not capabilities.enabled(name):
@@ -87,14 +109,7 @@ def register_routers(app):
                 dependencies=[Depends(authenticate_request), Depends(authorize_request), Depends(_availability_guard(name))],
             )
             for route in app.routes[before:]:
-                if isinstance(route, APIRoute):
-                    original = route.get_route_handler()
-                    def guarded(handler):
-                        async def handle(request):
-                            response = await handler(request)
-                            return protect_response(request, response)
-                        return handle
-                    route.app = request_response(guarded(original))
+                _protect_routes(route)
             capabilities.mark(name, "READY")
         except Exception:
             # Never leave partially registered routes behind without their policy wrapper.

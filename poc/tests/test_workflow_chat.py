@@ -141,11 +141,12 @@ def test_usage_contributes_to_department_spend(setup):
     assert db.get_department_monthly_spend('dept-chat') == pytest.approx(0.25)
 
 
-def test_plugin_skill_is_catalogued_preserved_and_revalidated(setup, tmp_path):
+def test_plugin_skill_is_catalogued_preserved_and_revalidated(setup, tmp_path, monkeypatch):
     from plugins.workflow_skills import skill_catalog, skill_context
     from backend.api.workflow_chat_policy import native_definition
     db, identity, _ = setup
-    root = tmp_path / 'plugins'
+    monkeypatch.setenv('PLATFORM_TENANT_STORAGE_ROOT', str(tmp_path / 'tenants'))
+    root = tmp_path / 'tenants' / 'org-chat' / 'shared' / 'plugins'
     folder = root / 'tech-backend' / 'skills' / 'senior-architect'
     folder.mkdir(parents=True)
     source = folder / 'SKILL.md'

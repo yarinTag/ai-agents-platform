@@ -20,7 +20,7 @@ from runtime.protocol import RuntimeAdapter
 from .parser import WorkflowParser, WorkflowDefinition, WorkflowStepDefinition
 from .sandbox import SandboxManager
 
-from .execution_models import BudgetExceededError, MCPGovernanceViolationError, WorkflowStepResult
+from .execution_models import BudgetExceededError, MCPGovernanceViolationError, UnauthorizedUserDepartmentError, WorkflowStepResult
 from .conditions import evaluate_condition_rule, evaluate_trigger_conditions
 from .step_runner import WorkflowStepRunner
 from .stages import group_steps_into_stages

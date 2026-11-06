@@ -143,3 +143,5 @@ cross-department step assignments and409 on implicit department/history transfer
 are prepared but not run. Runtime tests/commands remain unexecuted under the project restriction.
 
 Playground diagnostic fixtures now persist agent/task organization and department identity, preserving the intended missing-application-agent failure rather than failing tenant admission earlier. No fixture was executed.
+
+CI repair: provider credential fixtures override the current database authentication dependency; disabled identities expect401. Local plugin fixtures live inside the temporary tenant shared root. Workflow exception compatibility and organization-list isolation remain enforced by existing contracts. No local runtime verification performed.
