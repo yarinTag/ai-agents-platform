@@ -165,3 +165,6 @@ By explicit user authorization, local API tests are now allowed without agent/mo
 
 
 AI-14/AI-15 add UX/ADR artifacts, not executable UI or API behavior. Reuse the 39-case isolated API-only runner as regression evidence; static wireframe/document inspection is not browser/E2E/provider verification. Later tickets must add API tests for actual new routes/state transitions before release.
+
+## AI-16 API-only contracts
+run_api_audit.API_CONTRACTS includes test_capability_policy_api.py plus the AI-13 baseline. Real guarded FastAPI routes/SQLite exercise registry honesty, role/tenant/resource isolation, restrictive managers, CAS/history, current/frozen policy, selectors/time windows, channel policy and AI catalog narrowing. Server-seeded execution rows are policy subjects only; no workflow/agent/model dispatch or live provider request occurs. The disposable source snapshot and interpreter guard forbid network/subprocess; service doubles are not used. See docs/architecture/capability-policy-v1.md.

@@ -66,6 +66,7 @@ The **AI Agents Platform** is an enterprise multi-tenant autonomous agent orches
 * [**Backend Guidelines**](poc/backend/CLAUDE.md): Backend development standards, test requirements, and conventions.
 * [**REST API Routers**](poc/backend/api/AGENTS.md): Complete guide to all backend REST API routes, models, and endpoints.
 * [**Security & Hardening**](poc/backend/security/AGENTS.md): HS256 JWT, PBKDF2 hashing, RateLimiterMiddleware (2000 req/min), tenant scoping.
+* [**Capability Governance**](poc/governance/AGENTS.md): Versioned policies, exact resources, effective catalogs and repeated current/frozen authorization.
 * [**Workflows Engine**](poc/workflows/AGENTS.md): WorkflowEngine, WorkflowParser, SandboxManager, DAG execution, and budgets.
 * [**Hosted Claude SDK**](poc/runtime/claude_hosted/AGENTS.md): Isolated read-only SDK worker, private credential broker and request budgets.
 * [**Runtime Abstraction**](poc/runtime/AGENTS.md): RuntimeAdapter protocol, model tiers, and curated `MODEL_CATALOG`.
@@ -296,3 +297,6 @@ New read tools list_open_pull_requests and get_pull_request_review expose bounde
 
 ## AI-15 P00 generic governance decision record
 [Governance ADR](docs/architecture/adr-ai-15-generic-connector-governance.md) records the shared engine/trusted-adapter boundary, central current policy, separate channel uses, verified identity/ingress, exact-action human approvals, checkpointed continuation and receipts/reconciliation. This is a planning decision with P01–P11 release gates, not shipped future capability. [AI-14 UX](docs/design/governance-ux.md) is the FE integration contract; [AI-13](docs/architecture/connector-governance-contract.md) remains the source-backed baseline. All three form P00; implementing tickets publish exact new APIs/schema before FE integration.
+
+## AI-16 capability policy backend
+[Capability governance](poc/governance/AGENTS.md) owns provider-neutral versioned policy and repeated authorization. [Exact P01 contracts](docs/architecture/capability-policy-v1.md) document additive policy/history tables, protected governance APIs, admin expansion versus restrictive manager edits, frozen/current policy intersections and implementation-only descriptors. AI catalogs and existing tool/workspace/notification/merge adapters share the evaluator. Existing grants/credentials/workflows are not migrated or broadened. Only isolated HTTP/SQLite API verification was performed; no local agents/providers/messages. AI-17 UI and later event/generic approval phases remain separate.

@@ -43,6 +43,10 @@ class WorkflowToolExecutor:
             value = inputs.repository if group == 'repositories' else inputs.channel_id
             if value not in allowed:
                 raise ToolAccessError('Requested repository or channel is outside the authorized step scope.')
+        from governance.enforcement import require_capability
+        targets = [inputs.repository if group == 'repositories' else inputs.channel_id] if inputs is not None else entry[group]
+        for target in targets:
+            require_capability(self.db, self.scope['execution_id'], agent, connector, entry['operation'], target)
         return connector
 
     def inventory(self):

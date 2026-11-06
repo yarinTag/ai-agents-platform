@@ -36,6 +36,7 @@ ROUTERS = (
     ("workflows", ".api.workflows", "/api/v1/workflows", False),
     ("queue-api", ".queue.router", "/api/v1/queue", False),
     ("mcp", ".api.mcp", "/api/v1/mcp", False),
+    ("governance", ".api.governance", "/api/v1/governance", True),
     ("organizations", ".api.organizations", "/api/v1", True),
 )
 

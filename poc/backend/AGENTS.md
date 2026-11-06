@@ -141,3 +141,6 @@ Router response guards traverse lazy included-router original_router trees as we
 
 
 AI-15 ADR (docs/architecture/adr-ai-15-generic-connector-governance.md) fixes the target ownership boundary: control-plane policy/approvals/checkpoints/audit stay shared; trusted adapters own canonical provider resources, authenticity, execution preconditions and receipts. Existing routes stay unchanged in P00. P01–P11 must publish actual versioned contracts and tests before exposing future behavior.
+
+## AI-16 governance router
+The required governance router is mounted at /api/v1/governance. It exposes trusted descriptors, versioned organization/department policies, department history, effective catalogs and non-executable decision explanations. Current database identity and selected department govern every route; policy edits require a personal user. Shared enforcement is in poc/governance, not duplicated per API. Exact contracts: docs/architecture/capability-policy-v1.md.

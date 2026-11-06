@@ -75,6 +75,8 @@ def catalog(db, claims, department_id):
         'server_operations': {connector['id']: connector['server_operations'] for connector in connectors},
         'workspace_operations': {connector['id']: connector['workspace_operations'] for connector in connectors},
         'connector_tools': {connector['id']: connector['tools'] for connector in connectors}})
+    from governance.catalog import narrow_catalog
+    narrow_catalog(db, user, department_id, connectors, agents)
     from plugins.workflow_skills import skill_catalog
     from workflows.repo_sandbox import configuration_status
     from workflows.approval_config import public_url
@@ -105,6 +107,10 @@ def validate_candidate(candidate, resources):
             return
         if not connector.get('execution_supported'):
             errors.append(f'Connector {ref.connector_id} has no implemented and granted runtime tools.')
+        from governance.catalog import reference_allowed
+        resource = ref.repository or ref.channel_id
+        if ref.tool_name and resource and not reference_allowed(connector, ref.tool_name, resource):
+            errors.append('The selected capability/resource combination is denied by current policy.')
         for field, group in (('repository', 'repositories'), ('channel_id', 'channels'), ('tool_name', 'tools')):
             value = getattr(ref, field, None)
             if value and value not in connector[group]:
@@ -130,6 +136,9 @@ def validate_candidate(candidate, resources):
             errors.append(f'Agent {step.agent_id} is not available in this department.')
         for ref in step.resources:
             reference(ref)
+            combinations = agents.get(step.agent_id, {}).get('capability_resources', {}).get(ref.connector_id)
+            if combinations is not None and ref.tool_name and (ref.repository or ref.channel_id) not in combinations.get(ref.tool_name, []):
+                errors.append(f'Agent {step.agent_id} is not authorized for this capability/resource combination.')
         for identifier in {r.connector_id for r in step.resources}:
             connector = connectors.get(identifier)
             assigned = agents.get(step.agent_id, {}).get('connector_tools', {}).get(identifier, [])
@@ -218,6 +227,14 @@ def validate_approval(step, candidate, resources, agents, connectors):
             if config.merge_after_approval and ('merge_pull_request' not in connectors.get(ref.connector_id, {}).get('server_operations', [])
                     or 'merge_pull_request' not in agents.get(source.agent_id, {}).get('server_operations', {}).get(ref.connector_id, [])):
                 errors.append('Automatic merging requires an explicit merge_pull_request grant for the source agent and department.')
+            if config.merge_after_approval:
+                from governance.catalog import reference_allowed
+                connector = connectors.get(ref.connector_id, {})
+                agent = agents.get(source.agent_id, {})
+                per_agent = agent.get('capability_resources', {}).get(ref.connector_id)
+                if (not reference_allowed(connector, 'merge_pull_request', ref.repository, 'resources_by_server_operation')
+                        or (per_agent is not None and ref.repository not in per_agent.get('merge_pull_request', []))):
+                    errors.append('Automatic merging is not permitted for this exact repository and source agent.')
     channel = connectors.get(config.connector_id, {})
     tool = 'send_message' if channel.get('provider') == 'telegram' else 'post_chat_message'
     if (len(step.resources) != 1 or step.resources[0].connector_id != config.connector_id

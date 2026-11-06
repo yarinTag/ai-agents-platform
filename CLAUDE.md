@@ -258,3 +258,6 @@ AI-13 defines the generic connector baseline in docs/architecture/connector-gove
 
 
 P00 generic connector work is governed by docs/architecture/adr-ai-15-generic-connector-governance.md and docs/design/governance-ux.md. Implement only trusted, advertised adapter capabilities within central current resource policy. Model proposals/channel membership/URLs are never grants or human decisions. Documentation of planned capabilities does not activate them; agent prompt/schema updates must accompany actual implementations. User-authorized local API-only checks remain separate from agents/models/live providers/startup.
+
+## AI-16 policy development
+Preserve the legacy ceiling AND current/captured typed policies through governance.policy; typed allow never creates missing authority. Managers may append restrictions only; all effective edits and history are atomic/CAS. Register adapters in implementation code, never connector metadata. See docs/architecture/capability-policy-v1.md and poc/governance/AGENTS.md. Local verification for this task is the isolated real-FastAPI/SQLite API audit only; no agent/provider calls.

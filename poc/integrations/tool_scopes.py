@@ -102,6 +102,12 @@ def prepare_scope(db, task_id, execution_id, step, initiator_id=None, persist=Tr
                 continue
             if not agent_tool_allowed(db, agent, connector, tool):
                 continue
+            from governance.enforcement import require_capability
+            try:
+                for resource in selected:
+                    require_capability(db, execution_id, agent, connector, operation, resource)
+            except ToolAccessError:
+                continue
             suffix = hashlib.sha256(f'{identifier}:{operation}'.encode()).hexdigest()[:24]
             available.append({'name': operation + '_' + suffix, 'operation': operation, 'tool_id': tool.id,
                 'connector_id': identifier, 'provider': provider,
@@ -173,7 +179,9 @@ def prepare_execution_context(db, execution, workflow, definition, user_context=
     if user_context and not identity and not user_context.get('service'):
         raise ToolAccessError('Authenticated workflow initiator identity is missing.')
     require_initiator(db, identity, workflow.organization_id, workflow.department_id)
-    context = {'organization_id': workflow.organization_id, 'department_id': workflow.department_id,
+    from governance.store import capture
+    context = {'governance': capture(db, workflow.organization_id, workflow.department_id),
+               'workflow_revision': workflow.revision, 'organization_id': workflow.organization_id, 'department_id': workflow.department_id,
                'initiator_id': identity, 'binding': binding,
                'notification_agent_id': definition.steps[0].agent_id if definition.steps else None}
     with db._get_connection() as conn:

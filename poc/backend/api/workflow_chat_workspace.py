@@ -40,6 +40,12 @@ def validate_workspace(step, agents, connectors):
     required = {'clone_repository'} | ({'open_pull_request'} if config.mode == 'write' else set())
     available = set(connector.get('workspace_operations', []))
     assigned = set(agents.get(step.agent_id, {}).get('workspace_operations', {}).get(config.connector_id, []))
+    from governance.catalog import reference_allowed
+    if any(not reference_allowed(connector, operation, config.repository, 'resources_by_workspace_operation') for operation in required):
+        errors.append(f'Step {step.key} repository workspace is denied by capability policy.')
+    combinations = agents.get(step.agent_id, {}).get('capability_resources', {}).get(config.connector_id)
+    if combinations is not None and any(config.repository not in combinations.get(operation, []) for operation in required):
+        errors.append(f'Step {step.key} agent workspace scope is denied by capability policy.')
     if not required <= available or not required <= assigned:
         errors.append(f'Step {step.key} requires granted workspace operations: {", ".join(sorted(required))}. '
                       'An administrator must grant these explicitly; read-only GitHub tools cannot create PRs.')

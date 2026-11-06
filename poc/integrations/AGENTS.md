@@ -77,3 +77,6 @@ github_prs adds read-only list_open_pull_requests(repository,author?) without lo
 
 
 AI-15 target adapter contract is documented in docs/architecture/adr-ai-15-generic-connector-governance.md. Future descriptors/strict schemas/provider resource canonicalization/event verification and reconciliation must be backed by implementations and conformance tests; no generic arbitrary-URL/shell shortcut. Existing GitHub/Telegram/Slack dispatch remains current behavior until P01/P02 refactor. Provider verification is separate from metadata configuration and business authorization.
+
+## AI-16 repeated capability checks
+Existing adapters now share governance.enforcement.require_capability: tool scope preflight/step preparation and per-call authorization, repository clone/push/PR, notification targets and PR review/merge subject authorization. Execution context stores governance policy snapshots and workflow_revision. Current and frozen typed policy intersect existing exact scopes/legacy grants/current identity/agent/budget; no receipts or authenticated approval checks removed. Generic requires_approval blocks dispatch; only existing server merge path can continue with its persisted authenticated approval. AI catalog remains configuration-only. Full compatibility/branch limits: docs/architecture/capability-policy-v1.md. No live connector calls/messages executed.

@@ -44,6 +44,10 @@ def authorize_subject(db, approval, subject, merge=False):
             raise ToolAccessError('Merging requires an explicit merge_pull_request department grant; wildcard grants cannot merge.')
         if not agent_tool_allowed(db, agent, connector, merge_tool(db, connector)):
             raise ToolAccessError('The execution agent cannot merge pull requests.')
+    from governance.enforcement import require_capability
+    require_capability(db, execution.id, agent, connector, 'get_pull_request_review', subject['repository'])
+    if merge:
+        require_capability(db, execution.id, agent, connector, MERGE_OPERATION, subject['repository'], approval_path=True)
     if not db.check_department_budget(workflow.department_id).get('allowed'):
         raise ToolAccessError('Department budget does not permit further integration work.')
     return connector

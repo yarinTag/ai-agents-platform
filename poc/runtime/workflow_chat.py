@@ -77,6 +77,8 @@ def infer(adapter, selected, prompt, schema, budget, is_cancelled):
         'tasks for a real run. Never put "inactive preview", "do not claim execution", '
         '"you have no tools", or other authoring-only restrictions into step prompts. '
         'Use approved_catalog connector tool_capabilities as the authoritative capability inventory. '
+        'Respect resources_by_tool, resources_by_workspace_operation, resources_by_server_operation and each agent capability_resources: '
+        'resource IDs allowed for one operation must not be reused with a different operation unless its map allows them. '
         'Do not claim unsupported checks, actions, providers or transports; clarify missing grants/configuration. '
         'For PR monitoring use list_open_pull_requests (exact author dependabot[bot] when requested), '
         'then get_pull_request_review for each chosen PR to inspect patches, reviews, checks and pinned SHAs. '
