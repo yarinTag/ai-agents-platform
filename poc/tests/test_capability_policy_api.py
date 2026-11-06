@@ -209,3 +209,32 @@ def test_selectors_and_current_policy_are_rechecked_against_frozen_allow(baselin
     assert decision(client, role='ORG_ADMIN', agent_id='atlas_engineering', workflow_id='selectorwf').json()['decision'] == 'allowed'
     # Missing actor context is conservative, never a way to bypass a targeted deny.
     assert decision(client).json()['decision'] == 'denied'
+
+
+@pytest.mark.parametrize('blocked', [False, True])
+def test_ready_chat_destination_is_revalidated_by_exact_channel_before_creation(baseline, blocked):
+    db, client = baseline
+    connector = db.get_mcp_connector('atlas_slack')
+    config = {**connector.configuration, 'allowed_channels': ['C12345678', 'C87654321']}
+    db.save_mcp_connector({**connector.to_dict(), 'configuration': config})
+    if blocked:
+        assert save(client, [{'id': 'channel_deny', 'capability_id': 'slack.post_chat_message',
+            'connector_id': 'atlas_slack', 'resource_type': 'channel', 'resource_ids': ['C12345678'],
+            'effect': 'deny'}]).status_code == 200
+    proposal = {'name': 'Channel scope', 'steps': [{'key': 'read', 'name': 'Read',
+        'agent_id': 'atlas_engineering', 'prompt_template': 'Review repository.', 'resources': [
+            {'connector_id': 'atlas_github', 'repository': 'owner/repository', 'tool_name': 'get_pull_request_review'}]}],
+        'destination': {'connector_id': 'atlas_slack', 'channel_id': 'C12345678'}}
+    now = datetime.now().isoformat()
+    with db._get_connection() as conn:
+        conn.execute('''INSERT INTO workflow_builder_jobs
+            (id,organization_id,user_id,department_id,request_hash,request_json,status,result_json,
+             provider_id,model_id,cost_source,created_at,deadline_at) VALUES
+            ('policy-ready-request','atlas','atlas_ORG_ADMIN','atlas_engineering','hash','{}','READY',?,
+             'unused-provider','unused-model','API_KEY',?,?)''',
+            (json.dumps({'workflow': proposal}), now, now))
+    response = client.post('/api/v1/workflows/ai/chat/policy-ready-request/create', headers=auth())
+    assert response.status_code == (422 if blocked else 200), response.text
+    with db._get_connection() as conn:
+        assert conn.execute('SELECT COUNT(*) FROM workflow_executions').fetchone()[0] == 0
+        assert conn.execute('SELECT COUNT(*) FROM mcp_tool_calls').fetchone()[0] == 0

@@ -108,8 +108,9 @@ def validate_candidate(candidate, resources):
         if not connector.get('execution_supported'):
             errors.append(f'Connector {ref.connector_id} has no implemented and granted runtime tools.')
         from governance.catalog import reference_allowed
-        resource = ref.repository or ref.channel_id
-        if ref.tool_name and resource and not reference_allowed(connector, ref.tool_name, resource):
+        resource = getattr(ref, 'repository', None) or ref.channel_id
+        operation = getattr(ref, 'tool_name', None)
+        if operation and resource and not reference_allowed(connector, operation, resource):
             errors.append('The selected capability/resource combination is denied by current policy.')
         for field, group in (('repository', 'repositories'), ('channel_id', 'channels'), ('tool_name', 'tools')):
             value = getattr(ref, field, None)
@@ -156,8 +157,14 @@ def validate_candidate(candidate, resources):
             errors.append('Delivery requires an allowed Slack or Telegram connector.')
         if destination and destination['provider'] in ('slack', 'telegram'):
             delivery_tool = 'send_message' if destination['provider'] == 'telegram' else 'post_chat_message'
-            if delivery_tool not in destination['tools']:
+            from governance.catalog import reference_allowed
+            if (delivery_tool not in destination['tools'] or not reference_allowed(
+                    destination, delivery_tool, candidate.destination.channel_id)):
                 errors.append('The destination requires a granted message-delivery tool.')
+            notification_agent = agents.get(candidate.steps[0].agent_id, {})
+            per_agent = notification_agent.get('capability_resources', {}).get(candidate.destination.connector_id)
+            if per_agent is not None and candidate.destination.channel_id not in per_agent.get(delivery_tool, []):
+                errors.append('The notification agent is not authorized for this exact channel.')
     if candidate.cron_expression:
         from croniter import croniter
         if not croniter.is_valid(candidate.cron_expression):
