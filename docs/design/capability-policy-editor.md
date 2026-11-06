@@ -1,5 +1,9 @@
 # AI-17: capability/resource editor
 
+AI-18 companion references: [configuration/rollout guide](../governance-policy-guide.md),
+[policy algebra/roles](../architecture/p01-policy-algebra.md) and
+[API/schema reference](../architecture/p01-governance-api.md).
+
 The existing `/organization` route now includes Capabilities & resources. Own-org
 administrators use the new tab in OrganizationPage. Other roles retain the scoped
 DepartmentAccessPage and its authorized descriptions; they never mount administrative
@@ -77,7 +81,7 @@ The isolated API audit covers safe option projections, denied-resource editing c
 role/department isolation, CAS/revocation and existing action policy. It uses real
 FastAPI/SQLite without agent execution or provider I/O. Frontend type/lint/build and
 existing logic tests run in GitHub CI. No local UI/browser/render/accessibility or live
-provider execution is claimed. AI-18 broader P01 documentation and subsequent generic
-action/event/approval capabilities remain separate tickets.
+provider execution is claimed. AI-18 supplies the broader P01 documentation linked above;
+subsequent generic action/event/approval capabilities remain separate tickets.
 
 The review drawer title identifies the organization/department policy and exact scope ID. Refresh controls are disabled while the draft editor is open; explicit close/reload is required for conflict recovery. A rule edit remains cancellable when its original resource option is no longer configured.

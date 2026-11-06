@@ -172,3 +172,6 @@ run_api_audit.API_CONTRACTS includes test_capability_policy_api.py plus the AI-1
 AI-16 destination regression: workflow chat validates channel-only Destination objects without repository/tool fields, then checks exact channel delivery policy and notification-agent permissions. API-only saved-preview tests cover allowed and denied channels on the same connector, with zero executions or sends.
 
 AI-17 adds real HTTP editor-option contracts to test_capability_policy_api.py: secret-free exact projections include currently typed-policy-denied resources, exclude unsupported/foreign resources, honor department grants and deny organization policy reads to managers. The isolated API runner now covers 65 cases with no agent/model/provider execution.
+
+## AI-18 evidence scope
+The P01 documentation maps behavior to existing test_capability_policy_api.py/test_generic_governance_api.py and selected access/approval API contracts; AI-17 had 65 passing real HTTP/SQLite cases. The isolated runner/guard boundary, prior CI head and unverified provider/browser/runtime scope are recorded in ../../docs/governance-policy-guide.md. AI-18 changes documentation only and adds no tests that merely mirror prose; new behavior changes still require appropriate real API regression coverage. No new local runtime verification was performed for AI-18.

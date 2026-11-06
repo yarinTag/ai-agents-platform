@@ -21,3 +21,6 @@ generic approval continuation is introduced. Branch constraints apply only to
 workspace clone/open-PR; missing branch discovery is conservative. Every owned source
 must stay <=500 lines. Tests use the isolated real-HTTP API audit with external network,
 subprocess and runtime disabled; no local worker/agent/model verification is authorized.
+
+## AI-18 exact algebra
+Authoritative semantics: ../../docs/architecture/p01-policy-algebra.md; exact models/API/storage: ../../docs/architecture/p01-governance-api.md. Order is denied < requires_approval < allowed; default-deny needs a matching allow, deny overrides, and every current/captured layer intersects. Captured rule times use captured_at; current times are freshly captured. Missing selectors cannot evade restrictions. Generic decide is explanatory and does not replace declared step scopes/lifetime/adapter/approval/receipt checks. Never expose approval_path or server-owned snapshots/identity as client authority. The guide documents existing source, not a new runtime prompt or generic approval continuation.
