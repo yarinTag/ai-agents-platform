@@ -134,3 +134,6 @@ def initialize(conn):
             PRIMARY KEY(resource_type, resource_id)
         )
     """)
+
+    from .governance_schema import initialize as initialize_governance
+    initialize_governance(conn)

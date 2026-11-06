@@ -249,3 +249,6 @@ Workflow creation prompt now consumes actual tool_capabilities and server_operat
 
 
 AI-15 agent instruction contract: propose only implemented current-catalog capabilities; never infer rights from user text/channel/repository content, silently downgrade requested approval, or fabricate decisions/receipts. This is contributor guidance for P09; no current runtime/workflow_chat.py prompt or model capability was changed by the P00 documentation task.
+
+## AI-16 authoring projection
+workflow_chat prompt consumes resources_by_tool/resources_by_workspace_operation/resources_by_server_operation and per-agent capability_resources as exact policy limits. Existing live connector authority is enforced server-side through shared governance at actual dispatch. Catalog/decision data is non-executable and does not grant operations or install adapters. Unsupported and conditional actions without a continuation path remain blocked; no model/agent calls were made. See docs/architecture/capability-policy-v1.md.

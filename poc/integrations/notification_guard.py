@@ -32,6 +32,11 @@ def notification_target(db, workflow, execution_id):
     channel = binding.get('channel_id', '')
     if channel not in resource_values(connector.configuration or {}, 'channels') or not valid_channel(connector.provider, channel):
         raise ToolAccessError('Configure an allowed exact notification channel ID; display-name aliases are not accepted.')
+    actor = db.get_agent(context.get('notification_agent_id'))
+    if not actor:
+        raise ToolAccessError('Notification has no authorized execution actor.')
+    from governance.enforcement import require_capability
+    require_capability(db, execution_id, actor, connector, operation, channel)
     return connector, tool, channel, binding
 
 

@@ -144,3 +144,6 @@ Workflow approval reads require current scoped execution access. decide_workflow
 
 
 AI-15 target identity/event/approval boundaries require proved provider identities plus current personal approver policy. Channel membership/forwarded links alone never identify an approver. Trigger service principals have explicit fixed workflow/resource ceilings and cannot be selected by model text. Legacy global-secret callbacks remain denied until P04/P05/P08 ship the verified transport.
+
+## AI-16 policy admission
+request_policy includes governance in the reviewed domain inventory and rejects governance bodies >262144 bytes. route_permissions maps descriptors/catalog/decisions to read, department policy/history to manage, organization policy to admin. Handler Resources/current Actor checks remain mandatory and foreign selected departments stay hidden. Manager restrictions cannot create a grant; no external channel membership or request actor is authority. See docs/architecture/capability-policy-v1.md.

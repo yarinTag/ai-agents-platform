@@ -110,6 +110,8 @@ def authorize_workspace(db, execution_id, step, config):
                 'wildcard grants do not cover repository writes.')
         if not agent_tool_allowed(db, agent, connector, _tool(db, connector, operation)):
             raise ToolAccessError(f'The execution agent is not allowed to use {operation}.')
+        from governance.enforcement import require_capability
+        require_capability(db, execution_id, agent, connector, operation, config.repository, branch=config.ref)
     budget = db.check_department_budget(department_id)
     if not budget.get('allowed'):
         raise ToolAccessError('Department budget does not permit repository work.')

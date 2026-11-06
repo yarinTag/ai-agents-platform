@@ -13,6 +13,9 @@ def rules(read='', operate='', manage='', admin=''):
 
 
 ROUTE_PERMISSIONS = {
+    'governance': rules(read='list_capability_descriptors get_effective_capability_catalog explain_capability_decision',
+        manage='get_department_capability_policy put_department_capability_policy list_department_capability_revisions',
+        admin='get_organization_capability_policy put_organization_capability_policy'),
     'agents': rules(read='list_agents get_entire_hierarchy_tree get_agent get_agent_children get_agent_subtree', manage='create_agent update_agent delete_agent'),
     'projects': rules(read='list_projects get_project list_memories get_context_prompt', admin='create_project update_project delete_project create_memory delete_memory'),
     'skills': rules(read='list_skills get_skill scan_plugins get_plugin_skill_content get_plugins_config', admin='create_skill update_skill delete_skill update_plugins_config get_plugin_git_repos'),

@@ -344,3 +344,8 @@ workflow_chat ChatStep adds optional human_approval {source_step,connector_id,ch
 
 
 AI-13 source/HTTP baseline is docs/architecture/connector-governance-contract.md. Its v1 entities are proposals for later tickets, not newly registered endpoints. Current catalog execution_supported is configuration-only; CONNECTED/test_connector is not verified provider connectivity, and saved trigger_enabled does not establish an inbound listener. API-only audit exercises real registered guards without application lifespan or external actions.
+
+## AI-16 governance API
+governance.py: GET /api/v1/governance/capabilities; GET/PUT /organization/policy (admin); GET/PUT /departments/{department_id}/policy and GET /policy/history (current department manager/admin); GET /departments/{department_id}/catalog and POST /decisions (department readers). Strict PolicyUpdate includes expected_revision; stale409, invalid422, manager expansion403, hidden scope404. DecisionRequest accepts no actor/approval/frozen authority and returns non_executable:true. Managers append deny/require_approval only; admin may expand within legacy ceiling. AI context/proposal validation uses per-operation/resource and agent capability_resources, including repository-specific merge checks. Full models/storage/bounds: docs/architecture/capability-policy-v1.md.
+
+AI-16 destination regression: workflow chat validates channel-only Destination objects without repository/tool fields, then checks exact channel delivery policy and notification-agent permissions. API-only saved-preview tests cover allowed and denied channels on the same connector, with zero executions or sends.

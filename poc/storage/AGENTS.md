@@ -146,3 +146,6 @@ workflow_approvals_schema initializes workflow_approvals: id PK, execution_id UN
 
 
 AI-15 migration decision: preserve existing workflow revisions, approval/call receipts and denials while adding versioned policy/bindings/checkpoints in later owning tickets. P00 performs no schema/migration/data writes. Unknown grants remain inert and read wildcard cannot become write authority. No auto-claim, identity link, credential copy or replay of completed/unknown external writes.
+
+## AI-16 additive capability policies
+organization_schema invokes governance_schema.initialize. capability_policies columns: organization_id, scope_type organization|department, scope_id, revision>0, document_json, updated_by, updated_at; primary key organization_id/scope_type/scope_id. capability_policy_revisions adds revision to that primary key. governance.store uses BEGIN IMMEDIATE CAS and one atomic current/history update; validation reads locked previous document. Unset policy is virtual revision0 inherit; no legacy grants/backfill/credentials change. Execution captures both policies in one SQLite read snapshot. See docs/architecture/capability-policy-v1.md.

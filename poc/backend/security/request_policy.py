@@ -36,7 +36,7 @@ async def authorize_request(request: Request, db=Depends(get_db_manager)):
         raise HTTPException(403, "This host-global operation is unavailable to tenant accounts.")
     if domain not in {"agents", "projects", "skills", "tasks", "events", "templates", "models", "runtimes",
                       "audit", "auth", "schedules", "approvals", "chat", "war-room", "messages", "teams",
-                      "workflows", "mcp", "organizations", "departments"}:
+                      "workflows", "mcp", "organizations", "departments", "governance"}:
         raise HTTPException(403, "No tenant policy is registered for this operation.")
     level = required_level(request, domain)
     if level == 1 and domain != "auth":
@@ -54,6 +54,8 @@ async def authorize_request(request: Request, db=Depends(get_db_manager)):
     if request.method not in ("GET", "HEAD", "OPTIONS"):
         try:
             raw = await request.body()
+            if domain == "governance" and len(raw) > 262144:
+                raise HTTPException(413, "Capability policy requests are limited to 256 KiB.")
             body = json.loads(raw) if raw else {}
         except (ValueError, UnicodeError):
             raise HTTPException(422, "A JSON request body is required.")
