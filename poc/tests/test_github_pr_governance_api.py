@@ -140,3 +140,91 @@ def test_revoked_merge_grant_stops_approved_resolution_before_provider_io(baseli
     assert value['resolved_by'] == 'atlas_ORG_ADMIN' and value['receipts'] == []
     with db._get_connection() as conn:
         assert conn.execute('SELECT COUNT(*) FROM mcp_tool_calls').fetchone()[0] == 0
+
+
+@pytest.mark.parametrize('role', ['ORG_ADMIN', 'MANAGER', 'OPERATOR', 'MEMBER'])
+def test_run_details_project_pr_audit_without_secrets_or_cross_tenant_data(baseline, role):
+    """Stored diagnostic fixtures are historical records, never simulated provider calls."""
+    from runtime.models import AgentRun, TaskStatus
+    db, client = baseline
+    db.create_workflow(id='evidence_wf', name='Evidence', organization_id='atlas',
+                       department_id='atlas_engineering', definition_json='{"steps":[]}', is_active=False)
+    db.create_workflow_execution(execution_id='evidence_exec', workflow_id='evidence_wf',
+                                trigger_type='MANUAL', department_id='atlas_engineering', status='COMPLETED')
+    task = AgentRun(run_id='evidence_task', agent_id='atlas_engineering', prompt='Stored diagnostic',
+                    status=TaskStatus.COMPLETED, created_at=datetime.now(), organization_id='atlas', project_id=None)
+    db.save_task_run(task)
+    db.save_workflow_step_run({'id': 'evidence_step', 'execution_id': 'evidence_exec', 'step_key': 'work',
+        'agent_id': 'atlas_engineering', 'task_run_id': task.run_id, 'status': 'COMPLETED',
+        'started_at': datetime.now().isoformat(), 'completed_at': None, 'input_data': '',
+        'output_data': '', 'input_tokens': 0, 'output_tokens': 0, 'cost_usd': 0})
+    for connector, identifier in [('atlas_github', 'call_repo_own'), ('boreal_github', 'call_repo_foreign')]:
+        db.save_mcp_tool({'id': identifier + '_tool', 'connector_id': connector,
+                         'name': 'open_pull_request', 'description': 'Historical diagnostic'})
+        db.save_mcp_tool_call({'id': identifier, 'connector_id': connector, 'tool_id': identifier + '_tool',
+            'agent_id': 'atlas_engineering', 'task_id': task.run_id, 'status': 'COMPLETED',
+            'run_id': task.run_id, 'arguments': {'repository': 'owner/repository', 'token': 'argument-secret'},
+            'result': json.dumps({'pull_request_number': 42, 'commit': 'a' * 40, 'draft': True,
+                                  'body': 'private-body', 'token': 'result-secret'}),
+            'started_at': datetime.now().isoformat()})
+    db.save_mcp_tool({'id': 'evidence_read_tool', 'connector_id': 'atlas_github',
+                     'name': 'get_pull_request_review', 'description': 'Stored read diagnostic'})
+    db.save_mcp_tool_call({'id': 'call_exec_evidence', 'connector_id': 'atlas_github',
+        'tool_id': 'evidence_read_tool', 'agent_id': 'atlas_engineering', 'task_id': task.run_id,
+        'run_id': task.run_id, 'status': 'COMPLETED', 'arguments': {'repository': 'owner/repository'},
+        'result': json.dumps({'pull_request': {'number': 42, 'head': {'sha': 'a' * 40, 'token': 'nested-secret'},
+            'base': {'sha': 'b' * 40}, 'body': 'private-body'}, 'evidence_version': 2,
+            'candidate_ready': False, 'blockers': ['REQUIRED_CHECKS_NOT_PASSING'],
+            'reviews': [{'author': 'reviewer', 'state': 'APPROVED', 'commit_id': 'a' * 40,
+                         'trusted_approval': True, 'body': 'review-body-secret'}]}),
+        'started_at': datetime.now().isoformat()})
+    path = '/api/v1/workflows/executions/evidence_exec'
+    response = client.get(path, headers=auth(role))
+    assert response.status_code == 200, response.text
+    entries = response.json()['step_runs'][0]['pr_evidence']
+    assert len(entries) == 2
+    assert entries[0]['audit_id'] == 'call_repo_own'
+    assert entries[0]['operation'] == 'open_pull_request' and entries[0]['status'] == 'COMPLETED'
+    assert entries[0]['pull_number'] == 42 and entries[0]['head_sha'] == 'a' * 40
+    assert entries[0]['repository'] == 'owner/repository' and entries[0]['draft'] is True
+    assert entries[1]['blockers'] == ['REQUIRED_CHECKS_NOT_PASSING']
+    assert entries[1]['pull_request']['head'] == {'sha': 'a' * 40}
+    assert entries[1]['reviews'][0]['trusted_approval'] is True
+    assert not any(secret in response.text for secret in ('argument-secret', 'result-secret', 'private-body',
+                                                          'call_repo_foreign', 'nested-secret', 'review-body-secret'))
+    assert client.get(path, headers=auth(org='boreal')).status_code == 404
+    assert client.get(path, headers=auth(role, department='finance')).status_code == (404 if role == 'ORG_ADMIN' else 403)
+
+
+@pytest.mark.parametrize('receipt_status', ['STARTED', 'UNKNOWN', 'NOT_DISPATCHED', 'COMPLETED'])
+def test_approval_read_preserves_recorded_merge_outcome_without_claiming_new_work(baseline, receipt_status):
+    db, client = baseline
+    db.create_workflow(id='receipt_wf', name='Historical receipt', organization_id='atlas',
+                       department_id='atlas_engineering', definition_json='{"steps":[]}', is_active=False)
+    db.create_workflow_execution(execution_id='receipt_exec', workflow_id='receipt_wf',
+                                trigger_type='MANUAL', department_id='atlas_engineering', status='COMPLETED')
+    subject = {'repository': 'owner/repository', 'pull_number': 42, 'head_sha': 'a' * 40,
+               'base_sha': 'b' * 40, 'url': 'https://github.com/owner/repository/pull/42'}
+    receipt = {**subject, 'operation': 'merge_pull_request', 'status': receipt_status,
+               'audit_id': 'call_merge_historical', 'approved_by': 'atlas_MANAGER',
+               'started_at': datetime.now().isoformat()}
+    if receipt_status == 'COMPLETED':
+        receipt.update(merge_commit_sha='c' * 40, completed_at=datetime.now().isoformat())
+    with db._get_connection() as conn:
+        conn.execute("""INSERT INTO workflow_approvals
+            (id,execution_id,step_run_id,task_id,organization_id,department_id,workflow_revision,status,
+             config_json,subjects_json,report,created_at,expires_at,receipts_json,resolved_by)
+            VALUES ('receipt_gate','receipt_exec','receipt_step','receipt_task','atlas','atlas_engineering',1,
+                    'FAILED',?,?,?, ?,?,?, 'atlas_MANAGER')""",
+            (json.dumps({'kind': 'pull_requests', 'merge_after_approval': True}), json.dumps([subject]),
+             'Historical diagnostic only.', datetime.now().isoformat(),
+             (datetime.now() + timedelta(hours=1)).isoformat(), json.dumps([receipt])))
+    path = '/api/v1/workflows/executions/receipt_exec/approval'
+    response = client.get(path, headers=auth('MEMBER'))
+    assert response.status_code == 200, response.text
+    assert response.json()['receipts'] == [receipt]
+    assert response.json()['subjects'] == [subject]
+    assert response.json()['status'] == 'FAILED'  # Batch state is distinct from each external receipt.
+    assert client.get(path, headers=auth(org='boreal')).status_code == 404
+    with db._get_connection() as conn:
+        assert conn.execute('SELECT COUNT(*) FROM mcp_tool_calls').fetchone()[0] == 0

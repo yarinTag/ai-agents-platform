@@ -1,3 +1,4 @@
+import { PrPermissionSummary } from './PrPermissionSummary';
 import { Tag, Button, Modal, Typography, Space } from 'antd';
 import { ToolOutlined, FileTextOutlined, ApartmentOutlined, DeleteOutlined } from '@ant-design/icons';
 
@@ -35,6 +36,7 @@ export function WorkflowStepInspector({ selectedStep, detailModalVisible, setDet
       >
         {selectedStep && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <PrPermissionSummary step={selectedStep} />
             <div>
               <div style={{ fontSize: '12px', color: '#8b949e', marginBottom: '4px' }}>Assigned Agent:</div>
               <Tag color="cyan" style={{ fontSize: '13px', padding: '4px 10px' }}>

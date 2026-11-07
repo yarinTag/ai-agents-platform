@@ -328,3 +328,7 @@ getDepartmentMembers, bulkInviteDepartmentMembers and removeDepartmentMember sen
 
 
 Manage Team navigation uses selectTab('team') with the selected department, matching the URL-owned tab state introduced by AI-5. The removed setActiveTab state setter has no remaining OrganizationPage references. Static reference/diff checks only; no runtime verification performed.
+
+
+## AI-20 PR scopes and evidence
+AI-20 PR UI must keep draft publication, read evidence, review/comment writes, personal approval and server-only merge separate. Only structured persisted diagnostics/tool results supply PR facts; build fixed github.com links from validated repository/PR/SHA identifiers. Never parse model prose as a successful receipt. Historical readiness cannot authorize current actions; UNKNOWN/STARTED writes need reconciliation, not a retry button. EN/HE copy is paired in i18n/prGovernance.ts.

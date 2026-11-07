@@ -280,3 +280,7 @@ getDepartments(organization_id?) explicitly disables X-Department-ID using Axios
 
 ## Explicit department member request scope (2026-11-07)
 getDepartmentMembers, bulkInviteDepartmentMembers and removeDepartmentMember send X-Department-ID equal to their target deptId and encode path IDs. httpClient supplies the global selection only when the request has no explicit X-Department-ID header, preserving both a target scope and the false directory sentinel. Current server membership/tenant/admin checks remain unchanged. OrganizationPage clears old members before loading and ignores superseded/unmounted member responses/errors/loading updates. This prevents global header selection from rejecting Org & Teams operations on another authorized department. Static diff review only; no runtime verification performed.
+
+
+## AI-20 PR scopes and evidence
+AI-20: types/mcp WorkflowExecution.step_runs adds optional pr_evidence: Record<string,unknown>[] from the unchanged scoped detail endpoint. workflowApprovals receipt DTO adds optional operation, head_sha, base_sha, audit_id, approved_by, started_at/completed_at to reflect existing backend JSON. Missing legacy fields are supported. No token/transport/cache changes.

@@ -105,6 +105,8 @@ def get_execution_status(
         ).fetchall()]
     for step in step_runs:
         task = db.get_task_run(step["task_run_id"]) if step.get("task_run_id") else None
+        from .workflow_pr_evidence import step_pr_evidence
+        step["pr_evidence"] = step_pr_evidence(db, step, wf.organization_id)
         step["events"] = task.events[-500:] if task else []
         step["error"] = task.error if task else None
         step["task_status"] = task.status.value if task else None

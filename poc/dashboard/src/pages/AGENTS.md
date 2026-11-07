@@ -311,3 +311,7 @@ getDepartmentMembers, bulkInviteDepartmentMembers and removeDepartmentMember sen
 
 
 Manage Team navigation uses selectTab('team') with the selected department, matching the URL-owned tab state introduced by AI-5. The removed setActiveTab state setter has no remaining OrganizationPage references. Static reference/diff checks only; no runtime verification performed.
+
+
+## AI-20 PR scopes and evidence
+AI-20: WorkflowLogs and WorkflowExecutionDrawer render step.pr_evidence from authorized execution details, independently of model output and the 500-event timeline bound. Inspection also mounts existing WorkflowApprovalPanel keyed by execution ID, preserving current backend authority. No new route, action endpoint or resource grant. Missing historical receipts remain absent; confirmation is never inferred from workflow completion.
