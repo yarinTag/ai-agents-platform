@@ -1,5 +1,4 @@
 import React from 'react';
-import { usePermissions } from '../../hooks/usePermissions';
 import { useTranslation } from '../../i18n';
 import { Link, useLocation } from 'react-router-dom';
 import { Tooltip, Button } from 'antd';
@@ -18,7 +17,6 @@ import {
   ThunderboltOutlined,
   BankOutlined,
   ApartmentOutlined,
-  SettingOutlined,
 } from '@ant-design/icons';
 
 interface AppSidebarProps {
@@ -39,7 +37,6 @@ interface NavSection {
 
 export const AppSidebar: React.FC<AppSidebarProps> = ({ collapsed, onToggleCollapse }) => {
   const location = useLocation();
-  const { isAdmin } = usePermissions();
   const { t } = useTranslation();
 
   const sections: NavSection[] = [
@@ -124,11 +121,6 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ collapsed, onToggleColla
           badge: 'ORG',
           badgeColor: '#a855f7',
         },
-        {
-          to: '/settings',
-          label: 'Settings',
-          icon: <SettingOutlined style={{ fontSize: '15px' }} />,
-        },
       ],
     },
   ];
@@ -195,7 +187,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ collapsed, onToggleColla
 
             {/* Nav Items */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-              {section.items.filter((item) => isAdmin || item.to !== '/settings').map((item) => {
+              {section.items.map((item) => {
                 const isActive = location.pathname === item.to || (item.to !== '/' && location.pathname.startsWith(`${item.to}/`));
 
                 const linkElement = (

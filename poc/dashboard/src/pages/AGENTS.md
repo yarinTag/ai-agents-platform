@@ -231,7 +231,7 @@ WorkflowLogs readability: steps render collapsed except FAILED or active ones (d
 `WorkflowLogs.tsx` replaces the multi-line Ant Design `<Button block type="primary">` run list items (which caused horizontal flex squishing and full-card green fill) with vertical dark-themed clickable run cards (`role="button"`, keyboard accessible, emerald accent border `#10b981` when selected), a `Segmented` mode filter (`All Runs`, `Live`, `Playground`), status/trigger/deduplication tags with icons, duration/cost/token metadata, and a 4-column execution summary grid with terminal-styled `#0d1117` output/input blocks.
 
 ## Settings page & runtime configuration (2026-11-01)
-`SettingsPage.tsx` mounts at `/settings` (linked under `ORGANIZATION & GOVERNANCE` in `AppSidebar.tsx`) and renders `RuntimeSettingsPanel` for configuring AI API providers, API keys, enabled providers, and default models. `OrganizationPage.tsx` (`/organization`) also exposes a `Runtime settings` tab rendering `RuntimeSettingsPanel`, replacing the removed header button.
+`OrganizationPage.tsx` (`/organization?tab=runtime`) owns the `Runtime settings` tab rendering `RuntimeSettingsPanel` for configuring AI API providers, API keys, enabled providers, and default models. The redundant `SettingsPage.tsx` and sidebar entry have been removed; `/settings` redirects to this tab.
 
 
 WorkflowLogs now renders a dedicated Model reasoning summaries panel above Step Output inside each expanded step. Available summaries are counted in a geekblue Reasoning (N) badge visible even on collapsed step headers. Existing Runtime Events retains the full chronological trace. Missing-summary events remain visible in the dedicated panel. No route/API changes. Read-only inspection of existing SQLite run records confirmed persisted NVIDIA summaries; no new inference/tests/build/startup performed.
@@ -271,7 +271,7 @@ manager in a MEMBER department sees read-only controls via usePermissions. Plugi
 omit source-changing query parameters; non-admins cannot load private repository discovery or edit
 source config. QueuePanel explains why broker-wide metrics/DLQ actions are unavailable rather than
 polling global endpoints. App supplies a read-only department access view to non-admin Org & Teams
-and denies direct Settings navigation. Each feature remounts on scope/role changes. No runtime
+and routes legacy Settings navigation through that same protected organization view. Each feature remounts on scope/role changes. No runtime
 checks were performed; exact exceptions/limitations are in docs/access-control-audit.md.
 
 Workflow create and Create with AI entry points and recovery modal are enabled for canRead. Existing editing/deletion/settings and execution controls retain their respective roles. No local runtime verification performed.
@@ -296,3 +296,18 @@ WorkflowsPage passes AuthContext departments and an explicit ORG_ADMIN account-r
 
 ## AI-4 calendar execution navigation (2026-11-06)
 Calendar task cells link to /tasks?taskId=<encoded task ID>; useTasksPage reads that parameter through the authorized getTask API and opens the existing output/error/event console. Closing removes only taskId; stale/unmounted detail responses are ignored and failures show an error. CalendarRun renders status, actual start/end and completed duration, task console links and workflow logs links using canonical workflow/execution IDs. Workflow trigger_type is displayed, with CRON labeled Scheduled (cron); task trigger provenance is unavailable unless matched to a loaded workflow run, never inferred as manual. useCalendarViewPage independently loads up to 200 recent authorized workflow executions with the active department filter, existing polling/request-generation guards and a separate resource error. Cells and date inspection include workflow runs, including runs without tasks; the date modal discloses the 200-run history bound. Activity groups by started_at with created_at fallback; missing actual start/end remains unavailable. No backend/schema/grant changes. Static review only; local tests/build/typecheck/browser/startup remain unauthorized.
+
+
+## AI-5 consolidated runtime settings navigation (2026-11-07)
+The authenticated `/settings` route uses React Router Navigate with replace to `/organization?tab=runtime`, removing the legacy history entry. SettingsPage and its lazy import/sidebar item are removed. OrganizationPage validates `tab` against departments/workflows/team/users/runtime/capabilities, defaults missing/unknown values to departments, and updates only tab while preserving other query parameters. Browser back/forward and direct links select the corresponding tab. RuntimeSettingsPanel remains in the organization runtime tab; the existing non-admin DepartmentAccessPage route and capability/read guards remain authoritative, so redirects grant no admin access. No backend/provider behavior changes. Static source/diff review only; no local tests/build/typecheck/browser/startup under current runtime restrictions.
+
+
+## Organization department directory scope (2026-11-07)
+getDepartments(organization_id?) explicitly disables X-Department-ID using Axios's false header sentinel. httpClient respects that sentinel instead of injecting the active department; all other requests retain existing header selection. GET /api/v1/departments still applies current backend organization and membership authorization: admins see their full organization directory, non-admins only authorized memberships. Org & Teams Departments & Budgets counts/table and team selectors therefore no longer collapse to the selected header department. No global request-scope mutation, backend permission bypass or cross-tenant access. Static review/diff check only; runtime verification remains unauthorized.
+
+
+## Explicit department member request scope (2026-11-07)
+getDepartmentMembers, bulkInviteDepartmentMembers and removeDepartmentMember send X-Department-ID equal to their target deptId and encode path IDs. httpClient supplies the global selection only when the request has no explicit X-Department-ID header, preserving both a target scope and the false directory sentinel. Current server membership/tenant/admin checks remain unchanged. OrganizationPage clears old members before loading and ignores superseded/unmounted member responses/errors/loading updates. This prevents global header selection from rejecting Org & Teams operations on another authorized department. Static diff review only; no runtime verification performed.
+
+
+Manage Team navigation uses selectTab('team') with the selected department, matching the URL-owned tab state introduced by AI-5. The removed setActiveTab state setter has no remaining OrganizationPage references. Static reference/diff checks only; no runtime verification performed.

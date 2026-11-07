@@ -272,3 +272,11 @@ workflowApprovals.ts exposes typed getWorkflowApproval(executionId) and decideWo
 
 ## AI-17 governance client
 governanceApi.ts (facade re-exported) owns getGovernanceCapabilities, getGovernanceCatalog(departmentId), getCapabilityPolicy(departmentId|null), updateCapabilityPolicy(departmentId|null,document,expectedRevision), getCapabilityPolicyHistory(departmentId). All accept AbortSignal and use the shared authenticated transport; null policy target means organization. Paths are encoded; no new cache/storage or token parameter. types/governance.ts owns policy, descriptor, catalog/decision and safe resource-option DTOs. Exact endpoint contracts: docs/design/capability-policy-editor.md.
+
+
+## Organization department directory scope (2026-11-07)
+getDepartments(organization_id?) explicitly disables X-Department-ID using Axios's false header sentinel. httpClient respects that sentinel instead of injecting the active department; all other requests retain existing header selection. GET /api/v1/departments still applies current backend organization and membership authorization: admins see their full organization directory, non-admins only authorized memberships. Org & Teams Departments & Budgets counts/table and team selectors therefore no longer collapse to the selected header department. No global request-scope mutation, backend permission bypass or cross-tenant access. Static review/diff check only; runtime verification remains unauthorized.
+
+
+## Explicit department member request scope (2026-11-07)
+getDepartmentMembers, bulkInviteDepartmentMembers and removeDepartmentMember send X-Department-ID equal to their target deptId and encode path IDs. httpClient supplies the global selection only when the request has no explicit X-Department-ID header, preserving both a target scope and the false directory sentinel. Current server membership/tenant/admin checks remain unchanged. OrganizationPage clears old members before loading and ignores superseded/unmounted member responses/errors/loading updates. This prevents global header selection from rejecting Org & Teams operations on another authorized department. Static diff review only; no runtime verification performed.

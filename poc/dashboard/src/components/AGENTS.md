@@ -206,7 +206,7 @@ StepEventTimeline recognizes usage events as Usage & cost: per-call tokens, pric
 
 ## OfficeTopBar route indicator & runtime/org header items removal (2026-11-01)
 `layout/OfficeTopBar.tsx` removes the `routeTitles` dictionary and center "Current View Indicator" badge (`LIVE FLOW`, `AGENTS ROSTER`, etc.), as well as the header `Runtime settings` button and the organization badge right after it. Left section retains the menu collapse toggle, brand link, and `ACTIVE PLATFORM` badge; right section retains the department selector, user chip, logout button, and digital clock.
-`common/RuntimeSettingsPanel.tsx` provides an inline card component for configuring Direct HTTP API providers, API keys, enabled providers, and default models, mounted on `pages/SettingsPage.tsx` (`/settings`, added to `layout/AppSidebar.tsx` under `ORGANIZATION & GOVERNANCE`) and in the `Runtime settings` tab of `pages/OrganizationPage.tsx`.
+`common/RuntimeSettingsPanel.tsx` provides an inline card component for configuring Direct HTTP API providers, API keys, enabled providers, and default models, mounted in the `Runtime settings` tab of `pages/OrganizationPage.tsx` (`/organization?tab=runtime`). The sidebar exposes Org & Teams only; `/settings` is a legacy redirect.
 `layout/OfficeTopBar.tsx` and `robotic/DepartmentSelect.tsx` resolve `d.id || d.department_id` for option values while displaying `d.name` as the option label, ensuring the initial `activeDepartmentId` matches its dropdown option.
 
 
@@ -291,8 +291,8 @@ edges remain dotted, and all individual declarations remain in the evidence pane
 
 
 ## Role-aware shell and shared mutation controls (2026-11-05)
-AppSidebar hides Settings from non-admins; App denies direct non-admin settings navigation and
-shows DepartmentAccessPage instead of administrative Org & Teams requests. DepartmentAccessPage
+AppSidebar exposes Org & Teams with no separate Settings item; legacy /settings redirects to
+/organization?tab=runtime. App shows DepartmentAccessPage for non-admins instead of administrative Org & Teams requests. DepartmentAccessPage
 lists the current accessible department, account/membership roles and budget without mutations.
 HierarchyEditor/template instantiation and agent management require canManage; chat/session
 mutations require canOperate, including disabled keyboard submission. Host-native folder selection
@@ -312,3 +312,7 @@ org/CapabilityGovernancePanel.tsx owns scoped catalog/policy/history loading, ef
 CapabilityGovernancePanel explicitly initializes its optional AbortController ref for compatibility with the locked React type definitions; request cancellation semantics are unchanged.
 
 Policy review drawer identifies organization/department target and exact scope ID. Refresh is disabled while a draft editor is open; cancelling an edit remains possible if its original option disappeared.
+
+
+## AI-5 consolidated runtime settings navigation (2026-11-07)
+The authenticated `/settings` route uses React Router Navigate with replace to `/organization?tab=runtime`, removing the legacy history entry. SettingsPage and its lazy import/sidebar item are removed. OrganizationPage validates `tab` against departments/workflows/team/users/runtime/capabilities, defaults missing/unknown values to departments, and updates only tab while preserving other query parameters. Browser back/forward and direct links select the corresponding tab. RuntimeSettingsPanel remains in the organization runtime tab; the existing non-admin DepartmentAccessPage route and capability/read guards remain authoritative, so redirects grant no admin access. No backend/provider behavior changes. Static source/diff review only; no local tests/build/typecheck/browser/startup under current runtime restrictions.

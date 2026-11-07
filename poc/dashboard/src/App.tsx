@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ConfigProvider, theme, App as AntdApp, Spin } from 'antd';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { I18nProvider } from './i18n';
@@ -24,7 +24,6 @@ const featureRoutes = [
   { path: '/mcp', load: () => import('./pages/McpHub') },
   { path: '/projects', capability: 'projects', load: () => import('./pages/Projects') },
   { path: '/organization', capability: 'organizations', load: () => import('./pages/OrganizationPage') },
-  { path: '/settings', load: () => import('./pages/SettingsPage') },
   { path: '/dashboard', capability: 'events', load: () => import('./pages/Dashboard') },
 ];
 
@@ -64,13 +63,12 @@ const AuthenticatedShell: React.FC = () => {
         <AppLayout>
           {permissions.isAdmin && <OptionalRuntimeSetup />}
           <Routes>
+            <Route path="/settings" element={<Navigate to="/organization?tab=runtime" replace />} />
             {featureRoutes.map(({ path, capability, load }) => (
               <Route
                 key={path}
                 path={path}
-                element={path === '/settings' && !permissions.isAdmin
-                  ? <Alert type="warning" message="Organization administrator access is required." />
-                  : path === '/organization' && !permissions.isAdmin ? <DepartmentAccessPage key={pageScope} />
+                element={path === '/organization' && !permissions.isAdmin ? <DepartmentAccessPage key={pageScope} />
                   : !permissions.canRead ? <Alert type="info" message="No department access is assigned. Ask your organization administrator to add you to a department." />
                   : <LazyFeatureRoute key={`${pageScope}:${path}`} load={load} capability={capability} />}
               />
