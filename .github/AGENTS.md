@@ -1,19 +1,13 @@
 # GitHub automation
 
-## Claude PR reviews
-claude-review.yml reviews opened, synchronized, reopened and ready-for-review PRs.
-Drafts, forks and bot-authored PRs are excluded. It requires the repository secret
-CLAUDE_CODE_OAUTH_TOKEN, generated through the owner's Claude subscription with
-claude setup-token. Missing authentication fails explicitly before the Action.
-The official Action and checkout are pinned to immutable commits. The job has
-read-only contents, PR comment permission, OIDC for the installed Claude App,
-a 25-minute timeout and superseded-run cancellation. Checkout does not persist
-credentials. Review prompts prohibit application execution and file edits; allowed
-tools support source inspection and review comments. This is advisory review,
-not a required CI gate. Activation needs the configuration merged to master and
-a real completed review; configuration alone is not verified operation.
-Gemini's independent automatic review configuration is in .gemini/config.yaml;
-GitHub installation and Google Cloud activation are separate prerequisites.
+## Gemini PR reviews
+.gemini/config.yaml enables automatic summaries and reviews for non-draft PRs.
+There is no Claude review workflow or Claude credential requirement.
+The Gemini GitHub App already includes this repository. Historical reviews in
+Law-Firm-server PR16 were posted March20,2026; they do not prove current service
+availability. Google sunset the consumer GitHub review service July17,2026.
+Current setup requires the Google Cloud connection and its billing/Secret Manager
+prerequisites. No review has yet verified this repository's activation.
 
 ## Required checks and execution boundaries
 `workflows/ci.yml` runs on pull requests, main/master pushes, v-prefixed tag pushes and manual dispatch. Read-only GitHub permissions, disabled checkout credential persistence, job deadlines
