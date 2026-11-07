@@ -326,3 +326,5 @@ WorkflowCanvasStep preserves optional WorkflowStep.params for the same requireme
 Approval presentation permits one submitted decision per mounted scope and suppresses overlapping polls while the decision request is active. A pending/uncertain response stays disabled with reconciliation guidance; invalid expiration dates are nonactionable. Backend CAS remains authoritative.
 
 When a receipt lacks both immutable revisions (including draft publication), PrEvidence offers Current PR diff at the canonical PR /files URL, clearly distinct from a pinned SHA comparison.
+
+Checks-only diagnostics preserve files_included=false and explicitly remain incomplete approval proof even when their CI facts pass; the UI never displays a full-review readiness badge for that result. API contracts assert this field survives the safe projection.

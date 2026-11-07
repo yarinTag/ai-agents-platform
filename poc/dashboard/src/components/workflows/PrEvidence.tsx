@@ -26,7 +26,8 @@ export function PrEvidence({ value }: { value: unknown }) {
   const head = sha(row.head_sha) || sha(record(pull.head).sha);
   const base = sha(row.base_sha) || sha(record(pull.base).sha);
   const evidence = row.evidence_version !== undefined || Array.isArray(row.blockers) || row.candidate_ready !== undefined;
-  const proof = row.evidence_version === 2 && (!row.status || row.status === 'COMPLETED');
+  const checksOnly = row.files_included === false || row.operation === 'get_pull_request_checks';
+  const proof = row.evidence_version === 2 && !checksOnly && (!row.status || row.status === 'COMPLETED');
   const operation = str(row.operation);
   const status = str(row.status);
   const blockers = Array.isArray(row.blockers) ? row.blockers.filter((v): v is string => typeof v === 'string') : [];
@@ -61,7 +62,7 @@ export function PrEvidence({ value }: { value: unknown }) {
         <Tag color={ready ? 'success' : 'warning'}>{ready ? text.ready : text.blocked}</Tag>
         <Tag>{text.approved}: {fact(row.review_approved)}</Tag><Tag>{text.checks}: {fact(row.required_checks_satisfied)}</Tag>
         <Tag>{text.currentBase}: {fact(row.base_up_to_date)}</Tag>
-      </Space> : <Alert type="info" message={text.legacy} />}
+      </Space> : <Alert type="info" message={checksOnly ? text.limited : text.legacy} />}
       {row.partial === true && <Alert type="warning" message={text.partial} description={text.evidenceRecovery} />}
       {blockers.map((code, index) => <Alert key={`${code}:${index}`} type="warning" message={text.blockers[code] || <bdi dir="ltr">{code}</bdi>} description={`${text.recovery}: ${recovery(code)}`} />)}
       {Array.isArray(row.reviews) && row.reviews.map((v, i) => {

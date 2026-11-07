@@ -362,3 +362,5 @@ Existing /api/v1/governance/capabilities adds descriptor requires_capabilities f
 
 ## AI-20 PR scopes and evidence
 AI-20: authorized GET /api/v1/workflows/executions/{execution_id} adds step_runs[].pr_evidence, a bounded (32 per task) historical audit projection from workflow_pr_evidence.py. It intersects task/agent/connector organization, permits fixed GitHub PR operations, and allowlists scalar result fields, PR head/base identities, bounded blockers/reviewer summaries, audit ID/status/timestamps. Draft-PR receipts map pull_request_number/commit to pull_number/head_sha. No arguments, bodies, patches, arbitrary URLs/configuration or credentials are released. Existing execution scope checks precede projection; no execution or grant changes. Missing/deleted/malformed audit dependencies are omitted, not reconstructed. Approval endpoint and merge receipts remain unchanged.
+
+Checks-only diagnostics preserve files_included=false and explicitly remain incomplete approval proof even when their CI facts pass; the UI never displays a full-review readiness badge for that result. API contracts assert this field survives the safe projection.

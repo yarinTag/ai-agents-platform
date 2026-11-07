@@ -184,3 +184,5 @@ run_api_audit includes test_github_pr_governance_api.py: actual guarded FastAPI/
 AI-20 extends test_github_pr_governance_api.py with real FastAPI/SQLite historical audit projection checks across all four roles: exact draft receipt identity, allowlisted output, foreign-connector omission and tenant/selected-department denials. Fixtures are persisted diagnostic records, not provider-response mocks; no agent/model/provider/worker is executed. The existing isolated API audit runner includes this file.
 
 AI-20 also checks nested evidence/reviewer field allowlists and approval GET preservation of STARTED/UNKNOWN/NOT_DISPATCHED/COMPLETED receipts independently of a FAILED batch, with no connector calls.
+
+Checks-only diagnostics preserve files_included=false and explicitly remain incomplete approval proof even when their CI facts pass; the UI never displays a full-review readiness badge for that result. API contracts assert this field survives the safe projection.

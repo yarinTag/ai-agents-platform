@@ -174,7 +174,7 @@ def test_run_details_project_pr_audit_without_secrets_or_cross_tenant_data(basel
         'run_id': task.run_id, 'status': 'COMPLETED', 'arguments': {'repository': 'owner/repository'},
         'result': json.dumps({'pull_request': {'number': 42, 'head': {'sha': 'a' * 40, 'token': 'nested-secret'},
             'base': {'sha': 'b' * 40}, 'body': 'private-body'}, 'evidence_version': 2,
-            'candidate_ready': False, 'blockers': ['REQUIRED_CHECKS_NOT_PASSING'],
+            'candidate_ready': False, 'files_included': False, 'blockers': ['REQUIRED_CHECKS_NOT_PASSING'],
             'reviews': [{'author': 'reviewer', 'state': 'APPROVED', 'commit_id': 'a' * 40,
                          'trusted_approval': True, 'body': 'review-body-secret'}]}),
         'started_at': datetime.now().isoformat()})
@@ -187,6 +187,7 @@ def test_run_details_project_pr_audit_without_secrets_or_cross_tenant_data(basel
     assert entries[0]['operation'] == 'open_pull_request' and entries[0]['status'] == 'COMPLETED'
     assert entries[0]['pull_number'] == 42 and entries[0]['head_sha'] == 'a' * 40
     assert entries[0]['repository'] == 'owner/repository' and entries[0]['draft'] is True
+    assert entries[1]['files_included'] is False
     assert entries[1]['blockers'] == ['REQUIRED_CHECKS_NOT_PASSING']
     assert entries[1]['pull_request']['head'] == {'sha': 'a' * 40}
     assert entries[1]['reviews'][0]['trusted_approval'] is True

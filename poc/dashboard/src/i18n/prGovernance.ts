@@ -35,6 +35,7 @@ const en = {
     'A reviewer requested changes': 'A reviewer requested changes',
   } as Record<string, string>,
   statuses: { PENDING: 'Pending', RESOLVING: 'Processing', APPROVED: 'Approved', REJECTED: 'Rejected', EXPIRED: 'Expired', FAILED: 'Failed', STARTED: 'Started', UNKNOWN: 'Outcome unknown', NOT_DISPATCHED: 'Not dispatched', COMPLETED: 'Confirmed completed', COMMENTED: 'Commented', CHANGES_REQUESTED: 'Changes requested', DISMISSED: 'Dismissed' } as Record<string, string>,
+  limited: 'Checks-only diagnostic: a complete PR review including the diff is still required for approval.',
   legacy: 'Legacy evidence: current merge proof is unavailable.',
 };
 const he: typeof en = {
@@ -73,6 +74,7 @@ const he: typeof en = {
     'A reviewer requested changes': 'סוקר ביקש שינויים',
   },
   statuses: { PENDING: 'ממתין', RESOLVING: 'בעיבוד', APPROVED: 'אושר', REJECTED: 'נדחה', EXPIRED: 'פג תוקף', FAILED: 'נכשל', STARTED: 'התחיל', UNKNOWN: 'תוצאה לא ידועה', NOT_DISPATCHED: 'לא נשלח', COMPLETED: 'הושלם ואומת', COMMENTED: 'נשלחה תגובה', CHANGES_REQUESTED: 'נדרשו שינויים', DISMISSED: 'בוטל' },
+  limited: 'אבחון בדיקות בלבד: עדיין נדרשת סקירת PR מלאה הכוללת את ההבדלים לצורך אישור.',
   legacy: 'ראיות ישנות: הוכחת המיזוג הנוכחית אינה זמינה.',
 };
 export function usePrGovernanceText() { return useTranslation().locale === 'he' ? he : en; }

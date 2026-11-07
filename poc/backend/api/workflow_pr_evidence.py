@@ -5,7 +5,7 @@ OPERATIONS = ('open_pull_request', 'get_pull_request', 'get_pull_request_diff',
               'get_pull_request_checks', 'get_pull_request_review', 'comment_pull_request', 'review_pull_request')
 FIELDS = ('repository', 'pull_number', 'head_sha', 'base_sha', 'merge_commit_sha', 'provider_actor',
           'provider_id', 'evidence_version', 'candidate_ready', 'review_approved', 'base_up_to_date',
-          'required_checks_satisfied', 'partial', 'draft', 'pull_request_number', 'commit')
+          'required_checks_satisfied', 'files_included', 'partial', 'draft', 'pull_request_number', 'commit')
 
 
 def step_pr_evidence(db, step, organization_id):
