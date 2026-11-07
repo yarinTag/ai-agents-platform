@@ -1,5 +1,14 @@
 # GitHub automation
 
+## Gemini PR reviews
+.gemini/config.yaml enables automatic summaries and reviews for non-draft PRs.
+There is no Claude review workflow or Claude credential requirement.
+The Gemini GitHub App already includes this repository. Historical reviews in
+Law-Firm-server PR16 were posted March20,2026; they do not prove current service
+availability. Google sunset the consumer GitHub review service July17,2026.
+Current setup requires the Google Cloud connection and its billing/Secret Manager
+prerequisites. No review has yet verified this repository's activation.
+
 ## Required checks and execution boundaries
 `workflows/ci.yml` runs on pull requests, main/master pushes, v-prefixed tag pushes and manual dispatch. Read-only GitHub permissions, disabled checkout credential persistence, job deadlines
 and fail-fast:false preserve independent failure evidence. No production secrets, cloud
