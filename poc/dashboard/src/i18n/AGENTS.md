@@ -148,3 +148,5 @@ governance.ts exports useGovernanceText/GovernanceText with paired typed English
 
 ## AI-20 PR scopes and evidence
 AI-20: prGovernance.ts exports usePrGovernanceText with paired typed EN/HE requirements, evidence, receipt/status and actionable blocker/reconciliation copy. Shared PR views use document direction and bdi dir=ltr for canonical identifiers/SHAs; fixed GitHub links never depend on translated labels. Existing approval copy/locale persistence unchanged.
+
+PR diff copy distinguishes immutable SHA comparisons from a current, mutable PR diff in both languages.

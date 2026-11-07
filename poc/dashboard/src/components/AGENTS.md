@@ -324,3 +324,5 @@ AI-20: workflows/PrPermissionSummary accepts WorkflowStep and displays exact dec
 WorkflowCanvasStep preserves optional WorkflowStep.params for the same requirements panel in WorkflowStepInspector; graph projection must retain these declarations.
 
 Approval presentation permits one submitted decision per mounted scope and suppresses overlapping polls while the decision request is active. A pending/uncertain response stays disabled with reconciliation guidance; invalid expiration dates are nonactionable. Backend CAS remains authoritative.
+
+When a receipt lacks both immutable revisions (including draft publication), PrEvidence offers Current PR diff at the canonical PR /files URL, clearly distinct from a pinned SHA comparison.

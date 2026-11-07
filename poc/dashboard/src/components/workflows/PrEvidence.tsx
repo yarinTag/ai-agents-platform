@@ -51,7 +51,8 @@ export function PrEvidence({ value }: { value: unknown }) {
     <Space wrap>
       <Typography.Link href={location.url} target="_blank" rel="noopener noreferrer"><bdi dir="ltr">{location.repository} #{location.number}</bdi></Typography.Link>
       {operation && <Tag>{operation === 'open_pull_request' ? text.draft : operation === 'merge_pull_request' ? text.merge : operation === 'review_pull_request' ? text.review : operation === 'comment_pull_request' ? text.comment : operation.startsWith('get_pull_request') ? text.read : operation}</Tag>}
-      {base && head && <Typography.Link href={`https://github.com/${location.repository}/compare/${base}...${head}`} target="_blank" rel="noopener noreferrer">{text.diff}</Typography.Link>}
+      {base && head ? <Typography.Link href={`https://github.com/${location.repository}/compare/${base}...${head}`} target="_blank" rel="noopener noreferrer">{text.diff}</Typography.Link> :
+        <Typography.Link href={`${location.url}/files`} target="_blank" rel="noopener noreferrer">{text.liveDiff}</Typography.Link>}
     </Space>
     {fields.length > 0 && <Descriptions size="small" column={1} items={fields.map(([label, v]) => ({ key: label, label, children: <bdi dir="ltr">{v}</bdi> }))} />}
     {evidence && <>
