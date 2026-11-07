@@ -59,6 +59,8 @@ The **AI Agents Platform** is an enterprise multi-tenant autonomous agent orches
 
 ## 3. Master Index of Directory Documentation
 
+* [Gemini review configuration](.gemini/AGENTS.md): automatic non-draft PR summaries/reviews; separate Google Cloud activation required.
+
 ### Backend & Service Guides
 * [**Root Guide**](CLAUDE.md): Platform overview, verification commands, and operational rules.
 * [**Root Architecture**](AGENTS.md): Monorepo architectural map, system invariants, and master documentation index.
