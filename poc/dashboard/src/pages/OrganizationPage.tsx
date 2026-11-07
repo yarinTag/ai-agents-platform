@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Card, Row, Col, Statistic, Tabs, Tag, Button, Typography, message } from 'antd';
 import {
   BankOutlined, TeamOutlined, UserOutlined, SafetyCertificateOutlined,
@@ -20,6 +21,10 @@ import CapabilityGovernancePanel from '../components/org/CapabilityGovernancePan
 import { useGovernanceText } from '../i18n/governance';
 
 const { Text } = Typography;
+const organizationTabs = ['departments', 'workflows', 'team', 'users', 'runtime', 'capabilities'] as const;
+type OrganizationTab = typeof organizationTabs[number];
+const isOrganizationTab = (tab: string | null): tab is OrganizationTab =>
+  organizationTabs.some(key => key === tab);
 
 export const OrganizationPage: React.FC = () => {
   const { organization, user, refreshUserProfile } = useAuth();
@@ -28,7 +33,15 @@ export const OrganizationPage: React.FC = () => {
   const canvasText = useOrgWorkflowsCanvasText();
   const governanceText = useGovernanceText();
 
-  const [activeTab, setActiveTab] = useState<'departments' | 'workflows' | 'team' | 'users' | 'runtime' | 'capabilities'>('departments');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get('tab');
+  const activeTab = isOrganizationTab(requestedTab) ? requestedTab : 'departments';
+  const selectTab = (tab: string) => {
+    if (!isOrganizationTab(tab)) return;
+    const next = new URLSearchParams(searchParams);
+    next.set('tab', tab);
+    setSearchParams(next);
+  };
   const [departmentsList, setDepartmentsList] = useState<Department[]>([]);
   const [loadingDepts, setLoadingDepts] = useState<boolean>(false);
   const [creatingDept, setCreatingDept] = useState<boolean>(false);
@@ -61,16 +74,21 @@ export const OrganizationPage: React.FC = () => {
     }
   }, [organization?.id, t]);
 
+  const membersRequest = useRef(0);
+  useEffect(() => () => { membersRequest.current += 1; }, []);
+
   // Load department members
   const loadDepartmentMembers = useCallback(async (deptId: string) => {
+    const request = ++membersRequest.current;
+    setDeptMembers([]);
     setLoadingMembers(true);
     try {
       const res = await getDepartmentMembers(deptId);
-      setDeptMembers(res.data);
+      if (request === membersRequest.current) setDeptMembers(res.data);
     } catch (err: any) {
-      message.error(t('org.loadMembersError'));
+      if (request === membersRequest.current) message.error(t('org.loadMembersError'));
     } finally {
-      setLoadingMembers(false);
+      if (request === membersRequest.current) setLoadingMembers(false);
     }
   }, [t]);
 
@@ -188,7 +206,7 @@ export const OrganizationPage: React.FC = () => {
 
   const handleManageTeam = (deptId: string) => {
     setSelectedDeptId(deptId);
-    setActiveTab('team');
+    selectTab('team');
   };
 
   return (
@@ -364,7 +382,7 @@ export const OrganizationPage: React.FC = () => {
       >
         <Tabs
           activeKey={activeTab}
-          onChange={(k) => setActiveTab(k as any)}
+          onChange={selectTab}
           tabBarStyle={{ borderColor: '#21262d', marginBottom: '20px' }}
           items={[
             { key: 'capabilities', label: governanceText.title, children: <CapabilityGovernancePanel /> },

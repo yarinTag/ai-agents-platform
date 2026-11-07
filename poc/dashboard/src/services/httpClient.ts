@@ -16,7 +16,9 @@ export const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     const department = getRequestDepartment();
-    if (department && config.headers) config.headers['X-Department-ID'] = department;
+    if (department && config.headers && !config.headers.has('X-Department-ID')) {
+      config.headers.set('X-Department-ID', department);
+    }
     const token = localStorage.getItem(AUTH_TOKEN_KEY);
     if (token) {
       if (config.headers) {
