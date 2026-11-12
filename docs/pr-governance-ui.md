@@ -15,3 +15,5 @@ Source owners: components/workflows/PrPermissionSummary.tsx, PrEvidence.tsx, Wor
 Verification: 81 isolated real API/SQLite contracts passed (including eight new AI-20 cases); API contracts cover scoped audit projection and existing governance/approval contracts. Frontend lint/types/tests/build run through GitHub CI only. No local UI/browser/startup, agent/model/provider calls, live messages, PR writes or merges are used for verification. UI rendering and live provider outcomes are not established by API tests.
 
 Checks-only diagnostics preserve files_included=false and explicitly remain incomplete approval proof even when their CI facts pass; the UI never displays a full-review readiness badge for that result. API contracts assert this field survives the safe projection.
+
+For operational decisions based on these views, use the [AI-21 recovery runbook](pr-governance-runbook.md#recover-a-blocked-or-interrupted-run).
