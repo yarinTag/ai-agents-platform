@@ -201,3 +201,7 @@ AI-16 destination regression: workflow chat validates channel-only Destination o
 AI-18: generic policy decisions are explanatory; actual dispatch still intersects persisted execution/step scopes, task/run lifetime, current/captured policies, adapter preconditions and required authenticated approval/receipts. Do not trust stale JWT roles, caller-selected actors, channel messages or model claims. Preserve explicit manager restriction-only editing, full-document CAS and immutable revision history. Exact source contracts: docs/architecture/p01-governance-api.md; contributor authority limits: docs/architecture/p01-policy-algebra.md. No tests/startup/provider calls are authorized by these documentation instructions.
 
 AI-19: do not expose merge as a model tool or accept an APPROVE review event as human consent. Existing governance/API admission remains current-DB scoped; descriptor dependencies are real permission intersections, not informational hints. Approval receipts identify the persisted personal approver separately from the execution agent/provider credential. See docs/github-pr-governance.md. No provider success-path verification is claimed.
+
+
+## AI-20 PR scopes and evidence
+AI-20 execution details expose historical pr_evidence through the existing authorized run-detail route. Preserve workflow_pr_evidence allowlists and task/agent/tenant matching; never expose arbitrary stored audit arguments/results or promote model prose to proof. No new mutation/permission/approval endpoint.

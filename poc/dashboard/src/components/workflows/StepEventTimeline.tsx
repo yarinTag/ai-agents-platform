@@ -1,3 +1,4 @@
+import { PrResultEvidence } from './PrEvidence';
 import React, { useState } from 'react';
 import { Button, Space, Tag, Typography } from 'antd';
 import { asCostSummary, formatCost } from '../../services/workflowCosts';
@@ -132,6 +133,7 @@ const EventRow: React.FC<{ event: RuntimeEvent }> = ({ event }) => {
       {detail && <Button size="small" type="link" onClick={() => setOpen(open === 'detail' ? 'none' : 'detail')}>{open === 'detail' ? 'Less' : 'More'}</Button>}
       <Button size="small" type="link" onClick={() => setOpen(open === 'raw' ? 'none' : 'raw')}>{open === 'raw' ? 'Hide JSON' : 'JSON'}</Button>
     </Space>
+    {kind === EventKind.ToolResult && <PrResultEvidence value={event.content} />}
     {open === 'detail' && <pre style={preStyle}>{detail}</pre>}
     {open === 'raw' && <pre style={preStyle}>{JSON.stringify(event, null, 2)}</pre>}
   </div>;

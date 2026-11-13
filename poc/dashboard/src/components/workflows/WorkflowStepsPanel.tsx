@@ -1,3 +1,4 @@
+import { PrPermissionSummary } from './PrPermissionSummary';
 import { useWorkflowChatText } from '../../i18n/workflowChat';
 import { Form, Input, Button, Select, Checkbox, Tag, Row, Col, Card, Space } from 'antd';
 import { PlusOutlined, DeleteOutlined, FileTextOutlined, GithubOutlined, FolderOpenOutlined, GlobalOutlined, LinkOutlined } from '@ant-design/icons';
@@ -367,6 +368,7 @@ export function WorkflowStepsPanel({ model }: { model: ReturnType<typeof useWork
                         </Col>
                       </Row>
 
+                      <PrPermissionSummary step={st} />
                       {/* MCP and Skill assignment per step */}
                       <WorkflowRepositoryFields step={st} catalog={model.workspaceCatalog}
                         error={model.workspaceCatalogError} loading={model.resourcesLoading}

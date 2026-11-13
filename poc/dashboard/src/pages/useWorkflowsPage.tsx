@@ -240,6 +240,7 @@ export const useWorkflowsPage = () => {
         timeout_seconds: s.timeout_seconds || 300,
         skills: s.skills || [],
         mcp_servers: s.mcp_servers || s.mcpServers || [],
+        params: s.params,
       }));
     } catch (e) {
       return [];

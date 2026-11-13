@@ -288,3 +288,7 @@ getDepartmentMembers, bulkInviteDepartmentMembers and removeDepartmentMember sen
 
 
 Manage Team navigation uses selectTab('team') with the selected department, matching the URL-owned tab state introduced by AI-5. The removed setActiveTab state setter has no remaining OrganizationPage references. Static reference/diff checks only; no runtime verification performed.
+
+
+## AI-20 PR scopes and evidence
+AI-20 adds shared PrPermissionSummary and PrEvidence for workflow authoring, scoped execution logs/inspection, runtime tool-result timelines and the existing human-approval view. These render requirements and historical facts, never permission grants or current merge authority. See docs/pr-governance-ui.md. Existing auth/department transport and server-side enforcement remain authoritative.
