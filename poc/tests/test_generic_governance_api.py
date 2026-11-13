@@ -59,11 +59,120 @@ def auth(role='ORG_ADMIN', org='atlas', department='engineering'):
 
 
 CHANNEL_BINDINGS = '/api/v1/governance/channel-bindings'
+IDENTITIES = '/api/v1/governance/external-identities'
+
+
+def test_identity_management_respects_department_role_and_shared_links(baseline):
+    import time
+
+    db, client = baseline
+    path = f'{IDENTITIES}/departments/atlas_engineering/links'
+    identity_id = 'idl_' + 'a' * 32
+    with db._get_connection() as conn:
+        conn.execute("""INSERT INTO external_identity_links
+            (id,organization_id,connector_id,user_id,provider,account,subject,created_at)
+            VALUES (?,?,?,?,?,?,?,?)""",
+            (identity_id, 'atlas', 'atlas_telegram', 'atlas_MEMBER', 'telegram', '123456', '9876', int(time.time())))
+    manager = auth('MANAGER')
+    result = client.get(path, headers=manager)
+    assert result.status_code == 200, result.text
+    assert [(row['id'], row['can_revoke']) for row in result.json()['links']] == [(identity_id, True)]
+    assert client.get(path, headers=auth('MEMBER')).status_code in (403, 404)
+    assert client.get(path, headers=auth('MANAGER', 'boreal')).status_code == 404
+    assert client.get(path, headers=auth(department='finance')).status_code == 404
+    db.add_user_to_department('atlas_finance', 'atlas_MEMBER', role='MEMBER')
+    db.grant_department_mcp_access('atlas_finance', 'atlas_telegram', allowed_tools=['send_message'], organization_id='atlas')
+    assert client.get(path, headers=manager).json()['links'][0]['can_revoke'] is False
+    assert client.delete(f'{path}/{identity_id}', headers=manager).status_code == 403
+    db.remove_user_from_department('atlas_finance', 'atlas_MEMBER')
+    db.update_user('atlas_MANAGER', role='OPERATOR')
+    assert client.delete(f'{path}/{identity_id}', headers=manager).status_code in (403, 404)
+    db.update_user('atlas_MANAGER', role='MANAGER')
+    assert client.delete(f'{path}/{identity_id}', headers=manager).status_code == 204
+    assert client.get(IDENTITIES, headers=auth('MEMBER')).json() == []
+    with db._get_connection() as conn:
+        row = conn.execute("SELECT actor,details FROM audit_logs WHERE action='EXTERNAL_IDENTITY_REVOKED'").fetchone()
+    assert row['actor'] == 'atlas_MANAGER'
+    assert json.loads(row['details']) == {'organization_id': 'atlas', 'connector_id': 'atlas_telegram'}
+
+
+def test_identity_catalog_excludes_unconfigured_and_foreign_connectors(baseline):
+    db, client = baseline
+    for org in ('atlas', 'boreal'):
+        path = f'{IDENTITIES}/connectors/{org}_slack/secret'
+        setup = {'secret': 'catalog-secret-' + 'x' * 32, 'team_id': 'T12345678', 'app_id': 'A12345678'}
+        assert client.put(path, headers=auth(org=org), json=setup).status_code == 204
+    available = client.get(IDENTITIES + '/connectors', headers=auth('MEMBER'))
+    assert available.status_code == 200, available.text
+    assert available.json() == [{'id': 'atlas_slack', 'name': 'slack', 'provider': 'slack'}]
+    assert 'catalog-secret' not in available.text
+
+
+@pytest.mark.parametrize(('provider', 'subject'), [('telegram', '12345'), ('slack', 'U12345678')])
+def test_external_identity_proof_confirmation_replay_and_unlink(baseline, provider, subject, caplog):
+    import hashlib
+    import hmac
+    import time
+    from urllib.parse import urlencode
+
+    db, client = baseline
+    secret = 'identity-test-secret-' + 'x' * 32
+    connector_id = 'atlas_' + provider
+    setup = {'secret': secret}
+    if provider == 'telegram':
+        connector = db.get_mcp_connector(connector_id)
+        connector.configuration['bot_token'] = '123456:fixture'
+        db.save_mcp_connector(connector)
+    else:
+        setup.update(team_id='T12345678', app_id='A12345678')
+    path = f'{IDENTITIES}/connectors/{connector_id}'
+    assert client.put(path + '/secret', headers=auth('MEMBER'), json=setup).status_code == 403
+    assert client.put(path + '/secret', headers=auth(), json=setup).status_code == 204
+    issued = client.post(path + '/challenges', headers=auth('MEMBER'))
+    assert issued.status_code == 201, issued.text
+    assert issued.headers['cache-control'] == 'no-store'
+    challenge = issued.json()
+    status_path = f"{IDENTITIES}/challenges/{challenge['id']}"
+    assert client.get(status_path, headers=auth()).status_code == 404
+    assert client.post(status_path + '/confirm', headers=auth('MEMBER'), json={'subject': subject}).status_code == 409
+    timestamp = int(time.time())
+    if provider == 'telegram':
+        raw = json.dumps({'message': {'from': {'id': int(subject), 'is_bot': False},
+            'chat': {'id': int(subject), 'type': 'private'}, 'date': timestamp,
+            'text': '/start ' + challenge['code']}}).encode()
+        headers = {'X-Telegram-Bot-Api-Secret-Token': secret}
+    else:
+        raw = urlencode({'user_id': subject, 'team_id': setup['team_id'], 'api_app_id': setup['app_id'],
+                         'command': '/platform-link', 'text': challenge['code']}).encode()
+        signature = hmac.new(secret.encode(), f'v0:{timestamp}:'.encode() + raw, hashlib.sha256).hexdigest()
+        headers = {'X-Slack-Request-Timestamp': str(timestamp), 'X-Slack-Signature': 'v0=' + signature}
+    proof_path = f'/api/v1/external-identity-proofs/{connector_id}'
+    assert client.post(proof_path, content=raw).status_code == 403
+    assert client.post(proof_path, headers=headers, content=raw).status_code == 200
+    assert client.post(proof_path, headers=headers, content=raw).status_code == 200
+    assert client.get(status_path, headers=auth('MEMBER')).json()['subject'] == subject
+    link = client.post(status_path + '/confirm', headers=auth('MEMBER'), json={'subject': subject})
+    assert link.status_code == 201, link.text
+    assert client.post(status_path + '/confirm', headers=auth('MEMBER'), json={'subject': subject}).status_code == 409
+    link_path = IDENTITIES + '/' + link.json()['id']
+    assert client.delete(link_path, headers=auth()).status_code == 404
+    fresh = client.post(path + '/challenges', headers=auth('MEMBER')).json()
+    assert client.put(path + '/secret', headers=auth(), json={**setup, 'secret': 'rotated-' + 'y' * 32}).status_code == 204
+    assert client.get(f"{IDENTITIES}/challenges/{fresh['id']}", headers=auth('MEMBER')).status_code == 409
+    assert client.delete(link_path, headers=auth('MEMBER')).status_code == 204
+    assert client.get(IDENTITIES, headers=auth('MEMBER')).json() == []
+    with db._get_connection() as conn:
+        audits = conn.execute("SELECT action, details FROM audit_logs WHERE entity_type='external_identity'").fetchall()
+    assert {row['action'] for row in audits} == {
+        'EXTERNAL_IDENTITY_LINKED', 'EXTERNAL_IDENTITY_UNLINKED', 'EXTERNAL_IDENTITY_SECRET_ROTATED',
+    }
+    assert secret not in str([dict(row) for row in audits]) + caplog.text
+    assert challenge['code'] not in str([dict(row) for row in audits]) + caplog.text
 
 
 def binding_payload(**overrides):
     return {'department_id': 'atlas_engineering', 'connector_id': 'atlas_telegram',
-            'provider': 'telegram', 'channel_id': '-10012345', **overrides}
+            'provider': 'telegram', 'channel_id': '12345', **overrides}
 
 
 def test_channel_binding_lifecycle_is_scoped_revisioned_and_audited(baseline):
@@ -83,8 +192,14 @@ def test_channel_binding_lifecycle_is_scoped_revisioned_and_audited(baseline):
     assert organization_binding.status_code == 201
     assert client.get(CHANNEL_BINDINGS, headers=headers).json()['bindings'] == [organization_binding.json()]
     assert client.get(CHANNEL_BINDINGS, headers=auth('MANAGER'), params=department).json()['bindings'] == [binding]
+    member_rows = client.get(CHANNEL_BINDINGS, headers=auth('MEMBER'), params=department)
+    assert member_rows.status_code == 200
+    assert member_rows.json()['bindings'] == [binding]
 
     replacement = {'expected_revision': 1, 'uses': {'approve_decisions': True}}
+    assert client.put(path + '/uses', headers=auth('MEMBER'), params=department, json=replacement).status_code == 403
+    assert client.delete(path, headers=auth('MANAGER'),
+                         params={**department, 'expected_revision': 1}).status_code == 403
     assert client.put(path + '/uses', headers=headers, json=replacement).status_code == 404
     assert client.put(path + '/uses', headers=auth(org='boreal'),
                       params={'department_id': 'boreal_engineering'}, json=replacement).status_code == 404
@@ -123,6 +238,7 @@ def test_channel_binding_lifecycle_is_scoped_revisioned_and_audited(baseline):
     ({'connector_id': 'atlas_slack'}, 422),
     ({'channel_id': '@mutable_alias'}, 422),
     ({'channel_id': '*'}, 422),
+    ({'channel_id': '99999'}, 422),
     ({'uses': {'trigger_workflows': 'true'}}, 422),
     ({'uses': {'trigger_workflows': True, 'wildcard': True}}, 422),
 ])
@@ -139,7 +255,8 @@ def test_channel_bindings_require_admin_mutation_and_respect_selected_department
     for role in ('MANAGER', 'OPERATOR', 'MEMBER'):
         assert client.post(CHANNEL_BINDINGS, headers=auth(role), json=binding_payload()).status_code == 403
         assert client.get(CHANNEL_BINDINGS, headers=auth(role)).status_code == 403
-    assert client.get(CHANNEL_BINDINGS, headers=auth('MEMBER'), params=department).status_code == 404
+    assert client.get(CHANNEL_BINDINGS, headers=auth('MEMBER'),
+                      params={'department_id': 'atlas_finance'}).status_code == 404
     assert client.get(CHANNEL_BINDINGS, headers=auth(department='finance'), params=department).status_code == 404
     slack = client.post(CHANNEL_BINDINGS, headers=auth(), json=binding_payload(
         connector_id='atlas_slack', provider='slack', channel_id='C12345678', uses={'trigger_workflows': True},
@@ -152,6 +269,36 @@ def test_channel_bindings_require_admin_mutation_and_respect_selected_department
     second = client.get(CHANNEL_BINDINGS, headers=auth(), params={**department, 'limit': 1, 'after': first['next_after']}).json()
     assert first['bindings'][0]['id'] != second['bindings'][0]['id']
     assert second['next_after'] is None
+
+
+def test_channel_catalog_projects_existing_mcp_channels_without_connector_configuration(baseline):
+    db, client = baseline
+    telegram = db.get_mcp_connector('atlas_telegram')
+    telegram.configuration['channel_labels'] = {'12345': ' Legal Operations ', '99999': 'Unconfigured'}
+    db.save_mcp_connector(telegram)
+    path = CHANNEL_BINDINGS + '/catalog'
+    department = {'department_id': 'atlas_engineering'}
+    result = client.get(path, headers=auth(), params=department)
+    assert result.status_code == 200, result.text
+    catalog = result.json()
+    assert set(catalog['providers']) == {'telegram', 'slack'}
+    assert catalog['providers']['telegram']['runtime_supported_uses'] == ['send_notifications']
+    assert {row['id']: row['channel_ids'] for row in catalog['connectors']} == {
+        'atlas_telegram': ['12345'], 'atlas_slack': ['C12345678'],
+    }
+    assert {row['id']: row['channel_labels'] for row in catalog['connectors']} == {
+        'atlas_telegram': {'12345': 'Legal Operations'}, 'atlas_slack': {},
+    }
+    assert all(set(row) == {'id', 'name', 'provider', 'status', 'channel_ids', 'channel_labels'} for row in catalog['connectors'])
+    member = client.get(path, headers=auth('MEMBER'), params=department)
+    assert member.status_code == 200, member.text
+    assert all(not row['channel_ids'] and not row['channel_labels'] for row in member.json()['connectors'])
+    assert client.post(CHANNEL_BINDINGS, headers=auth(), json=binding_payload()).status_code == 201
+    bindings = client.get(CHANNEL_BINDINGS, headers=auth('MEMBER'), params=department)
+    assert bindings.status_code == 200, bindings.text
+    assert [(row['channel_id'], row['channel_name']) for row in bindings.json()['bindings']] == [
+        ('12345', 'Legal Operations'),
+    ]
 
 
 @pytest.mark.parametrize('role', ['ORG_ADMIN', 'MANAGER', 'OPERATOR', 'MEMBER'])

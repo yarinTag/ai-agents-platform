@@ -154,3 +154,13 @@ Follow ../../../docs/architecture/p01-policy-algebra.md: authenticate the sessio
 ## AI-22 channel registry admission
 
 Governance route policy registers channel-binding reads and org-admin writes. The endpoint requires exact tenant/department scope and personal administrator identity for mutations, with a current active admin check inside the SQLite write transaction. No channel binding authorizes provider callbacks or grants access to a connector. See [the channel registry](../../../docs/channel-bindings.md).
+
+AI-23 permits exact department channel binding reads at member level. The department resource check and selected department header still apply.
+
+The channel binding catalog uses the reviewed read route policy and exact selected department. Members receive connector metadata only for active department grants; connector configuration and secrets are excluded.
+
+AI-25 personal identity routes use current database identity and reviewed governance route permissions. Only the dedicated provider proof POST admits provider authentication, independently of platform JWTs.
+
+AI-26 identity management requires a current personal department manager or organization administrator, with selected department matching the route. Store reads and mutations recheck current role, exact membership and active same-organization connector grant. Only organization administrators can revoke a link applicable in another department or owned by an organization administrator.
+
+The reviewed AI-28 diagnostics and configuration-test routes require current org-admin access and exact connector scope. Public ingress verifies provider authority independently and never accepts user-supplied destination URLs for TLS probes.

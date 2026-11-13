@@ -1,10 +1,10 @@
 """Tenant-scoped channel registry configuration. No provider requests."""
-from typing import Annotated, Literal
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
-from integrations.tool_definitions import valid_channel
+from integrations.channel_providers import CHANNEL_PROVIDERS
 from storage import channel_bindings as store
 
 from ..dependencies import get_db_manager
@@ -13,7 +13,7 @@ from ..security.resource_access import Resources
 
 
 router = APIRouter(prefix="/channel-bindings")
-Provider = Literal["telegram", "slack"]
+Provider = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{0,39}$")]
 Identifier = Annotated[str, Field(min_length=1, max_length=150)]
 Revision = Annotated[int, Field(ge=1)]
 Department = Annotated[str | None, Query(min_length=1, max_length=150)]
@@ -33,16 +33,8 @@ class CreateChannelBinding(StrictModel):
     department_id: Identifier | None = None
     connector_id: Identifier
     provider: Provider
-    channel_id: Annotated[str, Field(min_length=1, max_length=32)]
+    channel_id: Identifier
     uses: ChannelUses = Field(default_factory=ChannelUses)
-
-    @model_validator(mode="after")
-    def validate_channel(self):
-        # Telegram usernames can be reassigned. Registry identities use numeric IDs.
-        if self.channel_id.startswith("@") or not valid_channel(self.provider, self.channel_id):
-            raise ValueError("Use an exact numeric Telegram chat ID or a Slack channel ID.")
-        return self
-
 
 class ReplaceChannelUses(StrictModel):
     expected_revision: Revision
@@ -56,6 +48,7 @@ class ChannelBinding(StrictModel):
     connector_id: str
     provider: Provider
     channel_id: str
+    channel_name: str | None = None
     uses: ChannelUses
     revision: Revision
     created_at: str
@@ -74,7 +67,7 @@ def _scope(request, db, department_id, *, write=False):
         if write and not actor.user_id:
             raise HTTPException(403, "A signed-in organization administrator is required.")
     if department_id is not None:
-        Resources(actor).require("department", department_id, 3)
+        Resources(actor).require("department", department_id)
     return actor
 
 
@@ -91,6 +84,48 @@ def _mutate(action, *args):
         raise HTTPException(422, str(exc)) from None
 
 
+def _channel_label(configuration: dict, channel_id: str) -> str | None:
+    labels = configuration.get("channel_labels")
+    label = labels.get(channel_id) if isinstance(labels, dict) else None
+    return label.strip()[:160] or None if isinstance(label, str) else None
+
+
+@router.get("/catalog")
+def get_channel_binding_catalog(request: Request, department_id: Department = None, db=Depends(get_db_manager)):
+    actor = _scope(request, db, department_id)
+    resources = Resources(actor)
+    connectors = []
+    for connector in db.list_mcp_connectors(organization_id=actor.organization_id):
+        provider = connector.provider.lower()
+        adapter = CHANNEL_PROVIDERS.get(provider)
+        if adapter is None:
+            continue
+        if not actor.admin:
+            grant = db.get_department_mcp_access(department_id, connector.id)
+            if not grant or not grant.is_active or grant.organization_id not in (None, actor.organization_id):
+                continue
+            if not resources.allows("connector", connector.id):
+                continue
+        configuration = connector.configuration or {}
+        channel_ids = adapter.configured_ids(configuration) if actor.admin else []
+        channel_labels = {
+            channel_id: label for channel_id in channel_ids
+            if (label := _channel_label(configuration, channel_id)) is not None
+        }
+        connectors.append({
+            "id": connector.id, "name": connector.name, "provider": provider, "status": connector.status,
+            "channel_ids": channel_ids, "channel_labels": channel_labels,
+        })
+    return {
+        "providers": {key: {
+            "label": adapter.label,
+            "configurable_uses": list(store.USES),
+            "runtime_supported_uses": adapter.runtime_supported_uses,
+        } for key, adapter in CHANNEL_PROVIDERS.items()},
+        "connectors": connectors,
+    }
+
+
 @router.get("", response_model=ChannelBindingPage)
 def list_channel_bindings(
     request: Request,
@@ -101,6 +136,11 @@ def list_channel_bindings(
 ):
     actor = _scope(request, db, department_id)
     rows = store.list_bindings(db, actor.organization_id, department_id, after or "", limit + 1)
+    connectors = {connector.id: connector for connector in db.list_mcp_connectors(organization_id=actor.organization_id)}
+    for row in rows[:limit]:
+        connector = connectors.get(row["connector_id"])
+        if connector and connector.provider.lower() == row["provider"]:
+            row["channel_name"] = _channel_label(connector.configuration or {}, row["channel_id"])
     return {"bindings": rows[:limit], "next_after": rows[limit - 1]["id"] if len(rows) > limit else None}
 
 

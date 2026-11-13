@@ -1,12 +1,18 @@
 import React from 'react';
-import { Alert, Card, Descriptions, Space } from 'antd';
+import { Alert, Card, Descriptions, Space, Tabs } from 'antd';
 import { useAuth } from '../../context/AuthContext';
 import CapabilityGovernancePanel from '../org/CapabilityGovernancePanel';
+import ExternalIdentitiesPanel from '../org/ExternalIdentitiesPanel';
+import ChannelBindingsPanel from '../org/ChannelBindingsPanel';
+import { useExternalIdentitiesText } from '../../i18n/externalIdentities';
+import { useChannelBindingsText } from '../../i18n/channelBindings';
 import { useGovernanceText } from '../../i18n/governance';
 
 export default function DepartmentAccessPage() {
   const { user, organization, departments, activeDepartmentId } = useAuth();
   const text = useGovernanceText();
+  const identitiesText = useExternalIdentitiesText();
+  const channelsText = useChannelBindingsText();
   const visible = departments.filter(department => !activeDepartmentId || (department.id || department.department_id) === activeDepartmentId);
   return <Space direction="vertical" style={{ width: '100%' }}>
     <Alert type="info" showIcon message={text.organization} description={text.ceiling} />
@@ -18,6 +24,10 @@ export default function DepartmentAccessPage() {
         { key: 'budget', label: text.budget, children: <bdi dir="ltr">${department.monthly_budget_usd}</bdi> },
       ]} />
     </Card>)}
-    <CapabilityGovernancePanel />
+    <Tabs items={[
+      { key: 'capabilities', label: text.title, children: <CapabilityGovernancePanel /> },
+      { key: 'channels', label: channelsText.title, children: <ChannelBindingsPanel /> },
+      { key: 'identities', label: identitiesText.title, children: <ExternalIdentitiesPanel />, destroyOnHidden: true },
+    ]} />
   </Space>;
 }

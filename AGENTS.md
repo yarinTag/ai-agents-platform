@@ -1,5 +1,9 @@
 # AGENTS.md - Root AI Agents Platform Architecture & Directory Index
 
+[AI-27 identity proof and recovery](docs/identity-proof-runbook.md) documents challenge and confirmation, approver identity boundaries, and response to compromised credentials.
+
+[AI-28 and AI-29 channel ingress](docs/channel-ingress.md) documents verified provider intake, durable event staging and the MCP webhook diagnostics view.
+
 [AI-22 channel registry](docs/channel-bindings.md) adds tenant-scoped Telegram/Slack configuration, independent use flags, and audited administrator changes. Verified ingress, identity and runtime use remain separate stages.
 
 ## 1. Platform Identity & Architectural Mission
@@ -311,3 +315,9 @@ The /organization route now presents capabilities/resources to all department re
 
 ## AI-19 governed PR adapter operations
 The existing generic policy/descriptor layer now exposes separate GitHub PR metadata/diff/check reads and explicit head-pinned comment/review writes. Aggregate read dependencies intersect policy; no write wildcard or legacy resource-only step acquires new writes. Server-only merge requires version2 evidence, a persisted personal approval claim, strict protected-base enforcement and one-attempt audit receipts. Exact contracts/compatibility and unverified live paths: docs/github-pr-governance.md. No saved grants/credentials/workflows or branch protection changed; API-only local verification, no agents/live providers.
+
+AI-23 adds the Channels tab to Organization. See [the registry and dashboard contract](docs/channel-bindings.md).
+
+AI-24 documents [channel identity and sender policy](docs/channel-identity-policy.md), including the boundary between MCP configuration, registry intent and verified action authority.
+
+[AI-25 external identity linking](docs/external-identities.md) defines the proof and confirmation API, identity lifecycle and diagnostic contracts.

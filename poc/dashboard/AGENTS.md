@@ -288,3 +288,9 @@ getDepartmentMembers, bulkInviteDepartmentMembers and removeDepartmentMember sen
 
 
 Manage Team navigation uses selectTab('team') with the selected department, matching the URL-owned tab state introduced by AI-5. The removed setActiveTab state setter has no remaining OrganizationPage references. Static reference/diff checks only; no runtime verification performed.
+
+AI-23 adds the Organization Channels tab. Department members can read their scope; organization administrators can manage both scopes. See [channel bindings](../../docs/channel-bindings.md).
+
+AI-29 exposes webhook diagnostics from MCP Hub for organization administrators. Distinguish current setup, observed provider deliveries and unverified public TLS. Local setup and public TLS have separate test controls. Neither test sends a provider event.
+
+AI-26 adds personal Linked accounts and scoped department management to the organization surface. The UI keeps proof codes only in current component state and shows verified account IDs before confirmation.

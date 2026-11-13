@@ -182,3 +182,17 @@ run_api_audit includes test_github_pr_governance_api.py: actual guarded FastAPI/
 ## AI-22 channel registry contracts
 
 `test_generic_governance_api.py` exercises real FastAPI routes and temporary SQLite for Telegram/Slack registration, role and tenant isolation, validation, revision conflicts, pagination, independent flags and allowlisted audit details. The existing API CI selection includes these cases.
+
+AI-23 updates the channel registry contract test to require department member read access while preserving administrator-only mutations and cross-department denial.
+
+Channel registry API contracts cover configured-ID enforcement and the credential-free provider catalog for admins and members.
+
+The channel catalog contract checks display labels are limited to configured channel IDs and omitted for member reads.
+
+The channel catalog contract also checks that members can read the name of their exact registered channel.
+
+The isolated API audit exercises AI-25 using signed request fixtures, real FastAPI and temporary SQLite. It covers both providers, unsigned proof rejection, user confirmation and isolation, replay, rotation, unlink and safe audit metadata.
+
+AI-26 real API contracts cover active connector catalog projection and department management, including foreign tenant/department denial, live role downgrade, shared link restrictions and revocation audit.
+
+test_channel_ingress_api.py covers verified Telegram and Slack staging, replay, org/admin scoping, rate limiting, secret-free diagnostics, Telegram identity proof routing and outbox leases using real FastAPI and temporary SQLite.

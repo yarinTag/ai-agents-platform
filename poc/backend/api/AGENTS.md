@@ -361,4 +361,18 @@ Existing /api/v1/governance/capabilities adds descriptor requires_capabilities f
 
 ## AI-22 channel bindings
 
-Under `/api/v1/governance/channel-bindings`, GET lists one exact org/department scope with `after`/`limit` pagination. POST creates a Telegram/Slack binding from `department_id?`, `connector_id`, `provider`, `channel_id` and `uses?`. PUT `/{binding_id}/uses` replaces the three independent booleans with `expected_revision`; DELETE `/{binding_id}` uses query `expected_revision`. Supply query `department_id` for department reads/updates/deletes. Current signed-in org admins own writes; department managers can read their selected department. See [the contract](../../../docs/channel-bindings.md) for scope, strict schemas, response fields and errors.
+Under `/api/v1/governance/channel-bindings`, GET lists one exact org/department scope with `after`/`limit` pagination. POST creates a Telegram/Slack binding from `department_id?`, `connector_id`, `provider`, `channel_id` and `uses?`. PUT `/{binding_id}/uses` replaces the three independent booleans with `expected_revision`; DELETE `/{binding_id}` uses query `expected_revision`. Supply query `department_id` for department reads/updates/deletes. Current signed-in org admins own writes; authorized members can read their selected department. See [the contract](../../../docs/channel-bindings.md) for scope, strict schemas, response fields and errors.
+
+AI-23 opens department binding list reads to authorized members of the selected department. Organization reads and all mutations keep their existing administrator requirements.
+
+GET /api/v1/governance/channel-bindings/catalog returns providers (label, configurable_uses, runtime_supported_uses) and scoped connectors (id, name, provider, status, channel_ids). Only org admins receive selectable configured channel IDs. POST requires a currently configured exact ID.
+
+Channel binding catalog connectors also return channel_labels keyed by selectable channel ID. Blank, non-string and unconfigured labels are excluded.
+
+GET channel bindings adds nullable channel_name from the exact binding connector and channel ID within the current organization. It does not expose other configured labels to members.
+
+AI-25 external-identities exposes personal list, issue, status, confirm and unlink plus admin secret rotation. Exact routes and schemas are in [external identities](../../../docs/external-identities.md).
+
+AI-26 adds GET /api/v1/governance/external-identities/connectors (configured, authorized {id,name,provider} records), and GET/DELETE /departments/{department_id}/links[/{link_id}] under the same base. Management GET accepts after (idl_ cursor) and limit (1–100, default 50), and returns {links,next_after}; each row contains id, connector_id, provider, subject, created_at (Unix seconds), member_name and can_revoke. DELETE returns 204 and requires current manager authority and exact row scope.
+
+AI-28 POST /api/v1/channel-ingress/{connector_id} accepts verified Telegram/Slack events. Org-admin GET /api/v1/governance/channel-ingress/{connector_id}/diagnostics and POST /test provide bounded diagnostics and optional explicit TLS checks. See [verified channel ingress](../../../docs/channel-ingress.md).

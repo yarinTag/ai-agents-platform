@@ -328,3 +328,9 @@ getDepartmentMembers, bulkInviteDepartmentMembers and removeDepartmentMember sen
 
 
 Manage Team navigation uses selectTab('team') with the selected department, matching the URL-owned tab state introduced by AI-5. The removed setActiveTab state setter has no remaining OrganizationPage references. Static reference/diff checks only; no runtime verification performed.
+
+AI-23 uses the governed channel binding API. Preserve exact tenant/department scope, revision checks, read-only member views and English/Hebrew RTL. Connector status is not channel verification.
+
+AI-29 WebhookDiagnostics consumes the scoped backend metadata projection. Keep connector and session changes isolated, localize EN/HE with RTL and separate configuration readiness from provider/TLS verification.
+
+Keep external identity commands in memory only, abort old scope requests, and use server-returned subject and can_revoke fields. Department management must preserve the current effective role and scope.

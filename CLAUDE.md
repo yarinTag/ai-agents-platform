@@ -272,3 +272,9 @@ AI-19 PR operations: use docs/github-pr-governance.md. Read dependencies must no
 ## Channel registry
 
 Use [the AI-22 channel registry contract](docs/channel-bindings.md) for route scope, exact provider channel identities, and audit behavior. Registration and its three independent use flags do not create connector grants or activate inbound workflows or approvals.
+
+Use [the channel identity and sender policy](docs/channel-identity-policy.md) when extending channel providers or planning workflows. Select exact IDs from the current authorized catalog. Future inbound routing must verify provider identity and apply explicit sender and action policy.
+
+AI-25 uses connector-scoped provider proof and explicit platform-user confirmation. See [external identities](docs/external-identities.md) before consuming linked identities in authorization.
+
+AI-28 and AI-29 use the [channel ingress contract](docs/channel-ingress.md). Verify before normalizing, store only projected event metadata, and keep workflow dispatch behind a future authorized consumer. Keep configured endpoint, point-in-time TLS result, and observed provider delivery distinct in diagnostics.

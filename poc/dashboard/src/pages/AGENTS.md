@@ -311,3 +311,9 @@ getDepartmentMembers, bulkInviteDepartmentMembers and removeDepartmentMember sen
 
 
 Manage Team navigation uses selectTab('team') with the selected department, matching the URL-owned tab state introduced by AI-5. The removed setActiveTab state setter has no remaining OrganizationPage references. Static reference/diff checks only; no runtime verification performed.
+
+OrganizationPage supports `/organization?tab=channels` and mounts ChannelBindingsPanel for the channel registry.
+
+AI-29 adds the organization-admin Webhook diagnostics tab in MCP Hub. It is scoped to a selected Slack/Telegram connector and unmounts when the operator leaves the tab.
+
+AI-26 OrganizationPage exposes Linked accounts at /organization?tab=identities. Non-admin users reach the same personal/management panel from the existing DepartmentAccessPage shell.

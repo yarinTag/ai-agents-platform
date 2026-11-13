@@ -2,6 +2,7 @@
 from datetime import datetime, timezone
 import json
 from uuid import uuid4
+from integrations.channel_providers import CHANNEL_PROVIDERS
 
 
 USES = ("send_notifications", "trigger_workflows", "approve_decisions")
@@ -18,7 +19,7 @@ def initialize(conn):
             organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
             department_id TEXT REFERENCES departments(id) ON DELETE CASCADE,
             connector_id TEXT NOT NULL REFERENCES mcp_connectors(id) ON DELETE CASCADE,
-            provider TEXT NOT NULL CHECK (provider IN ('telegram', 'slack')),
+            provider TEXT NOT NULL,
             channel_id TEXT NOT NULL,
             send_notifications INTEGER NOT NULL CHECK (send_notifications IN (0, 1)),
             trigger_workflows INTEGER NOT NULL CHECK (trigger_workflows IN (0, 1)),
@@ -82,13 +83,18 @@ def create(db, organization_id, department_id, actor_id, connector_id, provider,
         ).fetchone() is None:
             raise LookupError("Department not found in the authorized scope.")
         connector = conn.execute(
-            "SELECT provider FROM mcp_connectors WHERE id = ? AND organization_id = ?",
+            "SELECT provider, configuration FROM mcp_connectors WHERE id = ? AND organization_id = ?",
             (connector_id, organization_id),
         ).fetchone()
         if connector is None:
             raise LookupError("Connector not found in the authorized scope.")
         if connector["provider"].lower() != provider:
             raise ValueError("Channel provider must match the connector.")
+        adapter = CHANNEL_PROVIDERS.get(provider)
+        if adapter is None or not adapter.valid_id(channel_id):
+            raise ValueError("Unsupported provider or invalid channel identity.")
+        if channel_id not in adapter.configured_ids(json.loads(connector["configuration"] or "{}")):
+            raise ValueError("Select a channel configured on this connector.")
         duplicate = conn.execute("""
             SELECT 1 FROM channel_bindings WHERE organization_id = ? AND department_id IS ?
             AND connector_id = ? AND channel_id = ?

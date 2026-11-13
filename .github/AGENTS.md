@@ -86,3 +86,5 @@ Security CI additionally runs test_workflow_pr_approvals.py: pure PR projection/
 
 
 The backend matrix adds suite=api, running run_api_audit.py in a disposable source snapshot with the no-network/no-child-process guard and runtime disabled. Its reviewed HTTP selection uses temporary SQLite/real FastAPI/JWT and produces JUnit/summary artifacts under RUNNER_TEMP. Existing core/security/runtime suites are unchanged. The existing backend aggregate includes the new matrix member, so API failures fail CI required.
+
+AI-28 adds signed Telegram and Slack webhook ingress contracts to the isolated API suite. Tests use temporary SQLite and exercise persisted deduplication and retry state without contacting a provider.

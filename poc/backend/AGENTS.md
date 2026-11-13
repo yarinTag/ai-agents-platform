@@ -144,3 +144,7 @@ AI-15 ADR (docs/architecture/adr-ai-15-generic-connector-governance.md) fixes th
 
 ## AI-16 governance router
 The required governance router is mounted at /api/v1/governance. It exposes trusted descriptors, versioned organization/department policies, department history, effective catalogs and non-executable decision explanations. Current database identity and selected department govern every route; policy edits require a personal user. Shared enforcement is in poc/governance, not duplicated per API. Exact contracts: docs/architecture/capability-policy-v1.md.
+
+AI-25 registers the connector-scoped external identity proof POST with its own provider verification. Personal linking routes stay behind the governed router.
+
+AI-28 registers a connector-scoped provider-authenticated receiver independently of user session routes. The receiver stages verified events durably and does not invoke any workflow or approval.

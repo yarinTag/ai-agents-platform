@@ -144,3 +144,13 @@ workflowApproval.ts supplies matched EN/HE human decision labels, merge authoriz
 
 ## AI-17 governance localization
 governance.ts exports useGovernanceText/GovernanceText with paired typed English/Hebrew policy/access/role, rule effect, revision/history, review, 409 and readiness strings. New governance components use locale ConfigProvider direction; canonical IDs remain LTR. Existing large locale dictionaries and locale persistence remain unchanged.
+
+channelBindings.ts owns the English and Hebrew Channels tab, provider status, flag labels, empty/error states and action copy. The panel uses ConfigProvider direction and isolates channel IDs with bdi.
+
+The Channels copy includes a localized MCP setup hint and runtime availability badges.
+
+The Channels table localizes the Channel heading separately from the Channel ID picker.
+
+AI-29 channelIngress.ts provides paired English/Hebrew labels for readiness, recent events, failures and the local configuration check. The view uses locale-aware date/number formatting, Ant Design direction and LTR endpoint isolation.
+
+externalIdentities.ts owns English and Hebrew account linking, provider instructions, scope and expiry errors, verification and revocation copy. The panel uses RTL direction and isolates provider account IDs and commands with bdi.

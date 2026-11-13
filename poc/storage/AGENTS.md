@@ -159,3 +159,11 @@ No schema columns/tables change. Existing mcp_tool_calls records hold determinis
 ## AI-22 channel binding registry
 
 `organization_schema.initialize` creates `channel_bindings` through `channel_bindings.initialize`. Organization, optional department, connector, provider and exact channel form the immutable scope and identity. Independent flags are `send_notifications`, `trigger_workflows`, and `approve_decisions`. Revision checks, role revalidation and projected `audit_logs` writes share a transaction. See [the registry contract](../../docs/channel-bindings.md) for columns, cascading ownership and audit actions.
+
+Channel binding provider is an extensible text ID. Registration checks the trusted adapter and exact configured connector channel in the same transaction as the binding and audit insert.
+
+external_identities.py initializes identity_challenges (digest, org/connector/user, credential version, Unix issue/expiry times, verified subject and consumption) and external_identity_links (org, connector, user, provider account, subject, creation time). Writes use SQLite transactions for replay safety and metadata-only audit.
+
+AI-26 list_managed and revoke_managed use tenant/department membership and the current connector grant. Revocation invalidates the linked user’s open challenges on that connector and atomically audits EXTERNAL_IDENTITY_REVOKED against the verified manager actor. Shared links require organization-admin authority.
+
+AI-28 initializes channel_ingress_events, channel_ingress_outbox, channel_ingress_limits and channel_ingress_failures with connector-scoped dedup, atomic staging and fenced retries. See [the storage contract](../../docs/channel-ingress.md#storage-contract).

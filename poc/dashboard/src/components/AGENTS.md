@@ -316,3 +316,16 @@ Policy review drawer identifies organization/department target and exact scope I
 
 ## AI-5 consolidated runtime settings navigation (2026-11-07)
 The authenticated `/settings` route uses React Router Navigate with replace to `/organization?tab=runtime`, removing the legacy history entry. SettingsPage and its lazy import/sidebar item are removed. OrganizationPage validates `tab` against departments/workflows/team/users/runtime/capabilities, defaults missing/unknown values to departments, and updates only tab while preserving other query parameters. Browser back/forward and direct links select the corresponding tab. RuntimeSettingsPanel remains in the organization runtime tab; the existing non-admin DepartmentAccessPage route and capability/read guards remain authoritative, so redirects grant no admin access. No backend/provider behavior changes. Static source/diff review only; no local tests/build/typecheck/browser/startup under current runtime restrictions.
+
+AI-23 ChannelBindingsPanel lists exact-scope channel bindings with provider icons, connector status, pagination and independent uses. Admins create, replace uses and remove with revision checks. Scope changes abort pending requests and discard drafts.
+
+ChannelBindingsPanel uses the server catalog for provider labels, existing MCP channel choices and runtime availability. Provider icons are optional presentation.
+
+ChannelBindingsPanel searches configured channel names and IDs. Options show saved names first and use exact IDs as values.
+
+ChannelBindingsPanel shows channel_name and exact ID in the Channel column, with ID-only fallback.
+The table shows the provider and connector status. Connector selection is part of the add form. DepartmentAccessPage exposes Channels and Linked accounts in separate tabs for non-admin users.
+
+AI-29 WebhookDiagnostics lists Slack/Telegram connectors for organization admins. It resets on session, department, connector and tab changes and aborts outstanding requests. It shows local readiness, observed provider deliveries, and bounded failure summaries separately. Refresh loads current diagnostics. Check configuration runs a local readiness probe. Check public TLS explicitly asks the server for a point-in-time certificate check.
+
+AI-26 ExternalIdentitiesPanel shows personal links and provider challenge commands with in-memory codes, expiry, abortable polling and confirmation of the observed provider ID. Department managers get a paginated inspection/revocation table; server can_revoke controls actions on shared links. DepartmentAccessPage embeds the panel for non-admins.
