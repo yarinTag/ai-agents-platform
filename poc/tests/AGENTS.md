@@ -179,6 +179,13 @@ The P01 documentation maps behavior to existing test_capability_policy_api.py/te
 ## AI-19 API-only coverage
 run_api_audit includes test_github_pr_governance_api.py: actual guarded FastAPI/SQLite checks PR read/write descriptor schemas, required read dependencies, write wildcard denial, exact resource/current role, no grant backfill, inactive write-plan creation and authenticated merge resolution blocked before I/O when merge is ungranted. Baseline GitHub fixture now explicitly grants narrower read dependencies; existing receipt fixtures carry version2 proof as persisted subjects. No provider responses are mocked, agents dispatched or live PR actions run. Live evidence parsing/write success paths remain unverified. See ../../docs/github-pr-governance.md.
 
+## AI-20 PR scopes and evidence
+AI-20 extends test_github_pr_governance_api.py with real FastAPI/SQLite historical audit projection checks across all four roles: exact draft receipt identity, allowlisted output, foreign-connector omission and tenant/selected-department denials. Fixtures are persisted diagnostic records, not provider-response mocks; no agent/model/provider/worker is executed. The existing isolated API audit runner includes this file.
+
+AI-20 also checks nested evidence/reviewer field allowlists and approval GET preservation of STARTED/UNKNOWN/NOT_DISPATCHED/COMPLETED receipts independently of a FAILED batch, with no connector calls.
+
+Checks-only diagnostics preserve files_included=false and explicitly remain incomplete approval proof even when their CI facts pass; the UI never displays a full-review readiness badge for that result. API contracts assert this field survives the safe projection.
+
 ## AI-22 channel registry contracts
 
 `test_generic_governance_api.py` exercises real FastAPI routes and temporary SQLite for Telegram/Slack registration, role and tenant isolation, validation, revision conflicts, pagination, independent flags and allowlisted audit details. The existing API CI selection includes these cases.

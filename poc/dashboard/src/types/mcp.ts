@@ -149,6 +149,7 @@ export interface WorkflowExecution {
     error?: string;
     task_status?: string;
     events?: Array<Record<string, unknown>>;
+    pr_evidence?: Array<Record<string, unknown>>;
     input_data?: string;
     output_data?: string;
     cost_usd: number;

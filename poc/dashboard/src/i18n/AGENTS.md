@@ -145,6 +145,13 @@ workflowApproval.ts supplies matched EN/HE human decision labels, merge authoriz
 ## AI-17 governance localization
 governance.ts exports useGovernanceText/GovernanceText with paired typed English/Hebrew policy/access/role, rule effect, revision/history, review, 409 and readiness strings. New governance components use locale ConfigProvider direction; canonical IDs remain LTR. Existing large locale dictionaries and locale persistence remain unchanged.
 
+## AI-20 PR scopes and evidence
+AI-20: prGovernance.ts exports usePrGovernanceText with paired typed EN/HE requirements, evidence, receipt/status and actionable blocker/reconciliation copy. Shared PR views use document direction and bdi dir=ltr for canonical identifiers/SHAs; fixed GitHub links never depend on translated labels. Existing approval copy/locale persistence unchanged.
+
+PR diff copy distinguishes immutable SHA comparisons from a current, mutable PR diff in both languages.
+
+Checks-only diagnostics preserve files_included=false and explicitly remain incomplete approval proof even when their CI facts pass; the UI never displays a full-review readiness badge for that result. API contracts assert this field survives the safe projection.
+
 channelBindings.ts owns the English and Hebrew Channels tab, provider status, flag labels, empty/error states and action copy. The panel uses ConfigProvider direction and isolates channel IDs with bdi.
 
 The Channels copy includes a localized MCP setup hint and runtime availability badges.
