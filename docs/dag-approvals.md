@@ -37,3 +37,5 @@ The execution and barrier step change to WAITING_APPROVAL in the same transactio
 The approval and vote tables are authoritative. Votes are unique by approval and personal user. The worker can recover pending or approved-but-unclaimed rows after restart. An approved row is claimed once, with a fresh revision, initiator, voter role and quorum check. The execution and barrier statuses change in that same claim. If a worker stops after claim, inspect the persisted step runs and external receipts before taking recovery action. Automatic replay of a claimed continuation could duplicate effects and is not performed.
 
 The API returns pending requests for the selected department and scopes evidence to executions the caller can read. It exposes bounded prior-output excerpts and recorded cost. Full step details remain in execution logs. Decision submission takes only a boolean and rechecks current authority server-side. Neither an inbox badge nor a prior vote authorizes a subsequent action by itself.
+
+The visual step builder can convert an action-free step to a dashboard barrier and edit its roles, timeout, and quorum.

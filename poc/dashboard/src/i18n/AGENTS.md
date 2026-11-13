@@ -158,3 +158,5 @@ externalIdentities.ts owns English and Hebrew account linking, provider instruct
 channelTriggers.ts owns English and Hebrew trigger editor labels, matcher constraints and preview feedback.
 
 dagApprovals.ts owns English and Hebrew inbox, evidence and paused-step labels.
+
+The approval locale module also supplies visual policy editor labels and conversion guidance.

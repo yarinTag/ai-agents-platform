@@ -5,6 +5,7 @@ import { PlusOutlined, DeleteOutlined, FileTextOutlined, GithubOutlined, FolderO
 
 import { useWorkflowBuilder } from './useWorkflowBuilder';
 import { WorkflowRepositoryFields } from './WorkflowRepositoryFields';
+import { DagApprovalFields } from './DagApprovalFields';
 
 export function WorkflowStepsPanel({ model }: { model: ReturnType<typeof useWorkflowBuilder> }) {
   const {
@@ -368,15 +369,16 @@ export function WorkflowStepsPanel({ model }: { model: ReturnType<typeof useWork
                       </Row>
 
                       {/* MCP and Skill assignment per step */}
-                      <WorkflowRepositoryFields step={st} catalog={model.workspaceCatalog}
+                      <DagApprovalFields step={st} onChange={changes => handleUpdateStep(idx, changes)} />
+                      {!st.params?.dag_approval && <WorkflowRepositoryFields step={st} catalog={model.workspaceCatalog}
                         error={model.workspaceCatalogError} loading={model.resourcesLoading}
-                        onChange={changes => handleUpdateStep(idx, changes)} />
+                        onChange={changes => handleUpdateStep(idx, changes)} />}
                       <Row gutter={8} style={{ marginBottom: '8px' }}>
                         <Col span={12}>
                           <span style={{ fontSize: '11px', color: '#8b949e' }}>Step MCP Connectors:</span>
                           <Select
                             mode="multiple"
-                            disabled={Boolean(st.params?.workspace)}
+                            disabled={Boolean(st.params?.workspace || st.params?.dag_approval)}
                             size="small"
                             style={{ width: '100%' }}
                             value={st.mcp_servers || []}

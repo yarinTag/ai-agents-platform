@@ -335,3 +335,5 @@ WebhookDiagnostics selects providers through the channel catalog ingress_support
 AI-32 ChannelTriggerPanel is available in the saved workflow builder and Settings drawer. It uses server-scoped bindings, revisioned save and a side-effect-free preview. Requests are aborted on unmount.
 
 AI-35 DagApprovalsInbox shows the active department inbox and bounded prior outputs and recorded cost. Decision controls follow server can_decide; the workflow canvas can show WAITING_APPROVAL on steps from the inspected execution.
+
+DagApprovalFields edits approval roles, TTL and quorum in the visual step builder. Steps with tools or action params must have those removed before conversion.
