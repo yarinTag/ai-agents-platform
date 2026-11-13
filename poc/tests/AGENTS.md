@@ -196,3 +196,7 @@ The isolated API audit exercises AI-25 using signed request fixtures, real FastA
 AI-26 real API contracts cover active connector catalog projection and department management, including foreign tenant/department denial, live role downgrade, shared link restrictions and revocation audit.
 
 test_channel_ingress_api.py covers verified Telegram and Slack staging, replay, org/admin scoping, rate limiting, secret-free diagnostics, Telegram identity proof routing and outbox leases using real FastAPI and temporary SQLite.
+
+The channel ingress API contracts also exercise AI-31 revisioned rules, side-effect-free preview, exact replay prevention, revoked sender admission and lease fencing.
+
+The isolated channel ingress API module also checks the real deterministic DAG engine across two approval barriers, including quorum, duplicate decisions, preserved step history and rejection.

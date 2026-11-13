@@ -9,10 +9,13 @@ import { WorkflowGeneratorPanel } from './WorkflowGeneratorPanel';
 import { WorkflowDiagramPanel } from './WorkflowDiagramPanel';
 import { WorkflowStepsPanel } from './WorkflowStepsPanel';
 import { WorkflowYamlPanel } from './WorkflowYamlPanel';
+import { ChannelTriggerPanel } from './ChannelTriggerPanel';
+import { useChannelTriggersText } from '../../i18n/channelTriggers';
 export type { WorkflowStep, AttachedSkill } from './workflowBuilderTypes';
 
 export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = (props) => {
   const model = useWorkflowBuilder(props);
+  const triggerText = useChannelTriggersText();
   const {
     open, onClose, activeTab, setActiveTab, saving,
     workflow, formatting, definitionError, yamlContent, yamlDirty, changeSummary, setChangeSummary,
@@ -75,6 +78,11 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = (props) =
           setActiveTab(key);
         }}
         items={[
+          ...(workflow?.department_id ? [{
+            key: 'channel-trigger', label: triggerText.title,
+            children: open ? <ChannelTriggerPanel key={workflow.id} workflowId={workflow.id}
+              onSaved={revision => props.onSuccess({ ...workflow, revision })} /> : null,
+          }] : []),
           {
             key: 'ai',
             label: (

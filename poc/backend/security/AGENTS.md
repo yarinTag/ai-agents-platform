@@ -164,3 +164,9 @@ AI-25 personal identity routes use current database identity and reviewed govern
 AI-26 identity management requires a current personal department manager or organization administrator, with selected department matching the route. Store reads and mutations recheck current role, exact membership and active same-organization connector grant. Only organization administrators can revoke a link applicable in another department or owned by an organization administrator.
 
 The reviewed AI-28 diagnostics and configuration-test routes require current org-admin access and exact connector scope. Public ingress verifies provider authority independently and never accepts user-supplied destination URLs for TLS probes.
+
+See [AI-30 webhook operations](../../../docs/webhook-ingress.md) for proxy requirements, provider verification, retry semantics and incident recovery.
+
+Channel trigger settings use reviewed workflow route levels. Read requires workflow access; save and preview require current department management authority. Save also requires a personal actor.
+
+DAG inbox and decision use department read admission followed by personal identity checks. The decision transaction enforces the saved approver roles, current membership, initiator separation, quorum and replay fencing.

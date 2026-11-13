@@ -22,7 +22,10 @@ from .security import (
 from .security.tokens import validate_token_configuration
 
 # Import dependencies for startup/shutdown
+import asyncio
 from .dependencies import init_services, shutdown_services
+from .channel_trigger_worker import run as run_channel_trigger_worker
+from .dag_approval_worker import run as run_dag_approval_worker
 
 
 @asynccontextmanager
@@ -30,10 +33,20 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup: refuse to serve with a missing/weak JWT secret (no built-in fallback key).
     validate_token_configuration()
+    stop_channel_worker = asyncio.Event()
+    channel_worker = None
+    approval_worker = None
     try:
         await init_services()
+        channel_worker = asyncio.create_task(run_channel_trigger_worker(stop_channel_worker))
+        approval_worker = asyncio.create_task(run_dag_approval_worker(stop_channel_worker))
         yield
     finally:
+        stop_channel_worker.set()
+        if channel_worker is not None:
+            await channel_worker
+        if approval_worker is not None:
+            await approval_worker
         await shutdown_services()
 
 

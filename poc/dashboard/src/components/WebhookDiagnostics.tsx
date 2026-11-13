@@ -10,6 +10,8 @@ import {
   type IngressDiagnostics, type IngressEvent, type IngressTest,
 } from '../services/channelIngressApi';
 import type { MCPConnector } from '../types/mcp';
+import { getChannelCatalog } from '../services/channelBindingsApi';
+import type { ChannelCatalog } from '../services/channelBindingsApi';
 
 type Connector = Pick<MCPConnector, 'id' | 'name' | 'provider'>;
 type ErrorKey = 'accessDenied' | 'routeUnavailable' | 'refreshFailed' | 'testFailed';
@@ -27,20 +29,34 @@ export function WebhookDiagnostics({ connectors }: { connectors: Connector[] }) 
   const { organization, user, activeDepartmentId } = useAuth();
   const { dir } = useTranslation();
   if (!organization || user?.role !== 'ORG_ADMIN') return null;
-  const supported = connectors.filter(({ provider }) => provider === 'telegram' || provider === 'slack');
   const key = JSON.stringify([organization.id, user.id, activeDepartmentId]);
-  return <ConfigProvider direction={dir}><ConnectorSelection key={key} connectors={supported} /></ConfigProvider>;
+  return <ConfigProvider direction={dir}><ConnectorSelection key={key} connectors={connectors} /></ConfigProvider>;
 }
 
 function ConnectorSelection({ connectors }: { connectors: Connector[] }) {
   const text = useChannelIngressText();
+  const [catalog, setCatalog] = useState<ChannelCatalog>();
+  const [error, setError] = useState(false);
+  const [revision, setRevision] = useState(0);
   const [selected, setSelected] = useState<string>();
-  const connector = connectors.find(({ id }) => id === selected) ?? (connectors.length === 1 ? connectors[0] : undefined);
-  if (!connectors.length) return <Empty description={text.emptyConnectors} />;
+  useEffect(() => {
+    const request = new AbortController();
+    setError(false);
+    void getChannelCatalog(null, request.signal).then(({ data }) => {
+      if (!request.signal.aborted) setCatalog(data);
+    }).catch(() => { if (!request.signal.aborted) setError(true); });
+    return () => request.abort();
+  }, [revision]);
+  if (error) return <Alert type="error" showIcon title={text.connectorLoadFailed}
+    action={<Button onClick={() => setRevision(value => value + 1)}>{text.refresh}</Button>} />;
+  if (!catalog) return <Typography.Text role="status">{text.loadingConnectors}</Typography.Text>;
+  const supported = connectors.filter(({ provider }) => catalog.providers[provider.toLowerCase()]?.ingress_supported);
+  const connector = supported.find(({ id }) => id === selected) ?? (supported.length === 1 ? supported[0] : undefined);
+  if (!supported.length) return <Empty description={text.emptyConnectors} />;
   return <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
     <Select aria-label={text.connector} placeholder={text.selectConnector} value={connector?.id} onChange={setSelected}
       style={{ width: 'min(100%, 360px)' }}
-      options={connectors.map(({ id, name, provider }) => ({ value: id, label: `${name} · ${providerName(provider)}` }))} />
+      options={supported.map(({ id, name, provider }) => ({ value: id, label: `${name} · ${catalog.providers[provider.toLowerCase()].label}` }))} />
     {connector && <ConnectorDiagnostics key={connector.id} connectorId={connector.id} />}
   </Space>;
 }
@@ -155,7 +171,7 @@ function ConnectorDiagnostics({ connectorId }: { connectorId: string }) {
         ]} />
         <Space orientation="vertical">
           <Typography.Text type="secondary">{text.tlsHint}</Typography.Text>
-          {details.https_configured && <Typography.Text type="secondary">
+          {details.https_configured && ['slack', 'telegram'].includes(details.provider) && <Typography.Text type="secondary">
             {details.provider === 'slack' ? text.slackDeliveryHint : text.telegramDeliveryHint}
           </Typography.Text>}
         </Space>

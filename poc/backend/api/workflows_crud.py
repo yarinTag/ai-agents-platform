@@ -45,7 +45,11 @@ def persist_workflow(req, request, db, workflow_id=None, initially_active=True):
         raise HTTPException(status_code=400, detail="Either definition_yaml or definition_json is required")
 
     try:
-        _validated_definition(json.loads(def_json))
+        definition = json.loads(def_json)
+        _validated_definition(definition)
+        metadata = definition.get("metadata", {})
+        if any(key in metadata for key in ("channel_trigger", "channel_trigger_principal")):
+            raise ValueError("Configure channel triggers after creating the workflow.")
     except (ValueError, TypeError, AttributeError) as exc:
         raise HTTPException(status_code=400, detail=f"Invalid workflow definition: {exc}") from exc
 
@@ -263,6 +267,13 @@ def update_workflow(
                                          else yaml.safe_load(req.definition_yaml))
             data["id"] = wf.id
             original = json.loads(wf.definition_json)
+            metadata = data.setdefault("metadata", {})
+            original_metadata = original.get("metadata", {})
+            for key in ("channel_trigger", "channel_trigger_principal"):
+                if key in original_metadata:
+                    metadata[key] = original_metadata[key]
+                else:
+                    metadata.pop(key, None)
             if "runner_agent_id" in original:
                 data["runner_agent_id"] = original["runner_agent_id"]
             changes["definition_json"] = json.dumps(data, ensure_ascii=False)

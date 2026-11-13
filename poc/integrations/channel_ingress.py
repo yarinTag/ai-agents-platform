@@ -13,6 +13,7 @@ class Event:
     channel_id: str
     message_id: str
     sender_id: str | None
+    text: str = ""
 
 
 @dataclass(frozen=True)
@@ -54,7 +55,7 @@ def _telegram(raw, headers, settings, now):
     if isinstance(body, str) and (body == "/start" or body.startswith(("/start ", "/start@"))):
         return IdentityProof()
     return Event(str(update["update_id"]), "MESSAGE", str(chat["id"]), str(message["message_id"]),
-                 _personal_telegram_sender(message))
+                 _personal_telegram_sender(message), body if isinstance(body, str) else "")
 
 
 def _slack(raw, headers, settings, now):
@@ -82,12 +83,16 @@ def _slack(raw, headers, settings, now):
         raise InvalidProof("INVALID_EVENT")
     user = event.get("user")
     sender = user if (not event.get("bot_id") and isinstance(user, str) and re.fullmatch(r"[UW][A-Z0-9]{2,31}", user)) else None
-    return Event(event_id, "MESSAGE", channel, message, sender)
+    text = event.get("text")
+    return Event(event_id, "MESSAGE", channel, message, sender, text if isinstance(text, str) else "")
+
+
+INGRESS_ADAPTERS = {"telegram": _telegram, "slack": _slack}
 
 
 def verify_event(provider, raw, headers, settings, now):
     try:
-        adapter = {"telegram": _telegram, "slack": _slack}[provider]
+        adapter = INGRESS_ADAPTERS[provider]
         return adapter(raw, headers, settings, now)
     except InvalidProof:
         raise

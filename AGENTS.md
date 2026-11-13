@@ -1,8 +1,14 @@
 # AGENTS.md - Root AI Agents Platform Architecture & Directory Index
 
+[AI-31–33 channel trigger policy](docs/channel-trigger-policy.md) defines workflow rules, verified sender and fixed principal checks, and the untrusted input boundary.
+
+[AI-34–36 DAG approvals](docs/dag-approvals.md) defines dashboard decisions, checkpoint continuation, quorum and recovery.
+
 [AI-27 identity proof and recovery](docs/identity-proof-runbook.md) documents challenge and confirmation, approver identity boundaries, and response to compromised credentials.
 
 [AI-28 and AI-29 channel ingress](docs/channel-ingress.md) documents verified provider intake, durable event staging and the MCP webhook diagnostics view.
+
+[AI-30 webhook operations](docs/webhook-ingress.md) covers deployment topology, provider verification, receipt semantics and incident recovery.
 
 [AI-22 channel registry](docs/channel-bindings.md) adds tenant-scoped Telegram/Slack configuration, independent use flags, and audited administrator changes. Verified ingress, identity and runtime use remain separate stages.
 

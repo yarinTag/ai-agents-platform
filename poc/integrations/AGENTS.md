@@ -98,3 +98,9 @@ See [AI-24 provider and identity boundaries](../../docs/channel-identity-policy.
 identity_proofs.py verifies Telegram private bot messages and Slack signed slash commands, then extracts a stable personal provider subject. Its adapter registry is separate from execution and channel approval.
 
 AI-28 channel_ingress verifies provider bytes using shared identity-proof signature functions, then projects only stable event metadata. ingress_tls checks certificates for the configured public origin and pins global resolved IPs.
+
+See [AI-30 webhook operations](../../docs/webhook-ingress.md) for proxy requirements, provider verification, retry semantics and incident recovery.
+
+INGRESS_ADAPTERS in channel_ingress.py is the trusted provider registry for event verification and projection.
+
+Verified channel adapters project optional message text internally for trigger matching. Identity proof commands and raw provider envelopes are never staged as trigger input.

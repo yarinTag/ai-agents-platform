@@ -6,6 +6,7 @@ import { SendOutlined, SlackOutlined, ThunderboltOutlined, ClockCircleOutlined, 
 const { Text, Paragraph } = Typography;
 
 import type { WorkflowCanvasStep, WorkflowCanvasSkill, WorkflowCanvasGraphProps } from './workflowGraphTypes';
+import { useDagApprovalsText } from '../../i18n/dagApprovals';
 export type { WorkflowCanvasStep, WorkflowCanvasSkill } from './workflowGraphTypes';
 
 const AGENT_COLORS: Record<string, { bg: string; border: string; text: string; icon: string }> = {
@@ -21,6 +22,7 @@ const AGENT_COLORS: Record<string, { bg: string; border: string; text: string; i
 export const WorkflowCanvasGraph: React.FC<WorkflowCanvasGraphProps> = ({
   workflowName = 'Workflow DAG Pipeline',
   steps = [],
+  waitingStepKeys = [],
   channelBinding,
   skills = [],
   allowedMcps = [],
@@ -28,6 +30,7 @@ export const WorkflowCanvasGraph: React.FC<WorkflowCanvasGraphProps> = ({
   onDeleteStep,
   height = 540,
 }) => {
+  const approvalText = useDagApprovalsText();
   const [zoom, setZoom] = useState<number>(1);
   const [selectedStep, setSelectedStep] = useState<WorkflowCanvasStep | null>(null);
   const [detailModalVisible, setDetailModalVisible] = useState<boolean>(false);
@@ -296,6 +299,7 @@ export const WorkflowCanvasGraph: React.FC<WorkflowCanvasGraphProps> = ({
                       <Tag color="cyan" style={{ borderRadius: '6px', fontSize: '10px', margin: 0, fontWeight: 700 }}>
                         {step.key}
                       </Tag>
+                      {waitingStepKeys.includes(step.key) && <Tag color="gold">{approvalText.waiting}</Tag>}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                         <Tag style={{ background: '#21262d', color: '#8b949e', border: 'none', fontSize: '10px', margin: 0 }}>
                           <ClockCircleOutlined /> {step.timeout_seconds || 300}s

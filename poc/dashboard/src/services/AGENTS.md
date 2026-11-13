@@ -292,3 +292,9 @@ ChannelBinding includes nullable channel_name for list display.
 AI-29 channelIngressApi uses the shared authenticated HTTP client for GET /api/v1/governance/channel-ingress/{connector_id}/diagnostics and POST /api/v1/governance/channel-ingress/{connector_id}/test. Connector IDs are path-encoded and both requests accept abort signals. Diagnostics expose derived endpoint, secret and HTTPS presence, latest verified delivery, event timing/status and bounded verification failures. The test probes local configuration and storage by default. An explicit verify_tls flag checks the server-configured public host certificate without dispatching a provider event.
 
 externalIdentitiesApi.ts wraps scoped connector discovery, personal link listing and unlink, challenge issue/read/confirm, and department list/revoke. Calls accept AbortSignal and derive personal identity exclusively from authenticated server state.
+
+ChannelCatalog provider descriptors include ingress_supported. Ingress provider IDs are open strings from the server.
+
+channelTriggersApi wraps scoped workflow channel-trigger GET, PUT with expected_revision, and POST preview with bounded synthetic event input.
+
+dagApprovalsApi lists paginated department approvals and posts a personal boolean decision with AbortSignal support.

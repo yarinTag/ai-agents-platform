@@ -154,3 +154,7 @@ The Channels table localizes the Channel heading separately from the Channel ID 
 AI-29 channelIngress.ts provides paired English/Hebrew labels for readiness, recent events, failures and the local configuration check. The view uses locale-aware date/number formatting, Ant Design direction and LTR endpoint isolation.
 
 externalIdentities.ts owns English and Hebrew account linking, provider instructions, scope and expiry errors, verification and revocation copy. The panel uses RTL direction and isolates provider account IDs and commands with bdi.
+
+channelTriggers.ts owns English and Hebrew trigger editor labels, matcher constraints and preview feedback.
+
+dagApprovals.ts owns English and Hebrew inbox, evidence and paused-step labels.

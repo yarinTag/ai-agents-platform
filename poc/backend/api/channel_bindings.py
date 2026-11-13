@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from integrations.channel_providers import CHANNEL_PROVIDERS
+from integrations.channel_ingress import INGRESS_ADAPTERS
 from storage import channel_bindings as store
 
 from ..dependencies import get_db_manager
@@ -119,6 +120,7 @@ def get_channel_binding_catalog(request: Request, department_id: Department = No
     return {
         "providers": {key: {
             "label": adapter.label,
+            "ingress_supported": key in INGRESS_ADAPTERS,
             "configurable_uses": list(store.USES),
             "runtime_supported_uses": adapter.runtime_supported_uses,
         } for key, adapter in CHANNEL_PROVIDERS.items()},

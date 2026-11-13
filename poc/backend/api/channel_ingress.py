@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 from starlette.concurrency import run_in_threadpool
 
-from integrations.channel_ingress import Handshake, IdentityProof, verify_event
+from integrations.channel_ingress import INGRESS_ADAPTERS, Handshake, IdentityProof, verify_event
 from integrations.identity_proofs import InvalidProof, configuration, verify
 from integrations.ingress_tls import check_tls
 from storage import channel_ingress as inbox
@@ -103,7 +103,7 @@ def _scope(request, db, connector_id):
     actor.require(level=4)
     connector = Resources(actor).require("connector", connector_id)
     provider = connector.provider.lower()
-    if provider not in {"telegram", "slack"}:
+    if provider not in INGRESS_ADAPTERS:
         raise HTTPException(404, "Channel connector unavailable.")
     try:
         configuration(provider, connector.configuration or {})
