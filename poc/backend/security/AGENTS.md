@@ -150,3 +150,23 @@ request_policy includes governance in the reviewed domain inventory and rejects 
 
 ## AI-18 current identity and policy authority
 Follow ../../../docs/architecture/p01-policy-algebra.md: authenticate the session, then use current DB Actor/Resources and selected department. Never authorize by token role alone or grant rights from channel membership/links/model output. Personal policy mutations and approval decisions remain distinct from existing server-owned service authentication; do not synthesize service identity from a body. The full role/action and HTTP error matrix is in ../../../docs/architecture/p01-governance-api.md. Existing service handling is not a newly implemented generic service-principal registry.
+
+## AI-22 channel registry admission
+
+Governance route policy registers channel-binding reads and org-admin writes. The endpoint requires exact tenant/department scope and personal administrator identity for mutations, with a current active admin check inside the SQLite write transaction. No channel binding authorizes provider callbacks or grants access to a connector. See [the channel registry](../../../docs/channel-bindings.md).
+
+AI-23 permits exact department channel binding reads at member level. The department resource check and selected department header still apply.
+
+The channel binding catalog uses the reviewed read route policy and exact selected department. Members receive connector metadata only for active department grants; connector configuration and secrets are excluded.
+
+AI-25 personal identity routes use current database identity and reviewed governance route permissions. Only the dedicated provider proof POST admits provider authentication, independently of platform JWTs.
+
+AI-26 identity management requires a current personal department manager or organization administrator, with selected department matching the route. Store reads and mutations recheck current role, exact membership and active same-organization connector grant. Only organization administrators can revoke a link applicable in another department or owned by an organization administrator.
+
+The reviewed AI-28 diagnostics and configuration-test routes require current org-admin access and exact connector scope. Public ingress verifies provider authority independently and never accepts user-supplied destination URLs for TLS probes.
+
+See [AI-30 webhook operations](../../../docs/webhook-ingress.md) for proxy requirements, provider verification, retry semantics and incident recovery.
+
+Channel trigger settings use reviewed workflow route levels. Read requires workflow access; save and preview require current department management authority. Save also requires a personal actor.
+
+DAG inbox and decision use department read admission followed by personal identity checks. The decision transaction enforces the saved approver roles, current membership, initiator separation, quorum and replay fencing.

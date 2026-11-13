@@ -268,3 +268,19 @@ AI-17 uses the existing /organization route and header department. Preserve read
 Use docs/architecture/p01-policy-algebra.md for precise intersection/validity semantics and docs/architecture/p01-governance-api.md for HTTP/schema. JWT role claims are not authority; a catalog/decision/resource option is non-executable. Approval is an extra condition, not a grant. Agent/contributor work must not expand departments/resources/tools, rewrite captured scope/history, fabricate receipts or weaken the requested approval to make a workflow pass. Missing implementation/grant/setup must remain explicit. See docs/governance-policy-guide.md for safe CAS recovery and rollback limits; reverting to an older binary may ignore typed restrictions. Documentation is not permission to deploy, run agents or call providers.
 
 AI-19 PR operations: use docs/github-pr-governance.md. Read dependencies must not be bypassed via the aggregate tool; comment/review require explicit department/action grants and pinned HEAD. Model review cannot APPROVE. Merge stays behind a live persisted personal claim, exact subject, fresh version2 evidence and audit reservation before PUT. Unknown/unsupported rules or write outcomes fail closed; no automatic backfill/retry, branch-rule changes or fallback writes.
+
+## Channel registry
+
+Use [the AI-22 channel registry contract](docs/channel-bindings.md) for route scope, exact provider channel identities, and audit behavior. Registration and its three independent use flags do not create connector grants or activate inbound workflows or approvals.
+
+Use [the channel identity and sender policy](docs/channel-identity-policy.md) when extending channel providers or planning workflows. Select exact IDs from the current authorized catalog. Future inbound routing must verify provider identity and apply explicit sender and action policy.
+
+AI-25 uses connector-scoped provider proof and explicit platform-user confirmation. See [external identities](docs/external-identities.md) before consuming linked identities in authorization.
+
+AI-28 and AI-29 use the [channel ingress contract](docs/channel-ingress.md). Verify before normalizing, store only projected event metadata, and keep workflow dispatch behind a future authorized consumer. Keep configured endpoint, point-in-time TLS result, and observed provider delivery distinct in diagnostics.
+
+See [AI-30 webhook operations](docs/webhook-ingress.md) for proxy requirements, provider verification, retry semantics and incident recovery.
+
+Use [the channel trigger policy](docs/channel-trigger-policy.md) for AI-31–33. Trigger events supply data only. The saved rule, fixed principal and current authorization decide whether the engine starts.
+
+Follow [the DAG approval contract](docs/dag-approvals.md). Agents must never simulate or self-grant human approval. Preserve atomic checkpoint transitions and skip completed effects on continuation.

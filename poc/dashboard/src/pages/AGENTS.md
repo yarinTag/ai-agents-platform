@@ -312,6 +312,13 @@ getDepartmentMembers, bulkInviteDepartmentMembers and removeDepartmentMember sen
 
 Manage Team navigation uses selectTab('team') with the selected department, matching the URL-owned tab state introduced by AI-5. The removed setActiveTab state setter has no remaining OrganizationPage references. Static reference/diff checks only; no runtime verification performed.
 
-
 ## AI-20 PR scopes and evidence
 AI-20: WorkflowLogs and WorkflowExecutionDrawer render step.pr_evidence from authorized execution details, independently of model output and the 500-event timeline bound. Inspection also mounts existing WorkflowApprovalPanel keyed by execution ID, preserving current backend authority. No new route, action endpoint or resource grant. Missing historical receipts remain absent; confirmation is never inferred from workflow completion.
+
+OrganizationPage supports `/organization?tab=channels` and mounts ChannelBindingsPanel for the channel registry.
+
+AI-29 adds the organization-admin Webhook diagnostics tab in MCP Hub. It is scoped to a selected Slack/Telegram connector and unmounts when the operator leaves the tab.
+
+AI-26 OrganizationPage exposes Linked accounts at /organization?tab=identities. Non-admin users reach the same personal/management panel from the existing DepartmentAccessPage shell.
+
+The Workflows header opens the department-scoped Approvals inbox. Execution-derived waiting step keys are passed to the canvas only when the inspected execution belongs to that workflow.

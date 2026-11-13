@@ -90,3 +90,19 @@ github_pr_evidence owns version2 immutable PR/diff/CI/review/branch evidence, bo
 Review precedence uses validated timezone-aware submitted_at, with ID only as a tie breaker and case-insensitive reviewer identity. A review created earlier but submitted later must supersede an older approval; malformed chronology marks partial evidence and blocks merging.
 
 GitHub PR clients bind headers to the captured credential and compare it with the current authorized connector before each request. Rotation/revocation blocks subsequent old-header requests; in-flight writes cannot be recalled and acknowledged receipts must still be preserved.
+
+channel_providers.py owns trusted registry adapters, immutable channel ID validation and runtime-supported uses. It projects IDs from existing MCP channel configuration. Adding an adapter does not install runtime dispatch.
+
+See [AI-24 provider and identity boundaries](../../docs/channel-identity-policy.md) before adding a provider or using bindings in execution. Keep canonical provider identity and verification in the adapter and current authorization in the shared server path.
+
+identity_proofs.py verifies Telegram private bot messages and Slack signed slash commands, then extracts a stable personal provider subject. Its adapter registry is separate from execution and channel approval.
+
+AI-28 channel_ingress verifies provider bytes using shared identity-proof signature functions, then projects only stable event metadata. ingress_tls checks certificates for the configured public origin and pins global resolved IPs.
+
+See [AI-30 webhook operations](../../docs/webhook-ingress.md) for proxy requirements, provider verification, retry semantics and incident recovery.
+
+INGRESS_ADAPTERS in channel_ingress.py is the trusted provider registry for event verification and projection.
+
+Verified channel adapters project optional message text internally for trigger matching. Identity proof commands and raw provider envelopes are never staged as trigger input.
+
+Signed Slack slash commands other than /platform-link enter ingress as COMMAND after installation and bounded field validation. Slack trigger_id supplies the deduplication identity.

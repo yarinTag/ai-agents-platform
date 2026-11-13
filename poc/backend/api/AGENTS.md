@@ -359,8 +359,35 @@ GET /api/v1/governance/organization/policy and GET /departments/{department_id}/
 ## AI-19 shared governance projection
 Existing /api/v1/governance/capabilities adds descriptor requires_capabilities for aggregate/narrow PR reads, correct write effects and strict head/body/event schemas. /decisions can return DEPENDENT_CAPABILITY_DENIED; catalog/AI authoring prune missing or denied dependencies and keep writes behind explicit grants. Existing approval reads expose richer audit receipts through unchanged scoped receipts JSON; no new execution/approval endpoint or caller authority field. Exact adapter/audit contracts: ../../../docs/github-pr-governance.md.
 
-
 ## AI-20 PR scopes and evidence
 AI-20: authorized GET /api/v1/workflows/executions/{execution_id} adds step_runs[].pr_evidence, a bounded (32 per task) historical audit projection from workflow_pr_evidence.py. It intersects task/agent/connector organization, permits fixed GitHub PR operations, and allowlists scalar result fields, PR head/base identities, bounded blockers/reviewer summaries, audit ID/status/timestamps. Draft-PR receipts map pull_request_number/commit to pull_number/head_sha. No arguments, bodies, patches, arbitrary URLs/configuration or credentials are released. Existing execution scope checks precede projection; no execution or grant changes. Missing/deleted/malformed audit dependencies are omitted, not reconstructed. Approval endpoint and merge receipts remain unchanged.
 
 Checks-only diagnostics preserve files_included=false and explicitly remain incomplete approval proof even when their CI facts pass; the UI never displays a full-review readiness badge for that result. API contracts assert this field survives the safe projection.
+
+## AI-22 channel bindings
+
+Under `/api/v1/governance/channel-bindings`, GET lists one exact org/department scope with `after`/`limit` pagination. POST creates a Telegram/Slack binding from `department_id?`, `connector_id`, `provider`, `channel_id` and `uses?`. PUT `/{binding_id}/uses` replaces the three independent booleans with `expected_revision`; DELETE `/{binding_id}` uses query `expected_revision`. Supply query `department_id` for department reads/updates/deletes. Current signed-in org admins own writes; authorized members can read their selected department. See [the contract](../../../docs/channel-bindings.md) for scope, strict schemas, response fields and errors.
+
+AI-23 opens department binding list reads to authorized members of the selected department. Organization reads and all mutations keep their existing administrator requirements.
+
+GET /api/v1/governance/channel-bindings/catalog returns providers (label, configurable_uses, runtime_supported_uses) and scoped connectors (id, name, provider, status, channel_ids). Only org admins receive selectable configured channel IDs. POST requires a currently configured exact ID.
+
+Channel binding catalog connectors also return channel_labels keyed by selectable channel ID. Blank, non-string and unconfigured labels are excluded.
+
+GET channel bindings adds nullable channel_name from the exact binding connector and channel ID within the current organization. It does not expose other configured labels to members.
+
+AI-25 external-identities exposes personal list, issue, status, confirm and unlink plus admin secret rotation. Exact routes and schemas are in [external identities](../../../docs/external-identities.md).
+
+AI-26 adds GET /api/v1/governance/external-identities/connectors (configured, authorized {id,name,provider} records), and GET/DELETE /departments/{department_id}/links[/{link_id}] under the same base. Management GET accepts after (idl_ cursor) and limit (1–100, default 50), and returns {links,next_after}; each row contains id, connector_id, provider, subject, created_at (Unix seconds), member_name and can_revoke. DELETE returns 204 and requires current manager authority and exact row scope.
+
+AI-28 POST /api/v1/channel-ingress/{connector_id} accepts verified Telegram/Slack events. Org-admin GET /api/v1/governance/channel-ingress/{connector_id}/diagnostics and POST /test provide bounded diagnostics and optional explicit TLS checks. See [verified channel ingress](../../../docs/channel-ingress.md).
+
+Ingress diagnostics recognize provider IDs from INGRESS_ADAPTERS rather than a separate API allowlist.
+
+Channel catalog provider descriptors include ingress_supported, derived from the trusted ingress adapter registry.
+
+AI-31 exposes GET and PUT /api/v1/workflows/{workflow_id}/channel-trigger and POST /preview below that path. Reads are scoped to the saved workflow. Managers save a strict rule or null using expected_revision and simulate a rule against its authorized department binding. Preview returns matched and parameters and has no execution side effects.
+
+Workflow create rejects reserved trigger metadata and normal definition edits preserve the saved rule and principal. Only the dedicated trigger route changes these fields.
+
+GET /api/v1/workflows/dag-approvals?department_id= returns a scoped pending inbox of up to 50 items and a next_after cursor. POST /dag-approvals/{approval_id}/decision?department_id= accepts strict {approve:boolean}, rechecks a personal eligible voter, and returns the decision status.

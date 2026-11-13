@@ -317,7 +317,6 @@ Policy review drawer identifies organization/department target and exact scope I
 ## AI-5 consolidated runtime settings navigation (2026-11-07)
 The authenticated `/settings` route uses React Router Navigate with replace to `/organization?tab=runtime`, removing the legacy history entry. SettingsPage and its lazy import/sidebar item are removed. OrganizationPage validates `tab` against departments/workflows/team/users/runtime/capabilities, defaults missing/unknown values to departments, and updates only tab while preserving other query parameters. Browser back/forward and direct links select the corresponding tab. RuntimeSettingsPanel remains in the organization runtime tab; the existing non-admin DepartmentAccessPage route and capability/read guards remain authoritative, so redirects grant no admin access. No backend/provider behavior changes. Static source/diff review only; no local tests/build/typecheck/browser/startup under current runtime restrictions.
 
-
 ## AI-20 PR scopes and evidence
 AI-20: workflows/PrPermissionSummary accepts WorkflowStep and displays exact declared connector/repository/tool requirements plus workspace clone/open-PR and terminal merge dependencies. It does not edit scopes or claim effective permission. PrEvidence accepts unknown structured data, validates fixed-host canonical PR and SHA compare links, renders historical v2 review/check/base facts, incomplete/legacy warnings, bounded blockers with recovery and action audit receipts. PrAuditEvidence renders execution pr_evidence; StepEventTimeline additionally renders structured tool_result content at its chronological event. WorkflowApprovalPanel uses the same pinned-subject/receipt renderer, localized state labels, expiration/read-only explanations, no-receipt warning and unknown-write reconciliation. Request generations reject stale polls/decisions after execution changes/unmount. Existing role/API checks remain unchanged.
 
@@ -328,3 +327,24 @@ Approval presentation permits one submitted decision per mounted scope and suppr
 When a receipt lacks both immutable revisions (including draft publication), PrEvidence offers Current PR diff at the canonical PR /files URL, clearly distinct from a pinned SHA comparison.
 
 Checks-only diagnostics preserve files_included=false and explicitly remain incomplete approval proof even when their CI facts pass; the UI never displays a full-review readiness badge for that result. API contracts assert this field survives the safe projection.
+
+AI-23 ChannelBindingsPanel lists exact-scope channel bindings with provider icons, connector status, pagination and independent uses. Admins create, replace uses and remove with revision checks. Scope changes abort pending requests and discard drafts.
+
+ChannelBindingsPanel uses the server catalog for provider labels, existing MCP channel choices and runtime availability. Provider icons are optional presentation.
+
+ChannelBindingsPanel searches configured channel names and IDs. Options show saved names first and use exact IDs as values.
+
+ChannelBindingsPanel shows channel_name and exact ID in the Channel column, with ID-only fallback.
+The table shows the provider and connector status. Connector selection is part of the add form. DepartmentAccessPage exposes Channels and Linked accounts in separate tabs for non-admin users.
+
+AI-29 WebhookDiagnostics lists Slack/Telegram connectors for organization admins. It resets on session, department, connector and tab changes and aborts outstanding requests. It shows local readiness, observed provider deliveries, and bounded failure summaries separately. Refresh loads current diagnostics. Check configuration runs a local readiness probe. Check public TLS explicitly asks the server for a point-in-time certificate check.
+
+AI-26 ExternalIdentitiesPanel shows personal links and provider challenge commands with in-memory codes, expiry, abortable polling and confirmation of the observed provider ID. Department managers get a paginated inspection/revocation table; server can_revoke controls actions on shared links. DepartmentAccessPage embeds the panel for non-admins.
+
+WebhookDiagnostics selects providers through the channel catalog ingress_supported flag. Setup hints remain provider-specific.
+
+AI-32 ChannelTriggerPanel is available in the saved workflow builder and Settings drawer. It uses server-scoped bindings, revisioned save and a side-effect-free preview. Requests are aborted on unmount.
+
+AI-35 DagApprovalsInbox shows the active department inbox and bounded prior outputs and recorded cost. Decision controls follow server can_decide; the workflow canvas can show WAITING_APPROVAL on steps from the inspected execution.
+
+DagApprovalFields edits approval roles, TTL and quorum in the visual step builder. Steps with tools or action params must have those removed before conversion.

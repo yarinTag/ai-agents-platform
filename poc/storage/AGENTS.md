@@ -155,3 +155,31 @@ See ../../docs/architecture/p01-governance-api.md for exact table columns/keys a
 
 ## AI-19 audit JSON additions
 No schema columns/tables change. Existing mcp_tool_calls records hold deterministic call_merge_ intent/acknowledgement; arguments/result include approval/actor/agent/resource/SHA/time evidence. workflow_approvals.receipts_json retains STARTED/COMPLETED/NOT_DISPATCHED/UNKNOWN detail. Existing call status FAILED can contain UNKNOWN in result; do not treat it as proof that no external write occurred. Preserve ambiguous claims and prior receipts across recovery. See ../../docs/github-pr-governance.md.
+
+## AI-22 channel binding registry
+
+`organization_schema.initialize` creates `channel_bindings` through `channel_bindings.initialize`. Organization, optional department, connector, provider and exact channel form the immutable scope and identity. Independent flags are `send_notifications`, `trigger_workflows`, and `approve_decisions`. Revision checks, role revalidation and projected `audit_logs` writes share a transaction. See [the registry contract](../../docs/channel-bindings.md) for columns, cascading ownership and audit actions.
+
+Channel binding provider is an extensible text ID. Registration checks the trusted adapter and exact configured connector channel in the same transaction as the binding and audit insert.
+
+external_identities.py initializes identity_challenges (digest, org/connector/user, credential version, Unix issue/expiry times, verified subject and consumption) and external_identity_links (org, connector, user, provider account, subject, creation time). Writes use SQLite transactions for replay safety and metadata-only audit.
+
+AI-26 list_managed and revoke_managed use tenant/department membership and the current connector grant. Revocation invalidates the linked user’s open challenges on that connector and atomically audits EXTERNAL_IDENTITY_REVOKED against the verified manager actor. Shared links require organization-admin authority.
+
+AI-28 initializes channel_ingress_events, channel_ingress_outbox, channel_ingress_limits and channel_ingress_failures with connector-scoped dedup, atomic staging and fenced retries. See [the storage contract](../../docs/channel-ingress.md#storage-contract).
+
+Channel ingress failure buckets accept providers from INGRESS_ADAPTERS. Inbox and outbox identities remain provider-neutral.
+
+channel_ingress_trigger_inputs stores bounded sanitized text separately for active opted-in workflows with an exact trigger binding and active connector grant. Claims omit expired text; staging and claims prune expired rows, and settlement deletes terminal input.
+
+channel_trigger_dispatches records event/workflow uniqueness, execution ID, saved workflow revision, binding ID, principal and linked sender. Reservation and the QUEUED execution insert share a transaction.
+
+Channel trigger reservation and admission resolve linked identities and recheck current policy inside their SQLite write transaction. resolve_user accepts an existing connection to preserve that snapshot.
+
+workflow_dag_approvals stores a revisioned checkpoint and pending/approved/rejected/timed-out/claimed state per execution and step. workflow_dag_approval_votes enforces one decision per user per approval. Suspension atomically changes the execution to WAITING_APPROVAL. Vote counting rechecks current roles and excludes the initiator.
+
+DAG suspension inserts a WAITING_APPROVAL step run and persists execution totals atomically. Rejection and timeout fail both records. claim_resume verifies exact workflow scope and revision, active initiator and current quorum, then marks the approval CLAIMED, the barrier COMPLETED and the execution RUNNING in one transaction.
+
+AI-34 expires pending or approved-but-unclaimed waits at TTL. Inbox returns bounded excerpts and costs, current role eligibility, quorum and a cursor. The worker consumes durable approved rows and fails closed if continuation is no longer eligible.
+
+DAG approval vote eligibility excludes both the initiator and the recorded author of the pinned workflow revision.

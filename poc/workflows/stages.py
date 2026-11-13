@@ -31,3 +31,14 @@ def group_steps_into_stages(steps: List[WorkflowStepDefinition]) -> List[List[Wo
 
     return stages
 
+
+def isolate_approval_barriers(stages):
+    """Serialize each ready approval before other work in the same dependency stage."""
+    for stage in stages:
+        barriers = [step for step in stage if "dag_approval" in (step.params or {})]
+        for step in barriers:
+            yield [step]
+        remaining = [step for step in stage if step not in barriers]
+        if remaining:
+            yield remaining
+

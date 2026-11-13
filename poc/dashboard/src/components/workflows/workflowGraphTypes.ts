@@ -22,6 +22,7 @@ export interface WorkflowCanvasSkill {
 export interface WorkflowCanvasGraphProps {
   workflowName?: string;
   steps: WorkflowCanvasStep[];
+  waitingStepKeys?: readonly string[];
   channelBinding?: {
     provider?: string;
     channel_id?: string;

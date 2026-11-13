@@ -281,6 +281,23 @@ getDepartments(organization_id?) explicitly disables X-Department-ID using Axios
 ## Explicit department member request scope (2026-11-07)
 getDepartmentMembers, bulkInviteDepartmentMembers and removeDepartmentMember send X-Department-ID equal to their target deptId and encode path IDs. httpClient supplies the global selection only when the request has no explicit X-Department-ID header, preserving both a target scope and the false directory sentinel. Current server membership/tenant/admin checks remain unchanged. OrganizationPage clears old members before loading and ignores superseded/unmounted member responses/errors/loading updates. This prevents global header selection from rejecting Org & Teams operations on another authorized department. Static diff review only; no runtime verification performed.
 
-
 ## AI-20 PR scopes and evidence
 AI-20: types/mcp WorkflowExecution.step_runs adds optional pr_evidence: Record<string,unknown>[] from the unchanged scoped detail endpoint. workflowApprovals receipt DTO adds optional operation, head_sha, base_sha, audit_id, approved_by, started_at/completed_at to reflect existing backend JSON. Missing legacy fields are supported. No token/transport/cache changes.
+
+channelBindingsApi wraps GET/POST /api/v1/governance/channel-bindings, PUT /{binding_id}/uses and DELETE /{binding_id} with exact department scope, pagination and expected revisions.
+
+channelBindingsApi also wraps GET /catalog for scoped provider descriptors and selectable MCP channel IDs.
+
+Channel binding catalog connector records include channel_labels keyed by exact channel ID.
+
+ChannelBinding includes nullable channel_name for list display.
+
+AI-29 channelIngressApi uses the shared authenticated HTTP client for GET /api/v1/governance/channel-ingress/{connector_id}/diagnostics and POST /api/v1/governance/channel-ingress/{connector_id}/test. Connector IDs are path-encoded and both requests accept abort signals. Diagnostics expose derived endpoint, secret and HTTPS presence, latest verified delivery, event timing/status and bounded verification failures. The test probes local configuration and storage by default. An explicit verify_tls flag checks the server-configured public host certificate without dispatching a provider event.
+
+externalIdentitiesApi.ts wraps scoped connector discovery, personal link listing and unlink, challenge issue/read/confirm, and department list/revoke. Calls accept AbortSignal and derive personal identity exclusively from authenticated server state.
+
+ChannelCatalog provider descriptors include ingress_supported. Ingress provider IDs are open strings from the server.
+
+channelTriggersApi wraps scoped workflow channel-trigger GET, PUT with expected_revision, and POST preview with bounded synthetic event input.
+
+dagApprovalsApi lists paginated department approvals and posts a personal boolean decision with AbortSignal support.

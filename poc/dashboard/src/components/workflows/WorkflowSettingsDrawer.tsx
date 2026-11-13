@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, Button, Divider, Drawer, Empty, Flex, Segmented, Select, Spin, Tag, Typography, message, theme } from 'antd';
 import { CloudServerOutlined, GlobalOutlined, LockOutlined, RobotOutlined, SaveOutlined } from '@ant-design/icons';
 import { getWorkflowSettings, updateWorkflowSettings } from '../../services/api';
+import { ChannelTriggerPanel } from './ChannelTriggerPanel';
 import type { PlatformWorkflow } from '../../types/mcp';
 import {
   WORKFLOW_MACHINE_SIZES,
@@ -21,7 +22,7 @@ import {
 } from './workflowSettingsRules';
 
 interface WorkflowSettingsDrawerProps {
-  workflow: Pick<PlatformWorkflow, 'id' | 'name'>;
+  workflow: Pick<PlatformWorkflow, 'id' | 'name' | 'department_id'>;
   onClose: () => void;
   /** Called after settings are saved (the workflow revision changed). */
   onSaved?: () => void;
@@ -278,6 +279,9 @@ export const WorkflowSettingsDrawer: React.FC<WorkflowSettingsDrawerProps> = ({ 
       extra={data ? <Tag>{fill(text.revision, { revision: data.revision })}</Tag> : null}
     >
       {renderBody()}
+      {workflow.department_id && <div style={{ marginBlockStart: 24 }}>
+        <ChannelTriggerPanel workflowId={workflow.id} onSaved={() => { void load(); }} />
+      </div>}
     </Drawer>
   );
 };

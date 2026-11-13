@@ -19,9 +19,13 @@ import { PlatformWorkflow } from '../types/mcp';
 import { DepartmentsBudgetTab, TeamInvitationsTab, OrgUsersTab, OrgWorkflowsCanvasTab } from '../components/org';
 import CapabilityGovernancePanel from '../components/org/CapabilityGovernancePanel';
 import { useGovernanceText } from '../i18n/governance';
+import ExternalIdentitiesPanel from '../components/org/ExternalIdentitiesPanel';
+import { useExternalIdentitiesText } from '../i18n/externalIdentities';
+import ChannelBindingsPanel from '../components/org/ChannelBindingsPanel';
+import { useChannelBindingsText } from '../i18n/channelBindings';
 
 const { Text } = Typography;
-const organizationTabs = ['departments', 'workflows', 'team', 'users', 'runtime', 'capabilities'] as const;
+const organizationTabs = ['departments', 'workflows', 'team', 'users', 'runtime', 'capabilities', 'channels', 'identities'] as const;
 type OrganizationTab = typeof organizationTabs[number];
 const isOrganizationTab = (tab: string | null): tab is OrganizationTab =>
   organizationTabs.some(key => key === tab);
@@ -32,6 +36,8 @@ export const OrganizationPage: React.FC = () => {
   const runtimeText = useRuntimeSetupText();
   const canvasText = useOrgWorkflowsCanvasText();
   const governanceText = useGovernanceText();
+  const channelsText = useChannelBindingsText();
+  const identitiesText = useExternalIdentitiesText();
 
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedTab = searchParams.get('tab');
@@ -386,6 +392,8 @@ export const OrganizationPage: React.FC = () => {
           tabBarStyle={{ borderColor: '#21262d', marginBottom: '20px' }}
           items={[
             { key: 'capabilities', label: governanceText.title, children: <CapabilityGovernancePanel /> },
+            { key: 'channels', label: channelsText.title, children: <ChannelBindingsPanel /> },
+            { key: 'identities', label: identitiesText.title, children: <ExternalIdentitiesPanel />, destroyOnHidden: true },
             {
               key: 'departments',
               label: (

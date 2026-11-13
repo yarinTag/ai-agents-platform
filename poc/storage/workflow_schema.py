@@ -164,3 +164,5 @@ def initialize(conn, insert_revision):
 
     from .workflow_approvals_schema import initialize as initialize_approvals
     initialize_approvals(conn)
+    from .dag_approvals import initialize as initialize_dag_approvals
+    initialize_dag_approvals(conn)

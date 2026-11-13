@@ -17,6 +17,7 @@ API_CONTRACTS = [
     'poc/tests/test_github_pr_governance_api.py',
     'poc/tests/test_capability_policy_api.py',
     'poc/tests/test_generic_governance_api.py',
+    'poc/tests/test_channel_ingress_api.py',
     'poc/tests/test_access_policy.py::test_lists_details_and_selected_department_are_scoped',
     'poc/tests/test_access_policy.py::test_stale_admin_claims_and_disabled_users_cannot_restore_rights',
     'poc/tests/test_access_policy.py::test_membership_role_limits_global_manager_and_revocation_takes_effect',

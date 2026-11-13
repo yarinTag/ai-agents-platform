@@ -137,3 +137,12 @@ def initialize(conn):
 
     from .governance_schema import initialize as initialize_governance
     initialize_governance(conn)
+
+    from .channel_bindings import initialize as initialize_channel_bindings
+    initialize_channel_bindings(conn)
+
+    from .external_identities import initialize as initialize_external_identities
+    initialize_external_identities(conn)
+
+    from .channel_ingress import initialize as initialize_channel_ingress
+    initialize_channel_ingress(conn)

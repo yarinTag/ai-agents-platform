@@ -119,3 +119,7 @@ def register_routers(app):
             logger.exception("Optional router %s could not be registered", name)
             capabilities.mark(name, "UNAVAILABLE", "Module could not be loaded")
             _register_unavailable(app, name, prefix)
+    from .api.channel_ingress import receiver
+    from .api.external_identities import proof_router
+    app.include_router(receiver)
+    app.include_router(proof_router)

@@ -179,10 +179,33 @@ The P01 documentation maps behavior to existing test_capability_policy_api.py/te
 ## AI-19 API-only coverage
 run_api_audit includes test_github_pr_governance_api.py: actual guarded FastAPI/SQLite checks PR read/write descriptor schemas, required read dependencies, write wildcard denial, exact resource/current role, no grant backfill, inactive write-plan creation and authenticated merge resolution blocked before I/O when merge is ungranted. Baseline GitHub fixture now explicitly grants narrower read dependencies; existing receipt fixtures carry version2 proof as persisted subjects. No provider responses are mocked, agents dispatched or live PR actions run. Live evidence parsing/write success paths remain unverified. See ../../docs/github-pr-governance.md.
 
-
 ## AI-20 PR scopes and evidence
 AI-20 extends test_github_pr_governance_api.py with real FastAPI/SQLite historical audit projection checks across all four roles: exact draft receipt identity, allowlisted output, foreign-connector omission and tenant/selected-department denials. Fixtures are persisted diagnostic records, not provider-response mocks; no agent/model/provider/worker is executed. The existing isolated API audit runner includes this file.
 
 AI-20 also checks nested evidence/reviewer field allowlists and approval GET preservation of STARTED/UNKNOWN/NOT_DISPATCHED/COMPLETED receipts independently of a FAILED batch, with no connector calls.
 
 Checks-only diagnostics preserve files_included=false and explicitly remain incomplete approval proof even when their CI facts pass; the UI never displays a full-review readiness badge for that result. API contracts assert this field survives the safe projection.
+
+## AI-22 channel registry contracts
+
+`test_generic_governance_api.py` exercises real FastAPI routes and temporary SQLite for Telegram/Slack registration, role and tenant isolation, validation, revision conflicts, pagination, independent flags and allowlisted audit details. The existing API CI selection includes these cases.
+
+AI-23 updates the channel registry contract test to require department member read access while preserving administrator-only mutations and cross-department denial.
+
+Channel registry API contracts cover configured-ID enforcement and the credential-free provider catalog for admins and members.
+
+The channel catalog contract checks display labels are limited to configured channel IDs and omitted for member reads.
+
+The channel catalog contract also checks that members can read the name of their exact registered channel.
+
+The isolated API audit exercises AI-25 using signed request fixtures, real FastAPI and temporary SQLite. It covers both providers, unsigned proof rejection, user confirmation and isolation, replay, rotation, unlink and safe audit metadata.
+
+AI-26 real API contracts cover active connector catalog projection and department management, including foreign tenant/department denial, live role downgrade, shared link restrictions and revocation audit.
+
+test_channel_ingress_api.py covers verified Telegram and Slack staging, replay, org/admin scoping, rate limiting, secret-free diagnostics, Telegram identity proof routing and outbox leases using real FastAPI and temporary SQLite.
+
+The channel ingress API contracts also exercise AI-31 revisioned rules, side-effect-free preview, exact replay prevention, revoked sender admission and lease fencing.
+
+The isolated channel ingress API module also checks the real deterministic DAG engine across two approval barriers, including quorum, duplicate decisions, preserved step history and rejection.
+
+AI-31 verifies signed Slack command projection and deduplication through the real ingress API.

@@ -8,6 +8,12 @@ export interface RepositoryWorkspaceConfig {
   pr_title?: string | null;
 }
 
+export interface DagApprovalPolicy {
+  approver_roles?: ('OPERATOR' | 'MANAGER' | 'ORG_ADMIN')[];
+  timeout_seconds?: number;
+  quorum?: number;
+}
+
 export interface WorkflowStep {
   key: string;
   name: string;
@@ -18,7 +24,7 @@ export interface WorkflowStep {
   mcp_servers?: string[];
   skills?: string[];
   params?: { workspace?: RepositoryWorkspaceConfig; required_outcome?: 'pull_request';
-    agentId?: string; [key: string]: unknown };
+    agentId?: string; dag_approval?: DagApprovalPolicy; [key: string]: unknown };
 }
 
 export interface AttachedSkill {
