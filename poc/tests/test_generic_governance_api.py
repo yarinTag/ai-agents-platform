@@ -58,6 +58,102 @@ def auth(role='ORG_ADMIN', org='atlas', department='engineering'):
     return {'Authorization': 'Bearer ' + token, 'X-Department-ID': f'{org}_{department}'}
 
 
+CHANNEL_BINDINGS = '/api/v1/governance/channel-bindings'
+
+
+def binding_payload(**overrides):
+    return {'department_id': 'atlas_engineering', 'connector_id': 'atlas_telegram',
+            'provider': 'telegram', 'channel_id': '-10012345', **overrides}
+
+
+def test_channel_binding_lifecycle_is_scoped_revisioned_and_audited(baseline):
+    db, client = baseline
+    headers = auth()
+    department = {'department_id': 'atlas_engineering'}
+    original = client.post(CHANNEL_BINDINGS, headers=headers, json=binding_payload(
+        uses={'send_notifications': True},
+    ))
+    assert original.status_code == 201, original.text
+    binding = original.json()
+    path = CHANNEL_BINDINGS + '/' + binding['id']
+    assert binding['uses'] == {'send_notifications': True, 'trigger_workflows': False, 'approve_decisions': False}
+    assert binding['revision'] == 1
+    assert client.post(CHANNEL_BINDINGS, headers=headers, json=binding_payload()).status_code == 409
+    organization_binding = client.post(CHANNEL_BINDINGS, headers=headers, json=binding_payload(department_id=None))
+    assert organization_binding.status_code == 201
+    assert client.get(CHANNEL_BINDINGS, headers=headers).json()['bindings'] == [organization_binding.json()]
+    assert client.get(CHANNEL_BINDINGS, headers=auth('MANAGER'), params=department).json()['bindings'] == [binding]
+
+    replacement = {'expected_revision': 1, 'uses': {'approve_decisions': True}}
+    assert client.put(path + '/uses', headers=headers, json=replacement).status_code == 404
+    assert client.put(path + '/uses', headers=auth(org='boreal'),
+                      params={'department_id': 'boreal_engineering'}, json=replacement).status_code == 404
+    changed = client.put(path + '/uses', headers=headers, params=department, json=replacement)
+    assert changed.status_code == 200, changed.text
+    assert changed.json()['revision'] == 2
+    assert changed.json()['uses'] == {'send_notifications': False, 'trigger_workflows': False, 'approve_decisions': True}
+    assert client.put(path + '/uses', headers=headers, params=department, json=replacement).status_code == 409
+    assert client.put(path + '/uses', headers=headers, params=department,
+                      json={**replacement, 'expected_revision': 2}).json() == changed.json()
+    assert client.delete(path, headers=headers, params={**department, 'expected_revision': 1}).status_code == 409
+    assert client.delete(path, headers=headers, params={**department, 'expected_revision': 2}).status_code == 204
+    assert client.get(CHANNEL_BINDINGS, headers=headers, params=department).json()['bindings'] == []
+
+    with db._get_connection() as conn:
+        rows = conn.execute(
+            "SELECT action, actor, details FROM audit_logs WHERE entity_type = 'channel_binding' AND entity_id = ?",
+            (binding['id'],),
+        ).fetchall()
+    assert {row['action'] for row in rows} == {
+        'CHANNEL_BINDING_CREATED', 'CHANNEL_BINDING_UPDATED', 'CHANNEL_BINDING_REMOVED',
+    }
+    assert len(rows) == 3
+    for row in rows:
+        assert row['actor'] == 'atlas_ORG_ADMIN'
+        assert set(json.loads(row['details'])) == {
+            'organization_id', 'department_id', 'connector_id', 'provider', 'channel_id', 'revision', 'uses',
+        }
+    assert db.get_mcp_connector('atlas_telegram').configuration['allowed_channels'] == ['12345']
+    assert db.check_department_mcp_permission('atlas_engineering', 'atlas_telegram', 'send_message')['allowed']
+
+
+@pytest.mark.parametrize(('overrides', 'status'), [
+    ({'connector_id': 'boreal_telegram'}, 404),
+    ({'department_id': 'boreal_engineering'}, 404),
+    ({'connector_id': 'atlas_slack'}, 422),
+    ({'channel_id': '@mutable_alias'}, 422),
+    ({'channel_id': '*'}, 422),
+    ({'uses': {'trigger_workflows': 'true'}}, 422),
+    ({'uses': {'trigger_workflows': True, 'wildcard': True}}, 422),
+])
+def test_channel_binding_rejects_foreign_or_invalid_identity_and_flags(baseline, overrides, status):
+    _, client = baseline
+    response = client.post(CHANNEL_BINDINGS, headers=auth(), json=binding_payload(**overrides))
+    assert response.status_code == status, response.text
+    assert client.get(CHANNEL_BINDINGS, headers=auth(), params={'department_id': 'atlas_engineering'}).json()['bindings'] == []
+
+
+def test_channel_bindings_require_admin_mutation_and_respect_selected_department(baseline):
+    _, client = baseline
+    department = {'department_id': 'atlas_engineering'}
+    for role in ('MANAGER', 'OPERATOR', 'MEMBER'):
+        assert client.post(CHANNEL_BINDINGS, headers=auth(role), json=binding_payload()).status_code == 403
+        assert client.get(CHANNEL_BINDINGS, headers=auth(role)).status_code == 403
+    assert client.get(CHANNEL_BINDINGS, headers=auth('MEMBER'), params=department).status_code == 404
+    assert client.get(CHANNEL_BINDINGS, headers=auth(department='finance'), params=department).status_code == 404
+    slack = client.post(CHANNEL_BINDINGS, headers=auth(), json=binding_payload(
+        connector_id='atlas_slack', provider='slack', channel_id='C12345678', uses={'trigger_workflows': True},
+    ))
+    assert slack.status_code == 201, slack.text
+    assert slack.json()['uses'] == {'send_notifications': False, 'trigger_workflows': True, 'approve_decisions': False}
+    assert 'private-fixture-secret' not in slack.text
+    assert client.post(CHANNEL_BINDINGS, headers=auth(), json=binding_payload()).status_code == 201
+    first = client.get(CHANNEL_BINDINGS, headers=auth(), params={**department, 'limit': 1}).json()
+    second = client.get(CHANNEL_BINDINGS, headers=auth(), params={**department, 'limit': 1, 'after': first['next_after']}).json()
+    assert first['bindings'][0]['id'] != second['bindings'][0]['id']
+    assert second['next_after'] is None
+
+
 @pytest.mark.parametrize('role', ['ORG_ADMIN', 'MANAGER', 'OPERATOR', 'MEMBER'])
 @pytest.mark.parametrize('provider', PROVIDERS)
 def test_connector_reads_and_secret_redaction_across_roles_and_providers(baseline, role, provider):

@@ -150,3 +150,7 @@ request_policy includes governance in the reviewed domain inventory and rejects 
 
 ## AI-18 current identity and policy authority
 Follow ../../../docs/architecture/p01-policy-algebra.md: authenticate the session, then use current DB Actor/Resources and selected department. Never authorize by token role alone or grant rights from channel membership/links/model output. Personal policy mutations and approval decisions remain distinct from existing server-owned service authentication; do not synthesize service identity from a body. The full role/action and HTTP error matrix is in ../../../docs/architecture/p01-governance-api.md. Existing service handling is not a newly implemented generic service-principal registry.
+
+## AI-22 channel registry admission
+
+Governance route policy registers channel-binding reads and org-admin writes. The endpoint requires exact tenant/department scope and personal administrator identity for mutations, with a current active admin check inside the SQLite write transaction. No channel binding authorizes provider callbacks or grants access to a connector. See [the channel registry](../../../docs/channel-bindings.md).

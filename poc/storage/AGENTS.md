@@ -155,3 +155,7 @@ See ../../docs/architecture/p01-governance-api.md for exact table columns/keys a
 
 ## AI-19 audit JSON additions
 No schema columns/tables change. Existing mcp_tool_calls records hold deterministic call_merge_ intent/acknowledgement; arguments/result include approval/actor/agent/resource/SHA/time evidence. workflow_approvals.receipts_json retains STARTED/COMPLETED/NOT_DISPATCHED/UNKNOWN detail. Existing call status FAILED can contain UNKNOWN in result; do not treat it as proof that no external write occurred. Preserve ambiguous claims and prior receipts across recovery. See ../../docs/github-pr-governance.md.
+
+## AI-22 channel binding registry
+
+`organization_schema.initialize` creates `channel_bindings` through `channel_bindings.initialize`. Organization, optional department, connector, provider and exact channel form the immutable scope and identity. Independent flags are `send_notifications`, `trigger_workflows`, and `approve_decisions`. Revision checks, role revalidation and projected `audit_logs` writes share a transaction. See [the registry contract](../../docs/channel-bindings.md) for columns, cascading ownership and audit actions.

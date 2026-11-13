@@ -358,3 +358,7 @@ GET /api/v1/governance/organization/policy and GET /departments/{department_id}/
 
 ## AI-19 shared governance projection
 Existing /api/v1/governance/capabilities adds descriptor requires_capabilities for aggregate/narrow PR reads, correct write effects and strict head/body/event schemas. /decisions can return DEPENDENT_CAPABILITY_DENIED; catalog/AI authoring prune missing or denied dependencies and keep writes behind explicit grants. Existing approval reads expose richer audit receipts through unchanged scoped receipts JSON; no new execution/approval endpoint or caller authority field. Exact adapter/audit contracts: ../../../docs/github-pr-governance.md.
+
+## AI-22 channel bindings
+
+Under `/api/v1/governance/channel-bindings`, GET lists one exact org/department scope with `after`/`limit` pagination. POST creates a Telegram/Slack binding from `department_id?`, `connector_id`, `provider`, `channel_id` and `uses?`. PUT `/{binding_id}/uses` replaces the three independent booleans with `expected_revision`; DELETE `/{binding_id}` uses query `expected_revision`. Supply query `department_id` for department reads/updates/deletes. Current signed-in org admins own writes; department managers can read their selected department. See [the contract](../../../docs/channel-bindings.md) for scope, strict schemas, response fields and errors.

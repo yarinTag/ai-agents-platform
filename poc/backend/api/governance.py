@@ -8,8 +8,10 @@ from governance.policy import decide
 from governance.registry import capability, configured_resources, descriptors
 from governance import store
 from governance.validation import validate_document
+from .channel_bindings import router as channel_bindings_router
 
 router = APIRouter()
+router.include_router(channel_bindings_router)
 
 
 def _editor_record(db, actor, scope_type, scope_id):
