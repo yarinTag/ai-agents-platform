@@ -18,10 +18,12 @@ It cannot create arbitrary integrations from a prompt.
 
 - Configure the existing GitHub connector's exact repository allowlist and credentials
   with PR/content/check/status read access and PR/content merge permissions at GitHub.
-- Grant the department `list_open_pull_requests` and `get_pull_request_review` (or existing
-  read wildcard). `merge_pull_request` must be explicitly granted; write wildcard grants
-  are rejected. Agent restrictions further intersect this grant. Metadata registration
-  does not grant permissions.
+- Grant the department `list_open_pull_requests` for discovery and
+  `get_pull_request_review` with its three read dependencies
+  (`get_pull_request`, `get_pull_request_diff`, and `get_pull_request_checks`).
+  Existing read wildcards retain their read semantics. Merge requires an explicit
+  `merge_pull_request` grant without a wildcard on that grant. Agent restrictions and
+  the current and captured policy still apply. Metadata registration does not grant permissions.
 - Grant `send_message` for the exact Telegram connector/channel (or Slack equivalent).
 - Set server `PLATFORM_PUBLIC_URL` to the reachable HTTPS dashboard URL. Link recipients
   must sign in as an active organization admin or department manager. Forwarding a message
@@ -65,6 +67,9 @@ GitHub REST provides no atomic expected-base precondition. There is a residual r
 reads and the provider write; no application-level check replaces GitHub branch protection.
 
 ## Limits and operational recovery
+
+Use the [PR governance runbook](pr-governance-runbook.md) to classify blockers and
+reconcile per-subject receipts after an interrupted approval.
 
 - One terminal gate only; arbitrary DAG continuation after approval is not implemented.
 - PR batch bound10. A successful merge can advance the base branch, invalidating approval

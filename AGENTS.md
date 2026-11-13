@@ -1,5 +1,7 @@
 # AGENTS.md - Root AI Agents Platform Architecture & Directory Index
 
+The [AI-21 PR governance runbook](docs/pr-governance-runbook.md) covers agent operation selection, approval and audit states, and recovery after blocked or uncertain GitHub writes.
+
 ## 1. Platform Identity & Architectural Mission
 The **AI Agents Platform** is an enterprise multi-tenant autonomous agent orchestration and governance platform. It blends agent hierarchy management, visual DAG workflow execution, real-time collaboration war rooms, scheduled background cron execution, and a virtual pixel office with enterprise multi-tenancy, per-department monthly spending limits, and tool-level Model Context Protocol (MCP) governance.
 

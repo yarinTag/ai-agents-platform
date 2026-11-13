@@ -18,7 +18,7 @@ require lowercase hex head_sha of exactly40 or64 characters and body1..12000 cha
 | get_pull_request_checks | read | Same; requires get_pull_request | Checks/statuses/reviews/base-policy evidence; files_included:false |
 | get_pull_request_review | read | Same; requires all three operations above | Aggregate files and merge-readiness evidence_version:2 |
 | comment_pull_request | write | Same plus head_sha,body; explicit action and department grant | One provider-confirmed PR issue comment receipt |
-| review_pull_request | write | Same plus event:COMMENT|REQUEST_CHANGES; explicit action/grant | One commit-pinned review receipt; APPROVE is not a model option |
+| review_pull_request | write | Same plus `event` set to `COMMENT` or `REQUEST_CHANGES`. Requires an explicit action and grant. | One commit-pinned review receipt. The model cannot submit `APPROVE`. |
 | merge_pull_request | destructive, server-only | Existing persisted human approval and subject; explicit grant | One SHA-pinned audited merge attempt |
 
 Existing activity/open-PR reads remain available. Edit PR/rerun CI/channel approval
@@ -163,4 +163,5 @@ Primary provider contracts: [PR endpoints](https://docs.github.com/en/rest/pulls
 [active branch rules](https://docs.github.com/en/rest/repos/rules),
 [check runs](https://docs.github.com/en/rest/checks/runs),
 [required-check behavior](https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks).
-AI-20 owns richer UI evidence presentation; AI-21 owns the broader P02 operational contract.
+See the [AI-20 evidence UI contract](pr-governance-ui.md) and the
+[AI-21 operator and agent runbook](pr-governance-runbook.md).
