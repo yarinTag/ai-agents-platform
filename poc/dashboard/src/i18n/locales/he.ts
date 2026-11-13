@@ -46,7 +46,7 @@ export const he: TranslationDictionary = {
     none: 'ללא',
   },
   auth: {
-    title: 'AGENTS PLATFORM',
+    title: 'ConduitCross',
     subtitle: 'Enterprise Autonomous AI Fleet & Organizational Governance',
     rbacBadge: 'Multi-Tenant Tenant Isolation & RBAC',
     signInTab: 'התחברות לארגון',
@@ -87,7 +87,7 @@ export const he: TranslationDictionary = {
     fullNameRequired: 'נא להזין שם מלא',
     newPasswordLabel: 'בחר סיסמה לחשבונך',
     joinOrgButton: 'אמת הזמנה והצטרף לארגון',
-    footerText: 'AI Agents Platform v3.0 • Multi-Department Enterprise Architecture • Hard Budget Limits & MCP Tool Guardrails',
+    footerText: 'ConduitCross v3.0 • Multi-Department Enterprise Architecture • Hard Budget Limits & MCP Tool Guardrails',
     loginFailed: 'ההתחברות נכשלה. אנא בדוק את הפרטים ונסה שוב.',
     registerFailed: 'רישום הארגון נכשל. אנא בדוק את הפרטים ונסה שוב.',
     inviteFailed: 'ההצטרפות באמצעות ההזמנה נכשלה.',

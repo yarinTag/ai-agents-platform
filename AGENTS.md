@@ -1,5 +1,7 @@
 # AGENTS.md - Root AI Agents Platform Architecture & Directory Index
 
+[AI-37–39 interactive channel approval design](docs/interactive-channel-approvals.md) specifies provider boundaries, decision fencing, expiry and original-message updates.
+
 [AI-31–33 channel trigger policy](docs/channel-trigger-policy.md) defines workflow rules, verified sender and fixed principal checks, and the untrusted input boundary.
 
 [AI-34–36 DAG approvals](docs/dag-approvals.md) defines dashboard decisions, checkpoint continuation, quorum and recovery.
@@ -327,3 +329,5 @@ AI-23 adds the Channels tab to Organization. See [the registry and dashboard con
 AI-24 documents [channel identity and sender policy](docs/channel-identity-policy.md), including the boundary between MCP configuration, registry intent and verified action authority.
 
 [AI-25 external identity linking](docs/external-identities.md) defines the proof and confirmation API, identity lifecycle and diagnostic contracts.
+
+ConduitCross is the product display name. Repository and API identifiers retain their existing contracts.

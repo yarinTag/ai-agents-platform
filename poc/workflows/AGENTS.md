@@ -239,3 +239,5 @@ AI-34 reserves params.dag_approval for a dashboard barrier policy with exact app
 AI-34 engine isolates ready dashboard barriers, writes outputs and token/cost totals atomically before returning WAITING_APPROVAL, and resumes only via an atomic approved checkpoint claim. Continuation retains the original frozen tool context and skips checkpointed steps. Playground and shared source workspaces are unsupported for these barriers.
 
 See [DAG approval state and recovery](../../docs/dag-approvals.md) for the YAML contract, evidence and continuation invariants.
+
+Optional params.dag_approval.channel_binding_id queues a Telegram approval card in the suspension transaction. The dashboard remains available if delivery is unconfirmed.

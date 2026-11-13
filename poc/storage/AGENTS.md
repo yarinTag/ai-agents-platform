@@ -183,3 +183,5 @@ DAG suspension inserts a WAITING_APPROVAL step run and persists execution totals
 AI-34 expires pending or approved-but-unclaimed waits at TTL. Inbox returns bounded excerpts and costs, current role eligibility, quorum and a cursor. The worker consumes durable approved rows and fails closed if continuation is no longer eligible.
 
 DAG approval vote eligibility excludes both the initiator and the recorded author of the pinned workflow revision.
+
+dag_channel_deliveries records approval, exact binding, token digest, Telegram receipt and rendered state. dag_channel_callbacks records callback ID, actor, action and time atomically with the vote.

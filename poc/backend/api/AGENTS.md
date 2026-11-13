@@ -386,3 +386,5 @@ AI-31 exposes GET and PUT /api/v1/workflows/{workflow_id}/channel-trigger and PO
 Workflow create rejects reserved trigger metadata and normal definition edits preserve the saved rule and principal. Only the dedicated trigger route changes these fields.
 
 GET /api/v1/workflows/dag-approvals?department_id= returns a scoped pending inbox of up to 50 items and a next_after cursor. POST /dag-approvals/{approval_id}/decision?department_id= accepts strict {approve:boolean}, rechecks a personal eligible voter, and returns the decision status.
+
+Verified Telegram callback_query updates on POST /api/v1/channel-ingress/{connector_id} apply a shared DAG decision and return a generic answerCallbackQuery acknowledgment. Raw callback bodies are not stored.

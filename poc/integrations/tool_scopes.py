@@ -175,7 +175,8 @@ def execution_context(db, execution_id):
 def prepare_execution_context(db, execution, workflow, definition, user_context=None):
     binding = definition.metadata.get('channel_binding') if definition.metadata else None
     workspaces = any((s.params or {}).get('workspace') is not None for s in definition.steps)
-    if not (binding or workspaces or definition.mcp_servers or any(s.mcp_servers for s in definition.steps)):
+    interactive = any(((s.params or {}).get('dag_approval') or {}).get('channel_binding_id') for s in definition.steps)
+    if not (binding or workspaces or interactive or definition.mcp_servers or any(s.mcp_servers for s in definition.steps)):
         return
     if execution.trigger_type == 'PLAYGROUND':
         raise ToolAccessError('Playground cannot receive live connector context.')

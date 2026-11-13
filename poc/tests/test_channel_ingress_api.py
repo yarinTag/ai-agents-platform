@@ -168,6 +168,47 @@ def test_tls_probe_only_accepts_public_unicast_addresses():
     assert _global("2606:4700:4700::1111")
 
 
+def test_telegram_approval_callback_is_bound_to_message_and_votes_once(baseline):
+    from integrations.telegram_approval_cards import action_token, signed_action
+    from storage import channel_approval_delivery as delivery, dag_approvals
+
+    db, client = baseline
+    connector = configure(client, db, "telegram")
+    binding = client.post("/api/v1/governance/channel-bindings", headers=auth(), json={
+        "department_id": "atlas_engineering", "connector_id": connector, "provider": "telegram",
+        "channel_id": "12345", "uses": {"approve_decisions": True, "send_notifications": True},
+    })
+    assert binding.status_code == 201, binding.text
+    workflow = db.create_workflow(id="telegram-approval", name="Telegram approval", definition_json="{}",
+                                  department_id="atlas_engineering", organization_id="atlas")
+    db.create_workflow_execution("approval-run", workflow.id, "MANUAL", department_id=workflow.department_id)
+    identifier = dag_approvals.suspend(db, execution_id="approval-run", step_key="review",
+        revision=workflow.revision, initiator_id="atlas_OPERATOR",
+        policy={"approver_roles": ["MANAGER"], "quorum": 1, "timeout_seconds": 60,
+                "channel_binding_id": binding.json()["id"]},
+        checkpoint={"outputs": {}, "input_tokens": 0, "output_tokens": 0, "cost_usd": 0})
+    assert delivery.next_delivery(db)["id"] == identifier
+    token = action_token(db.get_mcp_connector(connector).configuration["bot_token"], identifier)
+    delivery.record_delivery(db, identifier, "DELIVERED", connector=connector, channel="12345",
+                             message="7", bot="123456", rendered="PENDING:0/1", token=token)
+    with db._get_connection() as conn:
+        conn.execute("""INSERT INTO external_identity_links
+            (id,organization_id,connector_id,user_id,provider,account,subject,created_at)
+            VALUES ('linked-manager','atlas',?,'atlas_MANAGER','telegram','123456','12345',?)""",
+            (connector, int(time.time())))
+    update = {"callback_query": {"id": "123", "data": f"dga:a:{token}:{signed_action(SECRET, token, 'a')}", "from": {"id": 12345, "is_bot": False},
+        "message": {"message_id": 8, "chat": {"id": 12345}, "from": {"id": 123456}}}}
+    path = f"{BASE}/{connector}"
+    assert client.post(path, json=update, headers=telegram_headers()).json()["text"].startswith("Decision unavailable")
+    update["callback_query"]["message"]["message_id"] = 7
+    for _ in range(2):
+        assert client.post(path, json=update, headers=telegram_headers()).json()["text"] == "Decision recorded."
+    with db._get_connection() as conn:
+        assert conn.execute("SELECT count(*) FROM dag_channel_callbacks").fetchone()[0] == 1
+        assert conn.execute("SELECT count(*) FROM workflow_dag_approval_votes").fetchone()[0] == 1
+    assert delivery.next_edit(db)[1] == "APPROVED"
+
+
 def test_channel_trigger_preview_and_fenced_admission(baseline):
     from workflows.channel_trigger_dispatch import admit_dispatch, reserve_dispatches
 

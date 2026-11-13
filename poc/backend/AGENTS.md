@@ -154,3 +154,5 @@ PLATFORM_CHANNEL_TRIGGER_WORKER=1 enables the API lifespan channel ingress consu
 The channel consumer passes its active ingress lease to engine admission. A stale consumer cannot start another execution under an expired lease.
 
 The API lifespan DAG approval worker expires stale waits and starts approved checkpoints through the existing workflow engine. Approval state is persisted and the engine claims it atomically.
+
+The API lifespan runs the Telegram approval card worker. It sends queued cards once and reconciles original messages from persisted DAG approval state.

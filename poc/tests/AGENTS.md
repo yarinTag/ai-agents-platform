@@ -202,3 +202,5 @@ The channel ingress API contracts also exercise AI-31 revisioned rules, side-eff
 The isolated channel ingress API module also checks the real deterministic DAG engine across two approval barriers, including quorum, duplicate decisions, preserved step history and rejection.
 
 AI-31 verifies signed Slack command projection and deduplication through the real ingress API.
+
+The isolated ingress contract includes an authenticated Telegram callback case for exact message matching, duplicate delivery, atomic voting and terminal edit selection.

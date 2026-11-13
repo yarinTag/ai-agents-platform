@@ -319,3 +319,5 @@ AI-29 adds the organization-admin Webhook diagnostics tab in MCP Hub. It is scop
 AI-26 OrganizationPage exposes Linked accounts at /organization?tab=identities. Non-admin users reach the same personal/management panel from the existing DepartmentAccessPage shell.
 
 The Workflows header opens the department-scoped Approvals inbox. Execution-derived waiting step keys are passed to the canvas only when the inspected execution belongs to that workflow.
+
+The dashboard welcome and default connector test notification use ConduitCross branding.

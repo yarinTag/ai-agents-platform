@@ -294,3 +294,5 @@ AI-23 adds the Organization Channels tab. Department members can read their scop
 AI-29 exposes webhook diagnostics from MCP Hub for organization administrators. Distinguish current setup, observed provider deliveries and unverified public TLS. Local setup and public TLS have separate test controls. Neither test sends a provider event.
 
 AI-26 adds personal Linked accounts and scoped department management to the organization surface. The UI keeps proof codes only in current component state and shows verified account IDs before confirmation.
+
+The browser document title and product branding use ConduitCross.

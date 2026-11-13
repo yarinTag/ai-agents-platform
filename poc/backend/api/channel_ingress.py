@@ -35,6 +35,16 @@ def _receive(db, connector_id, raw, headers):
         _, provider, settings, version = identities.connector_settings(conn, connector_id)
     now = int(time.time())
     event = verify_event(provider, raw, headers, settings, now)
+    from integrations.telegram_approval_cards import ApprovalCallback
+    if isinstance(event, ApprovalCallback):
+        from storage import channel_approval_delivery, dag_approvals
+        message = "Decision recorded."
+        try:
+            channel_approval_delivery.apply_callback(db, connector_id, version, event)
+        except (InvalidProof, PermissionError, dag_approvals.ApprovalConflict):
+            message = "Decision unavailable. Check the dashboard."
+        return JSONResponse({"method": "answerCallbackQuery", "callback_query_id": event.callback_id,
+                             "text": message})
     if isinstance(event, IdentityProof):
         subject, code = verify(provider, raw, headers, settings, now)
         try:

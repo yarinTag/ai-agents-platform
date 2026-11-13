@@ -13,6 +13,7 @@ class DagApprovalPolicy(BaseModel):
     timeout_seconds: int = Field(default=86400, ge=60, le=259200)
     quorum: int = Field(default=1, ge=1, le=10)
     separate_initiator: Literal[True] = True
+    channel_binding_id: str | None = Field(default=None, pattern=r"^chb_[a-f0-9]{32}$")
 
 
 def dag_approval_policy(step):

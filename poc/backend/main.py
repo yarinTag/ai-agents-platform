@@ -26,6 +26,7 @@ import asyncio
 from .dependencies import init_services, shutdown_services
 from .channel_trigger_worker import run as run_channel_trigger_worker
 from .dag_approval_worker import run as run_dag_approval_worker
+from .channel_approval_worker import run as run_channel_approval_worker
 
 
 @asynccontextmanager
@@ -36,10 +37,12 @@ async def lifespan(app: FastAPI):
     stop_channel_worker = asyncio.Event()
     channel_worker = None
     approval_worker = None
+    card_worker = None
     try:
         await init_services()
         channel_worker = asyncio.create_task(run_channel_trigger_worker(stop_channel_worker))
         approval_worker = asyncio.create_task(run_dag_approval_worker(stop_channel_worker))
+        card_worker = asyncio.create_task(run_channel_approval_worker(stop_channel_worker))
         yield
     finally:
         stop_channel_worker.set()
@@ -47,6 +50,8 @@ async def lifespan(app: FastAPI):
             await channel_worker
         if approval_worker is not None:
             await approval_worker
+        if card_worker is not None:
+            await card_worker
         await shutdown_services()
 
 

@@ -106,3 +106,5 @@ INGRESS_ADAPTERS in channel_ingress.py is the trusted provider registry for even
 Verified channel adapters project optional message text internally for trigger matching. Identity proof commands and raw provider envelopes are never staged as trigger input.
 
 Signed Slack slash commands other than /platform-link enter ingress as COMMAND after installation and bounded field validation. Slack trigger_id supplies the deduplication identity.
+
+telegram_approval_cards owns Telegram rendering and callback projection. Captured and current governance restrict delivery. Terminal edits retain Details and remove decision controls.
