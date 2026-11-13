@@ -104,3 +104,5 @@ See [AI-30 webhook operations](../../docs/webhook-ingress.md) for proxy requirem
 INGRESS_ADAPTERS in channel_ingress.py is the trusted provider registry for event verification and projection.
 
 Verified channel adapters project optional message text internally for trigger matching. Identity proof commands and raw provider envelopes are never staged as trigger input.
+
+Signed Slack slash commands other than /platform-link enter ingress as COMMAND after installation and bounded field validation. Slack trigger_id supplies the deduplication identity.

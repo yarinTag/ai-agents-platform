@@ -80,8 +80,13 @@ def _role(conn, row, user_id):
 
 
 def _eligible(conn, row, policy, user_id):
-    return (_role(conn, row, user_id) in policy["approver_roles"]
-            and (not policy["separate_initiator"] or user_id != row["initiator_id"]))
+    if _role(conn, row, user_id) not in policy["approver_roles"] or user_id == row["initiator_id"]:
+        return False
+    authored = conn.execute("""SELECT 1 FROM workflow_revisions r
+        JOIN workflow_executions x ON x.workflow_id=r.workflow_id
+        WHERE x.id=? AND r.revision=? AND r.actor_id=?""",
+        (row["execution_id"], row["workflow_revision"], user_id)).fetchone()
+    return authored is None
 
 
 def _finish(conn, row, status, now, actor=None):

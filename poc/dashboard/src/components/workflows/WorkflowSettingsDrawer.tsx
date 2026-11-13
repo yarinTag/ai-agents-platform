@@ -22,7 +22,7 @@ import {
 } from './workflowSettingsRules';
 
 interface WorkflowSettingsDrawerProps {
-  workflow: Pick<PlatformWorkflow, 'id' | 'name'>;
+  workflow: Pick<PlatformWorkflow, 'id' | 'name' | 'department_id'>;
   onClose: () => void;
   /** Called after settings are saved (the workflow revision changed). */
   onSaved?: () => void;

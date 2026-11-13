@@ -200,3 +200,5 @@ test_channel_ingress_api.py covers verified Telegram and Slack staging, replay, 
 The channel ingress API contracts also exercise AI-31 revisioned rules, side-effect-free preview, exact replay prevention, revoked sender admission and lease fencing.
 
 The isolated channel ingress API module also checks the real deterministic DAG engine across two approval barriers, including quorum, duplicate decisions, preserved step history and rejection.
+
+AI-31 verifies signed Slack command projection and deduplication through the real ingress API.

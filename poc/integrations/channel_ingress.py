@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 import json
 import re
+from urllib.parse import parse_qs
 
 from .identity_proofs import InvalidProof, require_slack_signature, require_telegram_secret
 
@@ -60,15 +61,31 @@ def _telegram(raw, headers, settings, now):
 
 def _slack(raw, headers, settings, now):
     require_slack_signature(raw, headers, settings, now)
+    _, team, app = settings
     if headers.get("content-type", "").split(";", 1)[0].strip().lower() == "application/x-www-form-urlencoded":
-        return IdentityProof()
+        form = parse_qs(raw.decode(), strict_parsing=True, max_num_fields=32)
+        if form.get("command") == ["/platform-link"]:
+            return IdentityProof()
+        if form.get("team_id") != [team] or form.get("api_app_id") != [app]:
+            raise InvalidProof("INVALID_PROOF")
+        command, = form["command"]
+        channel, = form["channel_id"]
+        sender, = form["user_id"]
+        receipt, = form["trigger_id"]
+        if (not re.fullmatch(r"/[A-Za-z][A-Za-z0-9_-]{0,63}", command)
+                or not re.fullmatch(r"[CGD][A-Z0-9]{7,30}", channel)
+                or not re.fullmatch(r"[UW][A-Z0-9]{2,31}", sender)
+                or not re.fullmatch(r"[A-Za-z0-9.]{1,120}", receipt)):
+            raise InvalidProof("INVALID_EVENT")
+        arguments, = form.get("text", [""])
+        identifier = f"command:{receipt}"
+        return Event(identifier, "COMMAND", channel, identifier, sender, f"{command} {arguments}".rstrip())
     envelope = json.loads(raw)
     if envelope["type"] == "url_verification":
         challenge = envelope["challenge"]
         if not isinstance(challenge, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", challenge):
             raise InvalidProof("INVALID_EVENT")
         return Handshake(challenge)
-    _, team, app = settings
     if envelope.get("team_id") != team or envelope.get("api_app_id") != app:
         raise InvalidProof("INVALID_PROOF")
     if envelope["type"] != "event_callback":

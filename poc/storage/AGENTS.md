@@ -181,3 +181,5 @@ workflow_dag_approvals stores a revisioned checkpoint and pending/approved/rejec
 DAG suspension inserts a WAITING_APPROVAL step run and persists execution totals atomically. Rejection and timeout fail both records. claim_resume verifies exact workflow scope and revision, active initiator and current quorum, then marks the approval CLAIMED, the barrier COMPLETED and the execution RUNNING in one transaction.
 
 AI-34 expires pending or approved-but-unclaimed waits at TTL. Inbox returns bounded excerpts and costs, current role eligibility, quorum and a cursor. The worker consumes durable approved rows and fails closed if continuation is no longer eligible.
+
+DAG approval vote eligibility excludes both the initiator and the recorded author of the pinned workflow revision.

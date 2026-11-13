@@ -109,6 +109,26 @@ def test_slack_exact_installation_signature_handshake_and_delivery(baseline):
     assert "fixture contents" not in repr(rows) and "opaque" not in repr(rows)
 
 
+def test_signed_slack_command_uses_common_ingress_deduplication(baseline):
+    from urllib.parse import urlencode
+
+    db, client = baseline
+    connector = configure(client, db, "slack")
+    raw = urlencode({
+        "command": "/review", "team_id": "T12345678", "api_app_id": "A12345678",
+        "channel_id": "C12345678", "user_id": "U12345678", "trigger_id": "1.2.sample",
+        "text": "sample", "response_url": "https://example.test/opaque",
+    }).encode()
+    headers = {**slack_headers(raw), "Content-Type": "application/x-www-form-urlencoded"}
+    path = f"{BASE}/{connector}"
+    assert client.post(path, content=raw, headers=headers).status_code == 202
+    assert client.post(path, content=raw, headers=headers).status_code == 200
+    claim = channel_ingress.claim(db)
+    assert claim["event"]["event_type"] == "COMMAND"
+    assert claim["event"]["event_id"] == "command:1.2.sample"
+    assert claim["trigger_text"] is None
+
+
 def test_outbox_lease_and_retry_are_fenced(baseline):
     db, client = baseline
     connector = configure(client, db, "telegram")

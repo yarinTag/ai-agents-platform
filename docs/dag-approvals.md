@@ -15,7 +15,7 @@ steps:
         separate_initiator: true
 ```
 
-Allowed roles are OPERATOR, MANAGER and ORG_ADMIN. They match the current effective role exactly. Quorum counts distinct eligible personal users, from 1 to 10, and the TTL is 60 to 259200 seconds. The initiating account cannot decide. Any eligible rejection terminates the wait. Agents must never simulate or self-grant approval.
+Allowed roles are OPERATOR, MANAGER and ORG_ADMIN. They match the current effective role exactly. Quorum counts distinct eligible personal users, from 1 to 10, and the TTL is 60 to 259200 seconds. The initiating account and the recorded author of the pinned revision cannot decide. Any eligible rejection terminates the wait. Agents must never simulate or self-grant approval.
 
 ```mermaid
 stateDiagram-v2

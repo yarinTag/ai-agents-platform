@@ -14,7 +14,7 @@ Use `GET` or `PUT /api/v1/workflows/{workflow_id}/channel-trigger` to read or sa
 
 `POST` to the same path plus `/preview` accepts a rule and a synthetic event. The server replaces the synthetic channel ID with the actual binding channel ID. Preview returns `matched` and `parameters` and neither verifies a sender nor reserves an execution. The workflow builder and settings drawer share this preview.
 
-Matchers support event type equality, exact leading command and mention tokens, a case-insensitive keyword substring, and a bounded regex subset. Parameters can project only `channel_id`, `event_type`, `message_id`, `sender_id` and `text`. Future provider slash-command adapters must map authenticated commands to the shared input contract. The existing Slack identity-link form remains reserved for proof.
+Matchers support event type equality, exact leading command and mention tokens, a case-insensitive keyword substring, and a bounded regex subset. Parameters can project only `channel_id`, `event_type`, `message_id`, `sender_id` and `text`. The Slack adapter maps signed slash commands to COMMAND events after checking app and workspace. The /platform-link form remains reserved for identity proof.
 
 ## Admission, retention and audit
 
