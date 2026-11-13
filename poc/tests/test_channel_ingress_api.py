@@ -109,6 +109,26 @@ def test_slack_exact_installation_signature_handshake_and_delivery(baseline):
     assert "fixture contents" not in repr(rows) and "opaque" not in repr(rows)
 
 
+def test_signed_slack_command_uses_common_ingress_deduplication(baseline):
+    from urllib.parse import urlencode
+
+    db, client = baseline
+    connector = configure(client, db, "slack")
+    raw = urlencode({
+        "command": "/review", "team_id": "T12345678", "api_app_id": "A12345678",
+        "channel_id": "C12345678", "user_id": "U12345678", "trigger_id": "1.2.sample",
+        "text": "sample", "response_url": "https://example.test/opaque",
+    }).encode()
+    headers = {**slack_headers(raw), "Content-Type": "application/x-www-form-urlencoded"}
+    path = f"{BASE}/{connector}"
+    assert client.post(path, content=raw, headers=headers).status_code == 202
+    assert client.post(path, content=raw, headers=headers).status_code == 200
+    claim = channel_ingress.claim(db)
+    assert claim["event"]["event_type"] == "COMMAND"
+    assert claim["event"]["event_id"] == "command:1.2.sample"
+    assert claim["trigger_text"] is None
+
+
 def test_outbox_lease_and_retry_are_fenced(baseline):
     db, client = baseline
     connector = configure(client, db, "telegram")
@@ -146,3 +166,90 @@ def test_tls_probe_only_accepts_public_unicast_addresses():
         assert not _global(address)
     assert _global("8.8.8.8")
     assert _global("2606:4700:4700::1111")
+
+
+def test_channel_trigger_preview_and_fenced_admission(baseline):
+    from workflows.channel_trigger_dispatch import admit_dispatch, reserve_dispatches
+
+    db, client = baseline
+    connector = configure(client, db, "telegram")
+    binding = client.post("/api/v1/governance/channel-bindings", headers=auth(), json={
+        "department_id": "atlas_engineering", "connector_id": connector, "provider": "telegram",
+        "channel_id": "12345", "uses": {"trigger_workflows": True},
+    })
+    assert binding.status_code == 201, binding.text
+    db.create_workflow(id="trigger-contract", name="Trigger contract", department_id="atlas_engineering",
+                       organization_id="atlas", definition_json="{}")
+    path = "/api/v1/workflows/trigger-contract/channel-trigger"
+    rule = {"binding_id": binding.json()["id"], "enabled": True, "matcher": "keyword",
+            "pattern": "review", "parameters": {"subject": "text"}}
+    payload = {"expected_revision": 1, "rule": rule}
+    assert client.put(path, headers=auth("MEMBER"), json=payload).status_code == 404
+    saved = client.put(path, headers=auth("MANAGER"), json=payload)
+    assert saved.status_code == 200, saved.text
+    assert client.put(path, headers=auth("MANAGER"), json=payload).status_code == 409
+    preview = client.post(path + "/preview", headers=auth("MANAGER"), json={
+        "rule": rule, "event": {"event_type": "MESSAGE", "channel_id": "ignored", "message_id": "preview",
+                                "text": "Please REVIEW"},
+    })
+    assert preview.json() == {"matched": True, "parameters": {"subject": "Please REVIEW"}}
+    with db._get_connection() as conn:
+        assert not conn.execute("SELECT 1 FROM workflow_executions").fetchone()
+        conn.execute("""INSERT INTO external_identity_links
+            (id,organization_id,connector_id,user_id,provider,account,subject,created_at)
+            VALUES ('linked-operator','atlas',?,'atlas_OPERATOR','telegram','123456','12345',?)""",
+            (connector, int(time.time())))
+    response = client.post(f"{BASE}/{connector}", json=telegram_message(text="Please REVIEW"), headers=telegram_headers())
+    assert response.status_code == 202, response.text
+    claim = channel_ingress.claim(db)
+    execution_id, = reserve_dispatches(db, claim)
+    assert reserve_dispatches(db, claim) == [execution_id]
+    workflow = db.get_workflow("trigger-contract")
+    assert admit_dispatch(db, execution_id, workflow, "expired-lease") is None
+    db.update_user("atlas_OPERATOR", status="INACTIVE")
+    assert admit_dispatch(db, execution_id, workflow, claim["lease_token"]) is None
+    db.update_user("atlas_OPERATOR", status="ACTIVE")
+    assert admit_dispatch(db, execution_id, workflow, claim["lease_token"]) == (
+        {"subject": "Please REVIEW"}, {"sub": "atlas_MANAGER", "org_id": "atlas"},
+    )
+    assert admit_dispatch(db, execution_id, workflow, claim["lease_token"]) is None
+
+
+def test_dag_approval_resume_preserves_prior_barrier_runs(baseline):
+    from workflows.engine import WorkflowEngine
+    from storage import dag_approvals
+
+    db, client = baseline
+    definition = {"name": "Approval contract", "steps": [
+        {"key": key, "name": key, "agent_id": "atlas_engineering",
+         "depends_on": deps, "params": {"dag_approval": {"quorum": 2}}}
+        for key, deps in [("first", []), ("second", ["first"])]
+    ]}
+    workflow = db.create_workflow(id="dag-contract", name=definition["name"],
+                                  department_id="atlas_engineering", organization_id="atlas",
+                                  definition_json=json.dumps(definition))
+    context = {"sub": "atlas_OPERATOR", "org_id": "atlas"}
+    execution = WorkflowEngine(db_manager=db).execute_workflow(workflow.id, user_context=context)
+    assert execution.status == "WAITING_APPROVAL"
+    base = "/api/v1/workflows/dag-approvals"
+    scope = {"department_id": "atlas_engineering"}
+    first, = client.get(base, params=scope, headers=auth("MANAGER")).json()["items"]
+    path = f"{base}/{first['id']}/decision"
+    assert client.post(path, params=scope, headers=auth("OPERATOR"), json={"approve": True}).status_code == 403
+    assert client.post(path, params=scope, headers=auth("MANAGER"), json={"approve": True}).json() == {"status": "PENDING"}
+    assert client.post(path, params=scope, headers=auth("MANAGER"), json={"approve": True}).status_code == 409
+    assert client.post(path, params=scope, headers=auth(), json={"approve": True}).json() == {"status": "APPROVED"}
+    resumed = WorkflowEngine(db_manager=db).execute_workflow(workflow.id, dag_approval_id=first["id"])
+    assert resumed.id == execution.id and resumed.status == "WAITING_APPROVAL"
+    second, = client.get(base, params=scope, headers=auth()).json()["items"]
+    assert second["step_key"] == "second"
+    assert second["outputs"] == [{"step_key": "first", "excerpt": "Approved", "truncated": False}]
+    assert dag_approvals.claim_resume(db, first["id"], workflow.id, workflow.revision) is None
+    assert client.post(f"{base}/{second['id']}/decision", params=scope,
+                       headers=auth(), json={"approve": False}).json() == {"status": "REJECTED"}
+    assert db.get_workflow_execution(execution.id).status == "FAILED"
+    with db._get_connection() as conn:
+        assert [tuple(row) for row in conn.execute("""SELECT step_key,status FROM workflow_step_runs
+            WHERE execution_id=? ORDER BY step_key""", (execution.id,))] == [
+            ("first", "COMPLETED"), ("second", "FAILED"),
+        ]

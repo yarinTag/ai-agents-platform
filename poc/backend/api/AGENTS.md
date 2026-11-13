@@ -376,3 +376,13 @@ AI-25 external-identities exposes personal list, issue, status, confirm and unli
 AI-26 adds GET /api/v1/governance/external-identities/connectors (configured, authorized {id,name,provider} records), and GET/DELETE /departments/{department_id}/links[/{link_id}] under the same base. Management GET accepts after (idl_ cursor) and limit (1–100, default 50), and returns {links,next_after}; each row contains id, connector_id, provider, subject, created_at (Unix seconds), member_name and can_revoke. DELETE returns 204 and requires current manager authority and exact row scope.
 
 AI-28 POST /api/v1/channel-ingress/{connector_id} accepts verified Telegram/Slack events. Org-admin GET /api/v1/governance/channel-ingress/{connector_id}/diagnostics and POST /test provide bounded diagnostics and optional explicit TLS checks. See [verified channel ingress](../../../docs/channel-ingress.md).
+
+Ingress diagnostics recognize provider IDs from INGRESS_ADAPTERS rather than a separate API allowlist.
+
+Channel catalog provider descriptors include ingress_supported, derived from the trusted ingress adapter registry.
+
+AI-31 exposes GET and PUT /api/v1/workflows/{workflow_id}/channel-trigger and POST /preview below that path. Reads are scoped to the saved workflow. Managers save a strict rule or null using expected_revision and simulate a rule against its authorized department binding. Preview returns matched and parameters and has no execution side effects.
+
+Workflow create rejects reserved trigger metadata and normal definition edits preserve the saved rule and principal. Only the dedicated trigger route changes these fields.
+
+GET /api/v1/workflows/dag-approvals?department_id= returns a scoped pending inbox of up to 50 items and a next_after cursor. POST /dag-approvals/{approval_id}/decision?department_id= accepts strict {approve:boolean}, rechecks a personal eligible voter, and returns the decision status.

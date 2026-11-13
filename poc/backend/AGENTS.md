@@ -148,3 +148,9 @@ The required governance router is mounted at /api/v1/governance. It exposes trus
 AI-25 registers the connector-scoped external identity proof POST with its own provider verification. Personal linking routes stay behind the governed router.
 
 AI-28 registers a connector-scoped provider-authenticated receiver independently of user session routes. The receiver stages verified events durably and does not invoke any workflow or approval.
+
+PLATFORM_CHANNEL_TRIGGER_WORKER=1 enables the API lifespan channel ingress consumer. It reserves authorized executions under the ingress lease and invokes the existing engine with the server-owned CHANNEL execution ID. Shutdown signals the consumer before tearing down services.
+
+The channel consumer passes its active ingress lease to engine admission. A stale consumer cannot start another execution under an expired lease.
+
+The API lifespan DAG approval worker expires stale waits and starts approved checkpoints through the existing workflow engine. Approval state is persisted and the engine claims it atomically.

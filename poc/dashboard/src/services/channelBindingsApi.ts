@@ -4,7 +4,7 @@ export const channelUses = ['send_notifications', 'trigger_workflows', 'approve_
 export type ChannelUses = Record<typeof channelUses[number], boolean>;
 export type ChannelIdentity = { connector_id: string; provider: string; channel_id: string };
 export type ChannelCatalog = {
-  providers: Record<string, { label: string; configurable_uses: typeof channelUses[number][]; runtime_supported_uses: typeof channelUses[number][] }>;
+  providers: Record<string, { label: string; ingress_supported: boolean; configurable_uses: typeof channelUses[number][]; runtime_supported_uses: typeof channelUses[number][] }>;
   connectors: { id: string; name: string; provider: string; status: string; channel_ids: string[]; channel_labels: Record<string, string> }[];
 };
 export type ChannelBinding = ChannelIdentity & {

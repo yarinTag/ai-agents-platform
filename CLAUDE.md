@@ -278,3 +278,9 @@ Use [the channel identity and sender policy](docs/channel-identity-policy.md) wh
 AI-25 uses connector-scoped provider proof and explicit platform-user confirmation. See [external identities](docs/external-identities.md) before consuming linked identities in authorization.
 
 AI-28 and AI-29 use the [channel ingress contract](docs/channel-ingress.md). Verify before normalizing, store only projected event metadata, and keep workflow dispatch behind a future authorized consumer. Keep configured endpoint, point-in-time TLS result, and observed provider delivery distinct in diagnostics.
+
+See [AI-30 webhook operations](docs/webhook-ingress.md) for proxy requirements, provider verification, retry semantics and incident recovery.
+
+Use [the channel trigger policy](docs/channel-trigger-policy.md) for AI-31–33. Trigger events supply data only. The saved rule, fixed principal and current authorization decide whether the engine starts.
+
+Follow [the DAG approval contract](docs/dag-approvals.md). Agents must never simulate or self-grant human approval. Preserve atomic checkpoint transitions and skip completed effects on continuation.

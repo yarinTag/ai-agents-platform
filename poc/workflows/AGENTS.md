@@ -223,3 +223,19 @@ Read ../../docs/architecture/p01-policy-algebra.md before changing admission or 
 
 ## AI-19 merge dispatch ownership
 human_approval.resolve delegates server-only writes to integrations.pr_merge.merge_subject instead of sending PUT inline. Existing terminal state/atomic human-claim semantics remain; fresh review rechecks approver on provider reads and actual merge independently loads the persisted approver/exact subject. Existing receipt JSON/output now includes immutable one-attempt audit IDs, head/base/merge SHAs, approver/agent and UTC times with STARTED/COMPLETED/NOT_DISPATCHED/UNKNOWN detail. Failed batches preserve earlier receipts; no automatic resend. See ../../docs/github-pr-governance.md. No schema migration, workflow rerun or live message/merge performed.
+
+AI-31 channel_trigger_rules defines strict provider-neutral matchers and an allowlisted parameter projection shared by dispatch and preview. Regex patterns allow literals, dot and edge anchors, with no quantifiers or groups. Text is bounded and control characters are stripped. Matching is independent of sender and workflow authorization.
+
+Trigger settings are stored in metadata.channel_trigger in the existing revisioned definition. Preview uses the actual selected binding channel ID and the same pure matcher as dispatch.
+
+AI-31 channel_trigger_dispatch plans against current connector account, exact configured channel, department grant, active saved workflow revision, linked operator-or-higher sender and manager-or-higher configuring principal. The dedicated settings endpoint records that principal from the session. Planning does not dispatch.
+
+Channel dispatch reserves one QUEUED execution per verified inbox event/workflow under the live outbox lease. Engine admission rechecks the saved revision and current trigger policy and atomically claims QUEUED before sandbox setup. CHANNEL payloads are labeled data appended to the task prompt and never expand skill names or template substitutions.
+
+CHANNEL admission also requires the live event lease in the atomic claim. The worker only marks unclaimed QUEUED runs failed while still owning the lease.
+
+AI-34 reserves params.dag_approval for a dashboard barrier policy with exact approver roles, 60–259200 second TTL, quorum 1–10 and required initiator separation. It cannot combine other step parameters or MCP connectors. The durable schema is available while engine wiring is in progress.
+
+AI-34 engine isolates ready dashboard barriers, writes outputs and token/cost totals atomically before returning WAITING_APPROVAL, and resumes only via an atomic approved checkpoint claim. Continuation retains the original frozen tool context and skips checkpointed steps. Playground and shared source workspaces are unsupported for these barriers.
+
+See [DAG approval state and recovery](../../docs/dag-approvals.md) for the YAML contract, evidence and continuation invariants.

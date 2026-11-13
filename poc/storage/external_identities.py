@@ -264,16 +264,18 @@ def unlink(db, organization_id, user_id, identifier):
         _audit(conn, "EXTERNAL_IDENTITY_UNLINKED", organization_id, row["connector_id"], user_id, identifier, int(time.time()))
 
 
-def resolve_user(db, organization_id, connector_id, verified_subject):
+def resolve_user(db, organization_id, connector_id, verified_subject, *, connection=None):
     """Resolve a verified subject to a current user. Callers must authorize the action."""
-    with db._get_connection() as conn:
-        _, provider, (_, account, _), _ = connector_settings(conn, connector_id, organization_id)
-        row = conn.execute("""SELECT users.id FROM external_identity_links AS links
-            JOIN users ON users.id=links.user_id AND users.organization_id=links.organization_id
-            WHERE links.organization_id=? AND links.connector_id=? AND links.provider=? AND links.account=?
-            AND links.subject=? AND users.status='ACTIVE'""",
-            (organization_id, connector_id, provider, account, verified_subject)).fetchone()
-        if row:
-            _require_connector_access(conn, organization_id, row["id"], connector_id)
-            return row["id"]
-        return None
+    if connection is None:
+        with db._get_connection() as conn:
+            return resolve_user(db, organization_id, connector_id, verified_subject, connection=conn)
+    _, provider, (_, account, _), _ = connector_settings(connection, connector_id, organization_id)
+    row = connection.execute("""SELECT users.id FROM external_identity_links AS links
+        JOIN users ON users.id=links.user_id AND users.organization_id=links.organization_id
+        WHERE links.organization_id=? AND links.connector_id=? AND links.provider=? AND links.account=?
+        AND links.subject=? AND users.status='ACTIVE'""",
+        (organization_id, connector_id, provider, account, verified_subject)).fetchone()
+    if row:
+        _require_connector_access(connection, organization_id, row["id"], connector_id)
+        return row["id"]
+    return None

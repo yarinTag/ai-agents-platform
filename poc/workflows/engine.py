@@ -72,7 +72,9 @@ class WorkflowEngine:
         user_context: Optional[Dict[str, Any]] = None,
         execution_id: Optional[str] = None,
         payload_hash: Optional[str] = None,
-        playground: bool = False
+        playground: bool = False,
+        channel_lease: str | None = None,
+        dag_approval_id: str | None = None,
     ) -> WorkflowExecution:
         """
         Execute an entire workflow instance.
@@ -90,6 +92,36 @@ class WorkflowEngine:
             if not self.runtime or not getattr(self.runtime.get_capabilities(), "supports_playground", False):
                 raise ValueError("The configured runtime does not support tool-free playground execution")
             trigger_type = "PLAYGROUND"
+
+        checkpoint = None
+        if dag_approval_id:
+            from storage.dag_approvals import claim_resume
+            checkpoint = claim_resume(self.db, dag_approval_id, workflow.id, workflow.revision)
+            if checkpoint is None:
+                raise ValueError("DAG continuation is no longer eligible or already claimed.")
+            execution_id = checkpoint["execution_id"]
+            user_context = checkpoint["user_context"]
+            trigger_payload = checkpoint["trigger_payload"]
+            trigger_type = self.db.get_workflow_execution(execution_id).trigger_type
+        elif trigger_type == "CHANNEL":
+            from .channel_trigger_dispatch import admit_dispatch
+            admitted = admit_dispatch(self.db, execution_id, workflow, channel_lease)
+            if admitted is None:
+                raise ValueError("Channel execution is no longer eligible or already claimed.")
+            trigger_payload, user_context = admitted
+        elif execution_id:
+            queued = self.db.get_workflow_execution(execution_id)
+            if queued and queued.trigger_type == "CHANNEL":
+                raise ValueError("Channel execution requires verified trigger admission.")
+            if queued and queued.status == "WAITING_APPROVAL":
+                raise ValueError("Waiting execution requires an approved continuation.")
+            if queued:
+                with self.db._get_connection() as conn:
+                    had_barrier = conn.execute(
+                        "SELECT 1 FROM workflow_dag_approvals WHERE execution_id=? LIMIT 1", (execution_id,),
+                    ).fetchone()
+                if had_barrier:
+                    raise ValueError("DAG checkpoint requires an approved continuation.")
 
         # 1. Budget and Department Access Authorization pre-check
         require_workflow_actor(workflow, user_context, self.db)
@@ -160,6 +192,11 @@ class WorkflowEngine:
         try:
             from .backend_policy import preflight_backends
             preflight_backends(wf_def, playground=playground, db=self.db, workflow=workflow)
+            from .dag_approval_config import dag_approval_policy
+            if any(dag_approval_policy(step) for step in wf_def.steps) and (
+                not dept_id or not (user_context or {}).get("sub") or source_workspace
+            ):
+                raise ValueError("DAG approvals require a personal initiator, department and independent step workspaces.")
             for step in wf_def.steps:
                 require_agent_scope(self.db.get_agent(step.agent_id), workflow, user_context, db=self.db)
                 reviewer_id = (getattr(step, "params", None) or {}).get("reviewerAgentId")
@@ -174,7 +211,7 @@ class WorkflowEngine:
             raise
 
         # Tool-free exercises never connect to declared MCP servers.
-        if not playground:
+        if not playground and checkpoint is None:
             from integrations.tool_scopes import prepare_execution_context
             try:
                 prepare_execution_context(self.db, wf_exec, workflow, wf_def, user_context)
@@ -214,19 +251,23 @@ class WorkflowEngine:
                     )
 
         # 5. Execute steps in DAG dependency stages (multi-agent parallel execution)
-        step_outputs: Dict[str, str] = {}
-        total_input_tokens = 0
-        total_output_tokens = 0
-        total_cost_usd = 0.0
+        step_outputs: Dict[str, str] = checkpoint["outputs"] if checkpoint else {}
+        total_input_tokens = checkpoint["input_tokens"] if checkpoint else 0
+        total_output_tokens = checkpoint["output_tokens"] if checkpoint else 0
+        total_cost_usd = checkpoint["cost_usd"] if checkpoint else 0.0
         final_status = "COMPLETED"
         failure_error: Optional[str] = None
 
-        if not playground:
+        if not playground and checkpoint is None:
             self._notify_lifecycle(workflow_id, execution_id, trigger_type, 'RUNNING', {}, event='start')
 
         try:
-            stages = self._group_steps_into_stages(wf_def.steps)
+            from .stages import isolate_approval_barriers
+            stages = isolate_approval_barriers(self._group_steps_into_stages(wf_def.steps))
             for stage in stages:
+                stage = [step for step in stage if step.key not in step_outputs]
+                if not stage:
+                    continue
                 # Check mid-run budget cap before launching next stage
                 if dept_id:
                     from storage.hosted_budget import execution_settled
@@ -238,6 +279,17 @@ class WorkflowEngine:
                         failure_error = f"Mid-run budget exceeded for department {dept_id}. Additional budget required."
                         break
 
+                approval = dag_approval_policy(stage[0]) if len(stage) == 1 else None
+                if approval:
+                    from storage.dag_approvals import suspend
+                    suspend(self.db, execution_id=execution_id, step_key=stage[0].key,
+                            revision=workflow.revision, initiator_id=user_context["sub"],
+                            policy=approval.model_dump(), checkpoint={
+                                "outputs": step_outputs, "input_tokens": total_input_tokens,
+                                "output_tokens": total_output_tokens, "cost_usd": total_cost_usd,
+                                "trigger_payload": trigger_payload,
+                            })
+                    return self.db.get_workflow_execution(execution_id)
                 if len(stage) == 1:
                     # Sequential step execution
                     res = self._execute_single_step(

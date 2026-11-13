@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 import json
 import re
+from urllib.parse import parse_qs
 
 from .identity_proofs import InvalidProof, require_slack_signature, require_telegram_secret
 
@@ -13,6 +14,7 @@ class Event:
     channel_id: str
     message_id: str
     sender_id: str | None
+    text: str = ""
 
 
 @dataclass(frozen=True)
@@ -54,20 +56,36 @@ def _telegram(raw, headers, settings, now):
     if isinstance(body, str) and (body == "/start" or body.startswith(("/start ", "/start@"))):
         return IdentityProof()
     return Event(str(update["update_id"]), "MESSAGE", str(chat["id"]), str(message["message_id"]),
-                 _personal_telegram_sender(message))
+                 _personal_telegram_sender(message), body if isinstance(body, str) else "")
 
 
 def _slack(raw, headers, settings, now):
     require_slack_signature(raw, headers, settings, now)
+    _, team, app = settings
     if headers.get("content-type", "").split(";", 1)[0].strip().lower() == "application/x-www-form-urlencoded":
-        return IdentityProof()
+        form = parse_qs(raw.decode(), strict_parsing=True, max_num_fields=32)
+        if form.get("command") == ["/platform-link"]:
+            return IdentityProof()
+        if form.get("team_id") != [team] or form.get("api_app_id") != [app]:
+            raise InvalidProof("INVALID_PROOF")
+        command, = form["command"]
+        channel, = form["channel_id"]
+        sender, = form["user_id"]
+        receipt, = form["trigger_id"]
+        if (not re.fullmatch(r"/[A-Za-z][A-Za-z0-9_-]{0,63}", command)
+                or not re.fullmatch(r"[CGD][A-Z0-9]{7,30}", channel)
+                or not re.fullmatch(r"[UW][A-Z0-9]{2,31}", sender)
+                or not re.fullmatch(r"[A-Za-z0-9.]{1,120}", receipt)):
+            raise InvalidProof("INVALID_EVENT")
+        arguments, = form.get("text", [""])
+        identifier = f"command:{receipt}"
+        return Event(identifier, "COMMAND", channel, identifier, sender, f"{command} {arguments}".rstrip())
     envelope = json.loads(raw)
     if envelope["type"] == "url_verification":
         challenge = envelope["challenge"]
         if not isinstance(challenge, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", challenge):
             raise InvalidProof("INVALID_EVENT")
         return Handshake(challenge)
-    _, team, app = settings
     if envelope.get("team_id") != team or envelope.get("api_app_id") != app:
         raise InvalidProof("INVALID_PROOF")
     if envelope["type"] != "event_callback":
@@ -82,12 +100,16 @@ def _slack(raw, headers, settings, now):
         raise InvalidProof("INVALID_EVENT")
     user = event.get("user")
     sender = user if (not event.get("bot_id") and isinstance(user, str) and re.fullmatch(r"[UW][A-Z0-9]{2,31}", user)) else None
-    return Event(event_id, "MESSAGE", channel, message, sender)
+    text = event.get("text")
+    return Event(event_id, "MESSAGE", channel, message, sender, text if isinstance(text, str) else "")
+
+
+INGRESS_ADAPTERS = {"telegram": _telegram, "slack": _slack}
 
 
 def verify_event(provider, raw, headers, settings, now):
     try:
-        adapter = {"telegram": _telegram, "slack": _slack}[provider]
+        adapter = INGRESS_ADAPTERS[provider]
         return adapter(raw, headers, settings, now)
     except InvalidProof:
         raise

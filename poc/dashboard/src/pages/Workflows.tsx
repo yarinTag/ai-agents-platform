@@ -10,6 +10,8 @@ import { WorkflowHistoryDrawer } from '../components/workflows/WorkflowHistoryDr
 import { WorkflowSettingsDrawer } from '../components/workflows/WorkflowSettingsDrawer';
 import { CreateWorkflowModal } from '../components/workflows/CreateWorkflowModal';
 import { WorkflowCanvasGraph } from '../components/workflows/WorkflowCanvasGraph';
+import { DagApprovalsInbox } from '../components/workflows/DagApprovalsInbox';
+import { useDagApprovalsText } from '../i18n/dagApprovals';
 const { TextArea } = Input;
 
 import { useWorkflowsPage } from './useWorkflowsPage';
@@ -23,6 +25,8 @@ export const WorkflowsPage: React.FC = () => {
   const model = useWorkflowsPage();
   const [chatSearch, setChatSearch] = useSearchParams();
   const [chatOpen, setChatOpen] = useState(() => chatSearch.has('workflowChat'));
+  const [approvalsOpen, setApprovalsOpen] = useState(false);
+  const approvalText = useDagApprovalsText();
   const closeChat = () => {
     setChatOpen(false);
     setChatSearch(previous => { const next = new URLSearchParams(previous); next.delete('workflowChat'); return next; }, { replace: true });
@@ -45,6 +49,7 @@ export const WorkflowsPage: React.FC = () => {
     canvasModalOpen,
     setCanvasModalOpen,
     selectedWorkflow,
+    selectedExecution,
     playgroundMode,
     runModalOpen,
     setRunModalOpen,
@@ -102,6 +107,7 @@ export const WorkflowsPage: React.FC = () => {
         </div>
 
         <Space size={10}>
+          <Button disabled={!canRead} onClick={() => setApprovalsOpen(true)}>{approvalText.title}</Button>
           <Button disabled={!canRead} onClick={() => setChatOpen(true)}>{chatText.entry}</Button>
           <Button
             icon={<ReloadOutlined spin={loading} />}
@@ -320,6 +326,9 @@ export const WorkflowsPage: React.FC = () => {
           <WorkflowCanvasGraph
             workflowName={selectedWorkflow.name}
             steps={getParsedWorkflowSteps(selectedWorkflow)}
+            waitingStepKeys={selectedExecution?.workflow_id === selectedWorkflow.id
+              ? selectedExecution.step_runs?.filter(step => step.status === 'WAITING_APPROVAL').map(step => step.step_key)
+              : undefined}
             channelBinding={selectedWorkflow.channel_binding}
             skills={[]}
             allowedMcps={[]}
@@ -378,6 +387,7 @@ export const WorkflowsPage: React.FC = () => {
 
       {chatOpen && canRead && <WorkflowChatModal onClose={closeChat} onCreated={() => { void loadData(); }} />}
       <WorkflowExecutionDrawer {...model} />
+      {approvalsOpen && canRead && <DagApprovalsInbox onClose={() => setApprovalsOpen(false)} />}
 
       {/* Create Workflow Modal */}
       {historyWorkflow && <WorkflowHistoryDrawer key={historyWorkflow.id} workflow={historyWorkflow}

@@ -35,3 +35,5 @@ The existing isolated API CI selection covers both providers, role and scope iso
 The channel selector shows the saved MCP channel name first, with the exact ID alongside it to distinguish duplicate names. It searches both and falls back to the ID when no name is configured. The catalog only returns labels for selectable IDs.
 
 The bindings list adds nullable channel_name from the current MCP label for each visible binding. The table shows that name alongside the exact ID and falls back to the ID alone.
+
+The provider catalog includes ingress_supported for providers with a registered webhook adapter. It is an implementation capability, separate from connector readiness.

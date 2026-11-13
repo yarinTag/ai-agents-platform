@@ -1,6 +1,6 @@
 import { api } from './httpClient';
 
-export type IngressProvider = 'slack' | 'telegram';
+export type IngressProvider = string;
 
 export interface IngressEvent {
   id: string;
