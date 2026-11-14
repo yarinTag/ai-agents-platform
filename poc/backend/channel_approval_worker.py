@@ -19,7 +19,8 @@ def _destination(db, row):
     if context.get("workflow_revision") != row["workflow_revision"] or context.get("governance") is None:
         raise ValueError("Approval delivery has no captured policy.")
     decision = decide(db, row["organization_id"], row["department_id"], binding["connector_id"],
-                      "telegram.send_message", binding["channel_id"], user_id=row["initiator_id"],
+                      "telegram.send_message", binding["channel_id"],
+                      user_id=context.get("initiator_id") if "config_json" in row else row["initiator_id"],
                       workflow_id=row["workflow_id"], frozen=context["governance"])
     if decision["decision"] != "allowed":
         raise ValueError("Approval delivery is not authorized.")

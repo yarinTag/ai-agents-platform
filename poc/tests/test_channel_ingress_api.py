@@ -203,6 +203,22 @@ def test_telegram_approval_callback_is_bound_to_message_and_votes_once(baseline)
     update["callback_query"]["message"]["message_id"] = 7
     for _ in range(2):
         assert client.post(path, json=update, headers=telegram_headers()).json()["text"] == "Decision recorded."
+    from hashlib import sha256
+    from backend.api.channel_ingress import _receive
+    from storage.external_identities import connector_settings
+
+    saved = db.get_mcp_connector(connector)
+    saved.configuration["ingress_mode"] = "polling"
+    db.save_mcp_connector(saved)
+    with db._get_connection() as conn:
+        _, _, _, version = connector_settings(conn, connector)
+    credentials = (version, sha256(saved.configuration["bot_token"].encode()).hexdigest())
+    update["callback_query"]["message"] = {
+        "message_id": 7, "chat": {"id": 12345, "type": "channel"},
+        "sender_chat": {"id": 12345, "type": "channel"},
+    }
+    acknowledgment = _receive(db, connector, json.dumps(update).encode(), {}, polled_credentials=credentials)
+    assert json.loads(acknowledgment.body)["text"] == "Decision recorded."
     with db._get_connection() as conn:
         assert conn.execute("SELECT count(*) FROM dag_channel_callbacks").fetchone()[0] == 1
         assert conn.execute("SELECT count(*) FROM workflow_dag_approval_votes").fetchone()[0] == 1
@@ -252,6 +268,8 @@ def test_terminal_telegram_claim_cannot_survive_relink(baseline):
     now = datetime.now()
     identifier = "wfa_terminal_test"
     with db._get_connection() as conn:
+        conn.execute("""INSERT INTO workflow_step_runs (id,execution_id,step_key,status,task_run_id)
+            VALUES ('review-step','terminal-run','approval','WAITING_APPROVAL','review-task')""")
         conn.execute("""INSERT INTO workflow_approvals
             (id,execution_id,step_run_id,task_id,organization_id,department_id,workflow_revision,status,
              config_json,subjects_json,report,created_at,expires_at)
@@ -264,7 +282,8 @@ def test_terminal_telegram_claim_cannot_survive_relink(baseline):
             (id,organization_id,connector_id,user_id,provider,account,subject,created_at)
             VALUES ('original-link','atlas',?,'atlas_MANAGER','telegram','123456','12345',?)""",
             (connector, int(time.time())))
-    assert delivery.next_delivery(db)["id"] == identifier
+    claimed = delivery.next_delivery(db)
+    assert claimed["id"] == identifier and claimed["step_key"] == "approval"
     token = action_token(db.get_mcp_connector(connector).configuration["bot_token"], identifier)
     delivery.record_delivery(db, identifier, "DELIVERED", connector=connector, channel="12345",
                              message="7", bot="123456", rendered="PENDING:0/1", token=token)

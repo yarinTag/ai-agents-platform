@@ -68,8 +68,12 @@ def merge_subject(db, approval, subject, approver_check, receipts):
         approver_check()
         require_claim(db, approval, subject)
         client.authorize()
-        # Strict protected-base evidence was collected immediately above. GitHub's SHA
-        # argument pins HEAD; provider strict enforcement covers the remaining base race.
+        if subject.get('target_sha'):
+            from urllib.parse import quote
+            branch = client.get('branches/' + quote(subject['target_ref'], safe=''))
+            if not isinstance(branch, dict) or (branch.get('commit') or {}).get('sha') != subject['target_sha']:
+                raise ToolAccessError('Target branch changed after approval. Create a fresh review and approval.')
+        # GitHub's merge API pins the PR head and applies repository merge rules.
         dispatched = True
         value = request_json('api.github.com', f"/repos/{subject['repository']}/pulls/{subject['pull_number']}/merge",
                              headers=client.headers, payload={'sha': subject['head_sha'], 'merge_method': 'squash'}, method='PUT')

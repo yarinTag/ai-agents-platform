@@ -14,6 +14,10 @@ def preflight(db, execution, workflow, definition):
         config = approval_configuration(step)
         if not config:
             continue
+        source = next(item for item in definition.steps if item.key == config.source_step)
+        if config.kind == 'pull_requests' and source.params.get('open_pr_source'):
+            # Delivery and merge authority are checked only once there are subjects.
+            continue
         if config.channel_binding_id:
             from storage.channel_approval_delivery import destination
             with db._get_connection() as conn:
@@ -27,7 +31,6 @@ def preflight(db, execution, workflow, definition):
             public_url()
         if config.kind != 'pull_requests':
             continue
-        source = next(item for item in definition.steps if item.key == config.source_step)
         scope = prepare_scope(db, None, execution.id, source, persist=False)
         reviews = [entry for entry in (scope or {}).get('entries', []) if entry['operation'] == 'get_pull_request_review']
         if not reviews:
@@ -49,10 +52,30 @@ def start_gate(db, step, task, step_record_id, execution_id, outputs):
     report = outputs.get(config.source_step)
     if not isinstance(report, str) or not report.strip() or len(report) > 50000:
         raise ToolAccessError('Human approval requires a nonempty source report of at most 50,000 characters.')
-    subjects = pinned_subjects(db, execution_id, config.source_step) if config.kind == 'pull_requests' else []
+    subjects = pinned_subjects(db, execution_id, config.source_step, allow_approval_only=True) if config.kind == 'pull_requests' else []
+    batch_findings = None
+    if config.kind == 'pull_requests':
+        from .parser import WorkflowParser
+        definition = WorkflowParser.from_dict(json.loads(workflow.definition_json))
+        source = next(item for item in definition.steps if item.key == config.source_step)
+        if source.params.get('open_pr_source'):
+            from .pull_request_batch import ReviewReport
+            try:
+                assessment = ReviewReport.parse_output(report)
+            except ValueError:
+                raise ToolAccessError('PR review did not return a valid eligibility report.') from None
+            eligible = set(assessment.eligible_pull_numbers)
+            subjects = [subject for subject in subjects if subject['pull_number'] in eligible]
+            report = assessment.findings
+            batch_findings = report
     if config.kind == 'pull_requests' and not subjects:
         task.result = 'No reviewed PR has complete, merge-ready evidence. No approval requested and nothing merged.'
+        if batch_findings:
+            task.result = f'{batch_findings}\n\n{task.result}'
         return False
+    from integrations.tool_scopes import prepare_scope
+    prepare_scope(db, task.run_id, execution_id, step)
+    dashboard = public_url() if not config.channel_binding_id else None
     now = datetime.now()
     identifier = 'wfa_' + uuid.uuid4().hex
     approval = {'execution_id': execution_id, 'organization_id': workflow.organization_id,
@@ -68,13 +91,20 @@ def start_gate(db, step, task, step_record_id, execution_id, outputs):
              workflow.revision, config.model_dump_json(), json.dumps(subjects), report,
              now.isoformat(), (now + timedelta(hours=config.expires_hours)).isoformat()))
         if config.channel_binding_id:
+            from storage.channel_approval_delivery import destination
+            binding, _, _, _ = destination(conn, {
+                'binding_id': config.channel_binding_id, 'organization_id': workflow.organization_id,
+                'department_id': workflow.department_id,
+            })
+            if (binding['connector_id'], binding['channel_id']) != (config.connector_id, config.channel_id):
+                raise ToolAccessError('Interactive approval binding does not match the declared destination.')
             from storage.channel_approval_delivery import enqueue
             enqueue(conn, identifier, config.channel_binding_id)
             conn.execute("UPDATE workflow_approvals SET status='PENDING' WHERE id=?", (identifier,))
     if config.channel_binding_id:
         task.result = f'Waiting for authenticated human approval: {identifier}.'
         return True
-    link = f'{public_url()}/workflows/{workflow.id}/logs?execution={execution_id}'
+    link = f'{dashboard}/workflows/{workflow.id}/logs?execution={execution_id}'
     text = ('Human approval required. Sign in to review and approve or reject. '
             + ('Approval authorizes SHA-pinned PR merges after fresh checks.\n' if config.merge_after_approval else 'No merge is authorized.\n')
             + link + '\n\n' + report)

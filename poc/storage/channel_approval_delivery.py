@@ -64,8 +64,11 @@ def next_delivery(db):
             ('pr_channel_deliveries', 'workflow_approvals', datetime.now().isoformat()),
             ('dag_channel_deliveries', 'workflow_dag_approvals', int(time.time())),
         ):
-            row = conn.execute(f"""SELECT a.*,d.binding_id,x.workflow_id FROM {table} d
+            step_key = ",s.step_key" if table == 'pr_channel_deliveries' else ""
+            step_join = "JOIN workflow_step_runs s ON s.id=a.step_run_id AND s.execution_id=a.execution_id" if step_key else ""
+            row = conn.execute(f"""SELECT a.*,d.binding_id,x.workflow_id{step_key} FROM {table} d
                 JOIN {approvals} a ON a.id=d.approval_id
+                {step_join}
                 JOIN workflow_executions x ON x.id=a.execution_id AND x.status='WAITING_APPROVAL'
                 JOIN workflows w ON w.id=x.workflow_id AND w.revision=a.workflow_revision
                     AND w.organization_id=a.organization_id AND w.department_id=a.department_id
@@ -145,8 +148,9 @@ def next_edit(db):
                 AND (d.rendered LIKE 'PENDING:%' OR (d.rendered='APPROVED' AND a.status IN ('REJECTED','TIMED_OUT')))
             ORDER BY d.retry_at,a.expires_at LIMIT 50""", (int(time.time()),)).fetchall()
         rows += conn.execute("""SELECT a.*,d.binding_id,d.connector_id,d.channel_id,d.message_id,
-                d.bot_id,d.token_digest,d.rendered,x.workflow_id
+                d.bot_id,d.token_digest,d.rendered,x.workflow_id,s.step_key
             FROM pr_channel_deliveries d JOIN workflow_approvals a ON a.id=d.approval_id
+            JOIN workflow_step_runs s ON s.id=a.step_run_id AND s.execution_id=a.execution_id
             JOIN workflow_executions x ON x.id=a.execution_id
             WHERE d.status='DELIVERED' AND d.retry_at<=?
                 AND (d.rendered LIKE 'PENDING:%' OR d.rendered='DECIDED')

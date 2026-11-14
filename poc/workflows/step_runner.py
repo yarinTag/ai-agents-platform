@@ -192,8 +192,26 @@ class WorkflowStepRunner:
                     workspace = open_workspace(self.db, task_id, execution_id, step, workspace_config)
                 else:
                     from integrations.tool_scopes import prepare_scope
-                    prepare_scope(self.db, task_id, execution_id, step)
-                if channel_action:
+                    numbers = None
+                    author = None
+                    if step.params.get('open_pr_source'):
+                        from .pull_request_batch import review_candidates
+                        author, numbers = review_candidates(self.db, execution_id, step)
+                    prepare_scope(self.db, task_id, execution_id, step,
+                                  pull_numbers=numbers[:10] if numbers is not None else None,
+                                  pull_author=author)
+                if step.params.get('discover_open_prs_author'):
+                    from .pull_request_batch import discover, finish
+                    finish(self.db, step_run, discover(self.db, step_run, step.params['discover_open_prs_author']))
+                elif step.params.get('open_pr_source'):
+                    from .pull_request_batch import EMPTY_REVIEW, REVIEW_FORMAT, finish
+                    if numbers:
+                        self.runtime.start_task(task_id=task_id, agent_id=actual_agent_id,
+                            prompt=f'{formatted_prompt}\nOpen PR numbers to review: {numbers[:10]}. '
+                                   f'Deferred PR numbers: {numbers[10:]}.\n{REVIEW_FORMAT}')
+                    else:
+                        finish(self.db, step_run, EMPTY_REVIEW)
+                elif channel_action:
                     execute_channel_action(self.db, step, step_run, step_outputs)
                 else:
                     self.runtime.start_task(task_id=task_id, agent_id=actual_agent_id, prompt=formatted_prompt)

@@ -1,4 +1,6 @@
 """Verified provider ingress and organization-scoped operational diagnostics."""
+import hashlib
+import json
 import os
 import sqlite3
 import time
@@ -30,9 +32,19 @@ class IngressTest(BaseModel):
     verify_tls: bool = False
 
 
-def _receive(db, connector_id, raw, headers):
+def _receive(db, connector_id, raw, headers, *, polled_credentials=None):
     with db._get_connection() as conn:
         _, provider, settings, version = identities.connector_settings(conn, connector_id)
+        if polled_credentials is not None:
+            row = conn.execute("SELECT configuration FROM mcp_connectors WHERE id=?",
+                               (connector_id,)).fetchone()
+            config = json.loads(row["configuration"])
+            token_digest = hashlib.sha256(config.get("bot_token", "").encode()).hexdigest()
+            if (provider != "telegram" or (version, token_digest) != polled_credentials
+                    or config.get("ingress_mode") != "polling"):
+                raise InvalidProof("PROVIDER_ROTATED")
+            # Only the local worker can enter this branch after authenticated provider HTTPS.
+            headers = {"x-telegram-bot-api-secret-token": settings[0]}
     now = int(time.time())
     event = verify_event(provider, raw, headers, settings, now)
     from integrations.telegram_approval_cards import ApprovalCallback
@@ -121,6 +133,7 @@ def _scope(request, db, connector_id):
     except InvalidProof:
         secret_configured = False
     webhook_url = _webhook_url(connector_id)
+    polling = provider == "telegram" and (connector.configuration or {}).get("ingress_mode") == "polling"
     return actor, {
         "provider": provider,
         "webhook_url": webhook_url,
@@ -128,6 +141,7 @@ def _scope(request, db, connector_id):
         "https_configured": webhook_url is not None,
         "ssl_status": "UNVERIFIED",
         "connector_connected": connector.status == "CONNECTED",
+        "ingress_mode": "polling" if polling else "webhook",
     }
 
 
@@ -153,10 +167,12 @@ def test_channel_ingress_configuration(connector_id: str, request: Request,
         storage_ready = True
     except sqlite3.Error:
         storage_ready = False
-    checks = {key: status[key] for key in ("https_configured", "secret_configured", "connector_connected")}
+    checks = {key: status[key] for key in ("secret_configured", "connector_connected")}
+    if status["ingress_mode"] == "webhook":
+        checks["https_configured"] = status["https_configured"]
     checks["storage_ready"] = storage_ready
     tls_status, live_request = "UNVERIFIED", False
-    if payload and payload.verify_tls and status["webhook_url"]:
+    if payload and payload.verify_tls and status["ingress_mode"] == "webhook" and status["webhook_url"]:
         tls_status, live_request = check_tls(status["webhook_url"])
     return {"status": "READY" if all(checks.values()) else "BLOCKED", "checks": checks,
             "live_request": live_request, "tls_status": tls_status}

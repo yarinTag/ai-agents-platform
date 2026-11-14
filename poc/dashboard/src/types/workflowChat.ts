@@ -48,6 +48,8 @@ export interface WorkflowChatJob {
   previous_workflow: ChatWorkflow | null;
   result: { message: string; workflow: ChatWorkflow | null; errors: string[]; ready: boolean } | null;
   error: string | null;
+  diagnostics?: { stage: 'reply_validation'; issues: Array<{ path: Array<string | number>; code: string }>;
+    issue_count: number; input_tokens: number; output_tokens: number } | null;
   model: string;
   provider: string;
   workflow_id: string | null;

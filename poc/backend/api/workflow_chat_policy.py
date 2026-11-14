@@ -143,6 +143,19 @@ def validate_candidate(candidate, resources):
     if set(candidate.skills) - approved_skills:
         errors.append('Workflow selects a skill outside the configured plugin catalog.')
     for step in candidate.steps:
+        if step.discover_open_prs_author and (step.workspace or step.send_output_of or step.human_approval
+                or step.open_pr_source or len(step.resources) != 1
+                or step.resources[0].tool_name != 'list_open_pull_requests' or not step.resources[0].repository):
+            errors.append('Open PR discovery requires one explicit GitHub open-list resource.')
+        if step.open_pr_source:
+            source = next((item for item in candidate.steps if item.key == step.open_pr_source), None)
+            if (not source or not source.discover_open_prs_author or source.key not in step.depends_on
+                    or step.workspace or step.send_output_of or step.human_approval
+                    or len(step.resources) != 1 or len(source.resources) != 1
+                    or step.resources[0].tool_name != 'get_pull_request_review'
+                    or step.resources[0].connector_id != source.resources[0].connector_id
+                    or step.resources[0].repository != source.resources[0].repository):
+                errors.append('PR review must depend on open PR discovery for the same connector and repository.')
         if step.human_approval:
             errors.extend(validate_approval(step, candidate, resources, agents, connectors))
         errors.extend(validate_workspace(step, agents, connectors))
@@ -204,11 +217,16 @@ def native_definition(candidate: ChatWorkflow, resources, runner_agent_id=None):
     connectors = {c['id']: c for c in resources['connectors']}
     steps = []
     for step in candidate.steps:
-        data = step.model_dump(exclude={'resources', 'send_output_of', 'skills', 'workspace', 'required_outcome', 'human_approval'})
+        data = step.model_dump(exclude={'resources', 'send_output_of', 'skills', 'workspace', 'required_outcome',
+                                       'human_approval', 'discover_open_prs_author', 'open_pr_source'})
         if step.agent_id == PLANNED_RUNNER_ID and runner_agent_id:
             data['agent_id'] = runner_agent_id
         data['mcp_servers'] = sorted({r.connector_id for r in step.resources})
         data['params'] = {'authorized_resources': [r.model_dump(exclude_none=True) for r in step.resources]}
+        if step.discover_open_prs_author:
+            data['params']['discover_open_prs_author'] = step.discover_open_prs_author
+        if step.open_pr_source:
+            data['params']['open_pr_source'] = step.open_pr_source
         if step.human_approval:
             config = step.human_approval
             binding = _interactive_binding(config, resources)

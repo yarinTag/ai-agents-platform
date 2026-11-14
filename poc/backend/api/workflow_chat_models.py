@@ -35,6 +35,8 @@ class ChatStep(StrictModel):
     workspace: RepositoryWorkspace | None = None
     required_outcome: Literal['analysis', 'pull_request'] = 'analysis'
     human_approval: HumanApproval | None = None
+    discover_open_prs_author: str | None = Field(default=None, pattern=r'^[A-Za-z0-9_\[\]-]{1,100}$')
+    open_pr_source: str | None = Field(default=None, min_length=1, max_length=80)
 
 
 class Destination(StrictModel):

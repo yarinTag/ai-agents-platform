@@ -69,6 +69,7 @@ class DepartmentResponse(BaseModel):
 
 class DepartmentMCPAccessRequest(BaseModel):
     connector_id: str
+    inherit_github_defaults: bool = False
     allowed_tools: Union[str, List[str]] = "*"
     organization_id: Optional[str] = None
     granted_by_user_id: Optional[str] = None
@@ -81,6 +82,7 @@ class DepartmentMCPAccessResponse(BaseModel):
     connector_id: str
     allowed_tools: str
     parsed_allowed_tools: List[str]
+    inherited: bool = False
     organization_id: Optional[str] = None
     is_active: bool
     granted_by_user_id: Optional[str] = None

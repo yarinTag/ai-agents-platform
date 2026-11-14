@@ -30,6 +30,7 @@ def _format_access_response(access: DepartmentMCPAccess) -> DepartmentMCPAccessR
         connector_id=access.connector_id,
         allowed_tools=access.allowed_tools,
         parsed_allowed_tools=parsed,
+        inherited=access.id.startswith('inherited:'),
         organization_id=access.organization_id,
         is_active=access.is_active,
         granted_by_user_id=access.granted_by_user_id,
@@ -52,6 +53,12 @@ def grant_department_mcp_access(
     dept = db.get_department(dept_id)
     if not dept:
         raise HTTPException(status_code=404, detail="Department not found")
+
+    if req.inherit_github_defaults:
+        access = db.inherit_department_github_access(dept_id, req.connector_id)
+        if access is None:
+            raise HTTPException(status_code=422, detail="No enabled GitHub defaults for this department and connector")
+        return _format_access_response(access)
 
     access = db.grant_department_mcp_access(
         department_id=dept_id,

@@ -64,11 +64,6 @@ export function useWorkflowChat(onCreated: () => void) {
 
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   useEffect(() => {
-    const changed = () => setRevision(n => n + 1);
-    window.addEventListener('platform:runtime-changed', changed);
-    return () => window.removeEventListener('platform:runtime-changed', changed);
-  }, []);
-  useEffect(() => {
     let cancelled = false;
     setLoading(true); setContext(null);
     api.getWorkflowChatContext(department || undefined).then(({ data }) => {
@@ -96,12 +91,12 @@ export function useWorkflowChat(onCreated: () => void) {
             if (data.result.workflow) setWorkflow(data.result.workflow);
           }
           if (data.error) setError(data.error);
-          setRevision(n => n + 1);
         }
       } catch (e) {
         if (cancelled) return;
         failure(e, true);
         if (axios.isAxiosError(e) && [401, 403, 404].includes(e.response?.status || 0)) {
+          setSearch(previous => { const next = new URLSearchParams(previous); next.delete('workflowChat'); return next; }, { replace: true });
           setWorkflow(null); setMessages([]); setJob(null); return;
         }
         timer = setTimeout(poll, 4000);
@@ -111,12 +106,16 @@ export function useWorkflowChat(onCreated: () => void) {
     return () => { cancelled = true; clearTimeout(timer); };
   }, [job?.id, job?.status]);
 
-  const send = async () => {
-    if (working || loading || !input.trim() || !department || !context?.selection) return;
-    const history: WorkflowChatMessage[] = [...messages.slice(-19), { role: 'user', content: input.trim() }];
-    const body = { department_id: department, messages: history, previous_workflow: workflow, locale };
+  const send = async (retry = false) => {
+    if (working || loading || !department || !context?.selection) return;
+    if (retry ? job?.status !== 'FAILED' : !input.trim()) return;
+    const history: WorkflowChatMessage[] = retry && job
+      ? job.messages
+      : [...messages.slice(-19), { role: 'user', content: input.trim() }];
+    const body = { department_id: department, messages: history,
+      previous_workflow: retry ? job?.previous_workflow ?? null : workflow, locale };
     const serialized = JSON.stringify(body);
-    if (request.current?.body !== serialized) request.current = {
+    if (retry || request.current?.body !== serialized) request.current = {
       body: serialized, value: { ...body, request_id: crypto.randomUUID() },
     };
     const outgoing = request.current?.value;
@@ -154,9 +153,10 @@ export function useWorkflowChat(onCreated: () => void) {
       const { data } = await api.createWorkflowFromChat(job.id);
       if (!alive.current) return;
       setJob({ ...job, status: 'CREATED', workflow_id: data.id }); onCreated();
-    } catch (e) { failure(e); setRevision(n => n + 1); }
+    } catch (e) { failure(e); }
     finally { if (alive.current) setBusy(false); }
   };
   return { text, context, department, setDepartment, messages, input, setInput, job, workflow, error: error || connectionError,
-    working, submitting: busy, loading, active, send, stop, reset, create, refresh: () => setRevision(n => n + 1) };
+    working, submitting: busy, loading, active, send: () => send(), stop, reset, create,
+    refresh: () => job?.status === 'FAILED' ? void send(true) : setRevision(n => n + 1) };
 }

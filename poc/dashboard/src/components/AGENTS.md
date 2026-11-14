@@ -337,3 +337,7 @@ AI-32 ChannelTriggerPanel is available in the saved workflow builder and Setting
 AI-35 DagApprovalsInbox shows the active department inbox and bounded prior outputs and recorded cost. Decision controls follow server can_decide; the workflow canvas can show WAITING_APPROVAL on steps from the inspected execution.
 
 DagApprovalFields edits approval roles, TTL and quorum in the visual step builder. Steps with tools or action params must have those removed before conversion.
+Workflow chat polls job status while generation is active. Terminal results do not reload the catalog, and authorization or missing-job errors clear the recovery URL to avoid a follow-up fetch of the same job.
+Workflow chat Retry starts a new generation using the failed job's conversation. Workflow log approval details load on entry and when the log Refresh button is pressed.
+LazyFeatureRoute resets its error boundary on pathname changes and explicit retries. Query changes, including the workflow chat recovery ID, preserve the mounted feature and its local state.
+WorkflowChatModal displays saved generation diagnostics in an expandable section for failed chat jobs, including the job ID, provider, model, token counts and validation issue details.

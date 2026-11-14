@@ -165,20 +165,25 @@ def required_checks_pass(policy, checks, statuses, head_sha, test_sha):
 def collect(client, number, include_files=True):
     from .github_prs import readiness_blockers
     row, pull = pinned_pull(client, number)
+    branch_path = 'branches/' + quote(pull['base']['ref'], safe='')
+    initial_branch = client.get(branch_path)
+    target_sha = (initial_branch.get('commit') or {}).get('sha') if isinstance(initial_branch, dict) else None
+    if not isinstance(target_sha, str) or not SHA.fullmatch(target_sha):
+        raise ToolAccessError('GitHub did not return the current target branch revision.')
     files, files_partial = file_evidence(client, number, row) if include_files else ([], False)
     checks, statuses, test_sha, ci_partial = ci_evidence(client, row, pull)
     reviews, reviews_partial = review_evidence(client, number, pull)
     policy = branch_policy(client, pull)
-    compare = client.get(f"compare/{pull['base']['sha']}...{pull['head']['sha']}", {'per_page': 1})
+    compare = client.get(f"compare/{target_sha}...{pull['head']['sha']}", {'per_page': 1})
     up_to_date = (isinstance(compare, dict) and compare.get('behind_by') == 0 and type(compare.get('behind_by')) is int
-                  and (compare.get('merge_base_commit') or {}).get('sha') == pull['base']['sha']
+                  and (compare.get('merge_base_commit') or {}).get('sha') == target_sha
                   and compare.get('status') in ('ahead', 'identical'))
     end_row, end = pinned_pull(client, number)
-    branch = client.get('branches/' + quote(pull['base']['ref'], safe=''))
+    branch = client.get(branch_path)
     changed = (end['head'] != pull['head'] or end['base'] != pull['base'] or not isinstance(branch, dict)
                or end_row.get('merge_commit_sha') != row.get('merge_commit_sha')
-               or (branch.get('commit') or {}).get('sha') != pull['base']['sha'])
-    partial = files_partial or ci_partial or reviews_partial or changed
+               or (branch.get('commit') or {}).get('sha') != target_sha)
+    partial = files_partial or ci_partial or changed
     ci = bool(checks or statuses) and all(value['status'] == 'completed' and value['conclusion'] in ('success', 'neutral', 'skipped') for value in checks) and all(value['state'] == 'success' for value in statuses)
     approved = sum(review['trusted_approval'] for review in reviews) >= policy['required_approvals']
     required = required_checks_pass(policy, checks, statuses, pull['head']['sha'], test_sha)
@@ -189,10 +194,18 @@ def collect(client, number, include_files=True):
     if not policy['known']: codes.append('BRANCH_POLICY_UNKNOWN_OR_UNSUPPORTED')
     if not policy['strict'] or not policy['enforce_admins']: codes.append('STRICT_PROTECTED_BASE_REQUIRED')
     if not required: codes.append('REQUIRED_CHECKS_NOT_PASSING')
-    blockers = readiness_blockers(end, partial, changed, ci, reviews) + codes
+    approval_blockers = readiness_blockers(end, partial, changed, ci, reviews)
+    if end['mergeable'] is True:
+        approval_blockers = [reason for reason in approval_blockers if reason != 'GitHub mergeability is not confirmed clean']
+    if end.get('merged') is not False:
+        approval_blockers.append('PR_STATE_UNKNOWN_OR_CLOSED')
+    blockers = readiness_blockers(end, partial or reviews_partial, changed, ci, reviews) + codes
     return {'repository': client.repository, 'pull_request': end, 'partial': partial, 'files': files,
             'checks': checks, 'statuses': statuses, 'reviews': reviews, 'branch_policy': policy,
             'candidate_ready': not blockers, 'blockers': blockers, 'blocker_codes': codes,
+            'approval_ready': not approval_blockers, 'approval_blockers': approval_blockers,
+            'target_sha': target_sha,
+            'observed_ci_passed': ci and not ci_partial,
             'evidence_version': EVIDENCE_VERSION, 'review_approved': approved, 'base_up_to_date': up_to_date and not changed,
             'required_checks_satisfied': required, 'untrusted_external_data': True,
-            'limitations': 'Strict classic protection/admin enforcement and fully observable rules are required for automatic merge. Unknown evidence blocks merging; this is not proof of code correctness.'}
+            'limitations': 'Branch policy diagnostics are reported separately. GitHub enforces repository merge rules when the approved merge is submitted.'}

@@ -65,7 +65,8 @@ class GitHubReads:
         rows, partial = self.pages('pulls', params={'state': 'open', 'sort': 'updated', 'direction': 'desc'})
         return {'repository': self.repository, 'untrusted_external_data': True, 'partial': partial,
                 'pull_requests': [project_pull(row, self.repository) for row in rows
-                                  if author is None or (row.get('user') or {}).get('login') == author],
+                                  if row.get('state') == 'open'
+                                  and (author is None or (row.get('user') or {}).get('login') == author)],
                 'limits': 'Up to 300 open PRs across the repository; no lookback cutoff. Filtering is by exact author login.'}
 
     def review(self, number):

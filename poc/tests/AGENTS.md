@@ -208,3 +208,12 @@ The isolated ingress contract includes an authenticated Telegram callback case f
 Terminal Telegram approval contracts verify exact provider message binding, durable callback deduplication and refusal to merge after the original identity link is replaced.
 
 The terminal Telegram contract also checks that the real workflow catalog and native compiler preserve pinned PR merge intent with an exact interactive binding and no dashboard URL.
+test_workflow_pr_approvals covers same-tenant GitHub defaults, department overrides, revocation and restoring inheritance with isolated SQLite.
+The PR approval contract tests verify that an empty receipt-scoped review completes its terminal gate without an approval record or a notification tool scope.
+The PR approval contracts exercise discovery receipt handoff against real SQLite, including empty results, duplicate numbers and rejected closed or wrong-author entries.
+The generic governance API tests cover same-tenant GitHub inheritance in the authoring catalog, disabling connector defaults, and denied out-of-scope department selection.
+PR approval report regression coverage verifies literal multiline findings and strict integer eligibility.
+PR approval tests cover typed connector completion, refusal to select out-of-batch PRs, and report serialization with multiline findings and quotes.
+The terminal Telegram approval contract checks that the claimed delivery includes the workflow step key needed to render the card.
+The terminal Telegram approval contract also exercises the internal polling ingress path against the persisted connector and verified callback.
+The terminal polling callback regression covers channel-attributed messages without a bot from field.

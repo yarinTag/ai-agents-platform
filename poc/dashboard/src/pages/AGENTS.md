@@ -321,3 +321,4 @@ AI-26 OrganizationPage exposes Linked accounts at /organization?tab=identities. 
 The Workflows header opens the department-scoped Approvals inbox. Execution-derived waiting step keys are passed to the canvas only when the inspected execution belongs to that workflow.
 
 The dashboard welcome and default connector test notification use ConduitCross branding.
+Workflow lists and logs load on entry, relevant selection changes, and explicit refresh. Workflow mutations can refresh affected data. Lists, execution details, and logs have no periodic refresh timers.

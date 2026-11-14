@@ -160,3 +160,4 @@ The API lifespan runs the Telegram approval card worker. It sends queued cards o
 Telegram DAG approval delivery works without PLATFORM_PUBLIC_URL. A valid dashboard origin adds an optional Details button.
 
 The Telegram card worker also consumes durable terminal PR callback claims through the existing pinned merge resolver.
+The API lifespan starts an opt-in local Telegram polling worker. It uses Telegram HTTPS getUpdates and the same verified ingress processing as webhook delivery, with a file lock per local SQLite database and durable offsets.

@@ -6,10 +6,38 @@ import json
 import uuid
 
 
+def github_default_operations():
+    from integrations.tool_definitions import OPERATIONS
+    return {*OPERATIONS['github'], 'clone_repository', 'open_pull_request', 'merge_pull_request'}
+
+
 class DepartmentPermissionsRepository:
     def __init__(self, connection_factory, get_department):
         self._get_connection = connection_factory
         self.get_department = get_department
+
+    def _github_default(self, conn, department_id, connector_id):
+        row = conn.execute("""SELECT c.organization_id,c.configuration,c.created_at
+            FROM mcp_connectors c JOIN departments d ON d.organization_id=c.organization_id
+            WHERE d.id=? AND c.id=? AND lower(c.provider)='github' AND c.status='CONNECTED'""",
+            (department_id, connector_id)).fetchone()
+        if not row:
+            return None
+        supported = github_default_operations()
+        try:
+            configuration = json.loads(row['configuration'] or '{}')
+        except (TypeError, ValueError):
+            return None
+        if not isinstance(configuration, dict):
+            return None
+        configured = configuration.get('department_default_tools', sorted(supported))
+        if not isinstance(configured, list) or not configured or any(
+                not isinstance(tool, str) or tool not in supported for tool in configured):
+            return None
+        return DepartmentMCPAccess(id=f'inherited:{department_id}:{connector_id}',
+            department_id=department_id, connector_id=connector_id, organization_id=row['organization_id'],
+            allowed_tools=json.dumps(sorted(set(configured))), is_active=True,
+            granted_by_user_id=None, granted_at=row['created_at'])
 
     def grant_department_mcp_access(
         self,
@@ -62,14 +90,33 @@ class DepartmentPermissionsRepository:
             raise RuntimeError(f"Failed to grant MCP access to department {department_id}")
         return access
 
+    def inherit_department_github_access(self, department_id, connector_id):
+        with self._get_connection() as conn:
+            conn.execute('BEGIN IMMEDIATE')
+            inherited = self._github_default(conn, department_id, connector_id)
+            if inherited is None:
+                return None
+            conn.execute('DELETE FROM department_mcp_access WHERE department_id=? AND connector_id=?',
+                         (department_id, connector_id))
+            conn.commit()
+            return inherited
+
     def revoke_department_mcp_access(self, department_id: str, connector_id: str) -> bool:
         """Revoke a department's access to an MCP connector (soft-delete / deactivate)."""
         with self._get_connection() as conn:
+            conn.execute('BEGIN IMMEDIATE')
             cursor = conn.execute("""
                 UPDATE department_mcp_access
                 SET is_active = 0
                 WHERE department_id = ? AND connector_id = ?
             """, (department_id, connector_id))
+            if not cursor.rowcount:
+                inherited = self._github_default(conn, department_id, connector_id)
+                if inherited:
+                    cursor = conn.execute("""INSERT INTO department_mcp_access
+                        (id,organization_id,department_id,connector_id,allowed_tools,is_active)
+                        VALUES (?,?,?,?,?,0)""", (f'dmcp_{uuid.uuid4().hex[:12]}',
+                        inherited.organization_id, department_id, connector_id, '[]'))
             conn.commit()
             return cursor.rowcount > 0
 
@@ -92,24 +139,28 @@ class DepartmentPermissionsRepository:
         with self._get_connection() as conn:
             row = conn.execute("""
                 SELECT * FROM department_mcp_access
-                WHERE department_id = ? AND connector_id = ? AND is_active = 1
+                WHERE department_id = ? AND connector_id = ?
             """, (department_id, connector_id)).fetchone()
-            if not row:
-                return None
-            return self._row_to_access(row)
+            if row:
+                return self._row_to_access(row) if row['is_active'] else None
+            return self._github_default(conn, department_id, connector_id)
 
     def list_department_mcp_access(self, department_id: str) -> List[DepartmentMCPAccess]:
         """List all active MCP grants for a department."""
         with self._get_connection() as conn:
             rows = conn.execute("""
                 SELECT * FROM department_mcp_access
-                WHERE department_id = ? AND is_active = 1
+                WHERE department_id = ?
                 ORDER BY connector_id ASC
             """, (department_id,)).fetchall()
-            return [
-                self._row_to_access(r)
-                for r in rows
-            ]
+            overrides = {r['connector_id'] for r in rows}
+            connectors = conn.execute("""SELECT c.id FROM mcp_connectors c
+                JOIN departments d ON d.organization_id=c.organization_id
+                WHERE d.id=? AND lower(c.provider)='github' AND c.status='CONNECTED' ORDER BY c.id""",
+                (department_id,)).fetchall()
+            inherited = [self._github_default(conn, department_id, c['id']) for c in connectors
+                         if c['id'] not in overrides]
+            return [self._row_to_access(r) for r in rows if r['is_active']] + [g for g in inherited if g]
 
     def check_department_mcp_permission(
         self,

@@ -42,7 +42,8 @@ def agent_tool_allowed(db, agent, connector, tool):
     return any(row['connector_id'] == connector.id and row.get('tool_id') in (None, tool.id, tool.name) for row in rows)
 
 
-def prepare_scope(db, task_id, execution_id, step, initiator_id=None, persist=True):
+def prepare_scope(db, task_id, execution_id, step, initiator_id=None, persist=True,
+                  pull_numbers=None, pull_author=None):
     """Freeze the step's declared upper bound before launching its model process."""
     context = execution_context(db, execution_id)
     if not context and not step.mcp_servers:
@@ -129,6 +130,9 @@ def prepare_scope(db, task_id, execution_id, step, initiator_id=None, persist=Tr
         'deadline_at': (datetime.now() + timedelta(seconds=min(step.timeout_seconds or 180, 300))).isoformat()}
     if not persist:
         return scope
+    if pull_numbers is not None:
+        scope['pull_numbers'] = pull_numbers
+        scope['pull_author'] = pull_author
     with db._get_connection() as conn:
         conn.execute('INSERT INTO workflow_tool_scopes(task_id, execution_id, scope_json) VALUES (?, ?, ?)',
                      (task_id, execution_id, json.dumps(scope)))
@@ -205,8 +209,13 @@ def prepare_execution_context(db, execution, workflow, definition, user_context=
     approval_preflight(db, execution, workflow, definition)
     from .repo_workspace import authorize_workspace, workspace_configuration
     from workflows.channel_action import action_configuration
+    from workflows.approval_config import approval_configuration
+    steps = {step.key: step for step in definition.steps}
     for step in definition.steps:
         action_configuration(step)  # Reject malformed later delivery steps before any side effects.
+        gate = approval_configuration(step)
+        if gate and gate.kind == 'pull_requests' and steps[gate.source_step].params.get('open_pr_source'):
+            continue
         prepare_scope(db, None, execution.id, step, persist=False)
         workspace = workspace_configuration(step)
         if workspace is not None:

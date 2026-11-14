@@ -43,6 +43,8 @@ class WorkflowToolExecutor:
             value = inputs.repository if group == 'repositories' else inputs.channel_id
             if value not in allowed:
                 raise ToolAccessError('Requested repository or channel is outside the authorized step scope.')
+            if 'pull_numbers' in self.scope and getattr(inputs, 'pull_number', None) not in self.scope['pull_numbers']:
+                raise ToolAccessError('Requested pull request is outside the discovered review batch.')
         from governance.enforcement import require_capability
         targets = [inputs.repository if group == 'repositories' else inputs.channel_id] if inputs is not None else entry[group]
         for target in targets:
@@ -129,6 +131,10 @@ class WorkflowToolExecutor:
                 elif entry['operation'] in ('list_open_pull_requests', 'get_pull_request_review', 'get_pull_request', 'get_pull_request_diff', 'get_pull_request_checks'):
                     from .github_prs import execute_read
                     output = execute_read(connector.configuration or {}, entry['operation'], inputs, authorize)
+                    if 'pull_numbers' in self.scope:
+                        pull = output.get('pull_request', {})
+                        if pull.get('state') != 'open' or pull.get('author') != self.scope.get('pull_author'):
+                            raise ToolAccessError('A discovered pull request no longer matches the open state and author filter.')
                 else:
                     output = fetch_activity(connector.configuration or {}, entry['operation'], inputs.repository, inputs.days, authorize)
                 if entry['operation'] not in WRITE_OPERATIONS:
@@ -151,6 +157,7 @@ class WorkflowToolExecutor:
         live_scope(self.db, self.task_id, self.scope)
         fulfilled = set()
         operations = set()
+        reviewed = set()
         with self.db._get_connection() as conn:
             calls = conn.execute('SELECT connector_id,tool_id,status,arguments FROM mcp_tool_calls WHERE task_id=? AND id LIKE ?',
                 (self.task_id, 'call_exec_%')).fetchall()
@@ -159,10 +166,16 @@ class WorkflowToolExecutor:
                 args = json.loads(call['arguments'] or '{}')
                 fulfilled.add((call['connector_id'], args.get('repository') or args.get('channel_id')))
                 operations.add((call['tool_id'], args.get('repository') or args.get('channel_id')))
+                if 'pull_number' in args:
+                    reviewed.add(args['pull_number'])
+        if set(self.scope.get('pull_numbers', [])) - reviewed:
+            raise ToolAccessError('The PR review did not return successful receipts for the entire batch.')
         for entry in self.entries.values():
             self.authorize(entry)
             required = entry['repositories'] if entry['provider'] == 'github' else entry['channels']
             if any((entry['connector_id'], value) not in fulfilled for value in required):
                 raise ToolAccessError('Required connector work has no successful tool receipt. The model response cannot be marked completed.')
-            if entry.get('required_operation') and any((entry['tool_id'], value) not in operations for value in required):
-                raise ToolAccessError('An explicitly required tool has no successful receipt for this step.')
+            if entry.get('required_operation'):
+                missing = [value for value in required if (entry['tool_id'], value) not in operations]
+                if missing:
+                    raise ToolAccessError(f"Required tool {entry['operation']} has no successful receipt for {', '.join(missing)}.")

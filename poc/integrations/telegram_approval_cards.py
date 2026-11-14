@@ -29,10 +29,16 @@ def parse_callback(update, bot_id, secret):
         return None
     match = re.fullmatch(r"dga:([ar]):([a-f0-9]{40}):([a-f0-9]{12})", data)
     message, sender = callback["message"], callback["from"]
+    chat = message["chat"]
+    # A channel post is attributed to the channel, even when a bot sent it.
+    # The signed action and stored delivery receipt bind the callback to our exact post.
+    channel_post = (chat.get("type") == "channel"
+                    and (message.get("sender_chat") or {}).get("id") == chat["id"])
+    from_bot = str((message.get("from") or {}).get("id")) == bot_id
     if (not match or not hmac.compare_digest(match[3], signed_action(secret, match[2], match[1])) or sender.get("is_bot") is not False or type(sender["id"]) is not int
             or sender["id"] <= 0 or type(message["message_id"]) is not int
             or message["message_id"] <= 0 or type(message["chat"]["id"]) is not int
-            or str(message["from"]["id"]) != bot_id
+            or not (from_bot or channel_post)
             or not re.fullmatch(r"[0-9]{1,40}", callback["id"])):
         raise InvalidProof("INVALID_APPROVAL_CALLBACK")
     return ApprovalCallback(callback["id"], match[2], match[1] == "a", str(sender["id"]),
