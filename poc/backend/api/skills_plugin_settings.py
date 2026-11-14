@@ -34,10 +34,11 @@ async def update_plugins_config(cfg: PluginsConfigRequest, request: Request,
                                 db_manager=Depends(get_db_manager)):
     org = _get_or_create_effective_org(request, db_manager)
     if department_id:
-        if cfg.source_mode not in (None, "git", "inherit") or cfg.local_path is not None:
+        mode = cfg.source_mode or ("git" if cfg.git_repo is not None else None)
+        if mode not in ("git", "inherit") or cfg.local_path is not None or (mode == "inherit" and cfg.git_repo is not None):
             raise HTTPException(422, "Department plugin sources must specify a GitHub repository or inherit.")
         repo = (cfg.git_repo or "").strip()
-        if cfg.source_mode == "git" and not _parse_github_owner_repo(repo):
+        if mode == "git" and not _parse_github_owner_repo(repo):
             raise HTTPException(422, "Enter a GitHub repository or select inheritance.")
         with db_manager._get_connection() as connection:
             if not department_source(connection, org.id, department_id):
@@ -45,8 +46,8 @@ async def update_plugins_config(cfg: PluginsConfigRequest, request: Request,
             connection.execute("""
                 UPDATE departments SET plugins_source_mode=?, plugins_git_repo=?
                 WHERE id=? AND organization_id=?
-            """, ("git" if cfg.source_mode == "git" else None,
-                  repo if cfg.source_mode == "git" else None, department_id, org.id))
+            """, ("git" if mode == "git" else None,
+                  repo if mode == "git" else None, department_id, org.id))
         return effective_plugin_config(db_manager, org.id, department_id)
     if cfg.source_mode == "inherit":
         raise HTTPException(422, "Only a department can inherit its plugin source.")

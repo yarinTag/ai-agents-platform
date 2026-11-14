@@ -1,6 +1,6 @@
 """Tenant-scoped operational reliability from persisted production executions."""
 from collections import Counter
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -29,29 +29,39 @@ def _category(error):
     return next((key for key, markers in FAILURE_MARKERS.items() if any(word in value for word in markers)), "unknown")
 
 
+def _utc_timestamp(column):
+    # Repository ISO strings without an offset predate explicit timezone storage.
+    # SQLite's space-separated CURRENT_TIMESTAMP values are already UTC.
+    return f"""CASE WHEN substr({column},11,1)='T'
+        AND instr(substr({column},12),'+')=0 AND instr(substr({column},12),'-')=0
+        AND upper(substr({column},-1))!='Z'
+        THEN julianday({column},'utc') ELSE julianday({column}) END"""
+
+
 @router.get("/metrics/reliability")
 def get_workflow_reliability(request: Request, window: Literal["24h", "7d", "30d"] = "7d",
                              db=Depends(get_db_manager)):
     actor = request.state.access_actor
     if not actor.organization_id or not actor.allows():
         raise HTTPException(403, "Workflow metrics require access to an organization.")
-    end = datetime.now()
+    end = datetime.now(timezone.utc)
     start = end - timedelta(hours=HOURS[window])
     with db._get_connection() as conn:
-        rows = conn.execute("""
+        rows = conn.execute(f"""
             SELECT e.id, e.workflow_id, w.name, w.department_id AS workflow_department,
-                e.department_id, e.status, e.created_at, e.total_cost_usd,
+                e.department_id, e.status, strftime('%Y-%m-%dT%H:%M:%fZ', {_utc_timestamp("e.created_at")}) AS created_utc,
+                e.total_cost_usd,
                 e.total_input_tokens, e.total_output_tokens,
-                (julianday(e.completed_at) - julianday(e.started_at)) * 86400 AS duration_seconds,
+                ({_utc_timestamp("e.completed_at")} - {_utc_timestamp("e.started_at")}) * 86400 AS duration_seconds,
                 e.error_message,
                 (SELECT s.error_message FROM workflow_step_runs s
                     WHERE s.execution_id=e.id AND s.status='FAILED' AND s.error_message IS NOT NULL
                     ORDER BY s.completed_at, s.step_key LIMIT 1) AS step_error
             FROM workflow_executions e JOIN workflows w ON w.id=e.workflow_id
-            WHERE w.organization_id=? AND julianday(e.created_at)>=julianday(?)
-                AND julianday(e.created_at)<=julianday(?)
+            WHERE w.organization_id=? AND {_utc_timestamp("e.created_at")}>=julianday(?)
+                AND {_utc_timestamp("e.created_at")}<=julianday(?)
                 AND e.trigger_type!='PLAYGROUND' AND e.status IN ('COMPLETED', 'FAILED')
-            ORDER BY julianday(e.created_at) DESC, e.id
+            ORDER BY {_utc_timestamp("e.created_at")} DESC, e.id
         """, (actor.organization_id, start.isoformat(), end.isoformat())).fetchall()
 
     bucket_format = "%Y-%m-%dT%H:00" if window == "24h" else "%Y-%m-%d"
@@ -74,11 +84,7 @@ def get_workflow_reliability(request: Request, window: Literal["24h", "7d", "30d
             "last_failed_execution_id": None, "failure_counts": Counter(),
         })
         status = "failed" if row["status"] == "FAILED" else "completed"
-        # Legacy execution timestamps use the server clock without a UTC offset.
-        timestamp = datetime.fromisoformat(row["created_at"])
-        if timestamp.tzinfo is not None:
-            timestamp = timestamp.astimezone().replace(tzinfo=None)
-        bucket = timestamp.strftime(bucket_format)
+        bucket = datetime.fromisoformat(row["created_utc"].replace("Z", "+00:00")).strftime(bucket_format)
         if bucket in trend:
             trend[bucket][status] += 1
         group[status] += 1

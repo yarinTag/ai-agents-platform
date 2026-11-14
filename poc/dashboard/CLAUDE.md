@@ -339,3 +339,5 @@ AI-29 WebhookDiagnostics consumes the scoped backend metadata projection. Keep c
 Keep external identity commands in memory only, abort old scope requests, and use server-returned subject and can_revoke fields. Department management must preserve the current effective role and scope.
 
 Non-admin MCP Hub displays the selected department’s effective capability catalog through the authenticated governance API.
+
+Organization admins can switch the Skills Hub between organization defaults and the selected department override.

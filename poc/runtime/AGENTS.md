@@ -271,3 +271,5 @@ For author-filtered PR monitoring, Workflow Chat generates a server-executed dis
 Receipt-scoped PR reviews extend the connector completion schema with eligible_pull_numbers, validate candidates against the frozen batch, and serialize findings and eligibility on the server. The formatting-only retry uses the same schema.
 
 Agent context assembly passes the agent department and supervisor ID to plugin resolution. Tenant custom skills are read from scoped SQLite storage.
+
+Production and Playground share tenant-scoped agent skill enrichment, including project and inherited plugin source checks.

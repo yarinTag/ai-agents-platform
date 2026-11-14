@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 
 class PluginsConfigRequest(BaseModel):
-    source_mode: Optional[str] = "local"
+    source_mode: Optional[str] = None
     git_repo: Optional[str] = None
     local_path: Optional[str] = None
 

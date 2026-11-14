@@ -1,3 +1,4 @@
+import { usePluginSourceText } from '../i18n/pluginSource';
 import { useAuth } from '../context/AuthContext';
 import { usePermissions } from '../hooks/usePermissions';
 import { Table, Input, Button, Tag, Tabs, Segmented, Select } from 'antd';
@@ -6,6 +7,7 @@ import type { useSkillsPage } from './useSkillsPage';
 
 export const PluginSourceConfiguration = (props: Pick<
   ReturnType<typeof useSkillsPage>,
+  | 'sourceDepartmentId'
   | 'effectiveConfig'
   | 'skills'
   | 'plugins'
@@ -32,6 +34,7 @@ export const PluginSourceConfiguration = (props: Pick<
   | 'handleClearSource'
 >) => {
   const {
+    sourceDepartmentId,
     effectiveConfig,
     skills,
     plugins,
@@ -58,20 +61,22 @@ export const PluginSourceConfiguration = (props: Pick<
     handleClearSource,
   } = props;
   const { isAdmin } = usePermissions();
-  const { activeDepartmentId, departments } = useAuth();
-  if (activeDepartmentId) {
+  const text = usePluginSourceText();
+  const { departments } = useAuth();
+  if (sourceDepartmentId) {
     const owner = departments.find(department => (department.id || department.department_id) === effectiveConfig?.source_department_id);
-    const inheritedFrom = owner?.name || effectiveConfig?.source_department_id || 'the organization';
+    const inheritedFrom = owner?.name || effectiveConfig?.source_department_id || text.organization;
     return <div style={{ marginBottom: 16 }}>
-      <p>{effectiveConfig?.inherited ? `Plugin source inherited from ${inheritedFrom}` : 'Department plugin source'}
-        {effectiveConfig?.git_repo && <> · <bdi>{effectiveConfig.git_repo}</bdi></>}
+      <p>{effectiveConfig?.inherited ? `${text.inherited} ${inheritedFrom}` : text.departmentSource}
+        {effectiveConfig && (effectiveConfig.source_mode === 'git' ? effectiveConfig.git_repo : effectiveConfig.local_path) &&
+          <> · <bdi>{effectiveConfig.source_mode === 'git' ? effectiveConfig.git_repo : effectiveConfig.local_path}</bdi></>}
       </p>
       {isAdmin && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <Input value={gitRepo} onChange={event => setGitRepo(event.target.value)}
-          placeholder="owner/repository" aria-label="Department GitHub repository" style={{ width: 280 }} />
-        <Button loading={savingConfig} disabled={!gitRepo.trim()} onClick={() => void handleSaveAndSync()}>Save repository</Button>
-        <Button disabled={savingConfig || effectiveConfig?.inherited} onClick={() => void handleClearSource()}>Use inherited source</Button>
-        <Button loading={scanning} onClick={() => void loadConfigAndScan(true)}>Refresh</Button>
+          placeholder="owner/repository" aria-label={text.repository} style={{ width: 280 }} />
+        <Button loading={savingConfig} disabled={!gitRepo.trim()} onClick={() => void handleSaveAndSync()}>{text.save}</Button>
+        <Button disabled={savingConfig || effectiveConfig?.inherited} onClick={() => void handleClearSource()}>{text.inherit}</Button>
+        <Button loading={scanning} onClick={() => void loadConfigAndScan(true)}>{text.refresh}</Button>
       </div>}
     </div>;
   }

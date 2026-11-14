@@ -118,6 +118,21 @@ class RuntimeCommandBuilder:
                                         shared=bool(project_config), create=True))
         raise ValueError("An organization-scoped workspace is required.")
 
+    def _agent_skills_prompt(self, agent_config, project_config):
+        from plugins.workflow_skills import agent_skill_context
+
+        try:
+            context = agent_skill_context(
+                self.services.database(), agent_config.organization_id, agent_config.skills,
+                getattr(project_config, "id", None), department_id=agent_config.department_id,
+                parent_agent_id=agent_config.parent_id,
+            )
+            if not context:
+                raise ValueError("Configured skill context could not be resolved")
+            return context
+        except Exception as error:
+            raise RuntimeError("Required agent skill context is unavailable") from error
+
     def _build_claude_command(
         self,
         agent_config: AgentConfig,
@@ -168,9 +183,7 @@ class RuntimeCommandBuilder:
         if playground:
             system_prompt = agent_config.system_prompt or ""
             if agent_config.skills:
-                skill_context = self.services.skills_prompt(agent_config.skills)
-                if not skill_context:
-                    raise ValueError("Required playground skill context is unavailable")
+                skill_context = self._agent_skills_prompt(agent_config, project_config)
                 system_prompt += "\n" + skill_context
             # Explicit tool inventory and MCP configuration; no inherited customization.
             cmd.extend([
@@ -276,19 +289,8 @@ class RuntimeCommandBuilder:
                 f"- Inspect the output returned by the delegate command and proceed to coordinate subsequent steps."
             )
 
-        # Inject equipped skills if configured
-        agent_skills = getattr(agent_config, "skills", None)
-        if agent_skills and len(agent_skills) > 0:
-            try:
-                from plugins.workflow_skills import agent_skill_context
-                skills_prompt = agent_skill_context(self.services.database(), agent_config.organization_id, agent_skills,
-                                                    getattr(project_config, "id", None),
-                                                    department_id=agent_config.department_id, parent_agent_id=agent_config.parent_id)
-                if not skills_prompt:
-                    raise RuntimeError("Configured skill context could not be resolved")
-                prompt_parts.append(skills_prompt)
-            except Exception as error:
-                raise RuntimeError("Required agent skill context is unavailable") from error
+        if agent_config.skills:
+            prompt_parts.append(self._agent_skills_prompt(agent_config, project_config))
 
         if prompt_parts:
             cmd.extend(["--system-prompt", "\n\n".join(prompt_parts)])

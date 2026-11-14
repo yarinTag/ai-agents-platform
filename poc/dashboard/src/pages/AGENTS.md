@@ -331,3 +331,5 @@ The Workflows run modal starts with the Advanced execution parameters accordion 
 The MCP Hub uses McpDepartmentTools for non-admins. It loads the effective catalog for the selected department and displays the connector, capability description, exact resource and separate authoring/execution decisions. Entering a new department clears the prior results. Marketplace, administration dialogs and connection tests mount only in the admin Hub.
 
 The Skills Hub displays the active department’s effective plugin source and inheritance origin. Organization administrators can save a GitHub override or restore inheritance. Dashboard WorkflowMetricsView displays the reliability trend, failure diagnostics and latest failure logs. Workflows accepts ?edit=<id> for an authorized visible workflow and consumes it when opening the existing builder.
+
+Skills Hub allows organization admins to switch between organization defaults and the selected department’s override. Scope changes remount the catalog and editor. Reliability trends display UTC.

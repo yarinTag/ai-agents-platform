@@ -25,6 +25,7 @@ METHOD_OWNERS = {
     "list_projects": "_projects",
     "delete_project": "_projects",
     "save_skill": "_skills",
+    "update_skill": "_skills",
     "get_skill": "_skills",
     "list_skills": "_skills",
     "delete_skill": "_skills",

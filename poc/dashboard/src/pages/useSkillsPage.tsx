@@ -1,4 +1,3 @@
-import { useAuth } from '../context/AuthContext';
 import type { PluginsConfig } from '../types/skill';
 import { usePermissions } from '../hooks/usePermissions';
 import { useEffect, useState, useRef } from 'react';
@@ -7,9 +6,8 @@ import { EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import { Skill, PluginPackage } from '../types/skill';
 import { getSkills, createSkill, updateSkill, deleteSkill, scanPlugins, getPluginsConfig, updatePluginsConfig, getPluginGitRepos, discoverMCPResources, getPluginSkillContent } from '../services/api';
 
-export const useSkillsPage = () => {
+export const useSkillsPage = (activeDepartmentId: string | null) => {
   const { isAdmin } = usePermissions();
-  const { activeDepartmentId } = useAuth();
   const [effectiveConfig, setEffectiveConfig] = useState<PluginsConfig>();
   const [skills, setSkills] = useState<Skill[]>([]);
   const [plugins, setPlugins] = useState<PluginPackage[]>([]);
@@ -346,6 +344,7 @@ export const useSkillsPage = () => {
   ];
 
   return {
+    sourceDepartmentId: activeDepartmentId,
     effectiveConfig,
     skills,
     sourceConfigError,
