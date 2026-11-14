@@ -1,3 +1,4 @@
+import { PrAuditEvidence } from '../components/workflows/PrEvidence';
 import { useWorkflowRunText } from '../i18n/workflowRun';
 import { formatCost } from '../services/workflowCosts';
 import React, { useEffect, useState } from 'react';
@@ -425,6 +426,7 @@ export const WorkflowLogsPage: React.FC = () => {
                             <Text type="secondary" style={{ fontSize: 12 }}>
                               Started: {formatTime(step.started_at)} · Finished: {formatTime(step.completed_at)}
                             </Text>
+                            <PrAuditEvidence entries={step.pr_evidence || []} />
                             {step.session_cost_summary && <Text style={{ fontSize: 12 }}>Session total: {formatCost(step.session_cost_summary)}</Text>}
                             {step.error && (
                               <Alert

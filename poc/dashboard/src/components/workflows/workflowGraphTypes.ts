@@ -1,3 +1,4 @@
+import type { WorkflowStep } from './workflowBuilderTypes';
 export interface WorkflowCanvasStep {
   key: string;
   name: string;
@@ -7,6 +8,7 @@ export interface WorkflowCanvasStep {
   timeout_seconds?: number;
   mcp_servers?: string[];
   skills?: string[];
+  params?: WorkflowStep['params'];
 }
 
 export interface WorkflowCanvasSkill {

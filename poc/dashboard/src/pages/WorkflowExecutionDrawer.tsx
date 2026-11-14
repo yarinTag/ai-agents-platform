@@ -1,3 +1,5 @@
+import { PrAuditEvidence } from '../components/workflows/PrEvidence';
+import { WorkflowApprovalPanel } from '../components/workflows/WorkflowApprovalPanel';
 import { useWorkflowRunText } from '../i18n/workflowRun';
 import { formatCost } from '../services/workflowCosts';
 import { Link } from 'react-router-dom';
@@ -100,8 +102,10 @@ export const WorkflowExecutionDrawer = (model: Pick<
             )}
 
             {selectedExecution.trigger_type === 'PLAYGROUND' && <Tag color="magenta">PLAYGROUND · TOOLS DISABLED</Tag>}
+            <WorkflowApprovalPanel key={selectedExecution.id} executionId={selectedExecution.id} />
             {selectedExecution.step_runs?.map(step => (
               <Card key={step.id} size="small" title={`${step.step_key} · ${step.status}`}>
+                <PrAuditEvidence entries={step.pr_evidence || []} />
                 <div>Cost: {formatCost(step.cost_summary, step.cost_usd)}</div>
                 {step.session_cost_summary && <div>Session total: {formatCost(step.session_cost_summary)}</div>}
                 <details><summary>Step input</summary><pre style={{ whiteSpace: 'pre-wrap' }}>{step.input_data}</pre></details>
