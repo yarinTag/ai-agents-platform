@@ -37,6 +37,12 @@ export function WorkflowChatModal({ onClose, onCreated }: Props) {
         {messages.length > 0 && <Button type="text" disabled={working} onClick={model.reset}>{text.newChat}</Button>}
       </Space>
       {error && <Alert type="error" showIcon message={error} style={{ marginBottom: 12 }} action={<Button size="small" onClick={model.refresh}>{text.retry}</Button>} />}
+      {job?.diagnostics && <details>
+        <summary>{text.diagnostics}</summary>
+        <pre dir="ltr" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+          {JSON.stringify({ job_id: job.id, provider: job.provider, model: job.model, ...job.diagnostics }, null, 2)}
+        </pre>
+      </details>}
       {loading && <Spin />}
       {!loading && context && !context.departments.length && <Alert type="info" message={text.noDepartments} />}
       {!loading && context && !context.selection && <Alert type="warning" message={text.noModel} />}

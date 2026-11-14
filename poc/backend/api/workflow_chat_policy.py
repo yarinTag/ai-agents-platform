@@ -10,6 +10,11 @@ from .workflow_chat_workspace import workspace_operations, agent_workspace_opera
 PLANNED_RUNNER_ID = "__workflow_runner__"
 
 
+def _interactive_binding(config, resources):
+    return next((binding['id'] for binding in resources.get('interactive_approval_bindings', [])
+                 if binding['connector_id'] == config.connector_id and binding['channel_id'] == config.channel_id), None)
+
+
 def workspace(db, claims, department_id=None):
     user = db.get_user(claims.get('sub')) if claims else None
     if not user or user.status != 'ACTIVE' or user.organization_id != claims.get('org_id'):
@@ -85,9 +90,27 @@ def catalog(db, claims, department_id):
         approval_ready = True
     except ValueError:
         approval_ready = False
-    return {'human_approval': {'configured': approval_ready, 'terminal_only': True,
-             'delivery': 'Authenticated dashboard link sent to approved Telegram/Slack channel',
-             'missing_setup': None if approval_ready else 'Administrator must configure PLATFORM_PUBLIC_URL (HTTPS dashboard URL).'},
+    with db._get_connection() as conn:
+        candidates = conn.execute("""SELECT id,connector_id,channel_id FROM channel_bindings
+            WHERE organization_id=? AND department_id=? AND provider='telegram'
+            AND approve_decisions=1 AND send_notifications=1""",
+            (user.organization_id, department_id)).fetchall()
+    from integrations.identity_proofs import InvalidProof, configuration
+    bindings = []
+    for binding in candidates:
+        if not any(c['id'] == binding['connector_id'] and c['provider'] == 'telegram'
+                   and binding['channel_id'] in c['channels'] and 'send_message' in c['tools'] for c in connectors):
+            continue
+        try:
+            configuration('telegram', db.get_mcp_connector(binding['connector_id']).configuration or {})
+        except (InvalidProof, AttributeError):
+            continue
+        bindings.append(dict(binding))
+    return {'interactive_approval_bindings': bindings,
+        'human_approval': {'configured': approval_ready or bool(bindings), 'terminal_only': True,
+             'dashboard_configured': approval_ready,
+             'delivery': 'Verified Telegram buttons for matching bindings, or authenticated dashboard approval',
+             'missing_setup': None if approval_ready or bindings else 'Configure an interactive Telegram binding or the dashboard HTTPS URL.'},
         'agents': agents, 'connectors': connectors, 'skills': skill_catalog(db, user.organization_id),
         'workspace_readiness': configuration_status(),
         'note': 'Only these configured resource IDs are authorized. Discovery does not grant access. '
@@ -120,6 +143,19 @@ def validate_candidate(candidate, resources):
     if set(candidate.skills) - approved_skills:
         errors.append('Workflow selects a skill outside the configured plugin catalog.')
     for step in candidate.steps:
+        if step.discover_open_prs_author and (step.workspace or step.send_output_of or step.human_approval
+                or step.open_pr_source or len(step.resources) != 1
+                or step.resources[0].tool_name != 'list_open_pull_requests' or not step.resources[0].repository):
+            errors.append('Open PR discovery requires one explicit GitHub open-list resource.')
+        if step.open_pr_source:
+            source = next((item for item in candidate.steps if item.key == step.open_pr_source), None)
+            if (not source or not source.discover_open_prs_author or source.key not in step.depends_on
+                    or step.workspace or step.send_output_of or step.human_approval
+                    or len(step.resources) != 1 or len(source.resources) != 1
+                    or step.resources[0].tool_name != 'get_pull_request_review'
+                    or step.resources[0].connector_id != source.resources[0].connector_id
+                    or step.resources[0].repository != source.resources[0].repository):
+                errors.append('PR review must depend on open PR discovery for the same connector and repository.')
         if step.human_approval:
             errors.extend(validate_approval(step, candidate, resources, agents, connectors))
         errors.extend(validate_workspace(step, agents, connectors))
@@ -181,13 +217,27 @@ def native_definition(candidate: ChatWorkflow, resources, runner_agent_id=None):
     connectors = {c['id']: c for c in resources['connectors']}
     steps = []
     for step in candidate.steps:
-        data = step.model_dump(exclude={'resources', 'send_output_of', 'skills', 'workspace', 'required_outcome', 'human_approval'})
+        data = step.model_dump(exclude={'resources', 'send_output_of', 'skills', 'workspace', 'required_outcome',
+                                       'human_approval', 'discover_open_prs_author', 'open_pr_source'})
         if step.agent_id == PLANNED_RUNNER_ID and runner_agent_id:
             data['agent_id'] = runner_agent_id
         data['mcp_servers'] = sorted({r.connector_id for r in step.resources})
         data['params'] = {'authorized_resources': [r.model_dump(exclude_none=True) for r in step.resources]}
+        if step.discover_open_prs_author:
+            data['params']['discover_open_prs_author'] = step.discover_open_prs_author
+        if step.open_pr_source:
+            data['params']['open_pr_source'] = step.open_pr_source
         if step.human_approval:
-            data['params']['human_approval'] = step.human_approval.model_dump()
+            config = step.human_approval
+            binding = _interactive_binding(config, resources)
+            if binding and config.kind == 'report' and not config.merge_after_approval:
+                data['mcp_servers'] = []
+                data['params'] = {'dag_approval': {'channel_binding_id': binding,
+                    'summary_step': config.source_step, 'timeout_seconds': config.expires_hours * 3600}}
+            else:
+                data['params']['human_approval'] = {
+                    **config.model_dump(exclude={'channel_binding_id'}), 'channel_binding_id': binding,
+                }
         if step.workspace:
             data['params'] = {'workspace': step.workspace.model_dump(exclude_none=True)}
         if step.required_outcome == 'pull_request':
@@ -219,8 +269,9 @@ def native_definition(candidate: ChatWorkflow, resources, runner_agent_id=None):
 def validate_approval(step, candidate, resources, agents, connectors):
     config = step.human_approval
     errors = []
-    if not resources.get('human_approval', {}).get('configured'):
-        errors.append('Human approval requires PLATFORM_PUBLIC_URL configured to the HTTPS dashboard URL.')
+    readiness = resources.get('human_approval', {})
+    if not _interactive_binding(config, resources) and not readiness.get('dashboard_configured', readiness.get('configured')):
+        errors.append('This destination needs an eligible interactive Telegram binding or an HTTPS dashboard URL.')
     if step.workspace or step.send_output_of:
         errors.append('Human approval cannot be combined with repository editing or a send-output action.')
     if config.source_step not in step.depends_on:

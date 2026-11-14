@@ -123,6 +123,7 @@ METHOD_OWNERS = {
     "list_organizations": "_organizations",
     "update_organization": "_organizations",
     "grant_department_mcp_access": "_department_permissions",
+    "inherit_department_github_access": "_department_permissions",
     "revoke_department_mcp_access": "_department_permissions",
     "get_department_mcp_access": "_department_permissions",
     "list_department_mcp_access": "_department_permissions",

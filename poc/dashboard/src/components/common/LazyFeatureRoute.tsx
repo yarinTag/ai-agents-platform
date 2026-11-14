@@ -22,7 +22,7 @@ export function LazyFeatureRoute({ load, capability }: LazyFeatureRouteProps) {
   const Feature = useMemo(() => lazy(load), [load, attempt]);
   return (
     <FeatureErrorBoundary
-      key={`${location.pathname}${location.search}:${attempt}`}
+      key={`${location.pathname}:${attempt}`}
       fallback={<FeatureUnavailable onRetry={() => setAttempt((value) => value + 1)} />}
     >
       <FeatureCapabilityGate capability={capability}>

@@ -260,3 +260,12 @@ Follow ../../docs/architecture/p01-policy-algebra.md: only trusted implemented c
 workflow_chat instructions expose separate PR metadata/diff/check reads and aggregate read dependencies, require explicit pinned comment/review writes and distinguish GitHub review from platform human approval. APPROVE is not a model review event. Explain current-head review/CI/base/strict protection prerequisites truthfully; do not replace blocked merge with a weaker plan without user instruction. Actual enforcement remains server-owned. Contracts: ../../docs/github-pr-governance.md. No model/agent calls performed.
 
 Use [AI-24 agent channel guidance](../../docs/channel-identity-policy.md#agent-instructions): channel labels are display metadata. Plan with exact connector/channel/tool identifiers from the current authorized catalog and surface missing authority.
+
+Workflow chat distinguishes Telegram report approvals without a dashboard origin from the dashboard-based pinned PR approval path.
+
+Workflow chat can select interactive Telegram delivery for report and pinned PR gates without requiring a dashboard URL.
+Workflow chat Direct API authoring uses a 12,000-token output ceiling, subject to the existing request budget. Direct workers distinguish token exhaustion, provider filtering, and other incomplete responses.
+Workflow chat uses depends_on for analysis inputs and reserves send_output_of for explicit channel delivery.
+Workflow chat declares only the aggregate get_pull_request_review tool for combined PR evidence. The server enforces its dependency grants and completion receipts.
+For author-filtered PR monitoring, Workflow Chat generates a server-executed discovery step and a receipt-scoped review dependency.
+Receipt-scoped PR reviews extend the connector completion schema with eligible_pull_numbers, validate candidates against the frozen batch, and serialize findings and eligibility on the server. The formatting-only retry uses the same schema.

@@ -124,8 +124,7 @@ export const WorkflowLogsPage: React.FC = () => {
       } finally { if (!disposed) setLoading(false); }
     };
     void load();
-    const timer = setInterval(load, 5000);
-    return () => { disposed = true; clearInterval(timer); };
+    return () => { disposed = true; };
   }, [workflowId, selectedId, refresh]);
 
   const download = () => {
@@ -159,7 +158,7 @@ export const WorkflowLogsPage: React.FC = () => {
           </Button>
         </div>
 
-        {execution && <WorkflowApprovalPanel key={execution.id} executionId={execution.id} />}
+        {execution && <WorkflowApprovalPanel key={execution.id} executionId={execution.id} refresh={refresh} />}
 
         {error && <Alert type="error" showIcon message="Unable to load logs" description={error} />}
 

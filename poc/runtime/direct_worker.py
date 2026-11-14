@@ -68,9 +68,12 @@ async def run_session(args, session):
         emit({**event, **extra})
 
     async with DirectTools(args) as tools:
-        finalizer = ConnectorFinalizer() if tools.connector is not None else None
+        pull_numbers = tools.connector.scope.get('pull_numbers') if tools.connector is not None else None
+        finalizer = ConnectorFinalizer(pull_numbers) if tools.connector is not None else None
         if finalizer:
             system += OUTCOME_PROMPT + FINISH_PROMPT
+            if pull_numbers is not None:
+                system += ' For PR review, include eligible_pull_numbers in the completion tool arguments and put plain-text findings in output.'
         for turn in range(1, 41):
             if tools.connector is not None:
                 try:
@@ -116,8 +119,14 @@ async def run_session(args, session):
                 result('The provider paused or refused this turn; automatic continuation is not supported.', is_error=True)
                 return
             if response['truncated']:
-                session.save()
-                result('The API response was truncated or filtered. Increase the output token limit or refine the request.', is_error=True)
+                reason = response.get('stop_reason')
+                if reason in ('max_tokens', 'max_output_tokens', 'length'):
+                    message = f'The model reached its output limit ({args.max_tokens:,} tokens). Request a smaller deliverable or use a model with more output capacity.'
+                elif reason == 'content_filter':
+                    message = 'The provider filtered the model response.'
+                else:
+                    message = 'The provider returned an incomplete model response.'
+                result(message, is_error=True)
                 return
             if finalizer:
                 action, output = finalizer.inspect(response)
@@ -143,7 +152,10 @@ async def run_session(args, session):
                     if action == 'repair':
                         # One bounded model-only formatting pass. Connector tools are
                         # removed from the next request and cannot be dispatched.
-                        messages.append({'role': 'user', 'content': REPAIR_PROMPT})
+                        repair = REPAIR_PROMPT
+                        if pull_numbers is not None:
+                            repair += ' Include the eligible_pull_numbers array from the reviewed batch.'
+                        messages.append({'role': 'user', 'content': repair})
                         session.save()
                         continue
                     session.save()

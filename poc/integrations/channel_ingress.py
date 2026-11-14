@@ -5,6 +5,7 @@ import re
 from urllib.parse import parse_qs
 
 from .identity_proofs import InvalidProof, require_slack_signature, require_telegram_secret
+from .telegram_approval_cards import parse_callback
 
 
 @dataclass(frozen=True)
@@ -44,6 +45,8 @@ def _personal_telegram_sender(message):
 def _telegram(raw, headers, settings, now):
     require_telegram_secret(headers, settings)
     update = json.loads(raw)
+    if "callback_query" in update:
+        return parse_callback(update, settings[1], settings[0])
     message = update.get("message")
     if message is None:
         return None

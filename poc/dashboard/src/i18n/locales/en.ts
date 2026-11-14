@@ -44,7 +44,7 @@ export const en = {
     none: 'None',
   },
   auth: {
-    title: 'AGENTS PLATFORM',
+    title: 'ConduitCross',
     subtitle: 'Enterprise Autonomous AI Fleet & Organizational Governance',
     rbacBadge: 'Multi-Tenant Tenant Isolation & RBAC',
     signInTab: 'Sign In to Org',
@@ -85,7 +85,7 @@ export const en = {
     fullNameRequired: 'Please enter your full name',
     newPasswordLabel: 'Choose Account Password',
     joinOrgButton: 'Verify Invitation & Join Org',
-    footerText: 'AI Agents Platform v3.0 • Multi-Department Enterprise Architecture • Hard Budget Limits & MCP Tool Guardrails',
+    footerText: 'ConduitCross v3.0 • Multi-Department Enterprise Architecture • Hard Budget Limits & MCP Tool Guardrails',
     loginFailed: 'Sign in failed. Please verify your credentials and try again.',
     registerFailed: 'Organization registration failed. Please review the details and try again.',
     inviteFailed: 'Joining with invitation token failed.',

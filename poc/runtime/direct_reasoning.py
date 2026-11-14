@@ -68,6 +68,7 @@ def responses_result(data, model):
               'input': tool_input(item['name'], item['arguments'])} for item in items if item.get('type') == 'function_call']
     usage = data.get('usage') or {}
     return {'text': text, 'calls': calls, 'message': {'role': 'assistant', 'response_items': items},
+            'stop_reason': (data.get('incomplete_details') or {}).get('reason') or data.get('status'),
             'truncated': data.get('status') != 'completed', 'model': data.get('model', model),
             'input_tokens': int(usage.get('input_tokens', 0)),
             'output_tokens': int(usage.get('output_tokens', 0)), 'reasoning': summaries}

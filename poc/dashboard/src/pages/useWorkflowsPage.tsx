@@ -114,8 +114,7 @@ export const useWorkflowsPage = () => {
 
   useEffect(() => {
     loadData();
-    const interval = setInterval(loadData, 10000); // Polling every 10s for active runs
-    return () => { ++requestVersion.current; clearInterval(interval); };
+    return () => { ++requestVersion.current; };
   }, [loadData]);
 
   useEffect(() => {
@@ -130,8 +129,7 @@ export const useWorkflowsPage = () => {
       }
     };
     void refresh();
-    const interval = setInterval(refresh, 3000);
-    return () => { disposed = true; clearInterval(interval); };
+    return () => { disposed = true; };
   }, [detailDrawerOpen, selectedExecution?.id, scopeKey]);
 
   // Handle Delete

@@ -14,6 +14,7 @@ class HumanApproval(BaseModel):
     kind: Literal['report', 'pull_requests'] = 'report'
     merge_after_approval: bool = False
     expires_hours: int = Field(default=24, ge=1, le=72)
+    channel_binding_id: str | None = Field(default=None, pattern=r'^chb_[a-f0-9]{32}$')
 
 
 def public_url():
@@ -22,6 +23,13 @@ def public_url():
     if parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
         raise ValueError('Configure PLATFORM_PUBLIC_URL as the HTTPS dashboard URL for authenticated approval links.')
     return raw
+
+
+def optional_public_url():
+    try:
+        return public_url()
+    except ValueError:
+        return None
 
 
 def approval_configuration(step):
