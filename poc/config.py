@@ -194,6 +194,8 @@ class Skill:
     project_id: Optional[str] = None  # None for global skills
     source: Optional[str] = "custom"  # "builtin", "local", "git", "custom"
     location: Optional[str] = None    # Repository URL or filesystem path
+    organization_id: Optional[str] = None
+    is_system: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)

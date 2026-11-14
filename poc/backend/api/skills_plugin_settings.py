@@ -1,40 +1,56 @@
 """Skills: plugin settings ownership."""
 
-from fastapi import Depends, Request, Query
+from fastapi import Depends, HTTPException, Request, Query
 from typing import Optional, Dict, Any
-import subprocess
 import httpx
 from ..dependencies import get_db_manager
 from .skills_models import PluginsConfigRequest
+from plugins.source import department_source, resolve_source
+from plugins.git_scanner import _parse_github_owner_repo
 from .skills_credentials import _find_git_token, _get_or_create_effective_org
 from fastapi import APIRouter
 
 router = APIRouter()
 
 
+def effective_plugin_config(db, organization_id, department_id):
+    source = resolve_source(db, organization_id, department_id)
+    return {"source_mode": source.source_mode, "git_repo": source.git_repo, "local_path": source.local_path,
+            "source_department_id": source.source_department_id,
+            "inherited": bool(department_id and source.source_department_id != department_id)}
+
+
 @router.get("/plugins/config")
-async def get_plugins_config(
-    request: Request,
-    db_manager = Depends(get_db_manager)
-):
-    """Get plugins configuration for the current organization."""
+async def get_plugins_config(request: Request, department_id: Optional[str] = None,
+                             db_manager=Depends(get_db_manager)):
     org = _get_or_create_effective_org(request, db_manager)
-    return {
-        "source_mode": org.plugins_source_mode or "local",
-        "git_repo": org.plugins_git_repo,
-        "local_path": org.plugins_local_path
-    }
+    return effective_plugin_config(db_manager, org.id, department_id)
 
 
-
+@router.put("/plugins/settings")
 @router.put("/plugins/config")
-async def update_plugins_config(
-    cfg: PluginsConfigRequest,
-    request: Request,
-    db_manager = Depends(get_db_manager)
-):
-    """Update plugins configuration for the current organization."""
+async def update_plugins_config(cfg: PluginsConfigRequest, request: Request,
+                                department_id: Optional[str] = None,
+                                db_manager=Depends(get_db_manager)):
     org = _get_or_create_effective_org(request, db_manager)
+    if department_id:
+        mode = cfg.source_mode or ("git" if cfg.git_repo is not None else None)
+        if mode not in ("git", "inherit") or cfg.local_path is not None or (mode == "inherit" and cfg.git_repo is not None):
+            raise HTTPException(422, "Department plugin sources must specify a GitHub repository or inherit.")
+        repo = (cfg.git_repo or "").strip()
+        if mode == "git" and not _parse_github_owner_repo(repo):
+            raise HTTPException(422, "Enter a GitHub repository or select inheritance.")
+        with db_manager._get_connection() as connection:
+            if not department_source(connection, org.id, department_id):
+                raise HTTPException(404, "Department not found.")
+            connection.execute("""
+                UPDATE departments SET plugins_source_mode=?, plugins_git_repo=?
+                WHERE id=? AND organization_id=?
+            """, ("git" if mode == "git" else None,
+                  repo if mode == "git" else None, department_id, org.id))
+        return effective_plugin_config(db_manager, org.id, department_id)
+    if cfg.source_mode == "inherit":
+        raise HTTPException(422, "Only a department can inherit its plugin source.")
     raw = cfg.model_dump(exclude_unset=True)
     mode = (cfg.source_mode or org.plugins_source_mode or "local").lower()
     if mode not in ("local", "git"):
@@ -95,7 +111,6 @@ async def get_plugin_git_repos(
         }
         url = "https://api.github.com/user/repos?per_page=100&sort=updated&affiliation=owner,collaborator,organization_member"
 
-    import httpx
     token_warning = None
     try:
         async with httpx.AsyncClient(timeout=12.0) as client:

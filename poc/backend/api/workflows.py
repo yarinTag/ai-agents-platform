@@ -23,4 +23,6 @@ from . import workflows_approvals as _approvals
 from . import workflows_channel_triggers as _channel_triggers
 from . import workflows_dag_approvals as _dag_approvals
 
-router = compose_routers(_dag_approvals.router, _approvals.router, _chat.router, _settings.router, _generation.router, _queries.router, _channels.router, _channel_triggers.router, _playground.router, _execution.router, _crud.router)
+from . import workflows_reliability as _reliability
+
+router = compose_routers(_reliability.router, _dag_approvals.router, _approvals.router, _chat.router, _settings.router, _generation.router, _queries.router, _channels.router, _channel_triggers.router, _playground.router, _execution.router, _crud.router)

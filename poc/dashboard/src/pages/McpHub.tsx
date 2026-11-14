@@ -2,6 +2,7 @@ import { usePermissions } from '../hooks/usePermissions';
 import React from 'react';
 import { Tag, Button } from 'antd';
 import { ApiOutlined, SyncOutlined, PlusOutlined } from '@ant-design/icons';
+import { McpDepartmentTools } from './McpDepartmentTools';
 import { useMcpPage } from './useMcpPage';
 import { McpConnectorModal } from './McpConnectorModal';
 import { McpHubTabs } from './McpHubTabs';
@@ -11,6 +12,10 @@ import { McpPermissionsModal } from './McpPermissionsModal';
 
 export const McpHubPage: React.FC = () => {
   const { isAdmin } = usePermissions();
+  return isAdmin ? <McpAdminHub /> : <McpDepartmentTools />;
+};
+
+const McpAdminHub: React.FC = () => {
   const model = useMcpPage();
   const { loading, resourceErrors, setCustomModalVisible, customForm, loadData } = model;
   return (
@@ -65,7 +70,7 @@ export const McpHubPage: React.FC = () => {
           <Button
             type="primary"
             icon={<PlusOutlined />}
-            disabled={!isAdmin || loading || Boolean(resourceErrors.connectors)}
+            disabled={loading || Boolean(resourceErrors.connectors)}
             onClick={() => {
               customForm.resetFields();
               setCustomModalVisible(true);

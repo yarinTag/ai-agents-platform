@@ -160,6 +160,7 @@ class Department(Record):
     budget_action: str = "REQUIRE_APPROVAL"  # HARD_STOP, REQUIRE_APPROVAL, NOTIFY_ONLY
     alert_threshold_pct: float = 80.0
     organization_id: Optional[str] = None
+    parent_department_id: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 

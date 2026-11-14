@@ -143,8 +143,7 @@ async def get_system_stats(
     agents = [a for a in config_manager.list_agents() if owned(a)]
     projects = [p for p in config_manager.list_projects() if owned(p)]
     project_ids = {p.id for p in projects}
-    # Skills have no organization: global skills plus skills of this org's projects.
-    skills = [s for s in db_manager.list_skills() if s.project_id is None or s.project_id in project_ids]
+    skills = [s for s in db_manager.list_skills(organization_id=org_id) if s.project_id is None or s.project_id in project_ids]
     recent_tasks = db_manager.list_task_runs(limit=10, organization_id=org_id)
 
     # Count tasks by status

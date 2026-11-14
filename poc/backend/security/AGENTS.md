@@ -114,7 +114,7 @@ response_policy filters collections/subtrees/activity and rebuilds scoped metric
 profiles retain their own source projection. Connector config credentials are redacted without
 prefixes and masked placeholders preserve saved values on update. Audit logs require attributable
 ownership. catalog_ownership generates safe organization-prefixed IDs (Unicode names retain safe
-hash suffixes) and records new skill/template ownership; legacy unowned global records cannot
+hash suffixes) and records template ownership. Skill writes persist organization ownership on the skill row. Legacy unowned global records cannot
 be silently claimed. New ownership table contract is documented in storage/AGENTS.md.
 
 Broker-wide queue APIs, global-secret legacy approval callbacks/dispatch, native OS folder picker
@@ -170,3 +170,5 @@ See [AI-30 webhook operations](../../../docs/webhook-ingress.md) for proxy requi
 Channel trigger settings use reviewed workflow route levels. Read requires workflow access; save and preview require current department management authority. Save also requires a personal actor.
 
 DAG inbox and decision use department read admission followed by personal identity checks. The decision transaction enforces the saved approver roles, current membership, initiator separation, quorum and replay fencing.
+
+Scoped skill lookup and dashboard counts use the authenticated organization. Project skills additionally require project access, and system skills are read-only. Plugin routes check their resolved source before opening content or scanning a local path. Reliability aggregation checks organization and both workflow/execution department memberships before including an outcome.

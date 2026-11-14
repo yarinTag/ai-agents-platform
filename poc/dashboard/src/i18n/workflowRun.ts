@@ -1,6 +1,7 @@
 import { useTranslation } from './I18nContext';
 
 const en = {
+  advanced: 'Advanced execution parameters (optional)',
   deliveryWarning: 'Summary may complete, but notification delivery is blocked',
   mode: 'Run location', local: 'Run on this server', queue: 'Send to message queue',
   help: 'Local execution needs no message broker. It runs real workflow steps and stops if this server restarts. Queued execution requires a connected broker and worker. Neither mode changes agent tools or permissions.',
@@ -9,6 +10,7 @@ const en = {
   failed: 'Workflow execution could not be started.',
 };
 const he: typeof en = {
+  advanced: 'פרמטרים מתקדמים להרצה (אופציונלי)',
   deliveryWarning: 'אפשר להשלים את הסיכום, אך שליחת ההודעה חסומה',
   mode: 'מיקום ההרצה', local: 'הרצה בשרת הזה', queue: 'שליחה לתור ההודעות',
   help: 'הרצה מקומית אינה דורשת שירות תורים. היא מפעילה את שלבי התהליך ונפסקת אם השרת מופעל מחדש. הרצה בתור דורשת שירות תורים וצרכן פעילים. שתי האפשרויות שומרות על כלי הסוכן והרשאותיו.',

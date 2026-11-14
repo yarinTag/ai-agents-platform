@@ -3,7 +3,6 @@ import { useTranslation } from '../../i18n';
 import { Link, useLocation } from 'react-router-dom';
 import { Tooltip, Button } from 'antd';
 import {
-  DesktopOutlined,
   DeploymentUnitOutlined,
   TeamOutlined,
   AppstoreOutlined,
@@ -43,13 +42,6 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ collapsed, onToggleColla
     {
       title: 'OPERATIONS',
       items: [
-        {
-          to: '/',
-          label: 'Office Canvas',
-          icon: <DesktopOutlined style={{ fontSize: '15px' }} />,
-          badge: 'LIVE',
-          badgeColor: '#10b981',
-        },
         {
           to: '/workflows',
           label: 'Workflows',

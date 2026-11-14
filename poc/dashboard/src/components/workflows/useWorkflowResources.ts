@@ -91,7 +91,7 @@ export function useWorkflowResources(options: WorkflowResourceOptions) {
         if (!options.editing && !channels.includes(options.channelId)) options.setChannelId(channels[0] || '');
       }, 'MCP connectors'),
       readResource(getSkills(), ({ data }) => { skillItems = data || []; }, 'Skills'),
-      readResource(scanPlugins(), ({ data }) => {
+      readResource(scanPlugins(options.departmentId ? { department_id: options.departmentId } : undefined), ({ data }) => {
         pluginItems = (data?.plugins || []).flatMap((plugin) =>
           (plugin.skills || []).map((skill) => ({ ...skill, source: 'marketplace' })));
       }, 'Plugin catalog'),

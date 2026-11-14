@@ -1,10 +1,10 @@
 import { usePermissions } from '../hooks/usePermissions';
 import { useAuth } from '../context/AuthContext';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { WorkflowChatModal } from '../components/workflows/WorkflowChatModal';
 import { useWorkflowChatText } from '../i18n/workflowChat';
 import { useSearchParams } from 'react-router-dom';
-import { Table, Button, Modal, Space, Card, Row, Col, Statistic, Tabs, Input, message, Switch, Form, Alert, Select } from 'antd';
+import { Table, Button, Modal, Space, Card, Row, Col, Statistic, Tabs, Input, message, Switch, Form, Alert, Select, Collapse } from 'antd';
 import { ApartmentOutlined, PlayCircleOutlined, PlusOutlined, ReloadOutlined, CodeOutlined, ThunderboltOutlined, CheckCircleOutlined, SyncOutlined, SafetyCertificateOutlined, CopyOutlined } from '@ant-design/icons';
 import { WorkflowHistoryDrawer } from '../components/workflows/WorkflowHistoryDrawer';
 import { WorkflowSettingsDrawer } from '../components/workflows/WorkflowSettingsDrawer';
@@ -70,6 +70,20 @@ export const WorkflowsPage: React.FC = () => {
     queuedRuns,
     deduplicatedRuns,
   } = model;
+  useEffect(() => {
+    const editId = chatSearch.get('edit');
+    if (!editId || loading || !canManage) return;
+    const workflow = workflows.find(item => item.id === editId);
+    if (!workflow) return;
+    setEditingWorkflow(workflow);
+    setCreateModalOpen(true);
+    setChatSearch(previous => {
+      const next = new URLSearchParams(previous);
+      next.delete('edit');
+      return next;
+    }, { replace: true });
+  }, [chatSearch, loading, canManage, workflows, setEditingWorkflow, setCreateModalOpen, setChatSearch]);
+
   const workflowColumns = createWorkflowColumns(model, {
     canManage, canOperate, isOrgAdmin: user?.role === 'ORG_ADMIN',
   }, departments);
@@ -286,17 +300,29 @@ export const WorkflowsPage: React.FC = () => {
           </Form.Item>}
           {!playgroundMode && <Alert type="info" showIcon message={runText.help} style={{ marginBottom: 16 }} />}
 
-          <Form.Item
-            name="payload"
-            label={<span style={{ color: '#c9d1d9' }}>Execution Trigger Payload (JSON)</span>}
-            tooltip="Custom input variables passed to workflow steps as {{variable_name}}"
-          >
-            <TextArea
-              rows={5}
-              placeholder='{\n  "target_branch": "main",\n  "issue_number": 42\n}'
-              style={{ fontFamily: 'monospace', fontSize: 12 }}
-            />
-          </Form.Item>
+          <Collapse
+            key={JSON.stringify([runModalOpen, playgroundMode, runningWorkflow?.id])}
+            defaultActiveKey={playgroundMode ? ['payload'] : []}
+            style={{ marginBottom: 16 }}
+            items={[{
+              key: 'payload',
+              label: runText.advanced,
+              forceRender: true,
+              children: (
+                <Form.Item
+                  name="payload"
+                  label={<span style={{ color: '#c9d1d9' }}>Execution Trigger Payload (JSON)</span>}
+                  tooltip="Custom input variables passed to workflow steps as {{variable_name}}"
+                >
+                  <TextArea
+                    rows={5}
+                    placeholder='{\n  "target_branch": "main",\n  "issue_number": 42\n}'
+                    style={{ fontFamily: 'monospace', fontSize: 12 }}
+                  />
+                </Form.Item>
+              ),
+            }]}
+          />
 
           {!playgroundMode && <Form.Item
             name="force_rerun"

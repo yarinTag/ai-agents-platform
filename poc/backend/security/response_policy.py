@@ -52,7 +52,7 @@ def scoped_stats(actor, resources):
     active_runs = [{"run_id": task.run_id, "agent_id": task.agent_id, "project_id": task.project_id,
                     "status": str(getattr(task.status, "value", task.status)),
                     "started_at": task.started_at.isoformat() if task.started_at else None} for task in active]
-    skills = [item for item in actor.db.list_skills() if resources.allows("skill", item.id)]
+    skills = [item for item in actor.db.list_skills(organization_id=actor.organization_id) if resources.allows("skill", item.id)]
     return {"agents": {"total": len(agents)}, "projects": {"total": len(projects)},
             "skills": {"total": len(skills), "global": sum(not s.project_id for s in skills), "project_specific": sum(bool(s.project_id) for s in skills)},
             "tasks": {"total_recent": len(tasks), "by_status": dict(counts),

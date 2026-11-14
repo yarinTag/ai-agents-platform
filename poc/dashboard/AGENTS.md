@@ -43,8 +43,7 @@ The **AI Agents Platform Dashboard** (`poc/dashboard/`) is an enterprise-grade, 
 * **Location**: [`src/components/layout/AppSidebar.tsx`](file:///Users/yarintag/Desktop/Projects/ai-agents-platform/poc/dashboard/src/components/layout/AppSidebar.tsx)
 * The collapsible navigation sidebar partitions application features into 4 functional domains:
   1. **`OPERATIONS`**:
-     * Office Canvas (`/`): Spatial 2D/3D workstation office floor with live status.
-     * Workflows (`/workflows`): Dedicated Workflows & Automations Hub for multi-agent DAG pipelines, manual execution, RabbitMQ distributed queue dispatching, and automated run deduplication.
+     * Workflows (`/workflows`): Authenticated landing page and dedicated Workflows & Automations Hub for multi-agent DAG pipelines, manual execution, RabbitMQ distributed queue dispatching, and automated run deduplication.
      * Live Flow (`/flow`): Visual task delegation pipeline and live SSE activity feed.
      * Agents Roster (`/agents`): Agent fleet roster, templates, hierarchy, and mini-chats.
   2. **`TOOLS & PLUGINS`**:
@@ -299,3 +298,5 @@ AI-29 exposes webhook diagnostics from MCP Hub for organization administrators. 
 AI-26 adds personal Linked accounts and scoped department management to the organization surface. The UI keeps proof codes only in current component state and shows verified account IDs before confirmation.
 
 The browser document title and product branding use ConduitCross.
+
+The Office Canvas is accessible directly at `/office`. Non-admin MCP Hub visitors see the read-only catalog for the selected department.

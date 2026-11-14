@@ -161,3 +161,5 @@ Telegram DAG approval delivery works without PLATFORM_PUBLIC_URL. A valid dashbo
 
 The Telegram card worker also consumes durable terminal PR callback claims through the existing pinned merge resolver.
 The API lifespan starts an opt-in local Telegram polling worker. It uses Telegram HTTPS getUpdates and the same verified ingress processing as webhook delivery, with a file lock per local SQLite database and durable offsets.
+
+get_skill_context accepts workflow organization and department IDs. Tenant agent runtime adds the supervisor agent ID for configured-source inheritance.

@@ -157,14 +157,6 @@ async def authorize_request(request: Request, db=Depends(get_db_manager)):
         raise HTTPException(403, "Host-native folder selection is not a tenant-scoped operation.")
     if domain == "workflows" and path.endswith("/generate"):
         actor.require(actor.default_department(), 1)
-    if domain == "skills" and "/plugins/" in path:
-        org = actor.db.get_organization(actor.organization_id)
-        if org.plugins_source_mode == "local" and org.plugins_local_path:
-            try:
-                tenant_workspace(actor.organization_id, candidate=org.plugins_local_path, shared=True)
-            except ValueError:
-                raise HTTPException(403, "The local plugin source is outside tenant storage.")
-
     memory_id = request.path_params.get("memory_id")
     if memory_id:
         memory = actor.db.get_project_memory(memory_id)
@@ -191,20 +183,6 @@ async def authorize_request(request: Request, db=Depends(get_db_manager)):
         connector = body.get("connector_id") or parameters.get("connector_id")
         if not tool or (connector and getattr(tool, "connector_id", None) != connector):
             raise HTTPException(404, "Tool not found for this connector.")
-    if domain == "skills" and path.endswith("/plugins/content"):
-        content_path = query.get("path", "")
-        org = actor.db.get_organization(actor.organization_id)
-        if content_path.startswith("github://"):
-            from plugins.git_scanner import _parse_github_owner_repo
-            parsed = _parse_github_owner_repo(org.plugins_git_repo or "")
-            if org.plugins_source_mode != "git" or not parsed or not content_path.startswith(f"github://{parsed[0]}/{parsed[1]}/") or ".." in content_path.split("/"):
-                raise HTTPException(404, "Skill is outside the configured organization source.")
-        else:
-            try:
-                tenant_workspace(actor.organization_id, candidate=content_path, shared=True)
-            except ValueError:
-                raise HTTPException(404, "Skill is outside tenant storage.")
-
     if request.method == "DELETE" and domain == "agents" and parameters.get("agent_id"):
         for child in actor.db.get_child_agents(parameters["agent_id"]):
             resources.require("agent", child.id, 3)

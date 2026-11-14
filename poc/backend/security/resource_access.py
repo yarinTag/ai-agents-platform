@@ -25,7 +25,10 @@ class Resources:
                    "interaction": "get_interaction", "message": "get_agent_message",
                    "skill": "get_skill", "template": "get_template", "user": "get_user"}
         method = methods.get(kind)
-        result = getattr(self.db, method)(identifier) if method and identifier else None
+        if kind == "skill" and identifier:
+            result = self.db.get_skill(identifier, organization_id=self.actor.organization_id) if self.actor.organization_id else None
+        else:
+            result = getattr(self.db, method)(identifier) if method and identifier else None
         self.cache[key] = result
         return result
 
@@ -110,9 +113,13 @@ class Resources:
                 except ValueError:
                     return False
             return all(check("agent", member if isinstance(member, str) else field(member, "agent_id")) for member in members)
-        if kind == "skill" and field(record, "project_id"):
-            return check("project", field(record, "project_id"))
-        if kind in ("skill", "template"):
+        if kind == "skill":
+            if field(record, "organization_id") is None:
+                return bool(field(record, "is_system") and not field(record, "project_id")
+                            and level == 1 and self.actor.allows(level=level))
+            project = field(record, "project_id")
+            return check("project", project) if project else self.actor.allows(level=level)
+        if kind == "template":
             return self.owned_catalog(kind, identifier) and self.actor.allows(level=level)
         return False
 

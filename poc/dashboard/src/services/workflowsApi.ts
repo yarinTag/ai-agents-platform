@@ -87,3 +87,23 @@ export const generateWorkflowDefinition = (params: {
 export const convertWorkflowFormat = (data: { yaml_content?: string; json_content?: string }) =>
   api.post<{ yaml_content: string; json_content: string }>('/api/v1/workflows/convert-format', data);
 
+
+export interface WorkflowReliability {
+  window: '24h' | '7d' | '30d';
+  trend: { bucket: string; completed: number; failed: number }[];
+  workflows: {
+    workflow_id: string;
+    name: string;
+    failed: number;
+    failure_rate: number;
+    success_rate: number;
+    average_duration_seconds: number | null;
+    average_cost_usd: number | null;
+    last_failed_execution_id: string | null;
+    failure_counts: Record<string, number>;
+    suggestions: { category: string; message: string }[];
+  }[];
+}
+
+export const getWorkflowReliability = (window: WorkflowReliability['window'], signal?: AbortSignal) =>
+  api.get<WorkflowReliability>('/api/v1/workflows/metrics/reliability', { params: { window }, signal });

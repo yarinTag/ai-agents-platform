@@ -354,3 +354,6 @@ LazyFeatureRoute resets its error boundary on pathname changes and explicit retr
 WorkflowChatModal displays saved generation diagnostics in an expandable section for failed chat jobs, including the job ID, provider, model, token counts and validation issue details.
 
 WorkflowApprovalPanel keeps the decision submission guards and reloads on execution changes or an optional explicit refresh signal from Workflow Logs.
+    1. **`OPERATIONS`**: Workflows (`/workflows`), Live Flow (`/flow`), Agents Roster (`/agents`).
+
+The workflow builder scans plugin skills using the workflow department so its picker matches execution source selection.

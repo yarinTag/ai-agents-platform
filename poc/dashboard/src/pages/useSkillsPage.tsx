@@ -1,3 +1,4 @@
+import type { PluginsConfig } from '../types/skill';
 import { usePermissions } from '../hooks/usePermissions';
 import { useEffect, useState, useRef } from 'react';
 import { Form, Button, Tag, message } from 'antd';
@@ -5,8 +6,9 @@ import { EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import { Skill, PluginPackage } from '../types/skill';
 import { getSkills, createSkill, updateSkill, deleteSkill, scanPlugins, getPluginsConfig, updatePluginsConfig, getPluginGitRepos, discoverMCPResources, getPluginSkillContent } from '../services/api';
 
-export const useSkillsPage = () => {
+export const useSkillsPage = (activeDepartmentId: string | null) => {
   const { isAdmin } = usePermissions();
+  const [effectiveConfig, setEffectiveConfig] = useState<PluginsConfig>();
   const [skills, setSkills] = useState<Skill[]>([]);
   const [plugins, setPlugins] = useState<PluginPackage[]>([]);
   const [marketplacePath, setMarketplacePath] = useState<string>('');
@@ -100,12 +102,13 @@ export const useSkillsPage = () => {
       let gRepo = overrides?.gitRepo !== undefined ? overrides.gitRepo : gitRepo;
 
       // On initial load, read current saved config from backend
-      if ((!isManual && !overrides) || !sourceConfigLoaded.current) {
+      if (activeDepartmentId || (!isManual && !overrides) || !sourceConfigLoaded.current) {
         try {
-          const cfgRes = await getPluginsConfig();
+          const cfgRes = await getPluginsConfig(activeDepartmentId);
           if (!cfgRes.data) throw new Error('Missing plugin configuration');
           if (cfgRes.data) {
             sourceConfigLoaded.current = true;
+            setEffectiveConfig(cfgRes.data);
             setSourceConfigError(null);
             mode = (cfgRes.data.source_mode as 'local' | 'git') || 'local';
             lPath = cfgRes.data.local_path || '';
@@ -129,7 +132,7 @@ export const useSkillsPage = () => {
         ...(mode === 'local' ? { local_path: lPath.trim() } : { git_repo: gRepo.trim() }),
       };
 
-      const res = await scanPlugins(isAdmin ? scanParams : undefined, isManual);
+      const res = await scanPlugins(activeDepartmentId ? { department_id: activeDepartmentId } : isAdmin ? scanParams : undefined, isManual);
       setScanError(null);
       if (res.data && Array.isArray(res.data.plugins)) {
         setPlugins(res.data.plugins);
@@ -162,11 +165,12 @@ export const useSkillsPage = () => {
   const handleSaveAndSync = async () => {
     try {
       setSavingConfig(true);
+      setSelectedPluginSkill(null);
       const payload = {
         source_mode: sourceMode,
         ...(sourceMode === 'local' ? { local_path: localPath.trim() } : { git_repo: gitRepo.trim() }),
       };
-      await updatePluginsConfig(payload);
+      await updatePluginsConfig(activeDepartmentId ? { source_mode: 'git', git_repo: gitRepo.trim() } : payload, activeDepartmentId);
       await loadConfigAndScan(true, { mode: sourceMode, localPath, gitRepo });
     } catch (err: any) {
       console.error('Failed to save plugins configuration', err);
@@ -180,7 +184,10 @@ export const useSkillsPage = () => {
     try {
       setSavingConfig(true);
       setSelectedPluginSkill(null);
-      if (sourceMode === 'local') {
+      if (activeDepartmentId) {
+        await updatePluginsConfig({ source_mode: 'inherit' }, activeDepartmentId);
+        await loadConfigAndScan(true);
+      } else if (sourceMode === 'local') {
         setLocalPath('');
         await updatePluginsConfig({ source_mode: 'local', local_path: '' });
         await loadConfigAndScan(true, { mode: 'local', localPath: '', gitRepo });
@@ -223,7 +230,7 @@ export const useSkillsPage = () => {
     setSkillContent(skill.content_preview || '');
     try {
       setLoadingContent(true);
-      const res = await getPluginSkillContent(skill.path);
+      const res = await getPluginSkillContent(skill.path, activeDepartmentId);
       if (res.data?.content) {
         setSkillContent(res.data.content);
       }
@@ -337,6 +344,8 @@ export const useSkillsPage = () => {
   ];
 
   return {
+    sourceDepartmentId: activeDepartmentId,
+    effectiveConfig,
     skills,
     sourceConfigError,
     scanError,

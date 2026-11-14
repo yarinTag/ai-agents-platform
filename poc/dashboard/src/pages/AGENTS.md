@@ -7,7 +7,7 @@ The `src/pages/` directory contains top-level page components mounted by React R
 
 ## 2. Page Catalog & Route Reference
 
-### 2.1 `OfficeView.tsx` (`/`)
+### 2.1 `OfficeView.tsx` (`/office`)
 * **Purpose**: Primary mission-control command floor rendering the physical simulation of the AI office.
 * **Key Components**:
   * [`AgentsOfficeV3Canvas`](file:///Users/yarintag/Desktop/Projects/ai-agents-platform/poc/dashboard/src/components/office/AgentsOfficeV3Canvas.tsx): High-fidelity 2.5D/isometric office floor with zoom, pan, department clusters, and agent avatars.
@@ -126,7 +126,7 @@ The `src/pages/` directory contains top-level page components mounted by React R
 * **Key Components**:
   * System Health Alert banner (`Healthy`, `Degraded`, `Critical`).
   * 4 Statistic Cards: Total Agents, Active Tasks, Connected MCPs, and Total Projects.
-  * Quick Launch Action shortcuts linking to Office Canvas, Agents, and MCP Hub.
+  * Quick Launch Action shortcuts linking to Workflows, Agents, and MCP Hub.
 * **State & Features**:
   * Fetches `getSystemStats()` and `getSystemHealth()` with error fallbacks.
 
@@ -325,3 +325,11 @@ The Workflows header opens the department-scoped Approvals inbox. Execution-deri
 
 The dashboard welcome and default connector test notification use ConduitCross branding.
 Workflow lists and logs load on entry, relevant selection changes, and explicit refresh. Workflow mutations can refresh affected data. Lists, execution details, and logs have no periodic refresh timers.
+
+The Workflows run modal starts with the Advanced execution parameters accordion collapsed for manual runs and expanded for Playground. The JSON field stays registered with the existing run form when collapsed.
+
+The MCP Hub uses McpDepartmentTools for non-admins. It loads the effective catalog for the selected department and displays the connector, capability description, exact resource and separate authoring/execution decisions. Entering a new department clears the prior results. Marketplace, administration dialogs and connection tests mount only in the admin Hub.
+
+The Skills Hub displays the active department’s effective plugin source and inheritance origin. Organization administrators can save a GitHub override or restore inheritance. Dashboard WorkflowMetricsView displays the reliability trend, failure diagnostics and latest failure logs. Workflows accepts ?edit=<id> for an authorized visible workflow and consumes it when opening the existing builder.
+
+Skills Hub allows organization admins to switch between organization defaults and the selected department’s override. Scope changes remount the catalog and editor. Reliability trends display UTC.

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Card, Row, Col, Statistic, Spin, Alert, Button, Tag } from 'antd';
 import {
+  ApartmentOutlined,
   DesktopOutlined,
   ThunderboltOutlined,
   AppstoreOutlined,
@@ -10,6 +11,7 @@ import {
   ArrowRightOutlined,
 } from '@ant-design/icons';
 import { Link } from 'react-router-dom';
+import { WorkflowMetricsView } from './WorkflowMetricsView';
 import { getSystemStats, getSystemHealth } from '../services/api';
 
 export const DashboardPage: React.FC = () => {
@@ -48,6 +50,7 @@ export const DashboardPage: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      <WorkflowMetricsView />
       {/* Welcome & Launch Bar */}
       <div
         style={{
@@ -71,14 +74,14 @@ export const DashboardPage: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '12px' }}>
-          <Link to="/">
+          <Link to="/workflows">
             <Button
               type="primary"
               size="large"
-              icon={<DesktopOutlined />}
+              icon={<ApartmentOutlined />}
               style={{ background: '#4f46e5', borderColor: '#4f46e5', fontWeight: 600 }}
             >
-              Open 3D Office
+              Explore Workflows
             </Button>
           </Link>
           <Link to="/flow">

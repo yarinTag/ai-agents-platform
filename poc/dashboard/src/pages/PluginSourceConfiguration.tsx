@@ -1,3 +1,5 @@
+import { usePluginSourceText } from '../i18n/pluginSource';
+import { useAuth } from '../context/AuthContext';
 import { usePermissions } from '../hooks/usePermissions';
 import { Table, Input, Button, Tag, Tabs, Segmented, Select } from 'antd';
 import { DeleteOutlined, AppstoreOutlined, FolderOpenOutlined, FileTextOutlined, SyncOutlined, ThunderboltOutlined, CheckCircleOutlined, GithubOutlined, SaveOutlined, DownSquareOutlined, UpSquareOutlined, LockOutlined, UnlockOutlined, BranchesOutlined, KeyOutlined, LinkOutlined } from '@ant-design/icons';
@@ -5,6 +7,8 @@ import type { useSkillsPage } from './useSkillsPage';
 
 export const PluginSourceConfiguration = (props: Pick<
   ReturnType<typeof useSkillsPage>,
+  | 'sourceDepartmentId'
+  | 'effectiveConfig'
   | 'skills'
   | 'plugins'
   | 'loading'
@@ -30,6 +34,8 @@ export const PluginSourceConfiguration = (props: Pick<
   | 'handleClearSource'
 >) => {
   const {
+    sourceDepartmentId,
+    effectiveConfig,
     skills,
     plugins,
     loading,
@@ -55,6 +61,25 @@ export const PluginSourceConfiguration = (props: Pick<
     handleClearSource,
   } = props;
   const { isAdmin } = usePermissions();
+  const text = usePluginSourceText();
+  const { departments } = useAuth();
+  if (sourceDepartmentId) {
+    const owner = departments.find(department => (department.id || department.department_id) === effectiveConfig?.source_department_id);
+    const inheritedFrom = owner?.name || effectiveConfig?.source_department_id || text.organization;
+    return <div style={{ marginBottom: 16 }}>
+      <p>{effectiveConfig?.inherited ? `${text.inherited} ${inheritedFrom}` : text.departmentSource}
+        {effectiveConfig && (effectiveConfig.source_mode === 'git' ? effectiveConfig.git_repo : effectiveConfig.local_path) &&
+          <> · <bdi>{effectiveConfig.source_mode === 'git' ? effectiveConfig.git_repo : effectiveConfig.local_path}</bdi></>}
+      </p>
+      {isAdmin && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <Input value={gitRepo} onChange={event => setGitRepo(event.target.value)}
+          placeholder="owner/repository" aria-label={text.repository} style={{ width: 280 }} />
+        <Button loading={savingConfig} disabled={!gitRepo.trim()} onClick={() => void handleSaveAndSync()}>{text.save}</Button>
+        <Button disabled={savingConfig || effectiveConfig?.inherited} onClick={() => void handleClearSource()}>{text.inherit}</Button>
+        <Button loading={scanning} onClick={() => void loadConfigAndScan(true)}>{text.refresh}</Button>
+      </div>}
+    </div>;
+  }
   if (!isAdmin) return <div style={{ color: '#8b949e', marginBottom: 12 }}>Plugin sources are managed by your organization administrator.</div>;
   return (<>
                 {/* Plugin Source Configuration Bar */}

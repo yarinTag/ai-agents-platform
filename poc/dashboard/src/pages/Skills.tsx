@@ -1,6 +1,8 @@
 import { usePermissions } from '../hooks/usePermissions';
-import React from 'react';
-import { Form, Input, Button, Modal, Tag, message, Select } from 'antd';
+import { useAuth } from '../context/AuthContext';
+import { usePluginSourceText } from '../i18n/pluginSource';
+import React, { useState } from 'react';
+import { Form, Input, Button, Modal, Tag, message, Select, Segmented, Space } from 'antd';
 import { PlusOutlined, SyncOutlined, CopyOutlined } from '@ant-design/icons';
 import { Skill } from '../types/skill';
 import FolderPickerModal from '../components/common/FolderPickerModal';
@@ -10,7 +12,23 @@ import { SkillsCatalogTabs } from './SkillsCatalogTabs';
 
 export const SkillsPage: React.FC = () => {
   const { isAdmin } = usePermissions();
-  const model = useSkillsPage();
+  const { activeDepartmentId } = useAuth();
+  const text = usePluginSourceText();
+  const [scope, setScope] = useState<'organization' | 'department'>('department');
+  const departmentId = !isAdmin || scope === 'department' ? activeDepartmentId : null;
+  return <Space orientation="vertical" style={{ width: '100%' }}>
+    {isAdmin && activeDepartmentId && <Segmented<'organization' | 'department'> aria-label={text.scope} value={scope}
+      onChange={setScope} options={[
+        { value: 'organization', label: text.organization },
+        { value: 'department', label: text.department },
+      ]} />}
+    <SkillsScope key={departmentId ?? 'organization'} departmentId={departmentId} />
+  </Space>;
+};
+
+function SkillsScope({ departmentId }: { departmentId: string | null }) {
+  const { isAdmin } = usePermissions();
+  const model = useSkillsPage(departmentId);
   const {
     skills,
     plugins,

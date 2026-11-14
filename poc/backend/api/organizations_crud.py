@@ -92,15 +92,19 @@ def create_department(
             target_org_id = user_state.get("org_id")
 
     dept_id = req.id or f"dept_{uuid.uuid4().hex[:10]}"
-    dept = db.create_department(
-        id=dept_id,
-        name=req.name,
-        description=req.description,
-        monthly_budget_usd=req.monthly_budget_usd,
-        budget_action=req.budget_action,
-        alert_threshold_pct=req.alert_threshold_pct,
-        organization_id=target_org_id
-    )
+    try:
+        dept = db.create_department(
+            id=dept_id,
+            name=req.name,
+            description=req.description,
+            monthly_budget_usd=req.monthly_budget_usd,
+            budget_action=req.budget_action,
+            alert_threshold_pct=req.alert_threshold_pct,
+            organization_id=target_org_id,
+            parent_department_id=req.parent_department_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
     return DepartmentResponse(**dept.to_dict())
 
 
@@ -129,6 +133,7 @@ def list_departments(
                 budget_action=r['budget_action'],
                 alert_threshold_pct=float(r['alert_threshold_pct']),
                 organization_id=r['organization_id'] if 'organization_id' in r.keys() else None,
+                parent_department_id=r['parent_department_id'],
                 created_at=r['created_at'],
                 updated_at=r['updated_at']
             )

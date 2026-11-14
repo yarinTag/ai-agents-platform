@@ -97,7 +97,8 @@ class WorkflowStepRunner:
         if step_skills and self.runtime is not None:
             if self.skill_context is None:
                 raise RuntimeError("Required skill context provider is unavailable")
-            skills_context = self.skill_context(step_skills, organization_id=workflow_for_skills.organization_id)
+            skills_context = self.skill_context(step_skills, organization_id=workflow_for_skills.organization_id,
+                                                department_id=workflow_for_skills.department_id)
             if not skills_context:
                 raise RuntimeError("Configured step skill context could not be resolved")
             formatted_prompt = f"{skills_context}\n\n[TASK INSTRUCTIONS]\n{formatted_prompt}"
