@@ -18,7 +18,8 @@ import {
 import axios from 'axios';
 import { getWorkflow, getWorkflowExecutions, getWorkflowExecution } from '../services/api';
 import { PlatformWorkflow, WorkflowExecution } from '../types/mcp';
-import { WorkflowApprovalPanel } from '../components/workflows/WorkflowApprovalPanel';
+import { DagApprovalsInbox } from '../components/workflows/DagApprovalsInbox';
+import { useDagApprovalsText } from '../i18n/dagApprovals';
 import { StepEventTimeline } from '../components/workflows/StepEventTimeline';
 
 const { Text, Title } = Typography;
@@ -90,6 +91,7 @@ const duration = (start?: string, end?: string) => {
 
 export const WorkflowLogsPage: React.FC = () => {
   const runText = useWorkflowRunText();
+  const approvalText = useDagApprovalsText();
   const { workflowId } = useParams<{ workflowId: string }>();
   const [params, setParams] = useSearchParams();
   const selectedId = params.get('execution');
@@ -101,6 +103,7 @@ export const WorkflowLogsPage: React.FC = () => {
   const [refresh, setRefresh] = useState(0);
   const [mode, setMode] = useState('ALL');
   const [search, setSearch] = useState('');
+  const [approvalRunId, setApprovalRunId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!workflowId) return;
@@ -158,7 +161,9 @@ export const WorkflowLogsPage: React.FC = () => {
           </Button>
         </div>
 
-        {execution && <WorkflowApprovalPanel key={execution.id} executionId={execution.id} refresh={refresh} />}
+        {execution && <DagApprovalsInbox open={execution.id === approvalRunId} execution={{
+          id: execution.id, department_id: execution.department_id,
+        }} onClose={() => setApprovalRunId(null)} />}
 
         {error && <Alert type="error" showIcon message="Unable to load logs" description={error} />}
 
@@ -301,7 +306,12 @@ export const WorkflowLogsPage: React.FC = () => {
                         <span style={{ fontFamily: 'monospace', fontSize: 14, color: '#f0f6fc' }}>{execution.id}</span>
                       </Space>
                     }
-                    extra={<Button size="small" icon={<DownloadOutlined />} onClick={download}>Export JSON</Button>}
+                    extra={<Space wrap size={6}>
+                      {execution.trigger_type !== 'PLAYGROUND' && <Button size="small" onClick={() => setApprovalRunId(execution.id)}>
+                        {approvalText.runApprovals}
+                      </Button>}
+                      <Button size="small" icon={<DownloadOutlined />} onClick={download}>Export JSON</Button>
+                    </Space>}
                   >
                     <Row gutter={[12, 12]}>
                       <Col xs={12} sm={6}>

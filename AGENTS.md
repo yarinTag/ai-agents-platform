@@ -333,3 +333,5 @@ AI-24 documents [channel identity and sender policy](docs/channel-identity-polic
 ConduitCross is the product display name. Repository and API identifiers retain their existing contracts.
 
 Department plugin sources resolve within the organization. Custom skill storage enforces organization ownership, and the authenticated dashboard exposes workflow reliability metrics. See the storage, plugin, REST API and dashboard guides.
+
+The Workflows inbox and Execution Logs show pending and historical checkpoint and final approvals.

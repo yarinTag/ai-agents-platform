@@ -357,3 +357,5 @@ WorkflowApprovalPanel keeps the decision submission guards and reloads on execut
     1. **`OPERATIONS`**: Workflows (`/workflows`), Live Flow (`/flow`), Agents Roster (`/agents`).
 
 The workflow builder scans plugin skills using the workflow department so its picker matches execution source selection.
+
+The shared inbox presents checkpoint and terminal approval tables under Pending and History. Closing details retains the current table, page and filter.
