@@ -1,4 +1,5 @@
 """Durable channel delivery and callback receipts for DAG decisions."""
+from datetime import datetime
 import hashlib
 import hmac
 import json
@@ -25,8 +26,13 @@ def initialize(conn):
     )""")
 
 
+def _table(approval_id):
+    return 'pr_channel_deliveries' if approval_id.startswith('wfa_') else 'dag_channel_deliveries'
+
+
 def enqueue(conn, approval_id, binding_id):
-    conn.execute("INSERT INTO dag_channel_deliveries(approval_id,binding_id,status) VALUES (?,?,'QUEUED')",
+    table = _table(approval_id)
+    conn.execute(f"INSERT INTO {table}(approval_id,binding_id,status) VALUES (?,?,'QUEUED')",
                  (approval_id, binding_id))
 
 
@@ -54,22 +60,26 @@ def destination(conn, row):
 
 def next_delivery(db):
     with dag_approvals._transaction(db) as conn:
-        row = conn.execute("""SELECT a.*,d.binding_id,x.workflow_id FROM dag_channel_deliveries d
-            JOIN workflow_dag_approvals a ON a.id=d.approval_id
-            JOIN workflow_executions x ON x.id=a.execution_id
-            JOIN workflows w ON w.id=x.workflow_id AND w.revision=a.workflow_revision
-                AND w.organization_id=a.organization_id AND w.department_id=a.department_id
-            WHERE d.status='QUEUED' AND a.status='PENDING' AND a.expires_at>?
-            ORDER BY a.expires_at,a.id LIMIT 1""", (int(time.time()),)).fetchone()
-        if not row:
-            return None
-        conn.execute("UPDATE dag_channel_deliveries SET status='SENDING' WHERE approval_id=?", (row["id"],))
-        return dict(row)
+        for table, approvals, clock in (
+            ('pr_channel_deliveries', 'workflow_approvals', datetime.now().isoformat()),
+            ('dag_channel_deliveries', 'workflow_dag_approvals', int(time.time())),
+        ):
+            row = conn.execute(f"""SELECT a.*,d.binding_id,x.workflow_id FROM {table} d
+                JOIN {approvals} a ON a.id=d.approval_id
+                JOIN workflow_executions x ON x.id=a.execution_id AND x.status='WAITING_APPROVAL'
+                JOIN workflows w ON w.id=x.workflow_id AND w.revision=a.workflow_revision
+                    AND w.organization_id=a.organization_id AND w.department_id=a.department_id
+                WHERE d.status='QUEUED' AND a.status='PENDING' AND a.expires_at>?
+                ORDER BY a.expires_at,a.id LIMIT 1""", (clock,)).fetchone()
+            if row:
+                conn.execute(f"UPDATE {table} SET status='SENDING' WHERE approval_id=?", (row["id"],))
+                return dict(row)
+        return None
 
 
 def record_delivery(db, approval_id, status, *, connector=None, channel=None, message=None, bot=None, rendered=None, token=None):
     with dag_approvals._transaction(db) as conn:
-        conn.execute("""UPDATE dag_channel_deliveries SET status=?,connector_id=?,channel_id=?,
+        conn.execute(f"""UPDATE {_table(approval_id)} SET status=?,connector_id=?,channel_id=?,
             message_id=?,bot_id=?,rendered=?,token_digest=? WHERE approval_id=? AND status='SENDING'""",
             (status, connector, channel, message, bot, rendered, digest(token) if token else None, approval_id))
 
@@ -79,6 +89,11 @@ def apply_callback(db, connector, version, callback):
         row = conn.execute("""SELECT a.*,d.binding_id,d.connector_id,d.channel_id,d.message_id,d.bot_id
             FROM dag_channel_deliveries d JOIN workflow_dag_approvals a ON a.id=d.approval_id
             WHERE d.token_digest=? AND d.status='DELIVERED'""", (digest(callback.token),)).fetchone()
+        terminal = row is None
+        if terminal:
+            row = conn.execute("""SELECT a.*,d.binding_id,d.connector_id,d.channel_id,d.message_id,d.bot_id,d.callback_id
+                FROM pr_channel_deliveries d JOIN workflow_approvals a ON a.id=d.approval_id
+                WHERE d.token_digest=? AND d.status='DELIVERED'""", (digest(callback.token),)).fetchone()
         if not row or (row["connector_id"], row["channel_id"], row["message_id"], row["bot_id"]) != (
             connector, callback.channel_id, callback.message_id, callback.bot_id,
         ):
@@ -93,6 +108,12 @@ def apply_callback(db, connector, version, callback):
         user = resolve_user(db, row["organization_id"], connector, callback.sender_id, connection=conn)
         if not user:
             raise InvalidProof("INVALID_APPROVAL_CALLBACK")
+        if terminal:
+            if row["callback_id"] == callback.callback_id and row["resolved_by"] == user:
+                return
+            from .terminal_channel_approval import claim
+            claim(conn, row, user, callback)
+            return
         if conn.execute("SELECT 1 FROM dag_channel_callbacks WHERE approval_id=? AND callback_id=?",
                         (row["id"], callback.callback_id)).fetchone():
             return
@@ -103,6 +124,8 @@ def apply_callback(db, connector, version, callback):
 
 
 def message_state(conn, row):
+    if "config_json" in row.keys():
+        return {"PENDING": "PENDING:0/1", "RESOLVING": "DECIDED", "EXPIRED": "TIMED_OUT"}.get(row["status"], row["status"])
     if row["status"] != "PENDING":
         return "APPROVED" if row["status"] == "CLAIMED" else row["status"]
     policy = json.loads(row["policy_json"])
@@ -121,8 +144,15 @@ def next_edit(db):
             WHERE d.status='DELIVERED' AND d.retry_at<=?
                 AND (d.rendered LIKE 'PENDING:%' OR (d.rendered='APPROVED' AND a.status IN ('REJECTED','TIMED_OUT')))
             ORDER BY d.retry_at,a.expires_at LIMIT 50""", (int(time.time()),)).fetchall()
+        rows += conn.execute("""SELECT a.*,d.binding_id,d.connector_id,d.channel_id,d.message_id,
+                d.bot_id,d.token_digest,d.rendered,x.workflow_id
+            FROM pr_channel_deliveries d JOIN workflow_approvals a ON a.id=d.approval_id
+            JOIN workflow_executions x ON x.id=a.execution_id
+            WHERE d.status='DELIVERED' AND d.retry_at<=?
+                AND (d.rendered LIKE 'PENDING:%' OR d.rendered='DECIDED')
+            ORDER BY d.retry_at,a.expires_at LIMIT 50""", (int(time.time()),)).fetchall()
         for row in rows:
-            conn.execute("UPDATE dag_channel_deliveries SET retry_at=? WHERE approval_id=?",
+            conn.execute(f"UPDATE {_table(row['id'])} SET retry_at=? WHERE approval_id=?",
                          (int(time.time()) + 30, row["id"]))
             state = message_state(conn, row)
             if state != row["rendered"]:
@@ -132,4 +162,4 @@ def next_edit(db):
 
 def record_edit(db, approval_id, state):
     with dag_approvals._transaction(db) as conn:
-        conn.execute("UPDATE dag_channel_deliveries SET rendered=? WHERE approval_id=?", (state, approval_id))
+        conn.execute(f"UPDATE {_table(approval_id)} SET rendered=? WHERE approval_id=?", (state, approval_id))

@@ -14,6 +14,7 @@ class DagApprovalPolicy(BaseModel):
     quorum: int = Field(default=1, ge=1, le=10)
     separate_initiator: Literal[True] = True
     channel_binding_id: str | None = Field(default=None, pattern=r"^chb_[a-f0-9]{32}$")
+    summary_step: str | None = Field(default=None, min_length=1, max_length=80)
 
 
 def dag_approval_policy(step):
@@ -22,4 +23,7 @@ def dag_approval_policy(step):
         return None
     if set(params) != {"dag_approval"} or step.mcp_servers:
         raise ValueError("DAG approval steps cannot declare execution tools or actions.")
-    return DagApprovalPolicy.model_validate(params["dag_approval"])
+    policy = DagApprovalPolicy.model_validate(params["dag_approval"])
+    if policy.summary_step and (not policy.channel_binding_id or policy.summary_step not in step.depends_on):
+        raise ValueError("Approval summary must reference a direct dependency and a channel binding.")
+    return policy

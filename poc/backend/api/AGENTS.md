@@ -388,3 +388,9 @@ Workflow create rejects reserved trigger metadata and normal definition edits pr
 GET /api/v1/workflows/dag-approvals?department_id= returns a scoped pending inbox of up to 50 items and a next_after cursor. POST /dag-approvals/{approval_id}/decision?department_id= accepts strict {approve:boolean}, rechecks a personal eligible voter, and returns the decision status.
 
 Verified Telegram callback_query updates on POST /api/v1/channel-ingress/{connector_id} apply a shared DAG decision and return a generic answerCallbackQuery acknowledgment. Raw callback bodies are not stored.
+
+Workflow chat exposes interactive_approval_bindings for eligible Telegram department bindings. A matching report-only approval compiles to params.dag_approval with channel_binding_id, summary_step and timeout_seconds. Pull-request approval retains its pinned terminal gate.
+
+Workflow chat can select an exact interactive Telegram binding for pinned PR gates even without a public dashboard origin. GitHub review and merge grant validation remains required.
+
+Workflow chat approval readiness distinguishes configured (any supported path) from dashboard_configured. Interactive availability is checked for the selected exact connector and channel.

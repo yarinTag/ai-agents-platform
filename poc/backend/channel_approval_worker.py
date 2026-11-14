@@ -6,7 +6,7 @@ from governance.policy import decide
 from integrations.telegram_approval_cards import action_token, write_card
 from integrations.tool_scopes import execution_context
 from storage import channel_approval_delivery as delivery
-from workflows.approval_config import public_url
+from workflows.approval_config import optional_public_url
 from .dependencies import get_db_manager
 
 logger = logging.getLogger(__name__)
@@ -31,9 +31,10 @@ def _send(db, row):
         binding, bot_token, bot, secret = _destination(db, row)
         token = action_token(bot_token, row["id"])
         with db._get_connection() as conn:
-            current = conn.execute("SELECT * FROM workflow_dag_approvals WHERE id=?", (row["id"],)).fetchone()
+            table = "workflow_approvals" if "config_json" in row else "workflow_dag_approvals"
+            current = conn.execute(f"SELECT * FROM {table} WHERE id=?", (row["id"],)).fetchone()
             state = delivery.message_state(conn, current)
-        message = write_card(bot_token, binding["channel_id"], row, state, public_url(), token=token, proof_secret=secret)
+        message = write_card(bot_token, binding["channel_id"], row, state, optional_public_url(), token=token, proof_secret=secret)
         delivery.record_delivery(db, row["id"], "DELIVERED", connector=binding["connector_id"],
                                  channel=binding["channel_id"], message=message, bot=bot, rendered=state, token=token)
     except Exception:
@@ -51,13 +52,15 @@ def _edit(db, row, state):
         token = action_token(bot_token, row["id"])
         if delivery.digest(token) != row["token_digest"]:
             token = None
-        write_card(bot_token, row["channel_id"], row, state, public_url(), message_id=row["message_id"], token=token, proof_secret=secret)
+        write_card(bot_token, row["channel_id"], row, state, optional_public_url(), message_id=row["message_id"], token=token, proof_secret=secret)
         delivery.record_edit(db, row["id"], state)
     except Exception:
         logger.warning("Approval card edit unconfirmed approval_id=%s", row["id"])
 
 
 def consume(db):
+    from storage.terminal_channel_approval import consume as consume_terminal
+    consume_terminal(db)
     row = delivery.next_delivery(db)
     if row:
         _send(db, row)

@@ -108,3 +108,7 @@ Verified channel adapters project optional message text internally for trigger m
 Signed Slack slash commands other than /platform-link enter ingress as COMMAND after installation and bounded field validation. Slack trigger_id supplies the deduplication identity.
 
 telegram_approval_cards owns Telegram rendering and callback projection. Captured and current governance restrict delivery. Terminal edits retain Details and remove decision controls.
+
+Telegram cards show up to 1,000 characters from the explicitly selected summary_step. The optional dashboard link is independent of callback verification.
+
+Terminal Telegram cards include pinned PR identities and bounded findings. An oversized report fails delivery without truncating reviewed subject identities.

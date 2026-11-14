@@ -241,3 +241,9 @@ AI-34 engine isolates ready dashboard barriers, writes outputs and token/cost to
 See [DAG approval state and recovery](../../docs/dag-approvals.md) for the YAML contract, evidence and continuation invariants.
 
 Optional params.dag_approval.channel_binding_id queues a Telegram approval card in the suspension transaction. The dashboard remains available if delivery is unconfirmed.
+
+DAG approval summary_step is optional and must name a direct dependency when channel_binding_id is set. Only that checkpoint output is selected for channel disclosure.
+
+optional_public_url returns a valid dashboard origin or None for optional interactive Details links.
+
+Terminal human_approval can specify channel_binding_id matching its declared Telegram destination. Interactive delivery does not require PLATFORM_PUBLIC_URL. Pinned PR evidence and existing merge resolution are retained.

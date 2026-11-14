@@ -14,7 +14,17 @@ def preflight(db, execution, workflow, definition):
         config = approval_configuration(step)
         if not config:
             continue
-        public_url()
+        if config.channel_binding_id:
+            from storage.channel_approval_delivery import destination
+            with db._get_connection() as conn:
+                binding, _, _, _ = destination(conn, {
+                    'binding_id': config.channel_binding_id, 'organization_id': workflow.organization_id,
+                    'department_id': workflow.department_id,
+                })
+            if (binding['connector_id'], binding['channel_id']) != (config.connector_id, config.channel_id):
+                raise ToolAccessError('Interactive approval binding does not match the declared destination.')
+        else:
+            public_url()
         if config.kind != 'pull_requests':
             continue
         source = next(item for item in definition.steps if item.key == config.source_step)
@@ -57,6 +67,13 @@ def start_gate(db, step, task, step_record_id, execution_id, outputs):
             (identifier, execution_id, step_record_id, task.run_id, workflow.organization_id, workflow.department_id,
              workflow.revision, config.model_dump_json(), json.dumps(subjects), report,
              now.isoformat(), (now + timedelta(hours=config.expires_hours)).isoformat()))
+        if config.channel_binding_id:
+            from storage.channel_approval_delivery import enqueue
+            enqueue(conn, identifier, config.channel_binding_id)
+            conn.execute("UPDATE workflow_approvals SET status='PENDING' WHERE id=?", (identifier,))
+    if config.channel_binding_id:
+        task.result = f'Waiting for authenticated human approval: {identifier}.'
+        return True
     link = f'{public_url()}/workflows/{workflow.id}/logs?execution={execution_id}'
     text = ('Human approval required. Sign in to review and approve or reject. '
             + ('Approval authorizes SHA-pinned PR merges after fresh checks.\n' if config.merge_after_approval else 'No merge is authorized.\n')

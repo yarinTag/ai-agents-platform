@@ -156,3 +156,7 @@ The channel consumer passes its active ingress lease to engine admission. A stal
 The API lifespan DAG approval worker expires stale waits and starts approved checkpoints through the existing workflow engine. Approval state is persisted and the engine claims it atomically.
 
 The API lifespan runs the Telegram approval card worker. It sends queued cards once and reconciles original messages from persisted DAG approval state.
+
+Telegram DAG approval delivery works without PLATFORM_PUBLIC_URL. A valid dashboard origin adds an optional Details button.
+
+The Telegram card worker also consumes durable terminal PR callback claims through the existing pinned merge resolver.

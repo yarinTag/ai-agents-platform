@@ -209,6 +209,87 @@ def test_telegram_approval_callback_is_bound_to_message_and_votes_once(baseline)
     assert delivery.next_edit(db)[1] == "APPROVED"
 
 
+def test_terminal_telegram_claim_cannot_survive_relink(baseline):
+    from datetime import datetime, timedelta
+
+    from integrations.telegram_approval_cards import action_token, signed_action
+    from storage import channel_approval_delivery as delivery, terminal_channel_approval
+
+    db, client = baseline
+    connector = configure(client, db, "telegram")
+    binding = client.post("/api/v1/governance/channel-bindings", headers=auth(), json={
+        "department_id": "atlas_engineering", "connector_id": connector, "provider": "telegram",
+        "channel_id": "12345", "uses": {"approve_decisions": True, "send_notifications": True},
+    })
+    assert binding.status_code == 201, binding.text
+    from backend.api.workflow_chat_policy import catalog
+    inventory = catalog(db, {"sub": "atlas_ORG_ADMIN", "org_id": "atlas"}, "atlas_engineering")
+    assert inventory["human_approval"]["configured"] is True
+    assert inventory["human_approval"]["dashboard_configured"] is False
+    assert inventory["interactive_approval_bindings"] == [{
+        "id": binding.json()["id"], "connector_id": connector, "channel_id": "12345",
+    }]
+    from backend.api.workflow_chat_models import ChatWorkflow
+    from backend.api.workflow_chat_policy import native_definition
+
+    candidate = ChatWorkflow.model_validate({"name": "Review Dependabot", "steps": [
+        {"key": "review", "name": "Review", "agent_id": "atlas_engineering", "prompt_template": "Review PRs.",
+         "resources": [{"connector_id": "atlas_github", "repository": "owner/repository",
+                        "tool_name": "get_pull_request_review"}]},
+        {"key": "approval", "name": "Approval", "agent_id": "atlas_engineering", "prompt_template": "Wait.",
+         "depends_on": ["review"], "resources": [{"connector_id": connector, "channel_id": "12345",
+                                                 "tool_name": "send_message"}],
+         "human_approval": {"source_step": "review", "connector_id": connector, "channel_id": "12345",
+                            "kind": "pull_requests", "merge_after_approval": True}},
+    ]})
+    compiled = native_definition(candidate, inventory)["steps"][1]["params"]["human_approval"]
+    assert compiled["channel_binding_id"] == binding.json()["id"]
+    assert compiled["kind"] == "pull_requests" and compiled["merge_after_approval"] is True
+    workflow = db.create_workflow(id="terminal-pr", name="Terminal PR", definition_json="{}",
+                                  department_id="atlas_engineering", organization_id="atlas")
+    db.create_workflow_execution("terminal-run", workflow.id, "MANUAL", department_id=workflow.department_id,
+                                 status="WAITING_APPROVAL")
+    now = datetime.now()
+    identifier = "wfa_terminal_test"
+    with db._get_connection() as conn:
+        conn.execute("""INSERT INTO workflow_approvals
+            (id,execution_id,step_run_id,task_id,organization_id,department_id,workflow_revision,status,
+             config_json,subjects_json,report,created_at,expires_at)
+            VALUES (?,'terminal-run','review-step','review-task','atlas','atlas_engineering',?,'PENDING',
+                    ?,'[]','Reviewed evidence',?,?)""",
+            (identifier, workflow.revision, json.dumps({"merge_after_approval": True}),
+             now.isoformat(), (now + timedelta(minutes=5)).isoformat()))
+        delivery.enqueue(conn, identifier, binding.json()["id"])
+        conn.execute("""INSERT INTO external_identity_links
+            (id,organization_id,connector_id,user_id,provider,account,subject,created_at)
+            VALUES ('original-link','atlas',?,'atlas_MANAGER','telegram','123456','12345',?)""",
+            (connector, int(time.time())))
+    assert delivery.next_delivery(db)["id"] == identifier
+    token = action_token(db.get_mcp_connector(connector).configuration["bot_token"], identifier)
+    delivery.record_delivery(db, identifier, "DELIVERED", connector=connector, channel="12345",
+                             message="7", bot="123456", rendered="PENDING:0/1", token=token)
+    update = {"callback_query": {"id": "456", "data": f"dga:a:{token}:{signed_action(SECRET, token, 'a')}",
+              "from": {"id": 12345, "is_bot": False},
+              "message": {"message_id": 8, "chat": {"id": 12345}, "from": {"id": 123456}}}}
+    path = f"{BASE}/{connector}"
+    assert client.post(path, json=update, headers=telegram_headers()).json()["text"].startswith("Decision unavailable")
+    update["callback_query"]["message"]["message_id"] = 7
+    for _ in range(2):
+        assert client.post(path, json=update, headers=telegram_headers()).json()["text"] == "Decision recorded."
+    with db._get_connection() as conn:
+        row = conn.execute("SELECT callback_id,decision,identity_link_id FROM pr_channel_deliveries").fetchone()
+        assert tuple(row) == ("456", 1, "original-link")
+        conn.execute("DELETE FROM external_identity_links WHERE id='original-link'")
+        conn.execute("""INSERT INTO external_identity_links
+            (id,organization_id,connector_id,user_id,provider,account,subject,created_at)
+            VALUES ('new-link','atlas',?,'atlas_MANAGER','telegram','123456','12345',?)""",
+            (connector, int(time.time())))
+    terminal_channel_approval.consume(db)
+    assert db.get_workflow_execution("terminal-run").status == "FAILED"
+    with db._get_connection() as conn:
+        assert conn.execute("SELECT receipts_json FROM workflow_approvals WHERE id=?", (identifier,)).fetchone()[0] == "[]"
+
+
 def test_channel_trigger_preview_and_fenced_admission(baseline):
     from workflows.channel_trigger_dispatch import admit_dispatch, reserve_dispatches
 

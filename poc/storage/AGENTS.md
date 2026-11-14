@@ -185,3 +185,7 @@ AI-34 expires pending or approved-but-unclaimed waits at TTL. Inbox returns boun
 DAG approval vote eligibility excludes both the initiator and the recorded author of the pinned workflow revision.
 
 dag_channel_deliveries records approval, exact binding, token digest, Telegram receipt and rendered state. dag_channel_callbacks records callback ID, actor, action and time atomically with the vote.
+
+pr_channel_deliveries references workflow_approvals and stores the binding, token digest, exact provider receipt, rendering state and one callback decision. RESOLVING and the callback decision commit together. The worker consumes that decision once.
+
+Terminal Telegram claims pin identity_link_id in pr_channel_deliveries. Every resolver authorization check requires the same link row; unlinking and relinking cannot revive a consumed decision.

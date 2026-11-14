@@ -23,3 +23,11 @@ The approval timeout is set on `params.dag_approval.timeout_seconds`. It starts 
 Use real FastAPI and SQLite contract tests for channel and message mismatch, revoked links and roles, duplicate callbacks, dashboard races, quorum, expiration, and failed message edits. Check the localized preview and dashboard fallback through the frontend CI. Provider delivery and edits require separate deployment verification.
 
 The first implementation supports Telegram via optional `params.dag_approval.channel_binding_id`. Choose a Telegram department binding with send and approve enabled, an active connector grant, webhook callback_query delivery and a configured HTTPS dashboard origin. Captured and current send policy must allow the destination. The card lists expiry in UTC. The worker edits the original message to reflect quorum and terminal decisions, including dashboard votes. An ambiguous initial send is not retried. Use the dashboard if delivery or editing fails. Slack cards and the visual configuration preview remain follow-up work.
+
+Telegram DAG cards can be delivered without PLATFORM_PUBLIC_URL. A valid dashboard URL adds an optional Details button. Set summary_step under params.dag_approval to a direct dependency that produces a short report suitable for the configured channel. The card includes up to 1,000 characters of that output. Terminal human_approval requests without an interactive binding use the dashboard link path and require its URL.
+
+Create with AI uses eligible Telegram bindings for report-only approvals and compiles those steps into the interactive DAG path. Pinned PR merge gates retain the terminal approval record and use the matching Telegram binding for delivery and decisions.
+
+Pinned PR gates generated with a matching Telegram binding reuse workflow_approvals and persist the callback claim before running the existing resolver. They require no dashboard URL. The resolver still requires fresh protected-branch evidence and exact permissions. An interrupted consumed claim requires operator reconciliation.
+
+A terminal Telegram decision pins the exact identity link record. If that link is removed, the original decision loses merge authority even if the user links an account again.

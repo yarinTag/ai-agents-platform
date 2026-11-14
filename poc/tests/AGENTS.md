@@ -204,3 +204,7 @@ The isolated channel ingress API module also checks the real deterministic DAG e
 AI-31 verifies signed Slack command projection and deduplication through the real ingress API.
 
 The isolated ingress contract includes an authenticated Telegram callback case for exact message matching, duplicate delivery, atomic voting and terminal edit selection.
+
+Terminal Telegram approval contracts verify exact provider message binding, durable callback deduplication and refusal to merge after the original identity link is replaced.
+
+The terminal Telegram contract also checks that the real workflow catalog and native compiler preserve pinned PR merge intent with an exact interactive binding and no dashboard URL.
