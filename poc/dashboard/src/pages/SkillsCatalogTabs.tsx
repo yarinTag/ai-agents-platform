@@ -12,6 +12,7 @@ export const SkillsCatalogTabs = (props: Pick<
   ReturnType<typeof useSkillsPage>,
   | 'sourceConfigError'
   | 'scanError'
+  | 'effectiveConfig'
   | 'skills'
   | 'plugins'
   | 'loading'

@@ -282,7 +282,8 @@ class RuntimeCommandBuilder:
             try:
                 from plugins.workflow_skills import agent_skill_context
                 skills_prompt = agent_skill_context(self.services.database(), agent_config.organization_id, agent_skills,
-                                                    getattr(project_config, "id", None))
+                                                    getattr(project_config, "id", None),
+                                                    department_id=agent_config.department_id, parent_agent_id=agent_config.parent_id)
                 if not skills_prompt:
                     raise RuntimeError("Configured skill context could not be resolved")
                 prompt_parts.append(skills_prompt)

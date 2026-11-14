@@ -35,7 +35,7 @@ This document provides developer instructions, architectural invariants, and com
   * Instant future Hebrew RTL toggle support via typed `TranslationDictionary`.
 * **Sidebar Navigation (`src/components/layout/AppSidebar.tsx`)**:
   * 4 structured navigation sections:
-    1. `OPERATIONS`: Office Canvas (`/`), Live Flow (`/flow`), Agents Roster (`/agents`).
+    1. `OPERATIONS`: Workflows (`/workflows`, redirected from `/`), Live Flow (`/flow`), Agents Roster (`/agents`).
     2. `TOOLS & PLUGINS`: Plugins Hub (`/skills`), MCP Hub (`/mcp`), Tasks Queue (`/tasks`).
     3. `WORKSPACE & DATA`: Projects (`/projects`), Schedule & Calendar (`/calendar`), System Metrics (`/dashboard`).
     4. `ORGANIZATION & GOVERNANCE`: Org & Teams (`/organization`).
@@ -337,3 +337,5 @@ AI-23 uses the governed channel binding API. Preserve exact tenant/department sc
 AI-29 WebhookDiagnostics consumes the scoped backend metadata projection. Keep connector and session changes isolated, localize EN/HE with RTL and separate configuration readiness from provider/TLS verification.
 
 Keep external identity commands in memory only, abort old scope requests, and use server-returned subject and can_revoke fields. Department management must preserve the current effective role and scope.
+
+Non-admin MCP Hub displays the selected department’s effective capability catalog through the authenticated governance API.

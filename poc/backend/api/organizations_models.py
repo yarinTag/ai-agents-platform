@@ -40,6 +40,7 @@ class DepartmentCreateRequest(BaseModel):
     budget_action: str = "HARD_STOP"
     alert_threshold_pct: float = 80.0
     organization_id: Optional[str] = None
+    parent_department_id: Optional[str] = None
 
 
 
@@ -62,6 +63,7 @@ class DepartmentResponse(BaseModel):
     budget_action: str
     alert_threshold_pct: float
     organization_id: Optional[str] = None
+    parent_department_id: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 

@@ -82,7 +82,9 @@ def initialize(conn):
             name TEXT NOT NULL,
             description TEXT,
             content TEXT NOT NULL,
-            project_id TEXT,  -- NULL for global skills
+            project_id TEXT,  -- NULL for organization-wide skills
+            organization_id TEXT REFERENCES organizations(id) ON DELETE CASCADE,
+            is_system INTEGER NOT NULL DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (project_id) REFERENCES projects (id)

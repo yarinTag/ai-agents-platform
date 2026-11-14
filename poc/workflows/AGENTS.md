@@ -257,3 +257,5 @@ New PR approval subjects distinguish the directly observed target branch SHA fro
 PR eligibility report parsing accepts literal line breaks and tabs in model JSON strings while preserving strict field, type, and size validation.
 Batch PR review asks for concise per-PR decisions and concrete blockers in the eligibility report, without reproducing patches or listing successful checks.
 For new receipt-scoped reviews the connector worker serializes the eligibility report from validated completion arguments. Models supply plain-text findings and a separate eligible_pull_numbers array.
+
+Workflow step skill resolution passes the saved workflow department to the shared plugin resolver. Workflow chat builds its skill catalog using the same department.

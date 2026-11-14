@@ -170,3 +170,5 @@ The approval locale module also supplies visual policy editor labels and convers
 
 English and Hebrew locales use the same ConduitCross product name.
 workflowChat includes an English and Hebrew label for the expandable generation diagnostics.
+
+workflowRun.ts provides the English and Hebrew label for the optional execution input accordion.

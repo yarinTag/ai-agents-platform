@@ -17,17 +17,23 @@ class DepartmentsRepository:
         monthly_budget_usd: float = 100.0,
         budget_action: str = "HARD_STOP",
         alert_threshold_pct: float = 80.0,
-        organization_id: Optional[str] = None
+        organization_id: Optional[str] = None,
+        parent_department_id: Optional[str] = None,
     ) -> Department:
         """Create a new department."""
         if not id:
             id = f"dept_{uuid.uuid4().hex[:10]}"
         now = datetime.now().isoformat()
         with self._get_connection() as conn:
+            if parent_department_id and not conn.execute(
+                "SELECT 1 FROM departments WHERE id=? AND organization_id=?",
+                (parent_department_id, organization_id),
+            ).fetchone():
+                raise ValueError("The parent department must belong to this organization.")
             conn.execute("""
-                INSERT INTO departments (id, name, description, monthly_budget_usd, budget_action, alert_threshold_pct, organization_id, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (id, name, description, monthly_budget_usd, budget_action, alert_threshold_pct, organization_id, now, now))
+                INSERT INTO departments (id, name, description, monthly_budget_usd, budget_action, alert_threshold_pct, organization_id, created_at, updated_at, parent_department_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (id, name, description, monthly_budget_usd, budget_action, alert_threshold_pct, organization_id, now, now, parent_department_id))
             conn.commit()
         return self.get_department(id)
 
@@ -47,6 +53,7 @@ class DepartmentsRepository:
                 budget_action=d.get('budget_action') or 'HARD_STOP',
                 alert_threshold_pct=float(d.get('alert_threshold_pct') or 80.0),
                 organization_id=d.get('organization_id'),
+                parent_department_id=d.get('parent_department_id'),
                 created_at=d.get('created_at'),
                 updated_at=d.get('updated_at')
             )

@@ -269,3 +269,5 @@ Workflow chat uses depends_on for analysis inputs and reserves send_output_of fo
 Workflow chat declares only the aggregate get_pull_request_review tool for combined PR evidence. The server enforces its dependency grants and completion receipts.
 For author-filtered PR monitoring, Workflow Chat generates a server-executed discovery step and a receipt-scoped review dependency.
 Receipt-scoped PR reviews extend the connector completion schema with eligible_pull_numbers, validate candidates against the frozen batch, and serialize findings and eligibility on the server. The formatting-only retry uses the same schema.
+
+Agent context assembly passes the agent department and supervisor ID to plugin resolution. Tenant custom skills are read from scoped SQLite storage.

@@ -331,3 +331,5 @@ AI-24 documents [channel identity and sender policy](docs/channel-identity-polic
 [AI-25 external identity linking](docs/external-identities.md) defines the proof and confirmation API, identity lifecycle and diagnostic contracts.
 
 ConduitCross is the product display name. Repository and API identifiers retain their existing contracts.
+
+Department plugin sources resolve within the organization. Custom skill storage enforces organization ownership, and the authenticated dashboard exposes workflow reliability metrics. See the storage, plugin, REST API and dashboard guides.

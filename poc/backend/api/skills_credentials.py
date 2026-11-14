@@ -9,27 +9,13 @@ from ..security import get_authorized_scope
 
 
 def _get_or_create_effective_org(request: Request, db_manager) -> Any:
-    """Resolve current organization, falling back to existing org or creating default org."""
-    scope = get_authorized_scope(request, db_manager)
-    org_id = scope.get("org_id")
-    org = db_manager.get_organization(org_id) if org_id else None
-
-    if org_id and not org:
-        raise HTTPException(status_code=404, detail="Organization not found")
-
+    """Resolve the authenticated tenant without falling back to another organization."""
+    org_id = get_authorized_scope(request, db_manager).get("org_id")
+    if not org_id:
+        raise HTTPException(status_code=403, detail="An organization scope is required.")
+    org = db_manager.get_organization(org_id)
     if not org:
-        all_orgs = db_manager.list_organizations()
-        if all_orgs:
-            org = all_orgs[0]
-        else:
-            org = db_manager.create_organization(
-                id="org_default",
-                name="Default Organization",
-                slug="default-org",
-                domain=None,
-                settings_json="{}",
-                plugins_source_mode="local"
-            )
+        raise HTTPException(status_code=404, detail="Organization not found")
     return org
 
 

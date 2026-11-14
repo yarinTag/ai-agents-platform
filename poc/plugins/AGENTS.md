@@ -66,3 +66,5 @@ same organization plugin source; project skill use requires the actual selected 
 owner. Foreign/unowned custom IDs fail instead of falling back to a global cache. Context is
 bounded to120000 chars. API plugin content additionally verifies configured Git owner/repo or
 local tenant containment. No source execution, scan, provider calls or verification imports.
+
+source.py resolves plugin Git overrides through the current department, its parent departments and the agent’s supervisor departments before using organization settings. Parent/agent traversal is tenant-bounded and cycle-safe. Workflow skills use the workflow department. Agent custom skills require organization ownership and, when applicable, the exact project.

@@ -45,6 +45,8 @@ export interface PluginPackage {
 }
 
 export interface PluginsConfig {
+  source_department_id?: string | null;
+  inherited?: boolean;
   source_mode: 'local' | 'git';
   git_repo?: string;
   local_path?: string;

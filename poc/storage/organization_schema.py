@@ -48,6 +48,15 @@ def initialize(conn):
     except Exception:
         pass
 
+    department_columns = {row[1] for row in conn.execute("PRAGMA table_info(departments)")}
+    for name, definition in (
+        ("parent_department_id", "TEXT REFERENCES departments(id) ON DELETE SET NULL"),
+        ("plugins_source_mode", "TEXT"),
+        ("plugins_git_repo", "TEXT"),
+    ):
+        if name not in department_columns:
+            conn.execute(f"ALTER TABLE departments ADD COLUMN {name} {definition}")
+
     # 1b. Department MCP Access Governance table (Tool-level filtering)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS department_mcp_access (
@@ -134,6 +143,9 @@ def initialize(conn):
             PRIMARY KEY(resource_type, resource_id)
         )
     """)
+
+    from .skills import migrate_skill_ownership
+    migrate_skill_ownership(conn)
 
     from .governance_schema import initialize as initialize_governance
     initialize_governance(conn)

@@ -5,6 +5,7 @@ from pathlib import Path
 from urllib.parse import quote
 from .git_scanner import _parse_github_owner_repo, _scan_git_repo_via_api
 from .local_scanner import scan_local_source
+from .source import resolve_source
 
 
 def github_token(db, organization_id):
@@ -18,13 +19,9 @@ def github_token(db, organization_id):
     return None
 
 
-def skill_catalog(db, organization_id):
-    org = db.get_organization(organization_id)
-    if not org:
-        raise ValueError('The skill organization is unavailable.')
-    mode = org.plugins_source_mode or 'local'
-    repo = (org.plugins_git_repo or '').strip()
-    root = (org.plugins_local_path or '').strip()
+def skill_catalog(db, organization_id, department_id=None, parent_agent_id=None, *, source=None):
+    source = source or resolve_source(db, organization_id, department_id, parent_agent_id)
+    mode, repo, root = source.source_mode, source.git_repo.strip(), source.local_path.strip()
     if mode == 'git':
         if not repo:
             return []
@@ -52,11 +49,12 @@ def skill_catalog(db, organization_id):
     return list(records.values())
 
 
-def skill_context(db, organization_id, identifiers):
+def skill_context(db, organization_id, identifiers, department_id=None, parent_agent_id=None):
     from integrations.provider_http import request_json
     if not identifiers:
         return ''
-    available = {skill['id']: skill for skill in skill_catalog(db, organization_id)}
+    source = resolve_source(db, organization_id, department_id, parent_agent_id)
+    available = {skill['id']: skill for skill in skill_catalog(db, organization_id, source=source)}
     selected = []
     for identifier in identifiers:
         matches = [key for key, skill in available.items() if key == identifier or
@@ -78,9 +76,8 @@ def skill_context(db, organization_id, identifiers):
                 raise ValueError('Selected plugin skill content is unavailable.')
             content = base64.b64decode(data['content']).decode('utf-8')
         else:
-            org = db.get_organization(organization_id)
             path = Path(identifier).expanduser().resolve()
-            root = Path(org.plugins_local_path).expanduser().resolve()
+            root = Path(source.local_path).expanduser().resolve()
             if not path.is_relative_to(root) or path.stat().st_size > 100000:
                 raise ValueError('Selected local skill is outside its configured source or too large.')
             content = path.read_text(encoding='utf-8')
@@ -91,11 +88,11 @@ def skill_context(db, organization_id, identifiers):
     return '\n\n'.join(parts)
 
 
-def agent_skill_context(db, organization_id, identifiers, project_id=None):
+def agent_skill_context(db, organization_id, identifiers, project_id=None, *, department_id=None, parent_agent_id=None):
     """Agent skills may use owned custom records or the configured plugin source only."""
     parts, plugin_ids = [], []
     for identifier in identifiers:
-        skill = db.get_skill(identifier)
+        skill = db.get_skill(identifier, organization_id=organization_id)
         if skill is None:
             plugin_ids.append(identifier)
             continue
@@ -103,14 +100,12 @@ def agent_skill_context(db, organization_id, identifiers, project_id=None):
             project = db.get_project(skill.project_id)
             owned = project and project.organization_id == organization_id and skill.project_id == project_id
         else:
-            with db._get_connection() as conn:
-                owner = conn.execute("SELECT organization_id FROM access_resource_owners WHERE resource_type='skill' AND resource_id=?", (identifier,)).fetchone()
-            owned = owner and owner["organization_id"] == organization_id
+            owned = skill.organization_id == organization_id or (skill.organization_id is None and skill.is_system)
         if not owned:
             raise ValueError('A configured custom skill is outside the current organization/project.')
         parts.append(f"# Skill: {skill.name}\n{skill.content}")
     if plugin_ids:
-        parts.append(skill_context(db, organization_id, plugin_ids))
+        parts.append(skill_context(db, organization_id, plugin_ids, department_id, parent_agent_id))
     text = '\n\n'.join(parts)
     if len(text) > 120000:
         raise ValueError('Combined skill instructions exceed the context limit.')

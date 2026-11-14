@@ -13,7 +13,7 @@ import { OptionalRuntimeSetup } from './components/common/OptionalRuntimeSetup';
 
 // Optional view modules load only when their route is selected.
 const featureRoutes = [
-  { path: '/', load: () => import('./pages/OfficeView') },
+  { path: '/office', load: () => import('./pages/OfficeView') },
   { path: '/workflows', capability: 'workflows', load: () => import('./pages/Workflows') },
   { path: '/workflows/:workflowId/logs', capability: 'workflows', load: () => import('./pages/WorkflowLogs') },
   { path: '/flow', load: () => import('./pages/AgentFlow') },
@@ -63,6 +63,7 @@ const AuthenticatedShell: React.FC = () => {
         <AppLayout>
           {permissions.isAdmin && <OptionalRuntimeSetup />}
           <Routes>
+            <Route path="/" element={<Navigate to="/workflows" replace />} />
             <Route path="/settings" element={<Navigate to="/organization?tab=runtime" replace />} />
             {featureRoutes.map(({ path, capability, load }) => (
               <Route

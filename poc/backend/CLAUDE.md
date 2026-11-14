@@ -205,3 +205,5 @@ AI-19: do not expose merge as a model tool or accept an APPROVE review event as 
 
 ## AI-20 PR scopes and evidence
 AI-20 execution details expose historical pr_evidence through the existing authorized run-detail route. Preserve workflow_pr_evidence allowlists and task/agent/tenant matching; never expose arbitrary stored audit arguments/results or promote model prose to proof. No new mutation/permission/approval endpoint.
+
+Skill catalogs, content and runtime injection use the same source resolver. Workflow reliability aggregates persisted terminal production outcomes under the caller’s selected scope.

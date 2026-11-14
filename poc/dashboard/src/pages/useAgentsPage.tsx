@@ -77,7 +77,7 @@ export const useAgentsPage = () => {
     try {
       const [skillsRes, pluginsRes, modelsRes] = await Promise.all([
         getSkills().catch(() => ({ data: [] })),
-        scanPlugins().catch(() => ({ data: { plugins: [] } })),
+        scanPlugins(activeDepartmentId ? { department_id: activeDepartmentId } : undefined).catch(() => ({ data: { plugins: [] } })),
         getAvailableModels().catch(() => ({ data: [] })),
       ]);
 

@@ -111,7 +111,7 @@ def catalog(db, claims, department_id):
              'dashboard_configured': approval_ready,
              'delivery': 'Verified Telegram buttons for matching bindings, or authenticated dashboard approval',
              'missing_setup': None if approval_ready or bindings else 'Configure an interactive Telegram binding or the dashboard HTTPS URL.'},
-        'agents': agents, 'connectors': connectors, 'skills': skill_catalog(db, user.organization_id),
+        'agents': agents, 'connectors': connectors, 'skills': skill_catalog(db, user.organization_id, department_id),
         'workspace_readiness': configuration_status(),
         'note': 'Only these configured resource IDs are authorized. Discovery does not grant access. '
                 'Only implemented and granted runtime tools are listed. A connected catalog entry alone is not executable. '

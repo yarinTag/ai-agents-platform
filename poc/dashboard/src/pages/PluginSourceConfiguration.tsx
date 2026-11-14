@@ -1,3 +1,4 @@
+import { useAuth } from '../context/AuthContext';
 import { usePermissions } from '../hooks/usePermissions';
 import { Table, Input, Button, Tag, Tabs, Segmented, Select } from 'antd';
 import { DeleteOutlined, AppstoreOutlined, FolderOpenOutlined, FileTextOutlined, SyncOutlined, ThunderboltOutlined, CheckCircleOutlined, GithubOutlined, SaveOutlined, DownSquareOutlined, UpSquareOutlined, LockOutlined, UnlockOutlined, BranchesOutlined, KeyOutlined, LinkOutlined } from '@ant-design/icons';
@@ -5,6 +6,7 @@ import type { useSkillsPage } from './useSkillsPage';
 
 export const PluginSourceConfiguration = (props: Pick<
   ReturnType<typeof useSkillsPage>,
+  | 'effectiveConfig'
   | 'skills'
   | 'plugins'
   | 'loading'
@@ -30,6 +32,7 @@ export const PluginSourceConfiguration = (props: Pick<
   | 'handleClearSource'
 >) => {
   const {
+    effectiveConfig,
     skills,
     plugins,
     loading,
@@ -55,6 +58,23 @@ export const PluginSourceConfiguration = (props: Pick<
     handleClearSource,
   } = props;
   const { isAdmin } = usePermissions();
+  const { activeDepartmentId, departments } = useAuth();
+  if (activeDepartmentId) {
+    const owner = departments.find(department => (department.id || department.department_id) === effectiveConfig?.source_department_id);
+    const inheritedFrom = owner?.name || effectiveConfig?.source_department_id || 'the organization';
+    return <div style={{ marginBottom: 16 }}>
+      <p>{effectiveConfig?.inherited ? `Plugin source inherited from ${inheritedFrom}` : 'Department plugin source'}
+        {effectiveConfig?.git_repo && <> · <bdi>{effectiveConfig.git_repo}</bdi></>}
+      </p>
+      {isAdmin && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <Input value={gitRepo} onChange={event => setGitRepo(event.target.value)}
+          placeholder="owner/repository" aria-label="Department GitHub repository" style={{ width: 280 }} />
+        <Button loading={savingConfig} disabled={!gitRepo.trim()} onClick={() => void handleSaveAndSync()}>Save repository</Button>
+        <Button disabled={savingConfig || effectiveConfig?.inherited} onClick={() => void handleClearSource()}>Use inherited source</Button>
+        <Button loading={scanning} onClick={() => void loadConfigAndScan(true)}>Refresh</Button>
+      </div>}
+    </div>;
+  }
   if (!isAdmin) return <div style={{ color: '#8b949e', marginBottom: 12 }}>Plugin sources are managed by your organization administrator.</div>;
   return (<>
                 {/* Plugin Source Configuration Bar */}
