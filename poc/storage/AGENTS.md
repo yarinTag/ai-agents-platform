@@ -183,3 +183,12 @@ DAG suspension inserts a WAITING_APPROVAL step run and persists execution totals
 AI-34 expires pending or approved-but-unclaimed waits at TTL. Inbox returns bounded excerpts and costs, current role eligibility, quorum and a cursor. The worker consumes durable approved rows and fails closed if continuation is no longer eligible.
 
 DAG approval vote eligibility excludes both the initiator and the recorded author of the pinned workflow revision.
+
+dag_channel_deliveries records approval, exact binding, token digest, Telegram receipt and rendered state. dag_channel_callbacks records callback ID, actor, action and time atomically with the vote.
+
+pr_channel_deliveries references workflow_approvals and stores the binding, token digest, exact provider receipt, rendering state and one callback decision. RESOLVING and the callback decision commit together. The worker consumes that decision once.
+
+Terminal Telegram claims pin identity_link_id in pr_channel_deliveries. Every resolver authorization check requires the same link row; unlinking and relinking cannot revive a consumed decision.
+DepartmentPermissionsRepository resolves effective GitHub connector grants from same-organization connected connectors when no department row exists. Connector configuration.department_default_tools can override the built-in implemented operation list. An inactive department row suppresses inheritance; revoking an inherited grant creates this row. Active department rows supply their own tool list.
+inherit_department_github_access atomically clears a department override only when the same-organization GitHub connector has an enabled default.
+PR approval card delivery and edit projections resolve step_key from the associated execution step run.

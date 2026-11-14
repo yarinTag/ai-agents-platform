@@ -160,3 +160,6 @@ channelTriggers.ts owns English and Hebrew trigger editor labels, matcher constr
 dagApprovals.ts owns English and Hebrew inbox, evidence and paused-step labels.
 
 The approval locale module also supplies visual policy editor labels and conversion guidance.
+
+English and Hebrew locales use the same ConduitCross product name.
+workflowChat includes an English and Hebrew label for the expandable generation diagnostics.

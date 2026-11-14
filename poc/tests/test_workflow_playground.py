@@ -190,7 +190,8 @@ def test_live_execution_still_requires_declared_mcp_grants(environment, mcp_scop
     db.save_agent(AgentConfig(id="grant-agent", name="Grant agent", description="Scoped worker",
         system_prompt="Analyze", organization_id="grant-org", department_id="dept-no-grants"))
     db.save_mcp_connector({"id": "github", "name": "GitHub", "provider": "github",
-        "status": "CONNECTED", "organization_id": "grant-org"})
+        "status": "CONNECTED", "organization_id": "grant-org",
+        "configuration": {"department_default_tools": []}})
     definition = {"name": "Exercise", "steps": [
         {"key": "analyze", "agent_id": "grant-agent", "prompt_template": "Analyze input"}
     ]}

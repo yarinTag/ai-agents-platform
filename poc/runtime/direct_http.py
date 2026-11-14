@@ -112,13 +112,14 @@ def request(provider, model, system, messages, tools, max_tokens, session=None, 
         accept(session, data, messages)
     usage = data.get('usage') or {}
     reasoning = []
+    stop_reason = data.get('stop_reason')
     if anthropic:
         blocks = data.get('content') or []
         calls = [b for b in blocks if b.get('type') == 'tool_use']
         text = '\n'.join(b.get('text', '') for b in blocks if b.get('type') == 'text')
         reasoning = [b['thinking'] for b in blocks if b.get('type') == 'thinking' and b.get('thinking')]
         message = {'role': 'assistant', 'content': blocks}
-        truncated = data.get('stop_reason') == 'max_tokens'
+        truncated = stop_reason == 'max_tokens'
     else:
         choice = data['choices'][0]
         raw = choice['message']
@@ -127,8 +128,9 @@ def request(provider, model, system, messages, tools, max_tokens, session=None, 
         reasoning = compatible_reasoning(raw)
         calls = [{'id': c['id'], 'name': c['function']['name'],
             'input': tool_input(c['function']['name'], c['function']['arguments']), 'type': 'tool_use'} for c in raw.get('tool_calls') or []]
-        truncated = choice.get('finish_reason') in ('length', 'content_filter')
-    return {'stop_reason': data.get('stop_reason'), 'transport': transport, 'response_id': data.get('id'), 'text': text, 'calls': calls, 'message': message, 'truncated': truncated, 'reasoning': reasoning,
+        stop_reason = choice.get('finish_reason')
+        truncated = stop_reason in ('length', 'content_filter')
+    return {'stop_reason': stop_reason, 'transport': transport, 'response_id': data.get('id'), 'text': text, 'calls': calls, 'message': message, 'truncated': truncated, 'reasoning': reasoning,
         'provider_cost_usd': usage.get('cost') if provider == 'direct_openrouter' else None,
         'model': data.get('model', model),
         'input_tokens': int(usage.get('input_tokens', usage.get('prompt_tokens', 0))),

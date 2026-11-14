@@ -369,7 +369,7 @@ export const useMcpConnectorActions = (state: Pick<
         provider,
         connector_id: connectorId,
         channel_id: channelId,
-        message: `🔔 Test notification from AI Agents Platform to ${channelId}`,
+        message: `🔔 Test notification from ConduitCross to ${channelId}`,
       });
       message.success(`Sent test message to ${channelId} (${provider})`);
     } catch (err: any) {

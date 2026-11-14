@@ -239,3 +239,21 @@ AI-34 reserves params.dag_approval for a dashboard barrier policy with exact app
 AI-34 engine isolates ready dashboard barriers, writes outputs and token/cost totals atomically before returning WAITING_APPROVAL, and resumes only via an atomic approved checkpoint claim. Continuation retains the original frozen tool context and skips checkpointed steps. Playground and shared source workspaces are unsupported for these barriers.
 
 See [DAG approval state and recovery](../../docs/dag-approvals.md) for the YAML contract, evidence and continuation invariants.
+
+Optional params.dag_approval.channel_binding_id queues a Telegram approval card in the suspension transaction. The dashboard remains available if delivery is unconfirmed.
+
+DAG approval summary_step is optional and must name a direct dependency when channel_binding_id is set. Only that checkpoint output is selected for channel disclosure.
+
+optional_public_url returns a valid dashboard origin or None for optional interactive Details links.
+
+Terminal human_approval can specify channel_binding_id matching its declared Telegram destination. Interactive delivery does not require PLATFORM_PUBLIC_URL. Pinned PR evidence and existing merge resolution are retained.
+PR batch steps can set params.discover_open_prs_author to execute one governed open-PR listing with an exact author. A dependent step with params.open_pr_source uses the returned PR numbers, defers candidates beyond ten and completes without inference when the list is empty.
+Receipt-scoped PR review returns a strict JSON report with eligible_pull_numbers and findings. The terminal gate intersects those numbers with server-verified pinned subjects before requesting approval. Empty batches produce a valid empty eligibility report without a model call.
+Receipt-scoped reviews carry the discovery author into the governed tool scope alongside the bounded candidate numbers.
+For receipt-scoped PR batches, delivery scope and merge authorization are checked when the terminal gate has eligible subjects. Empty batches complete without preparing a notification scope or resolving a dashboard URL.
+When a receipt-scoped PR approval gate has no eligible subjects, its terminal result includes the review findings so completion notifications can distinguish an empty batch from blocked PRs.
+PR approval can be requested for complete, successful observed CI and a passing change assessment. The post-approval merge continues to enforce fresh strict GitHub merge evidence.
+New PR approval subjects distinguish the directly observed target branch SHA from GitHub's PR base snapshot. The final merge rechecks the approved target and head and relies on GitHub to enforce configured branch rules.
+PR eligibility report parsing accepts literal line breaks and tabs in model JSON strings while preserving strict field, type, and size validation.
+Batch PR review asks for concise per-PR decisions and concrete blockers in the eligibility report, without reproducing patches or listing successful checks.
+For new receipt-scoped reviews the connector worker serializes the eligibility report from validated completion arguments. Models supply plain-text findings and a separate eligible_pull_numbers array.

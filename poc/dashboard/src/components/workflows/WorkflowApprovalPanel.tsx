@@ -5,7 +5,7 @@ import { usePermissions } from '../../hooks/usePermissions';
 import { useWorkflowApprovalText } from '../../i18n/workflowApproval';
 import { decideWorkflowApproval, getWorkflowApproval, type WorkflowApproval } from '../../services/workflowApprovals';
 
-export function WorkflowApprovalPanel({ executionId }: { executionId: string }) {
+export function WorkflowApprovalPanel({ executionId, refresh }: { executionId: string; refresh: number }) {
   const text = useWorkflowApprovalText();
   const { canManage } = usePermissions();
   const [approval, setApproval] = useState<WorkflowApproval | null>(null);
@@ -21,9 +21,8 @@ export function WorkflowApprovalPanel({ executionId }: { executionId: string }) 
       } catch { if (!cancelled) setError(text.failed); }
     };
     void load();
-    const timer = setInterval(load, 5000);
-    return () => { cancelled = true; clearInterval(timer); };
-  }, [executionId, text.failed]);
+    return () => { cancelled = true; };
+  }, [executionId, refresh, text.failed]);
   const decide = async (approve: boolean) => {
     setBusy(true); setError('');
     try {

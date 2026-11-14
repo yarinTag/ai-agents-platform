@@ -8,9 +8,7 @@ def execute_gate(db, step, task, record_id, execution_id, outputs, playground_wo
     try:
         if playground_workspace:
             raise ValueError('Human approval and merging are unavailable in Playground.')
-        from integrations.tool_scopes import prepare_scope
         from .human_approval import start_gate
-        prepare_scope(db, task.run_id, execution_id, step)
         waiting = start_gate(db, step, task, record_id, execution_id, outputs)
         task.status = TaskStatus.PENDING_APPROVAL if waiting else TaskStatus.COMPLETED
         status = 'WAITING_APPROVAL' if waiting else 'COMPLETED'

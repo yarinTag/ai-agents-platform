@@ -1,10 +1,13 @@
 """New lightweight workflow-chat API; independent of the removed assistant."""
 import hashlib
 import json
+import logging
+import re
 import sqlite3
 import uuid
 from datetime import datetime, timedelta
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from pydantic import ValidationError
 from ..dependencies import get_db_manager, get_runtime_adapter, get_optional_runtime_adapter
 from .workflow_chat_models import ChatReply, ChatRequest, ChatWorkflow
 from .workflow_chat_policy import catalog, native_definition, validate_candidate, workspace
@@ -13,6 +16,7 @@ from .workflows_mapping import _workflow_to_response
 from .workflows_models import WorkflowCreateRequest
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def claims(request):
@@ -37,10 +41,13 @@ def read_job(db, identity, job_id):
 
 def public_job(row):
     saved_request = json.loads(row['request_json'])
+    saved_result = json.loads(row['result_json']) if row['result_json'] else None
+    diagnostics = (saved_result or {}).get('diagnostics')
     return {'id': row['id'], 'status': row['status'], 'department_id': row['department_id'],
         'messages': saved_request.get('messages', []),
         'previous_workflow': saved_request.get('previous_workflow'),
-        'result': json.loads(row['result_json']) if row['result_json'] else None,
+        'result': None if diagnostics else saved_result,
+        'diagnostics': diagnostics,
         'error': row['error'], 'model': row['model_id'], 'provider': row['provider_id'],
         'workflow_id': row['workflow_id'] if row['status'] == 'CREATED' else None}
 
@@ -102,17 +109,9 @@ def chat(payload: ChatRequest, request: Request, background: BackgroundTasks,
 def parse_reply(output):
     if isinstance(output, dict):
         return ChatReply.model_validate(output)
-    text = str(output or '')
-    decoder = json.JSONDecoder()
-    for offset, value in enumerate(text):
-        if value != '{':
-            continue
-        try:
-            parsed, _ = decoder.raw_decode(text[offset:])
-            return ChatReply.model_validate(parsed)
-        except ValueError:
-            continue
-    raise ValueError('The model returned an invalid reply. Please try again.')
+    text = re.sub(r'^\s*<think>.*?</think>', '', str(output or ''), count=1, flags=re.DOTALL).strip()
+    fenced = re.fullmatch(r'```(?:json)?\s*(.*?)\s*```', text, flags=re.DOTALL | re.IGNORECASE)
+    return ChatReply.model_validate_json(fenced.group(1) if fenced else text)
 
 
 def generate(db, runtime, identity, job_id):
@@ -133,7 +132,7 @@ def generate(db, runtime, identity, job_id):
             'previous_workflow': payload.previous_workflow.model_dump() if payload.previous_workflow else None,
             'approved_catalog': resources}, ensure_ascii=False)
         if len(prompt) > 160000:
-            raise ValueError('The conversation and resource list are too large. Start a new conversation.')
+            raise HTTPException(422, 'The conversation and resource list are too large. Start a new conversation.')
 
         def stopped():
             try:
@@ -148,7 +147,22 @@ def generate(db, runtime, identity, job_id):
         if inference.get('error'):
             error = inference['error']
         else:
-            reply = parse_reply(inference.get('output'))
+            try:
+                reply = parse_reply(inference.get('output'))
+            except ValidationError as exc:
+                issues = []
+                for item in exc.errors(include_input=False, include_context=False, include_url=False)[:10]:
+                    path = item['loc']
+                    if item['type'] == 'extra_forbidden':
+                        path = (*path[:-1], '<unknown field>')
+                    issues.append({'path': list(path), 'code': item['type']})
+                diagnostics = {'stage': 'reply_validation', 'issues': issues,
+                               'issue_count': exc.error_count(),
+                               'input_tokens': inference.get('input_tokens', 0),
+                               'output_tokens': inference.get('output_tokens', 0)}
+                result = {'diagnostics': diagnostics}
+                logger.warning('Workflow chat reply rejected for job %s: %s', job_id, diagnostics)
+                raise HTTPException(422, 'The model did not return a valid workflow draft. Retry generation.') from None
             errors = validate_candidate(reply.workflow, resources) if reply.workflow else []
             message = reply.message if not errors else ('הטיוטה דורשת תיקון לפני היצירה. הפרטים מופיעים בתצוגה המקדימה.' if payload.locale == 'he' else 'This draft needs corrections before it can be created. See the details in the preview.')
             result = {'message': message, 'workflow': reply.workflow.model_dump() if reply.workflow else None,

@@ -71,6 +71,8 @@ def infer(adapter, selected, prompt, schema, budget, is_cancelled):
         'executed, saved, connected or activated. The chat itself only prepares a draft. '
         'For a step sending a previous summary to a channel, set send_output_of to the source step key, '
         'include that key in depends_on, and reference exactly one approved channel resource. '
+        'Use depends_on alone to pass results between analysis steps, including GitHub listing and review. '
+        'Keep send_output_of null for all analysis, repository tool, and human approval steps. '
         'The server executes this delivery without asking a model to call the tool. '
         'Prefer get_repository_activity for a repository activity summary when that tool is granted. '
         'Step prompt_template values are future execution instructions: write them as actionable '
@@ -81,8 +83,13 @@ def infer(adapter, selected, prompt, schema, budget, is_cancelled):
         'resource IDs allowed for one operation must not be reused with a different operation unless its map allows them. '
         'Do not claim unsupported checks, actions, providers or transports; clarify missing grants/configuration. '
         'For PR monitoring use list_open_pull_requests (exact author dependabot[bot] when requested), '
+        'set discover_open_prs_author on its dedicated listing step and open_pr_source to that step key on the '
+        'aggregate review step, with an explicit depends_on and the same connector and repository; '
         'then get_pull_request_review for each chosen PR to inspect patches, reviews, checks and pinned SHAs. '
-        'Aggregate get_pull_request_review also requires get_pull_request, get_pull_request_diff and get_pull_request_checks grants. '
+        'Aggregate get_pull_request_review requires get_pull_request, get_pull_request_diff and get_pull_request_checks grants. '
+        'For aggregate reviews declare only get_pull_request_review in that step resources. Its dependency grants '
+        'are checked by the server. Every tool declared in step resources requires its own successful call receipt. '
+        'Call the aggregate review at most once per PR in the batch and report any PRs deferred to a later run. '
         'Use separately granted get_pull_request/get_pull_request_diff/get_pull_request_checks when only those facts are requested. '
         'comment_pull_request and review_pull_request are explicit writes pinned to head_sha; review events are COMMENT or REQUEST_CHANGES, never APPROVE. '
         'A GitHub review is not platform human approval. Automatic merge additionally requires approved current-head reviews, '
@@ -93,11 +100,11 @@ def infer(adapter, selected, prompt, schema, budget, is_cancelled):
         'It must depend on all previous work (directly or transitively), include source_step as a direct dependency, '
         'and declare exactly one resource with the channel delivery tool; it has no workspace or send_output_of. '
         'The source step must explicitly declare get_pull_request_review for pinned PR gates. '
-        'The server sends the report and authenticated dashboard approval link, persists WAITING_APPROVAL and stops consuming a worker. '
-        'This is approval in the dashboard reached from Telegram, not Telegram bot reply/callback approval. '
+        'For report and pinned PR gates, select a matching interactive_approval_bindings entry when available. '
+        'The server attaches the binding and sends Telegram buttons with a report; no dashboard URL is required. '
         'Set merge_after_approval=true only if explicitly requested and server_operations includes merge_pull_request '
         'for the source agent and connector. The model never receives a merge tool. '
-        'Explain missing PLATFORM_PUBLIC_URL setup or explicit merge grants; never pretend approval is only a notification. '
+        'Explain missing PLATFORM_PUBLIC_URL only for gates using dashboard approval. Explain missing explicit merge grants. '
         'Merges recheck exact head/base SHAs, CI/reviews and grants after human approval. '
         'Each model step has at most32 audited connector calls and a bounded runtime; split large reviews into explicit stages or narrow the batch. '
         'Batches are limited to ten reviewed candidates; a base change after one merge can block remaining PRs and needs a new review. '
@@ -107,7 +114,8 @@ def infer(adapter, selected, prompt, schema, budget, is_cancelled):
         'Do not emit a workflow while important details or permissions are unresolved.\n' + json.dumps(schema))
     profile = AgentConfig(id='workflow-builder', name='Workflow builder', description='Tool-free planning',
         model=selected['model_id'], runtime_provider=selected['provider_id'], system_prompt=system,
-        skills=[], dangerously_skip_permissions=False, organization_id=selected['organization_id'])
+        max_tokens=12000, skills=[], dangerously_skip_permissions=False,
+        organization_id=selected['organization_id'])
     command = adapter._build_claude_command(profile, None, prompt, playground=True)
     command[command.index('--system-prompt') + 1] = system
     if selected['provider_id'] not in ('free_claude_code', 'custom_gateway'):

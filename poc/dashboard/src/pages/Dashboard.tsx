@@ -63,7 +63,7 @@ export const DashboardPage: React.FC = () => {
       >
         <div>
           <h2 style={{ margin: 0, color: '#f3f4f6', fontSize: '24px', fontWeight: 700 }}>
-            Welcome to AI Agents Platform & Virtual Office
+            Welcome to ConduitCross
           </h2>
           <p style={{ margin: '8px 0 0 0', color: '#a5b4fc', fontSize: '14px', maxWidth: '600px' }}>
             Autonomous AI engineering teams operating with local repository workspaces, custom skills plugins, and real-time isometric visualization.

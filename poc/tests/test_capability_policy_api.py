@@ -257,7 +257,11 @@ def test_editor_options_are_secret_free_and_include_policy_denied_resources(base
 
 
 def test_editor_options_respect_department_grants_and_org_admin_scope(baseline):
-    _, client = baseline
+    db, client = baseline
+    response = client.get(BASE + '/departments/atlas_finance/policy', headers=auth(department='finance'))
+    assert response.status_code == 200
+    assert {value['connector_id'] for value in response.json()['resource_options']} == {'atlas_github'}
+    assert db.revoke_department_mcp_access('atlas_finance', 'atlas_github')
     response = client.get(BASE + '/departments/atlas_finance/policy', headers=auth(department='finance'))
     assert response.status_code == 200 and response.json()['resource_options'] == []
     organization = client.get(BASE + '/organization/policy', headers=auth())

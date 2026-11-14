@@ -14,8 +14,7 @@ def load(db, organization_id, scope_type, scope_id):
                            (organization_id, scope_type, scope_id)).fetchone()
     if row:
         result = dict(row)
-        result['document'] = json.loads(result.pop('document_json'))
-        PolicyDocument.model_validate(result['document'])  # Malformed persistence never becomes an allow.
+        result['document'] = PolicyDocument.model_validate_json(result.pop('document_json')).model_dump()
         return result
     return {'organization_id': organization_id, 'scope_type': scope_type, 'scope_id': scope_id,
             'revision': 0, 'document': PolicyDocument().model_dump(), 'updated_by': None, 'updated_at': None}
@@ -25,7 +24,8 @@ def history(db, organization_id, scope_type, scope_id):
     with db._get_connection() as conn:
         rows = conn.execute('SELECT * FROM capability_policy_revisions WHERE organization_id=? AND scope_type=? AND scope_id=? ORDER BY revision DESC LIMIT 100',
                             (organization_id, scope_type, scope_id)).fetchall()
-    return [{**dict(row), 'document_json': None, 'document': json.loads(row['document_json'])} for row in rows]
+    return [{**dict(row), 'document_json': None,
+             'document': PolicyDocument.model_validate_json(row['document_json']).model_dump()} for row in rows]
 
 
 def save(db, organization_id, scope_type, scope_id, document, expected_revision, actor_id, validator=None):

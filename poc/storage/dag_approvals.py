@@ -24,6 +24,8 @@ def initialize(conn):
         user_id TEXT NOT NULL, decision INTEGER NOT NULL CHECK(decision IN (0,1)),
         created_at INTEGER NOT NULL, PRIMARY KEY(approval_id,user_id)
     )""")
+    from .channel_approval_delivery import initialize as initialize_delivery
+    initialize_delivery(conn)
 
 
 class ApprovalConflict(ValueError):
@@ -61,6 +63,9 @@ def suspend(db, *, execution_id, step_key, revision, initiator_id, policy, check
         conn.execute("""UPDATE workflow_executions SET status='WAITING_APPROVAL',
             total_input_tokens=?,total_output_tokens=?,total_cost_usd=? WHERE id=?""",
             (checkpoint["input_tokens"], checkpoint["output_tokens"], checkpoint["cost_usd"], execution_id))
+        if policy.get("channel_binding_id"):
+            from .channel_approval_delivery import enqueue
+            enqueue(conn, identifier, policy["channel_binding_id"])
     return identifier
 
 
@@ -103,35 +108,40 @@ def _finish(conn, row, status, now, actor=None):
 def decide(db, organization_id, department_id, identifier, user_id, approve):
     """Record one personal vote and recheck every counted approval against current roles."""
     with _transaction(db) as conn:
-        now = int(time.time())
-        row = conn.execute("""SELECT a.* FROM workflow_dag_approvals a
-            JOIN workflow_executions x ON x.id=a.execution_id AND x.status='WAITING_APPROVAL'
-            JOIN workflows w ON w.id=x.workflow_id AND w.revision=a.workflow_revision
-                AND w.organization_id=a.organization_id AND w.department_id=a.department_id
-            WHERE a.id=? AND a.organization_id=? AND a.department_id=? AND a.status='PENDING'""",
-            (identifier, organization_id, department_id)).fetchone()
-        if row is None:
-            raise ApprovalConflict("Approval is unavailable or no longer pending.")
-        policy = json.loads(row["policy_json"])
-        if not _eligible(conn, row, policy, user_id):
-            raise PermissionError("Current user is not eligible to decide this approval.")
-        if row["expires_at"] <= now:
-            _finish(conn, row, "TIMED_OUT", now)
-            return "TIMED_OUT"
-        result = conn.execute("""INSERT INTO workflow_dag_approval_votes
-            (approval_id,user_id,decision,created_at) VALUES (?,?,?,?)
-            ON CONFLICT(approval_id,user_id) DO NOTHING""", (identifier, user_id, int(approve), now))
-        if not result.rowcount:
-            raise ApprovalConflict("This user already voted.")
-        if not approve:
-            _finish(conn, row, "REJECTED", now, user_id)
-            return "REJECTED"
-        votes = conn.execute("SELECT user_id FROM workflow_dag_approval_votes WHERE approval_id=? AND decision=1",
-                             (identifier,)).fetchall()
-        if sum(_eligible(conn, row, policy, vote["user_id"]) for vote in votes) >= policy["quorum"]:
-            _finish(conn, row, "APPROVED", now, user_id)
-            return "APPROVED"
-        return "PENDING"
+        return decide_on_connection(conn, organization_id, department_id, identifier, user_id, approve)
+
+
+def decide_on_connection(conn, organization_id, department_id, identifier, user_id, approve):
+    """Apply the shared decision within the caller's SQLite write transaction."""
+    now = int(time.time())
+    row = conn.execute("""SELECT a.* FROM workflow_dag_approvals a
+        JOIN workflow_executions x ON x.id=a.execution_id AND x.status='WAITING_APPROVAL'
+        JOIN workflows w ON w.id=x.workflow_id AND w.revision=a.workflow_revision
+            AND w.organization_id=a.organization_id AND w.department_id=a.department_id
+        WHERE a.id=? AND a.organization_id=? AND a.department_id=? AND a.status='PENDING'""",
+        (identifier, organization_id, department_id)).fetchone()
+    if row is None:
+        raise ApprovalConflict("Approval is unavailable or no longer pending.")
+    policy = json.loads(row["policy_json"])
+    if not _eligible(conn, row, policy, user_id):
+        raise PermissionError("Current user is not eligible to decide this approval.")
+    if row["expires_at"] <= now:
+        _finish(conn, row, "TIMED_OUT", now)
+        return "TIMED_OUT"
+    result = conn.execute("""INSERT INTO workflow_dag_approval_votes
+        (approval_id,user_id,decision,created_at) VALUES (?,?,?,?)
+        ON CONFLICT(approval_id,user_id) DO NOTHING""", (identifier, user_id, int(approve), now))
+    if not result.rowcount:
+        raise ApprovalConflict("This user already voted.")
+    if not approve:
+        _finish(conn, row, "REJECTED", now, user_id)
+        return "REJECTED"
+    votes = conn.execute("SELECT user_id FROM workflow_dag_approval_votes WHERE approval_id=? AND decision=1",
+                         (identifier,)).fetchall()
+    if sum(_eligible(conn, row, policy, vote["user_id"]) for vote in votes) >= policy["quorum"]:
+        _finish(conn, row, "APPROVED", now, user_id)
+        return "APPROVED"
+    return "PENDING"
 
 
 def claim_resume(db, identifier, workflow_id, revision):

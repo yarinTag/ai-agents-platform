@@ -53,7 +53,7 @@ def authorize_subject(db, approval, subject, merge=False):
     return connector
 
 
-def pinned_subjects(db, execution_id, source_step):
+def pinned_subjects(db, execution_id, source_step, *, allow_approval_only=False):
     with db._get_connection() as conn:
         steps = conn.execute('SELECT task_run_id,status FROM workflow_step_runs WHERE execution_id=? AND step_key=?',
                              (execution_id, source_step)).fetchall()
@@ -65,15 +65,20 @@ def pinned_subjects(db, execution_id, source_step):
     subjects = {}
     for call in calls:
         value = json.loads(call['result'] or '{}')
-        if (value.get('candidate_ready') is not True or value.get('partial') is not False or value.get('evidence_version') != 2
-                or value.get('review_approved') is not True or value.get('base_up_to_date') is not True
-                or value.get('required_checks_satisfied') is not True):
+        if value.get('partial') is not False or value.get('evidence_version') != 2:
+            continue
+        eligible = value.get('approval_ready') is True and value.get('observed_ci_passed') is True
+        merge_ready = (value.get('candidate_ready') is True and value.get('review_approved') is True
+                       and value.get('base_up_to_date') is True and value.get('required_checks_satisfied') is True)
+        if not (merge_ready or (allow_approval_only and eligible)):
             continue
         pull = value['pull_request']
         subject = {'repository': value['repository'], 'pull_number': pull['number'],
                    'head_sha': pull['head']['sha'], 'base_sha': pull['base']['sha'],
                    'connector_id': call['connector_id'], 'agent_id': call['agent_id'], 'tool_id': call['tool_id'],
                    'url': pull['url'], 'author': pull['author']}
+        if value.get('target_sha'):
+            subject.update(target_sha=value['target_sha'], target_ref=pull['base']['ref'])
         subjects[(subject['connector_id'], subject['repository'], subject['pull_number'])] = subject
     if len(subjects) > 10:
         raise ToolAccessError('One approval batch supports at most ten reviewed PRs; narrow the workflow request.')
@@ -89,9 +94,16 @@ def fresh_review(db, approval, subject, merge, extra_authorize=None):
     client = GitHubReads(connector.configuration or {}, subject['repository'], authorize)
     result = client.review(subject['pull_number'])
     pull = result['pull_request']
+    if subject.get('target_sha'):
+        if (result.get('approval_ready') is not True or result.get('observed_ci_passed') is not True
+                or result.get('target_sha') != subject['target_sha'] or pull['base']['ref'] != subject['target_ref']
+                or pull['head']['sha'] != subject['head_sha'] or pull.get('author') != subject['author']):
+            raise ToolAccessError('PR revisions, author, or CI changed after approval. Create a fresh review and approval.')
+        return client
     if (not result['candidate_ready'] or result['partial'] or result.get('evidence_version') != 2
             or result.get('review_approved') is not True or result.get('base_up_to_date') is not True
             or result.get('required_checks_satisfied') is not True or pull['head']['sha'] != subject['head_sha']
-            or pull['base']['sha'] != subject['base_sha']):
-        raise ToolAccessError('PR commits/checks/reviews changed or are not merge-ready. Create a fresh review and approval.')
+            or pull['base']['sha'] != subject['base_sha']
+            or pull.get('author') != subject['author']):
+        raise ToolAccessError('PR author, commits, checks or reviews changed or are not merge-ready. Create a fresh review and approval.')
     return client

@@ -12,6 +12,10 @@ class WorkflowOutcome(BaseModel):
     blocker: Optional[str] = Field(max_length=8000)
 
 
+class PullRequestOutcome(WorkflowOutcome):
+    eligible_pull_numbers: list[int] = Field(max_length=10)
+
+
 class OutcomeFormatError(ValueError):
     def __init__(self, code, message):
         self.code = code
@@ -27,7 +31,7 @@ def _unique_keys(pairs):
     return result
 
 
-def parse_outcome(value):
+def parse_outcome(value, schema=WorkflowOutcome):
     """Accept a typed tool input or one whole JSON document, optionally fenced.
 
     Never search prose for a convenient embedded completed object.
@@ -42,7 +46,7 @@ def parse_outcome(value):
         except (ValueError, TypeError):
             raise OutcomeFormatError('INVALID_JSON', 'The model did not return a verifiable completion status.') from None
     try:
-        parsed = WorkflowOutcome.model_validate(value)
+        parsed = schema.model_validate(value)
     except ValidationError:
         raise OutcomeFormatError('INVALID_ENVELOPE', 'The model did not return the required status, output and blocker fields.') from None
     if not parsed.output.strip():

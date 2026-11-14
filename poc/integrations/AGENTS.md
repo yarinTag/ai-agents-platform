@@ -106,3 +106,18 @@ INGRESS_ADAPTERS in channel_ingress.py is the trusted provider registry for even
 Verified channel adapters project optional message text internally for trigger matching. Identity proof commands and raw provider envelopes are never staged as trigger input.
 
 Signed Slack slash commands other than /platform-link enter ingress as COMMAND after installation and bounded field validation. Slack trigger_id supplies the deduplication identity.
+
+telegram_approval_cards owns Telegram rendering and callback projection. Captured and current governance restrict delivery. Terminal edits retain Details and remove decision controls.
+
+Telegram cards show up to 1,000 characters from the explicitly selected summary_step. The optional dashboard link is independent of callback verification.
+
+Terminal Telegram cards include pinned PR identities and bounded findings. An oversized report fails delivery without truncating reviewed subject identities.
+Governed completion names the required operation and exact configured targets when successful tool receipts are missing.
+Open PR discovery filters provider results by open state and exact requested author. Review batch scopes enforce the discovered PR numbers at invocation.
+Receipt-scoped review completion requires a successful audited call for every PR in the authorized batch.
+Batch review scopes also capture the exact author from the discovery receipt. A review result must still match that author and open state before it can receive a successful receipt.
+Fresh PR evidence after human approval must match the approved subject author as well as the pinned head and base SHAs.
+Execution preflight defers receipt-scoped terminal PR approval delivery authorization until the gate has eligible subjects. Review and discovery scopes still receive normal preflight checks.
+PR evidence exposes observed_ci_passed and approval_ready separately from candidate_ready. The PR gate can pin observed-CI approval candidates. Fresh merge evidence still requires the full GitHub merge policy.
+New approval subjects pin the directly observed target branch ref and SHA in addition to PR head and provider-reported base. Stable differences between the two base values are diagnostic. Fresh merge checks observed CI and both pins, then submits a head-pinned merge for GitHub to enforce repository rules. Legacy subjects retain the strict evidence path.
+Telegram approval callbacks accept channel-attributed posts when sender_chat matches the channel. The signed action and stored delivery receipt still bind the decision to the exact bot, channel and message.

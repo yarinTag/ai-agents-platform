@@ -3,7 +3,7 @@ import hashlib
 import json
 import os
 import re
-from .direct_outcomes import WorkflowOutcome, OutcomeFormatError, parse_outcome, outcome_result
+from .direct_outcomes import PullRequestOutcome, WorkflowOutcome, OutcomeFormatError, parse_outcome, outcome_result
 
 FINISH_NAME = 'platform_workflow_finish'
 FINISH_TOOL = {'name': FINISH_NAME,
@@ -56,12 +56,15 @@ def rejection_event(candidate, error, attempt):
 
 class ConnectorFinalizer:
     """Only one bounded formatting pass, within the worker's existing call limit."""
-    def __init__(self):
+    def __init__(self, pull_numbers=None):
         self.formatting_only = False
         self.diagnostic = None
+        self.pull_numbers = pull_numbers
+        self.schema = PullRequestOutcome if pull_numbers is not None else WorkflowOutcome
+        self.tool = FINISH_TOOL if pull_numbers is None else {**FINISH_TOOL, 'input_schema': self.schema.model_json_schema()}
 
     def inventory(self, connector_tools):
-        return [FINISH_TOOL] if self.formatting_only else [*connector_tools, FINISH_TOOL]
+        return [self.tool] if self.formatting_only else [*connector_tools, self.tool]
 
     def inspect(self, response):
         self.diagnostic = None
@@ -75,7 +78,10 @@ class ConnectorFinalizer:
                 if len(calls) != 1 or not finish:
                     raise OutcomeFormatError('MIXED_FINALIZATION', 'Finalization must be separate from connector calls.')
                 candidate = finish[0]['input']
-            value = parse_outcome(candidate)
+            value = parse_outcome(candidate, self.schema)
+            if self.pull_numbers is not None and (
+                    len(value.output) > 40000 or not set(value.eligible_pull_numbers).issubset(self.pull_numbers)):
+                raise OutcomeFormatError('INVALID_PR_REPORT', 'The review must use only PR numbers in the authorized batch and bounded findings.')
         except OutcomeFormatError as exc:
             self.diagnostic = rejection_event(candidate, exc, 2 if self.formatting_only else 1)
             self.diagnostic['recovery_action'] = ('fail_closed' if self.formatting_only or exc.code == 'MIXED_FINALIZATION' else 'formatting_only')
@@ -86,4 +92,7 @@ class ConnectorFinalizer:
         output, blocker = outcome_result(value)
         if blocker is not None:
             return 'blocked', redact_candidate(blocker)
+        if self.pull_numbers is not None:
+            output = json.dumps({'eligible_pull_numbers': value.eligible_pull_numbers, 'findings': output},
+                                ensure_ascii=False)
         return 'completed', output

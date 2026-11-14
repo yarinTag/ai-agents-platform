@@ -386,3 +386,17 @@ AI-31 exposes GET and PUT /api/v1/workflows/{workflow_id}/channel-trigger and PO
 Workflow create rejects reserved trigger metadata and normal definition edits preserve the saved rule and principal. Only the dedicated trigger route changes these fields.
 
 GET /api/v1/workflows/dag-approvals?department_id= returns a scoped pending inbox of up to 50 items and a next_after cursor. POST /dag-approvals/{approval_id}/decision?department_id= accepts strict {approve:boolean}, rechecks a personal eligible voter, and returns the decision status.
+
+Verified Telegram callback_query updates on POST /api/v1/channel-ingress/{connector_id} apply a shared DAG decision and return a generic answerCallbackQuery acknowledgment. Raw callback bodies are not stored.
+
+Workflow chat exposes interactive_approval_bindings for eligible Telegram department bindings. A matching report-only approval compiles to params.dag_approval with channel_binding_id, summary_step and timeout_seconds. Pull-request approval retains its pinned terminal gate.
+
+Workflow chat can select an exact interactive Telegram binding for pinned PR gates even without a public dashboard origin. GitHub review and merge grant validation remains required.
+
+Workflow chat approval readiness distinguishes configured (any supported path) from dashboard_configured. Interactive availability is checked for the selected exact connector and channel.
+Workflow chat accepts a strict reply object or JSON document with optional Markdown fences and a leading think block. Rejected replies log bounded validation error types without model output.
+Workflow chat persists reply-validation diagnostics in workflow_builder_jobs.result_json for FAILED jobs. The owner-scoped job response exposes diagnostics separately from result, including the stage, up to ten issue paths/codes, total issue count and token usage. Raw replies, validation inputs, and unknown field names are excluded.
+Workflow chat accepts discover_open_prs_author and open_pr_source for governed PR discovery and review. It validates the explicit dependency, matching connector/repository and exact tool declarations before compiling both fields into step params.
+GitHub connector configuration accepts department_default_tools as an explicit list of implemented operations. Omission gives departments the supported GitHub operation set; an empty list disables inheritance. Existing department MCP access routes replace the inherited list or revoke it for one department. Tenant repository scope, execution authority and server-side approval remain required.
+POST /departments/{dept_id}/mcp-access accepts inherit_github_defaults=true to restore enabled same-organization GitHub defaults. Access responses expose inherited for effective grants.
+Telegram connectors support configuration.ingress_mode webhook (default) or polling. In polling mode ingress diagnostics do not require a public HTTPS origin. The authenticated local worker rechecks the current connector mode and credentials before dispatching updates through the shared validation path.

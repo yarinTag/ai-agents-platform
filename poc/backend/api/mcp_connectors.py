@@ -13,6 +13,20 @@ from fastapi import APIRouter
 router = APIRouter()
 
 
+def validate_department_defaults(provider, configuration):
+    if configuration and "ingress_mode" in configuration and (
+            provider.lower() != "telegram" or configuration["ingress_mode"] not in ("webhook", "polling")):
+        raise HTTPException(422, "Telegram ingress mode must be webhook or polling.")
+    if not configuration or 'department_default_tools' not in configuration:
+        return
+    from storage.department_permissions import github_default_operations
+    tools = configuration['department_default_tools']
+    supported = github_default_operations()
+    if provider.lower() != 'github' or not isinstance(tools, list) or any(
+            not isinstance(tool, str) or tool not in supported for tool in tools):
+        raise HTTPException(422, 'Department defaults must list implemented GitHub operations.')
+
+
 @router.get("/connectors")
 def list_installed_connectors(
     request: Request,
@@ -72,6 +86,7 @@ def install_connector(
 
     # Check if already installed
     existing = db.get_mcp_connector(conn_id)
+    validate_department_defaults(existing.provider if existing else req.provider, req.configuration)
     if existing:
         # Update instead of duplicate
         existing.name = req.name
@@ -138,7 +153,9 @@ def update_connector(
             if isinstance(incoming, dict):
                 return {key: merge((old if isinstance(old, dict) else {}).get(key), value) for key, value in incoming.items()}
             return old if incoming == "••••••" else incoming
-        c.configuration = merge(c.configuration, req.configuration)
+        configuration = merge(c.configuration, req.configuration)
+        validate_department_defaults(c.provider, configuration)
+        c.configuration = configuration
     if req.status is not None:
         c.status = req.status
     if req.capabilities is not None:

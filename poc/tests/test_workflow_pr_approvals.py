@@ -152,6 +152,106 @@ def test_explicit_merge_grant_never_inherits_wildcard(state):
         authorize_subject(db, approval, subject, merge=True)
 
 
+def test_github_defaults_preserve_department_overrides_and_tenant_boundaries(state):
+    db, _ = state
+    db.save_mcp_connector({'id': 'github', 'name': 'GitHub', 'provider': 'github',
+        'status': 'CONNECTED', 'organization_id': 'own',
+        'configuration': {'department_default_tools': ['list_open_pull_requests']}})
+    inherited = db.get_department_mcp_access('own', 'github')
+    assert inherited.id.startswith('inherited:')
+    assert db.list_department_mcp_access('own') == [inherited]
+    assert db.get_department_mcp_access('foreign', 'github') is None
+    assert db.inherit_department_github_access('foreign', 'github') is None
+    assert db.check_department_mcp_permission('own', 'github', 'list_open_pull_requests')['allowed']
+    assert not db.check_department_mcp_permission('own', 'github', 'merge_pull_request')['allowed']
+    db.grant_department_mcp_access('own', 'github', allowed_tools=['list_pull_requests'])
+    assert not db.check_department_mcp_permission('own', 'github', 'list_open_pull_requests')['allowed']
+    assert db.inherit_department_github_access('own', 'github') == inherited
+    assert db.revoke_department_mcp_access('own', 'github')
+    assert db.get_department_mcp_access('own', 'github') is None
+    assert db.list_department_mcp_access('own') == []
+    assert db.inherit_department_github_access('own', 'github') == inherited
+
+
+def test_review_batch_uses_only_matching_discovery_receipts(state):
+    from workflows.pull_request_batch import review_candidates
+
+    db, _ = state
+    db.save_mcp_connector({'id': 'github', 'name': 'GitHub', 'provider': 'github', 'organization_id': 'own'})
+    db.save_mcp_tool({'id': 'open-tool', 'connector_id': 'github', 'name': 'list_open_pull_requests',
+                      'description': 'List open pull requests'})
+    step = WorkflowParser.from_dict({'steps': [{'key': 'review', 'depends_on': ['discover'],
+        'params': {'open_pr_source': 'discover', 'authorized_resources': [
+            {'connector_id': 'github', 'repository': 'owner/repo', 'tool_name': 'get_pull_request_review'}]}}]}).steps[0]
+    with db._get_connection() as conn:
+        conn.execute("UPDATE workflow_step_runs SET step_key='discover', status='COMPLETED' WHERE id='step'")
+    call = {'id': 'call_exec_discovery', 'connector_id': 'github', 'tool_id': 'open-tool',
+        'agent_id': 'agent', 'task_id': 'task', 'status': 'COMPLETED',
+        'arguments': {'repository': 'owner/repo', 'author': 'dependabot[bot]'}}
+    candidate = {'number': 7, 'state': 'open', 'author': 'dependabot[bot]'}
+    for pulls, expected in (([], []), ([candidate, candidate], [7])):
+        db.save_mcp_tool_call({**call, 'result': json.dumps({'partial': False, 'pull_requests': pulls})})
+        assert review_candidates(db, 'exec', step) == ('dependabot[bot]', expected)
+    for invalid in ({**candidate, 'state': 'closed'}, {**candidate, 'author': 'another-user'}):
+        db.save_mcp_tool_call({**call, 'result': json.dumps({'partial': False, 'pull_requests': [invalid]})})
+        with pytest.raises(ValueError, match='invalid candidates'):
+            review_candidates(db, 'exec', step)
+
+
+def test_pr_review_report_accepts_multiline_findings_with_strict_eligibility():
+    from workflows.pull_request_batch import ReviewReport
+
+    report = '{"eligible_pull_numbers":[22],"findings":"First line\nSecond line"}'
+    assert ReviewReport.parse_output(report).eligible_pull_numbers == [22]
+    with pytest.raises(ValueError):
+        ReviewReport.parse_output(report.replace('[22]', '["22"]'))
+
+
+def test_review_completion_serializes_findings_and_checks_batch_membership():
+    from runtime.completion_validation import ConnectorFinalizer, FINISH_NAME
+    from workflows.pull_request_batch import ReviewReport
+
+    finalizer = ConnectorFinalizer([22])
+    assert 'eligible_pull_numbers' in finalizer.inventory([])[0]['input_schema']['required']
+    payload = {'status': 'completed', 'blocker': None, 'output': 'First line\nSecond "line"',
+               'eligible_pull_numbers': [21]}
+    response = {'calls': [{'name': FINISH_NAME, 'input': payload}], 'text': ''}
+    assert finalizer.inspect(response)[0] == 'repair'
+    assert [tool['name'] for tool in finalizer.inventory([{'name': 'review'}])] == [FINISH_NAME]
+    payload['eligible_pull_numbers'] = [22]
+    status, output = finalizer.inspect(response)
+    assert status == 'completed'
+    assert ReviewReport.parse_output(output).model_dump() == {
+        'eligible_pull_numbers': [22], 'findings': payload['output']}
+
+
+def test_empty_pr_batch_completes_without_approval_delivery(state):
+    from workflows.approval_runner import execute_gate
+    from workflows.human_approval import preflight
+    from workflows.pull_request_batch import EMPTY_REVIEW
+
+    db, _ = state
+    parsed = definition()
+    source, gate = parsed.steps
+    source.params['open_pr_source'] = 'discover'
+    db.update_workflow('wf', definition_json=json.dumps({'steps': [
+        {'key': step.key, 'params': step.params} for step in parsed.steps]}))
+    db.update_workflow_execution('exec', status='RUNNING')
+    preflight(db, db.get_workflow_execution('exec'), db.get_workflow('wf'), parsed)
+    with db._get_connection() as conn:
+        conn.execute("""INSERT INTO workflow_step_runs
+            (id,execution_id,step_key,agent_id,status,output_data)
+            VALUES ('source','exec','review','agent','COMPLETED',?)""", (EMPTY_REVIEW,))
+        conn.execute("DELETE FROM workflow_approvals WHERE id='gate'")
+    task = db.get_task_run('task')
+    result = execute_gate(db, gate, task, 'step', 'exec', {'review': EMPTY_REVIEW}, None)
+    assert result.status == 'COMPLETED'
+    assert 'No matching open pull requests' in result.output
+    with db._get_connection() as conn:
+        assert conn.execute("SELECT count(*) FROM workflow_approvals").fetchone()[0] == 0
+        assert conn.execute("SELECT count(*) FROM workflow_tool_scopes").fetchone()[0] == 0
+
+
 def test_only_successful_persisted_review_receipts_can_pin_candidates(state):
     db, _ = state
     db.save_mcp_connector({'id': 'github', 'name': 'GitHub', 'provider': 'github', 'organization_id': 'own'})

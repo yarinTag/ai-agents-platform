@@ -377,10 +377,22 @@ def test_wildcard_reads_do_not_offer_server_merge_authority(baseline):
     assert github['server_operations'] == []
 
 
-def test_no_grants_or_cross_department_selection_never_expands_catalog(baseline):
-    _, client = baseline
-    response = client.get('/api/v1/workflows/ai/context', headers=auth('ORG_ADMIN', department='finance'),
-                          params={'department_id': 'atlas_finance'})
+def test_github_defaults_do_not_expand_cross_department_access(baseline):
+    db, client = baseline
+    path = '/api/v1/workflows/ai/context'
+    finance_headers = auth('ORG_ADMIN', department='finance')
+    finance_params = {'department_id': 'atlas_finance'}
+    response = client.get(path, headers=finance_headers, params=finance_params)
+    assert response.status_code == 200
+    github, = response.json()['catalog']['connectors']
+    assert github['id'] == 'atlas_github'
+    assert github['repositories'] == ['owner/repository']
+    assert 'list_open_pull_requests' in github['tools']
+
+    connector = db.get_mcp_connector('atlas_github')
+    connector.configuration['department_default_tools'] = []
+    db.save_mcp_connector(connector)
+    response = client.get(path, headers=finance_headers, params=finance_params)
     assert response.status_code == 200 and response.json()['catalog']['connectors'] == []
     assert client.get('/api/v1/workflows/ai/context', headers=auth('MEMBER', department='finance')).status_code == 403
     assert client.get('/api/v1/workflows/ai/context', headers=auth('MEMBER'),

@@ -8,6 +8,8 @@ storage, role and compatibility contracts: [capability policy v1](../../docs/arc
   unknown metadata cannot register execution. Unsupported roadmap operations stay blocked.
 - store.py: additive SQLite policy/history, transactional compare-and-swap, atomic
   organization/department execution snapshots; revision0 means virtual inherit.
+  Current policy and history reads validate stored documents and return schema
+  defaults for omitted optional selectors and validity bounds.
 - validation.py: personal current admin writes; department managers append restrictions
   only, validated against locked current policy; exact configured tenant resources.
 - policy.py: legacy/current/frozen/identity/agent/workflow/budget intersection;
