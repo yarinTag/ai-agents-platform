@@ -201,16 +201,28 @@ def fail_resume(db, identifier):
             _finish(conn, row, "REJECTED", int(time.time()))
 
 
-def inbox(db, organization_id, department_id, user_id, *, after=""):
+def inbox(db, organization_id, department_id, user_id, *, after="", view="pending", execution_id=None):
     with db._get_connection() as conn:
-        rows = conn.execute("""SELECT a.*,w.id AS workflow_id,w.name AS workflow_name
+        now = int(time.time())
+        execution_filter = " AND a.execution_id=?" if execution_id else ""
+        scope = (organization_id, department_id, execution_id) if execution_id else (organization_id, department_id)
+        base = """SELECT a.*,w.id AS workflow_id,w.name AS workflow_name
             FROM workflow_dag_approvals a
-            JOIN workflow_executions x ON x.id=a.execution_id AND x.status='WAITING_APPROVAL'
+            JOIN workflow_executions x ON x.id=a.execution_id
             JOIN workflows w ON w.id=x.workflow_id AND w.organization_id=a.organization_id
-                AND w.department_id=a.department_id AND w.revision=a.workflow_revision
-            WHERE a.organization_id=? AND a.department_id=? AND a.status='PENDING'
-                AND a.expires_at>? AND a.id>? ORDER BY a.id LIMIT 51""",
-            (organization_id, department_id, int(time.time()), after)).fetchall()
+            WHERE a.organization_id=? AND a.department_id=?""" + execution_filter
+        if view == "history":
+            cursor = conn.execute(base + " AND a.id=? AND a.status!='PENDING'",
+                                  (*scope, after)).fetchone() if after else None
+            boundary = " AND (COALESCE(a.decided_at,0),a.id)<(?,?)" if cursor else ""
+            params = (*scope, cursor["decided_at"] or 0, cursor["id"]) if cursor else scope
+            rows = conn.execute(base + " AND a.status!='PENDING'" + boundary +
+                                " ORDER BY COALESCE(a.decided_at,0) DESC,a.id DESC LIMIT 51", params).fetchall()
+        else:
+            rows = conn.execute(base + """ AND a.status='PENDING' AND a.expires_at>? AND a.id>?
+                AND x.status='WAITING_APPROVAL' AND w.department_id=a.department_id
+                AND w.revision=a.workflow_revision ORDER BY a.id LIMIT 51""",
+                                (*scope, now, after)).fetchall()
         items = []
         for row in rows[:50]:
             policy = json.loads(row["policy_json"])
@@ -220,11 +232,14 @@ def inbox(db, organization_id, department_id, user_id, *, after=""):
             outputs = checkpoint["outputs"]
             items.append({
                 **{key: row[key] for key in (
-                    "id", "execution_id", "workflow_id", "workflow_name", "step_key", "expires_at",
+                    "id", "execution_id", "workflow_id", "workflow_name", "step_key", "expires_at", "decided_at",
                 )},
+                "status": "APPROVED" if row["status"] == "CLAIMED" else row["status"],
+                "my_vote": next(("APPROVED" if v["decision"] else "REJECTED"
+                                 for v in votes if v["user_id"] == user_id), None),
                 "approver_roles": policy["approver_roles"], "quorum": policy["quorum"],
-                "approvals": sum(v["decision"] and _eligible(conn, row, policy, v["user_id"]) for v in votes),
-                "can_decide": _eligible(conn, row, policy, user_id) and not any(v["user_id"] == user_id for v in votes),
+                "approvals": sum(v["decision"] and (view == "history" or _eligible(conn, row, policy, v["user_id"])) for v in votes),
+                "can_decide": view == "pending" and _eligible(conn, row, policy, user_id) and not any(v["user_id"] == user_id for v in votes),
                 "cost_usd": checkpoint["cost_usd"],
                 "outputs": [{"step_key": key, "excerpt": value[:4000], "truncated": len(value) > 4000}
                             for key, value in list(outputs.items())[-12:]],

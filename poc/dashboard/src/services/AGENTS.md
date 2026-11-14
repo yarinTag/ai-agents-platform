@@ -303,3 +303,5 @@ channelTriggersApi wraps scoped workflow channel-trigger GET, PUT with expected_
 dagApprovalsApi lists paginated department approvals and posts a personal boolean decision with AbortSignal support.
 
 skillsApi.ts keys department plugin configuration and scans separately, sends department_id on config/scan/content, and invalidates caches after PUT /api/v1/skills/plugins/settings. workflowsApi.ts exposes the abortable reliability endpoint with a 24h, 7d or 30d window.
+
+dagApprovalsApi.ts supports abortable pending/history requests for checkpoint and terminal approvals with optional execution ID and cursor.

@@ -300,3 +300,5 @@ AI-26 adds personal Linked accounts and scoped department management to the orga
 The browser document title and product branding use ConduitCross.
 
 The Office Canvas is accessible directly at `/office`. Non-admin MCP Hub visitors see the read-only catalog for the selected department.
+
+Approval history is available in the Workflows inbox and the Run approvals drawer in logs.

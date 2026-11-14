@@ -196,3 +196,5 @@ PR approval card delivery and edit projections resolve step_key from the associa
 SQLite skill migration adds skills.organization_id (organization FK with ON DELETE CASCADE), skills.is_system (INTEGER DEFAULT 0) and idx_skills_org. Backfill uses the current project organization when it agrees with any recorded owner, or the recorded owner for projectless skills. Legacy ownerless rows stay out of tenant APIs. Department rows add parent_department_id (department FK with ON DELETE SET NULL), plugins_source_mode and plugins_git_repo. Creation requires a same-organization parent.
 
 The DatabaseManager legacy facade exports the scoped update_skill repository method.
+
+DAG approval history queries recorded decisions across revisions by department and optional execution. CLAIMED is exposed as APPROVED, with recorded vote counts.

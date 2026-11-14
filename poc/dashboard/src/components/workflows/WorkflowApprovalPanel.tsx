@@ -1,13 +1,13 @@
 import { PrEvidence } from './PrEvidence';
 import { usePrGovernanceText } from '../../i18n/prGovernance';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Button, Card, Popconfirm, Space, Tag, Typography } from 'antd';
+import { Alert, Button, Card, Empty, Spin, Popconfirm, Space, Tag, Typography } from 'antd';
 import axios from 'axios';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useWorkflowApprovalText } from '../../i18n/workflowApproval';
 import { decideWorkflowApproval, getWorkflowApproval, type WorkflowApproval } from '../../services/workflowApprovals';
 
-export function WorkflowApprovalPanel({ executionId, refresh }: { executionId: string; refresh?: number }) {
+export function WorkflowApprovalPanel({ executionId, refresh, emptyMessage, onDecision }: { executionId: string; refresh?: number; emptyMessage?: string; onDecision?: () => void }) {
   const prText = usePrGovernanceText();
   const generation = useRef(0);
   const requestId = useRef(0);
@@ -18,11 +18,12 @@ export function WorkflowApprovalPanel({ executionId, refresh }: { executionId: s
   const { canManage } = usePermissions();
   const [approval, setApproval] = useState<WorkflowApproval | null>(null);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     const scope = ++generation.current;
     let cancelled = false;
-    setApproval(null); setError(''); setBusy(false); setAttempted(false);
+    setLoading(true); setApproval(null); setError(''); setBusy(false); setAttempted(false);
     decisionActive.current = false; decisionSent.current = false;
     const load = async () => {
       if (decisionActive.current) return;
@@ -31,6 +32,7 @@ export function WorkflowApprovalPanel({ executionId, refresh }: { executionId: s
         const { data } = await getWorkflowApproval(executionId);
         if (!cancelled && scope === generation.current && request === requestId.current) { setApproval(data); setError(''); }
       } catch { if (!cancelled && scope === generation.current && request === requestId.current) setError(text.failed); }
+      finally { if (!cancelled && scope === generation.current && request === requestId.current) setLoading(false); }
     };
     void load();
     return () => { cancelled = true; ++generation.current; };
@@ -46,13 +48,15 @@ export function WorkflowApprovalPanel({ executionId, refresh }: { executionId: s
       if (scope !== generation.current) return;
       ++requestId.current;
       setApproval(previous => previous ? { ...previous, status: 'RESOLVING' } : null);
+      onDecision?.();
     } catch (cause) {
       if (scope !== generation.current) return;
       const detail = axios.isAxiosError(cause) ? cause.response?.data?.detail : null;
       setError(typeof detail === 'string' ? detail : text.failed);
     } finally { if (scope === generation.current) { decisionActive.current = false; setBusy(false); } }
   };
-  if (!approval) return error ? <Alert type="error" message={error} /> : null;
+  if (!approval) return error ? <Alert type="error" message={error} /> : loading ? <Spin />
+    : emptyMessage ? <Empty description={emptyMessage} /> : null;
   const deadline = new Date(approval.expires_at).getTime();
   const expired = !Number.isFinite(deadline) || deadline <= Date.now();
   const actionable = approval.status === 'PENDING' && !expired && canManage && !busy && !attempted;

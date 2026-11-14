@@ -413,7 +413,7 @@ export const WorkflowsPage: React.FC = () => {
 
       {chatOpen && canRead && <WorkflowChatModal onClose={closeChat} onCreated={() => { void loadData(); }} />}
       <WorkflowExecutionDrawer {...model} />
-      {approvalsOpen && canRead && <DagApprovalsInbox onClose={() => setApprovalsOpen(false)} />}
+      {canRead && <DagApprovalsInbox open={approvalsOpen} onClose={() => setApprovalsOpen(false)} />}
 
       {/* Create Workflow Modal */}
       {historyWorkflow && <WorkflowHistoryDrawer key={historyWorkflow.id} workflow={historyWorkflow}

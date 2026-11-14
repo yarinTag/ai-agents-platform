@@ -174,3 +174,5 @@ workflowChat includes an English and Hebrew label for the expandable generation 
 workflowRun.ts provides the English and Hebrew label for the optional execution input accordion.
 
 pluginSource.ts localizes the plugin source scope and inherited source controls. workflowMetrics.ts localizes reliability labels, categories and remediation suggestions.
+
+dagApprovals.ts localizes history, checkpoint results, recorded votes and run approval labels.
