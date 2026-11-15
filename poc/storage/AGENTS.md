@@ -200,3 +200,5 @@ The DatabaseManager legacy facade exports the scoped update_skill repository met
 DAG approval history queries recorded decisions across revisions by department and optional execution. CLAIMED is exposed as APPROVED, with recorded vote counts.
 
 DAG approval listings derive decision_source from the recorded decision actor and associated Telegram callback receipt. Decisions without a human actor have no source.
+
+dag_channel_deliveries and pr_channel_deliveries add nullable claimed_at Unix seconds. Workers mark claims older than 300 seconds, including legacy untimed SENDING rows, UNCONFIRMED. The worker never requeues an ambiguous send.

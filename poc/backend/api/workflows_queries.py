@@ -110,7 +110,16 @@ def get_execution_status(
         step["events"] = task.events[-500:] if task else []
         step["error"] = task.error if task else None
         step["task_status"] = task.status.value if task else None
-    return _with_notification_status(db, exec_record, step_runs=step_runs)
+    from ..security.identity import load_actor
+    from ..security.resource_access import Resources
+    actor = load_actor(request, db)
+    Resources(actor).require("execution", execution_id)
+    from integrations.tool_scopes import execution_context
+    from .workflow_run_audit import execution_audit
+    response = _with_notification_status(db, exec_record, step_runs=step_runs)
+    response.run_audit = execution_audit(db, exec_record, actor.organization_id,
+                                         execution_context(db, execution_id) or {})
+    return response
 
 @router.post("/executions/{execution_id}/evaluate", status_code=status.HTTP_201_CREATED)
 def evaluate_execution(

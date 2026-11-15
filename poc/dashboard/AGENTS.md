@@ -306,3 +306,5 @@ Approval history is available in the Workflows inbox and the Run approvals drawe
 The visual DAG approval editor supports Telegram destination selection and a local preview. Visible approval tables refresh every ten seconds and expose decision source.
 
 Approval tables refresh every ten seconds while visible. Workflow Logs updates the execution list and selected run detail in place while there is a pending, queued, running or waiting-for-approval execution.
+
+The run audit timeline in logs and the execution drawer displays correlated trigger, workflow, approval and connector milestones.

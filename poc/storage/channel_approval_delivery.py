@@ -25,6 +25,9 @@ def initialize(conn):
         created_at INTEGER NOT NULL, PRIMARY KEY(approval_id,callback_id)
     )""")
 
+    if not any(row[1] == "claimed_at" for row in conn.execute("PRAGMA table_info(dag_channel_deliveries)")):
+        conn.execute("ALTER TABLE dag_channel_deliveries ADD COLUMN claimed_at INTEGER")
+
 
 def _table(approval_id):
     return 'pr_channel_deliveries' if approval_id.startswith('wfa_') else 'dag_channel_deliveries'
@@ -60,6 +63,10 @@ def destination(conn, row):
 
 def next_delivery(db):
     with dag_approvals._transaction(db) as conn:
+        now = int(time.time())
+        for table in ('pr_channel_deliveries', 'dag_channel_deliveries'):
+            conn.execute(f"""UPDATE {table} SET status='UNCONFIRMED'
+                WHERE status='SENDING' AND (claimed_at IS NULL OR claimed_at<=?)""", (now - 300,))
         for table, approvals, clock in (
             ('pr_channel_deliveries', 'workflow_approvals', datetime.now().isoformat()),
             ('dag_channel_deliveries', 'workflow_dag_approvals', int(time.time())),
@@ -75,7 +82,7 @@ def next_delivery(db):
                 WHERE d.status='QUEUED' AND a.status='PENDING' AND a.expires_at>?
                 ORDER BY a.expires_at,a.id LIMIT 1""", (clock,)).fetchone()
             if row:
-                conn.execute(f"UPDATE {table} SET status='SENDING' WHERE approval_id=?", (row["id"],))
+                conn.execute(f"UPDATE {table} SET status='SENDING',claimed_at=? WHERE approval_id=?", (now, row["id"]))
                 return dict(row)
         return None
 

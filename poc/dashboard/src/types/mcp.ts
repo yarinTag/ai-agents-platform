@@ -136,7 +136,23 @@ export interface CostSummary {
   output_tokens?: number;
 }
 
+interface RunAudit {
+  correlation_id: string;
+  workflow_revision: number | null;
+  principal_id: string | null;
+  trigger: { event_id: string; provider: string; received_at: number; outbox_status: string | null;
+    sender_user_id: string; connector_id: string; binding_id: string } | null;
+  approvals: { id: string; step_key: string | null; status: string; opened_at?: string | null;
+    decided_at: string | number | null; decided_by: string | null;
+    delivery_status: string | null; message_id: string | null; decision_source: 'telegram' | 'dashboard' | null }[];
+  receipts: { id: string; operation: string; provider: string; status: string; step_key: string | null;
+    started_at: string; completed_at: string | null;
+    receipt: { message_id?: string | number; pull_number?: number; status?: string; merge_commit_sha?: string } }[];
+  receipts_truncated: boolean;
+}
+
 export interface WorkflowExecution {
+  run_audit?: RunAudit | null;
   cost_summary?: CostSummary | null;
   step_runs?: Array<{
     id: string;

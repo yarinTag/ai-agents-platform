@@ -347,3 +347,5 @@ Keep approval tables mounted during detail open/close so filtering and scrolling
 Approval previews use existing department bindings and read-only readiness endpoints. They do not send test messages.
 
 Keep live Workflow Logs updates in useWorkflowLogData. The ten-second poll serializes requests and cancels on navigation.
+
+Link operators from ambiguous sends to MCP Hub and the approval inbox. Never present an unchecked retry for an unknown provider outcome.

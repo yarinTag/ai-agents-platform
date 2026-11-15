@@ -1,3 +1,4 @@
+import { RunAuditTimeline } from '../components/workflows/RunAuditTimeline';
 import { PrAuditEvidence } from '../components/workflows/PrEvidence';
 import { WorkflowApprovalPanel } from '../components/workflows/WorkflowApprovalPanel';
 import { useWorkflowRunText } from '../i18n/workflowRun';
@@ -102,6 +103,7 @@ export const WorkflowExecutionDrawer = (model: Pick<
             )}
 
             {selectedExecution.trigger_type === 'PLAYGROUND' && <Tag color="magenta">PLAYGROUND · TOOLS DISABLED</Tag>}
+            <RunAuditTimeline execution={selectedExecution} />
             <WorkflowApprovalPanel key={selectedExecution.id} executionId={selectedExecution.id} />
             {selectedExecution.step_runs?.map(step => (
               <Card key={step.id} size="small" title={`${step.step_key} · ${step.status}`}>

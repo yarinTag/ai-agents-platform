@@ -163,3 +163,5 @@ The Telegram card worker also consumes durable terminal PR callback claims throu
 The API lifespan starts an opt-in local Telegram polling worker. It uses Telegram HTTPS getUpdates and the same verified ingress processing as webhook delivery, with a file lock per local SQLite database and durable offsets.
 
 get_skill_context accepts workflow organization and department IDs. Tenant agent runtime adds the supervisor agent ID for configured-source inheritance.
+
+The approval delivery worker reconciles SENDING records to UNCONFIRMED after five minutes across both card types. It never retries an ambiguous initial send.

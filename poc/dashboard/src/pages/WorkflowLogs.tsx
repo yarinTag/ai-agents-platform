@@ -1,3 +1,4 @@
+import { RunAuditTimeline } from '../components/workflows/RunAuditTimeline';
 import { PrAuditEvidence } from '../components/workflows/PrEvidence';
 import { useWorkflowRunText } from '../i18n/workflowRun';
 import { formatCost } from '../services/workflowCosts';
@@ -341,6 +342,8 @@ export const WorkflowLogsPage: React.FC = () => {
                       <pre style={preStyle}>{execution.trigger_payload || '{}'}</pre>
                     </details>
                   </Card>
+                  <RunAuditTimeline execution={execution} onReview={execution.trigger_type === 'PLAYGROUND'
+                    ? undefined : () => setApprovalRunId(execution.id)} />
 
                   <Input.Search
                     placeholder="Search step output, input, and runtime events…"

@@ -337,3 +337,5 @@ Department plugin sources resolve within the organization. Custom skill storage 
 The Workflows inbox and Execution Logs show pending and historical checkpoint and final approvals.
 
 AI-38 adds Telegram destination setup and previews to the approval step editor. AI-39 documents callback verification and recovery in docs/interactive-channel-approvals.md.
+
+AI-43/44 execution audit projection and recovery limits are documented in docs/workflow-run-audit.md.
