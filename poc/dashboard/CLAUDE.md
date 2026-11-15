@@ -348,4 +348,6 @@ Approval previews use existing department bindings and read-only readiness endpo
 
 Keep live Workflow Logs updates in useWorkflowLogData. The ten-second poll serializes requests and cancels on navigation.
 
+Keep approval details and action availability synchronized with the currently polled approval rows.
+
 Link operators from ambiguous sends to MCP Hub and the approval inbox. Never present an unchecked retry for an unknown provider outcome.

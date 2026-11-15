@@ -4,6 +4,16 @@ import { useTranslation } from '../../i18n';
 import { useRunAuditText } from '../../i18n/runAudit';
 import type { WorkflowExecution } from '../../types/mcp';
 
+function auditTime(value?: string | number | null) {
+  if (typeof value === 'number') return Number.isFinite(value) ? value * 1000 : null;
+  if (!value) return null;
+  // SQLite CURRENT_TIMESTAMP uses a space separator and stores UTC.
+  const timestamp = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?$/.test(value)
+    ? value.replace(' ', 'T') + 'Z' : value;
+  const time = Date.parse(timestamp);
+  return Number.isFinite(time) ? time : null;
+}
+
 export function RunAuditTimeline({ execution, onReview }: {
   execution: WorkflowExecution; onReview?: () => void;
 }) {
@@ -12,11 +22,13 @@ export function RunAuditTimeline({ execution, onReview }: {
   const { locale, dir } = useTranslation();
   if (!audit) return null;
 
-  const formatTime = (value?: string | number | null) => value == null ? null
-    : new Date(typeof value === 'number' ? value * 1000 : value).toLocaleString(locale);
+  const formatTime = (value?: string | number | null) => {
+    const time = auditTime(value);
+    return time == null ? null : new Date(time).toLocaleString(locale);
+  };
   const trigger = audit.trigger;
   const origin = trigger ? [
-    { time: trigger.received_at * 1000, key: trigger.event_id, label: text.ingress, children: <Space wrap>
+    { time: auditTime(trigger.received_at), key: trigger.event_id, label: text.ingress, children: <Space wrap>
       <Tag>{trigger.provider}</Tag>
       {trigger.outbox_status && <Tag>{trigger.outbox_status}</Tag>}
       <bdi>{trigger.event_id}</bdi>
@@ -26,7 +38,7 @@ export function RunAuditTimeline({ execution, onReview }: {
   ] : [];
   const milestones = [
     ...origin,
-    { time: Date.parse(execution.started_at || execution.created_at || ''), key: execution.id, label: text.run,
+    { time: auditTime(execution.started_at || execution.created_at), key: execution.id, label: text.run,
       children: <Space wrap>
         <Tag>{execution.trigger_type}</Tag>
         <Tag>{execution.status}</Tag>
@@ -35,7 +47,7 @@ export function RunAuditTimeline({ execution, onReview }: {
       </Space> },
     ...audit.approvals.map(approval => ({
       key: approval.id, label: text.approval,
-      time: typeof approval.decided_at === 'number' ? approval.decided_at * 1000 : Date.parse(approval.decided_at ?? approval.opened_at ?? ''),
+      time: auditTime(approval.decided_at ?? approval.opened_at),
       children: <Space wrap>
         <bdi>{approval.step_key}</bdi>
         <Tag>{approval.status}</Tag>
@@ -47,7 +59,7 @@ export function RunAuditTimeline({ execution, onReview }: {
       </Space>,
     })),
     ...audit.receipts.map(receipt => ({
-      key: receipt.id, label: text.receipt, time: Date.parse(receipt.completed_at || receipt.started_at),
+      key: receipt.id, label: text.receipt, time: auditTime(receipt.completed_at || receipt.started_at),
       children: <Space wrap>
         <Tag>{receipt.provider}</Tag>
         <bdi>{receipt.step_key}</bdi><bdi>{receipt.operation}</bdi>
@@ -57,7 +69,7 @@ export function RunAuditTimeline({ execution, onReview }: {
         <span>{formatTime(receipt.completed_at || receipt.started_at)}</span>
       </Space>,
     })),
-  ].sort((a, b) => (a.time || 0) - (b.time || 0));
+  ].sort((a, b) => (a.time ?? Number.MAX_SAFE_INTEGER) - (b.time ?? Number.MAX_SAFE_INTEGER));
   const uncertain = audit.approvals.some(item => item.delivery_status === 'UNCONFIRMED');
 
   return <ConfigProvider direction={dir}><Card size="small" title={text.title}>

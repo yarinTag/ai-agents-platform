@@ -97,7 +97,6 @@ def get_execution_status(
     wf = db.get_workflow(exec_record.workflow_id)
     if not wf:
         raise HTTPException(status_code=404, detail="Workflow not found")
-    _check_workflow_scope(wf, get_authorized_scope(request, db))
     with db._get_connection() as conn:
         step_runs = [dict(row) for row in conn.execute(
             "SELECT * FROM workflow_step_runs WHERE execution_id = ? ORDER BY started_at, step_key",
@@ -112,8 +111,9 @@ def get_execution_status(
         step["task_status"] = task.status.value if task else None
     from ..security.identity import load_actor
     from ..security.resource_access import Resources
-    actor = load_actor(request, db)
-    Resources(actor).require("execution", execution_id)
+    actor = getattr(request.state, "access_actor", None) or load_actor(request, db)
+    resources = getattr(request.state, "access_resources", None) or Resources(actor)
+    resources.require("execution", execution_id)
     from integrations.tool_scopes import execution_context
     from .workflow_run_audit import execution_audit
     response = _with_notification_status(db, exec_record, step_runs=step_runs)

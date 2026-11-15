@@ -415,3 +415,5 @@ GET /api/v1/workflows/dag-approvals supports view=pending|history, kind=checkpoi
 Approval list items now expose decision_source (telegram, dashboard or null) from persisted callback and decision records.
 
 GET /api/v1/workflows/executions/{execution_id} adds run_audit with execution correlation ID, dispatch provenance, approval actor and card status, and at most 100 allowlisted GitHub/chat connector receipts. Scope checks precede projection. List responses do not compute this projection.
+
+Execution detail reuses the request-scoped actor and resource checks when admission has populated them.
