@@ -363,3 +363,5 @@ The shared inbox presents checkpoint and terminal approval tables under Pending 
 ChannelApprovalFields renders Telegram destinations with Send and Approve enabled, direct dependency summary selection, a local preview, linked identity and administrator ingress readiness. Pending/history tables refresh while visible and display the recorded decision source.
 
 Open approval tables poll every ten seconds without clearing visible rows during background reads.
+
+DAG approval detail uses the latest polled row and disables deciding when the row leaves the pending page. Builder dependency edits clear an unavailable approval summary step.

@@ -347,3 +347,5 @@ Keep approval tables mounted during detail open/close so filtering and scrolling
 Approval previews use existing department bindings and read-only readiness endpoints. They do not send test messages.
 
 Keep live Workflow Logs updates in useWorkflowLogData. The ten-second poll serializes requests and cancels on navigation.
+
+Keep approval details and action availability synchronized with the currently polled approval rows.

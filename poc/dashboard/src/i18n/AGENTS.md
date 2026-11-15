@@ -180,3 +180,5 @@ dagApprovals.ts localizes history, checkpoint results, recorded votes and run ap
 channelApprovals.ts localizes Telegram preview, setup warnings, fallback and decision source in EN and HE.
 
 workflowRun.ts explains the ten-second active-run refresh in EN and HE.
+
+dagApprovals.ts includes EN/HE guidance when an open approval is no longer on the pending page.

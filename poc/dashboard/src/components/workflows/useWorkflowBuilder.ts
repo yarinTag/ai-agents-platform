@@ -9,6 +9,12 @@ import { useAuth } from '../../context/AuthContext';
 
 import type { WorkflowStep, AttachedSkill, CreateWorkflowModalProps } from './workflowBuilderTypes';
 
+function clearUnavailableSummary(step: WorkflowStep): WorkflowStep {
+  const policy = step.params?.dag_approval;
+  if (!policy?.summary_step || step.depends_on.includes(policy.summary_step)) return step;
+  return { ...step, params: { ...step.params, dag_approval: { ...policy, summary_step: undefined } } };
+}
+
 export function useWorkflowBuilder({ open, onClose, onSuccess, defaultChannelProvider = 'telegram', defaultChannelId = '', departmentId, workflow }: CreateWorkflowModalProps) {
   const { departments, activeDepartmentId } = useAuth();
   const effectiveDepartmentId = workflow ? workflow.department_id : departmentId || activeDepartmentId || departments[0]?.id;
@@ -275,7 +281,7 @@ export function useWorkflowBuilder({ open, onClose, onSuccess, defaultChannelPro
 
   const handleUpdateStep = (index: number, patch: Partial<WorkflowStep>) => {
     const updated = [...steps];
-    updated[index] = { ...updated[index], ...patch };
+    updated[index] = clearUnavailableSummary({ ...updated[index], ...patch });
     setSteps(updated);
     syncToYaml(workflowName, description, updated);
   };
@@ -293,7 +299,7 @@ export function useWorkflowBuilder({ open, onClose, onSuccess, defaultChannelPro
             ...parentKeys.filter((p) => p !== s.key),
           ])
         );
-        return { ...s, depends_on: nextDeps };
+        return clearUnavailableSummary({ ...s, depends_on: nextDeps });
       });
     setSteps(updated);
     syncToYaml(workflowName, description, updated);
