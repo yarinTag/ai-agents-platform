@@ -4,8 +4,8 @@
 .gemini/config.yaml enables automatic summaries and reviews for non-draft PRs.
 There is no Claude review workflow or Claude credential requirement.
 The Gemini GitHub App already includes this repository. Historical reviews in
-Law-Firm-server PR16 were posted March20,2026; they do not prove current service
-availability. Google sunset the consumer GitHub review service July17,2026.
+Law-Firm-server PR16 were posted March 20, 2026; they do not prove current service
+availability. Google sunset the consumer GitHub review service July 17, 2026.
 Current setup requires the Google Cloud connection and its billing/Secret Manager
 prerequisites. No review has yet verified this repository's activation.
 
