@@ -1,5 +1,7 @@
 # AGENTS.md - Root AI Agents Platform Architecture & Directory Index
 
+[AI-45 workflow operations](docs/operations-runbook.md) and [credential and state recovery](docs/disaster-recovery.md) cover ingress incidents, stalled approvals, unknown PR outcomes and credential rotation.
+
 [AI-37–39 interactive channel approval design](docs/interactive-channel-approvals.md) specifies provider boundaries, decision fencing, expiry and original-message updates.
 
 [AI-31–33 channel trigger policy](docs/channel-trigger-policy.md) defines workflow rules, verified sender and fixed principal checks, and the untrusted input boundary.

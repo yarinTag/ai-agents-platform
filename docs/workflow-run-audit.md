@@ -7,3 +7,5 @@ The execution detail API returns a read projection under the same current execut
 The ingress worker already reclaims expired processing leases. The card worker additionally transitions a stale SENDING claim to UNCONFIRMED after five minutes. Initial sends with unknown outcomes require channel inspection. Use the dashboard for any still-pending approval. Never replay a decision or a side-effecting provider call merely because its receipt is absent. Existing message edits can reconcile toward the persisted state.
 
 This first slice uses the existing operational records. External tamper-evident storage and non-repudiation, broader recovery tooling and post-retention provenance are outstanding. The UI provides review and connector-inspection links. It does not offer a replay or re-request action.
+
+For incident steps and credential rotation, use the [operations runbook](operations-runbook.md) and [credential and state recovery guide](disaster-recovery.md).
