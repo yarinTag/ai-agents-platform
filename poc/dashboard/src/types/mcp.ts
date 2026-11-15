@@ -136,7 +136,7 @@ export interface CostSummary {
   output_tokens?: number;
 }
 
-interface RunAudit {
+export interface RunAudit {
   correlation_id: string;
   workflow_revision: number | null;
   principal_id: string | null;

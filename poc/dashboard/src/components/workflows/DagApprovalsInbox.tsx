@@ -62,8 +62,11 @@ function Inbox({ department, executionId, view, active, onDecisionBusy }: {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<'loadError' | 'decisionError' | 'recorded'>();
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const [selected, setSelected] = useState<DagApproval>();
+  const [reviewed, setSelected] = useState<DagApproval>();
   const mutation = useRef<AbortController | undefined>(undefined);
+  const current = reviewed && rows.find(row => row.id === reviewed.id);
+  const selected = current ?? reviewed;
+  const canDecide = view === 'pending' && current?.can_decide;
   const after = cursors[cursors.length - 1];
   useEffect(() => () => mutation.current?.abort(), []);
   useEffect(() => {
@@ -87,7 +90,7 @@ function Inbox({ department, executionId, view, active, onDecisionBusy }: {
   }, [department, after, reload, view, executionId, active]);
 
   const decide = async (approve: boolean) => {
-    if (!selected?.can_decide || mutation.current) return;
+    if (!selected || !canDecide || mutation.current) return;
     const request = new AbortController();
     mutation.current = request;
     setBusy(true); onDecisionBusy(true); setNotice(undefined);
@@ -129,15 +132,18 @@ function Inbox({ department, executionId, view, active, onDecisionBusy }: {
       onCancel={() => { if (!busy) setDetailsOpen(false); }}
       footer={<Space wrap>
         <Button disabled={busy} onClick={() => setDetailsOpen(false)}>{t.close}</Button>
-        {selected.can_decide && <>
+        {canDecide && <>
           <Button danger disabled={busy} onClick={() => void decide(false)}>{t.reject}</Button>
           <Button type="primary" loading={busy} onClick={() => void decide(true)}>{t.approve}</Button>
         </>}
       </Space>}>
+      {view === 'pending' && !current && <Alert type="info" title={t.noLongerPending} />}
       <Descriptions column={1} items={[
         { key: 'workflow', label: t.workflow, children: selected.workflow_name },
         { key: 'step', label: t.step, children: <bdi>{selected.step_key}</bdi> },
-        { key: 'status', label: t.status, children: <Tag color={statusColors[selected.status]}>{t[selected.status]}</Tag> },
+        { key: 'status', label: t.status, children: current || view === 'history'
+          ? <Tag color={statusColors[selected.status]}>{t[selected.status]}</Tag> : '—' },
+        { key: 'votes', label: t.votes, children: <bdi>{selected.approvals}/{selected.quorum}</bdi> },
         { key: 'decision', label: t.decidedAt, children: selected.decided_at != null ? <bdi>{date(selected.decided_at)}</bdi> : '—' },
         { key: 'personal', label: t.myVote, children: selected.my_vote ? t[selected.my_vote] : '—' },
         { key: 'expires', label: t.expires, children: <bdi>{date(selected.expires_at)}</bdi> },

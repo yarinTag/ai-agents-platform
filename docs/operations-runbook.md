@@ -23,7 +23,7 @@ Use [webhook ingress](webhook-ingress.md) for limits, provider-specific checks a
 | DAG PENDING | Check original expiry, eligible roles and revision. An eligible user can decide in the dashboard if chat delivery failed. |
 | DAG APPROVED, unclaimed | Let the worker resume the checkpoint. If it cannot continue, inspect current revision, initiator authority and eligible quorum. |
 | DAG CLAIMED, run interrupted | Inspect stored step results and external receipts. Reconcile possible effects before requesting a new run. A claimed continuation is not automatically replayed. |
-| Card SENDING | Stacked AI-43 marks a stale claim UNCONFIRMED after five minutes. Inspect the original channel and use dashboard fallback. Never resend an initial card purely because its receipt is missing. |
+| Card SENDING | The card worker marks a stale claim UNCONFIRMED after five minutes. Inspect the original channel and use dashboard fallback. Never resend an initial card purely because its receipt is missing. |
 | Terminal approval RESOLVING | Check the callback claim and external receipts. A queued Telegram decision can be consumed after restart. An already-consumed claim that stopped mid-resolution requires operator reconciliation. |
 
 Disable Listen, Approve or Send on the exact binding for the affected action. For wider compromise follow [credential recovery](disaster-recovery.md). See [DAG approval recovery](dag-approvals.md) and [interactive approval failure modes](interactive-channel-approvals.md).
