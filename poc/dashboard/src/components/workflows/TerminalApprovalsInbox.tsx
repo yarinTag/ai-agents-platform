@@ -1,3 +1,4 @@
+import { useChannelApprovalsText } from '../../i18n/channelApprovals';
 import { useEffect, useState } from 'react';
 import { Alert, Button, Modal, Space, Table, Tag } from 'antd';
 import { Link } from 'react-router-dom';
@@ -6,8 +7,9 @@ import { useDagApprovalsText } from '../../i18n/dagApprovals';
 import { listTerminalApprovals, type ApprovalView, type TerminalApprovalSummary } from '../../services/dagApprovalsApi';
 import { WorkflowApprovalPanel } from './WorkflowApprovalPanel';
 
-export function TerminalApprovalsInbox({ department, view, executionId }: { department: string; view: ApprovalView; executionId?: string }) {
+export function TerminalApprovalsInbox({ department, view, executionId, active }: { department: string; view: ApprovalView; executionId?: string; active: boolean }) {
   const t = useDagApprovalsText();
+  const channel = useChannelApprovalsText();
   const { locale } = useTranslation();
   const [rows, setRows] = useState<TerminalApprovalSummary[]>([]);
   const [cursors, setCursors] = useState<string[]>([]);
@@ -20,17 +22,26 @@ export function TerminalApprovalsInbox({ department, view, executionId }: { depa
   const after = cursors[cursors.length - 1];
 
   useEffect(() => {
+    if (!active) return;
     const request = new AbortController();
     setLoading(true); setFailed(false);
-    void listTerminalApprovals(department, after, request.signal, view, executionId).then(({ data }) => {
-      if (!request.signal.aborted) { setRows(data.items); setNext(data.next_after); }
+    const load = () => listTerminalApprovals(department, after, request.signal, view, executionId).then(({ data }) => {
+      if (!request.signal.aborted) { setFailed(false); setRows(data.items); setNext(data.next_after); }
     }).catch(() => {
       if (!request.signal.aborted) setFailed(true);
     }).finally(() => {
       if (!request.signal.aborted) setLoading(false);
     });
-    return () => request.abort();
-  }, [department, after, view, refresh, executionId]);
+    let fetching = false;
+    const refreshRows = async () => {
+      if (fetching || document.visibilityState === 'hidden') return;
+      fetching = true;
+      try { await load(); } finally { fetching = false; }
+    };
+    void refreshRows();
+    const timer = window.setInterval(() => void refreshRows(), 10_000);
+    return () => { window.clearInterval(timer); request.abort(); };
+  }, [department, after, view, refresh, executionId, active]);
 
   return <Space orientation="vertical" style={{ width: '100%' }}>
     {failed && <Alert type="error" title={t.loadError} showIcon />}
@@ -39,6 +50,8 @@ export function TerminalApprovalsInbox({ department, view, executionId }: { depa
       scroll={{ x: 'max-content' }} locale={{ emptyText: view === 'history' ? t.emptyHistory : t.empty }} columns={[
         { title: t.workflow, dataIndex: 'workflow_name' },
         { title: t.status, render: (_, item) => <Tag>{item.status}</Tag> },
+        { title: channel.source, render: (_, item) => item.decision_source === 'telegram'
+          ? channel.telegram : item.decision_source === 'dashboard' ? channel.dashboardSource : '—' },
         { title: view === 'history' ? t.decidedAt : t.expires, render: (_, item) => {
           const value = view === 'history' ? item.resolved_at : item.expires_at;
           return <bdi>{value ? new Date(value).toLocaleString(locale) : '—'}</bdi>;

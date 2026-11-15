@@ -335,3 +335,5 @@ ConduitCross is the product display name. Repository and API identifiers retain 
 Department plugin sources resolve within the organization. Custom skill storage enforces organization ownership, and the authenticated dashboard exposes workflow reliability metrics. See the storage, plugin, REST API and dashboard guides.
 
 The Workflows inbox and Execution Logs show pending and historical checkpoint and final approvals.
+
+AI-38 adds Telegram destination setup and previews to the approval step editor. AI-39 documents callback verification and recovery in docs/interactive-channel-approvals.md.

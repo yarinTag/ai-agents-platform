@@ -1,3 +1,4 @@
+import { useChannelApprovalsText } from '../../i18n/channelApprovals';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Button, Card, ConfigProvider, Descriptions, Drawer, Modal, Space, Table, Tabs, Tag, Typography } from 'antd';
 import { Link } from 'react-router-dom';
@@ -19,13 +20,13 @@ export function DagApprovalsInbox({ open = true, onClose, execution }: {
   return <ConfigProvider direction={dir}>
     <Drawer open={open} size="large" title={execution ? t.runApprovals : t.title} onClose={onClose}>
       <ApprovalLists key={JSON.stringify([organization.id, user.id, user.role, department, execution?.id])}
-        department={department} execution={execution} />
+        department={department} execution={execution} active={open} />
     </Drawer>
   </ConfigProvider>;
 }
 
-function ApprovalLists({ department, execution }: {
-  department?: string | null; execution?: { id: string };
+function ApprovalLists({ department, execution, active }: {
+  department?: string | null; execution?: { id: string }; active: boolean;
 }) {
   const t = useDagApprovalsText();
   const [view, setView] = useState<ApprovalView>('pending');
@@ -34,23 +35,24 @@ function ApprovalLists({ department, execution }: {
     emptyMessage={t.emptyTerminal} />;
   if (!department) return terminal || <Alert type="info" title={t.selectDepartment} />;
   const checkpoints = <Inbox key={view} department={department} executionId={execution?.id}
-    view={view} onDecisionBusy={setDeciding} />;
+    view={view} active={active} onDecisionBusy={setDeciding} />;
   const views = <Tabs activeKey={view} onChange={key => {
     if (!deciding && (key === 'pending' || key === 'history')) setView(key);
   }} items={[{ key: 'pending', label: t.pending }, { key: 'history', label: t.history }]} />;
   return <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
     {views}
     <Card size="small" title={t.checkpoints}>{checkpoints}</Card>
-    <Card size="small" title={t.terminal}><TerminalApprovalsInbox key={view} department={department} view={view} executionId={execution?.id} /></Card>
+    <Card size="small" title={t.terminal}><TerminalApprovalsInbox key={view} department={department} view={view} active={active} executionId={execution?.id} /></Card>
   </Space>;
 }
 
 const statusColors = { PENDING: 'gold', APPROVED: 'green', REJECTED: 'red', TIMED_OUT: 'default' };
 
-function Inbox({ department, executionId, view, onDecisionBusy }: {
-  department: string; executionId?: string; view: ApprovalView; onDecisionBusy: (busy: boolean) => void;
+function Inbox({ department, executionId, view, active, onDecisionBusy }: {
+  department: string; executionId?: string; view: ApprovalView; active: boolean; onDecisionBusy: (busy: boolean) => void;
 }) {
   const t = useDagApprovalsText();
+  const channel = useChannelApprovalsText();
   const { locale } = useTranslation();
   const [rows, setRows] = useState<DagApproval[]>([]);
   const [cursors, setCursors] = useState<string[]>([]);
@@ -65,15 +67,24 @@ function Inbox({ department, executionId, view, onDecisionBusy }: {
   const after = cursors[cursors.length - 1];
   useEffect(() => () => mutation.current?.abort(), []);
   useEffect(() => {
+    if (!active) return;
     const request = new AbortController();
     setLoading(true);
     setNotice(previous => previous === 'loadError' ? undefined : previous);
-    void listDagApprovals(department, after, request.signal, view, executionId).then(({ data }) => {
-      if (!request.signal.aborted) { setRows(data.items); setNext(data.next_after); }
+    const load = () => listDagApprovals(department, after, request.signal, view, executionId).then(({ data }) => {
+      if (!request.signal.aborted) { setNotice(previous => previous === 'loadError' ? undefined : previous); setRows(data.items); setNext(data.next_after); }
     }).catch(() => { if (!request.signal.aborted) setNotice('loadError'); })
       .finally(() => { if (!request.signal.aborted) setLoading(false); });
-    return () => request.abort();
-  }, [department, after, reload, view, executionId]);
+    let fetching = false;
+    const refreshRows = async () => {
+      if (fetching || document.visibilityState === 'hidden') return;
+      fetching = true;
+      try { await load(); } finally { fetching = false; }
+    };
+    void refreshRows();
+    const timer = window.setInterval(() => void refreshRows(), 10_000);
+    return () => { window.clearInterval(timer); request.abort(); };
+  }, [department, after, reload, view, executionId, active]);
 
   const decide = async (approve: boolean) => {
     if (!selected?.can_decide || mutation.current) return;
@@ -101,6 +112,8 @@ function Inbox({ department, executionId, view, onDecisionBusy }: {
         { title: t.workflow, dataIndex: 'workflow_name' },
         { title: t.step, render: (_, item) => <bdi>{item.step_key}</bdi> },
         { title: t.status, render: (_, item) => <Tag color={statusColors[item.status]}>{t[item.status]}</Tag> },
+        { title: channel.source, render: (_, item) => item.decision_source === 'telegram'
+          ? channel.telegram : item.decision_source === 'dashboard' ? channel.dashboardSource : '—' },
         { title: view === 'history' ? t.decidedAt : t.expires, render: (_, item) => {
           const value = view === 'history' ? item.decided_at : item.expires_at;
           return <bdi>{value != null ? date(value) : '—'}</bdi>;

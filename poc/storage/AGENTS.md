@@ -198,3 +198,5 @@ SQLite skill migration adds skills.organization_id (organization FK with ON DELE
 The DatabaseManager legacy facade exports the scoped update_skill repository method.
 
 DAG approval history queries recorded decisions across revisions by department and optional execution. CLAIMED is exposed as APPROVED, with recorded vote counts.
+
+DAG approval listings derive decision_source from the recorded decision actor and associated Telegram callback receipt. Decisions without a human actor have no source.

@@ -1,7 +1,7 @@
 import { PrAuditEvidence } from '../components/workflows/PrEvidence';
 import { useWorkflowRunText } from '../i18n/workflowRun';
 import { formatCost } from '../services/workflowCosts';
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { Alert, Button, Card, Col, Collapse, Empty, Input, Row, Segmented, Space, Spin, Tag, Typography } from 'antd';
 import {
@@ -15,9 +15,7 @@ import {
   CodeOutlined,
   RobotOutlined,
 } from '@ant-design/icons';
-import axios from 'axios';
-import { getWorkflow, getWorkflowExecutions, getWorkflowExecution } from '../services/api';
-import { PlatformWorkflow, WorkflowExecution } from '../types/mcp';
+import { useWorkflowLogData } from './useWorkflowLogData';
 import { DagApprovalsInbox } from '../components/workflows/DagApprovalsInbox';
 import { useDagApprovalsText } from '../i18n/dagApprovals';
 import { StepEventTimeline } from '../components/workflows/StepEventTimeline';
@@ -95,40 +93,10 @@ export const WorkflowLogsPage: React.FC = () => {
   const { workflowId } = useParams<{ workflowId: string }>();
   const [params, setParams] = useSearchParams();
   const selectedId = params.get('execution');
-  const [workflow, setWorkflow] = useState<PlatformWorkflow | null>(null);
-  const [runs, setRuns] = useState<WorkflowExecution[]>([]);
-  const [execution, setExecution] = useState<WorkflowExecution | null>(null);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [refresh, setRefresh] = useState(0);
+  const { workflow, runs, execution, error, loading, refresh } = useWorkflowLogData(workflowId, selectedId);
   const [mode, setMode] = useState('ALL');
   const [search, setSearch] = useState('');
   const [approvalRunId, setApprovalRunId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!workflowId) return;
-    let disposed = false;
-    setExecution(null);
-    setLoading(true);
-    const load = async () => {
-      try {
-        const [wf, history] = await Promise.all([getWorkflow(workflowId), getWorkflowExecutions(workflowId, 200)]);
-        const id = selectedId || history.data[0]?.id;
-        const detail = id ? (await getWorkflowExecution(id)).data : null;
-        if (detail && detail.workflow_id !== workflowId) throw new Error('Execution does not belong to this workflow');
-        if (!disposed) {
-          setWorkflow(wf.data); setRuns(history.data); setExecution(detail); setError('');
-        }
-      } catch (cause: unknown) {
-        if (!disposed) {
-          const detail = axios.isAxiosError(cause) ? cause.response?.data?.detail : null;
-          setError(typeof detail === 'string' ? detail : cause instanceof Error ? cause.message : 'Unable to load workflow logs');
-        }
-      } finally { if (!disposed) setLoading(false); }
-    };
-    void load();
-    return () => { disposed = true; };
-  }, [workflowId, selectedId, refresh]);
 
   const download = () => {
     if (!execution) return;
@@ -153,10 +121,10 @@ export const WorkflowLogsPage: React.FC = () => {
               <Text type="secondary" style={{ fontSize: 16, fontWeight: 400 }}>· Execution Logs</Text>
             </Title>
             <Text type="secondary" style={{ fontSize: 13 }}>
-              Run history, step output, and runtime diagnostics. Auto-refreshes every 5 seconds.
+              {runText.logsRefresh}
             </Text>
           </div>
-          <Button icon={<ReloadOutlined spin={loading} />} onClick={() => setRefresh(value => value + 1)}>
+          <Button icon={<ReloadOutlined spin={loading} />} onClick={() => refresh()}>
             Refresh
           </Button>
         </div>

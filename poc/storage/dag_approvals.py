@@ -235,6 +235,10 @@ def inbox(db, organization_id, department_id, user_id, *, after="", view="pendin
                     "id", "execution_id", "workflow_id", "workflow_name", "step_key", "expires_at", "decided_at",
                 )},
                 "status": "APPROVED" if row["status"] == "CLAIMED" else row["status"],
+                "decision_source": ("telegram" if conn.execute(
+                    """SELECT 1 FROM dag_channel_callbacks WHERE approval_id=? AND user_id=?
+                        AND created_at<=?""", (row["id"], row["decided_by"], row["decided_at"]),
+                ).fetchone() else "dashboard") if row["decided_by"] else None,
                 "my_vote": next(("APPROVED" if v["decision"] else "REJECTED"
                                  for v in votes if v["user_id"] == user_id), None),
                 "approver_roles": policy["approver_roles"], "quorum": policy["quorum"],
