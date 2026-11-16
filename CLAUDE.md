@@ -284,3 +284,5 @@ See [AI-30 webhook operations](docs/webhook-ingress.md) for proxy requirements, 
 Use [the channel trigger policy](docs/channel-trigger-policy.md) for AI-31–33. Trigger events supply data only. The saved rule, fixed principal and current authorization decide whether the engine starts.
 
 Follow [the DAG approval contract](docs/dag-approvals.md). Agents must never simulate or self-grant human approval. Preserve atomic checkpoint transitions and skip completed effects on continuation.
+
+For the governed workflow release, record evidence against docs/governed-workflow-release.md and reconcile post-backup provider effects before any approval-schema rollback.

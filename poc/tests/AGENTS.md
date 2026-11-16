@@ -225,3 +225,29 @@ The terminal Telegram approval contract checks that the claimed delivery include
 The terminal Telegram approval contract also exercises the internal polling ingress path against the persisted connector and verified callback.
 The terminal polling callback regression covers channel-attributed messages without a bot from field.
 Capability editor tests verify inherited GitHub resources and per-department revocation. Missing-grant execution tests explicitly disable GitHub inheritance to exercise admission with no effective grants.
+
+`test_workflow_pr_approvals.py` covers the persisted successor approval transition, cumulative receipts and rejection of stale round IDs on a real temporary SQLite/FastAPI instance. The case starts from a recorded receipt and does not invoke external providers.
+
+Workflow Chat contract tests cover rejecting tool-only and resource-only proposals even when the same step contains a valid exact pair.
+
+Workflow Chat contract tests cover isolated approval checkpoint compilation and rejection of unauthorized writes even with a checkpoint.
+
+AI-46 migration coverage asserts legacy terminal decisions, provider cards and receipts persist, schema initialization is repeatable, and FK cascade and the one-live-round index hold. A concurrent real FastAPI/SQLite test asserts exactly one of two authorized dashboard decisions claims the gate. Both cases are in the existing PR approval CI selection.
+
+Terminal Telegram callback coverage now distinguishes an identical retransmission from a second user click with a fresh callback ID. It checks a single durable decision and that the card enters DECIDED before GitHub resolution.
+
+AI-46 approval matrix exercises two organizations and three departments with actual authorization on GET and POST, including foreign admin, unassigned manager, read-only roles, and revocation with a previously issued token.
+
+AI-46 ingress concurrency coverage submits two verified copies simultaneously and requires one durable receipt/outbox pair.
+
+AI-49 Workflow Chat confirmation tests an exact Listen-only binding and verifies the server-owned trigger principal and inactive persisted workflow.
+
+Slack channel approval ingress integration covers a valid signed form, wrong original message, repeat delivery and exactly one durable vote with no trigger staging.
+
+The Socket Mode contract test uses real SQLite/FastAPI, checks webhook fencing and shared durable deduplication from trusted internal envelope admission. The live WebSocket transport is outside that test.
+
+test_channel_trigger_relevance.py verifies the deterministic preview, strict confidence threshold, durable single classification claim, one dispatch on MATCH, and hourly capacity. It uses persisted outcome fixtures without calling a provider.
+
+PR approval tests cover recovery from a confirmed final merge receipt with an expired advancement claim without provider I/O.
+
+Confirmed-merge recovery covers revoked channel bindings, retained receipts and failed advancement without opening a provider connection.

@@ -9,6 +9,7 @@ from backend.dependencies import get_db_manager
 from backend.security import authenticate_request, create_access_token
 from config import AgentConfig
 from persistence import DatabaseManager
+from poc.tests.test_generic_governance_api import auth as scoped_auth, baseline
 from runtime.models import AgentRun, TaskStatus
 from integrations.github_prs import project_pull, readiness_blockers
 from integrations.pr_approval_policy import authorize_subject, pinned_subjects
@@ -277,3 +278,204 @@ def test_only_successful_persisted_review_receipts_can_pin_candidates(state):
     call['result'] = json.dumps(facts)
     db.save_mcp_tool_call(call)
     assert pinned_subjects(db, 'exec', 'review') == []
+
+
+def test_successive_merge_approvals_preserve_receipts_and_fence_stale_decisions(state):
+    from workflows.human_approval import finish
+
+    db, client = state
+    path = '/api/v1/workflows/executions/exec/approval'
+    auth = headers('ownMANAGER')
+    first = {'repository': 'owner/repo', 'pull_number': 20, 'head_sha': 'a' * 40, 'base_sha': 'b' * 40,
+             'url': 'https://github.com/owner/repo/pull/20'}
+    second = dict(first, pull_number=23, url='https://github.com/owner/repo/pull/23')
+    receipt = {'repository': 'owner/repo', 'pull_number': 20, 'status': 'COMPLETED', 'merge_commit_sha': 'c' * 40}
+    with db._get_connection() as conn:
+        conn.execute("""UPDATE workflow_approvals SET status='RESOLVING',resolved_by='ownMANAGER',
+                        config_json=?,subjects_json=?,remaining_json=? WHERE id='gate'""",
+                     (json.dumps({'kind': 'pull_requests', 'merge_after_approval': True, 'expires_hours': 24}),
+                      json.dumps([first]), json.dumps([second])))
+        claimed = dict(conn.execute("SELECT * FROM workflow_approvals WHERE id='gate'").fetchone())
+
+    # Drive the persistence boundary with a recorded receipt and newly pinned review.
+    next_subject = dict(second, base_sha='c' * 40, target_sha='c' * 40)
+    finish(db, claimed, 'APPROVED', receipts=[receipt], next_review=(next_subject, 'Fresh review'))
+    assert db.get_workflow_execution('exec').status == 'WAITING_APPROVAL'
+    current = client.get(path, headers=auth).json()
+    assert current['status'] == 'PENDING' and current['position'] == 1 and current['remaining_count'] == 0
+    assert current['subjects'][0]['base_sha'] == 'c' * 40
+    assert current['receipts'] == [receipt]
+    assert client.get(path, params={'approval_id': 'gate'}, headers=auth).json()['status'] == 'APPROVED'
+    assert client.post(path, headers=auth, json={'approve': True, 'approval_id': 'gate'}).status_code == 409
+    assert client.post(path, headers=auth, json={'approve': True}).status_code == 409
+
+    response = client.post(path, headers=auth, json={'approve': False, 'approval_id': current['id']})
+    assert response.status_code == 202
+    assert db.get_workflow_execution('exec').status == 'FAILED'
+    with db._get_connection() as conn:
+        row = conn.execute("SELECT output_data FROM workflow_step_runs WHERE id='step'").fetchone()
+    output = json.loads(row['output_data'])
+    assert output['merge_receipts'] == [receipt]
+    assert output['unresolved_pull_requests'] == ['owner/repo #23']
+
+
+def test_legacy_approval_migration_preserves_card_and_merge_receipt(tmp_path):
+    import sqlite3
+    from storage.workflow_approvals_schema import initialize
+
+    db_path = tmp_path / 'legacy_approvals.db'
+    with sqlite3.connect(db_path) as conn:
+        conn.row_factory = sqlite3.Row
+        conn.execute('PRAGMA foreign_keys=ON')
+        conn.executescript("""
+            CREATE TABLE workflow_executions (id TEXT PRIMARY KEY);
+            INSERT INTO workflow_executions VALUES ('exec');
+            CREATE TABLE workflow_approvals (
+                id TEXT PRIMARY KEY, execution_id TEXT NOT NULL UNIQUE
+                    REFERENCES workflow_executions(id) ON DELETE CASCADE,
+                step_run_id TEXT NOT NULL, task_id TEXT NOT NULL, organization_id TEXT NOT NULL,
+                department_id TEXT NOT NULL, workflow_revision INTEGER NOT NULL, status TEXT NOT NULL,
+                config_json TEXT NOT NULL, subjects_json TEXT NOT NULL, report TEXT NOT NULL,
+                created_at TEXT NOT NULL, expires_at TEXT NOT NULL, resolved_at TEXT, resolved_by TEXT,
+                error TEXT, receipts_json TEXT NOT NULL DEFAULT '[]'
+            );
+            CREATE INDEX idx_workflow_approvals_scope
+                ON workflow_approvals(organization_id,department_id,status);
+            CREATE TABLE pr_channel_deliveries (
+                approval_id TEXT PRIMARY KEY REFERENCES workflow_approvals(id) ON DELETE CASCADE,
+                binding_id TEXT NOT NULL, token_digest TEXT UNIQUE, connector_id TEXT, channel_id TEXT,
+                message_id TEXT, bot_id TEXT, status TEXT NOT NULL, rendered TEXT,
+                retry_at INTEGER NOT NULL DEFAULT 0, callback_id TEXT, decision INTEGER,
+                identity_link_id TEXT, claimed_at INTEGER
+            );
+            INSERT INTO workflow_approvals VALUES (
+                'gate','exec','step','task','org','dept',5,'APPROVED','{}','[]','original',
+                '2026-11-16','2026-11-17','2026-11-16','manager',NULL,
+                '[{"status":"COMPLETED","pull_number":20}]'
+            );
+            INSERT INTO pr_channel_deliveries VALUES (
+                'gate','binding','digest','connector','channel','message','bot','DELIVERED',
+                'APPROVED',0,'callback',NULL,'identity',123
+            );
+        """)
+        original_gate = dict(conn.execute('SELECT * FROM workflow_approvals').fetchone())
+        original_card = dict(conn.execute('SELECT * FROM pr_channel_deliveries').fetchone())
+        initialize(conn)
+        initialize(conn)
+        gate = dict(conn.execute('SELECT * FROM workflow_approvals').fetchone())
+        assert gate == {**original_gate, 'position': 0, 'remaining_json': '[]',
+                        'advance_pending': 0, 'advance_claim_until': None}
+        assert dict(conn.execute('SELECT * FROM pr_channel_deliveries').fetchone()) == original_card
+        assert conn.execute('PRAGMA foreign_key_check').fetchall() == []
+        conn.execute("""
+            INSERT INTO workflow_approvals (id,execution_id,step_run_id,task_id,organization_id,
+                department_id,workflow_revision,status,config_json,subjects_json,report,created_at,expires_at,position)
+            SELECT 'next',execution_id,step_run_id,task_id,organization_id,department_id,workflow_revision,
+                'PENDING',config_json,subjects_json,report,created_at,expires_at,1
+            FROM workflow_approvals WHERE id='gate'
+        """)
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute("UPDATE workflow_approvals SET status='RESOLVING' WHERE id='gate'")
+        conn.execute("DELETE FROM workflow_executions WHERE id='exec'")
+        assert conn.execute('SELECT count(*) FROM pr_channel_deliveries').fetchone()[0] == 0
+
+
+def test_concurrent_dashboard_decisions_claim_the_gate_once(state):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    db, client = state
+    rendezvous = Barrier(2, timeout=10)
+    path = '/api/v1/workflows/executions/exec/approval'
+
+    def decide(actor):
+        rendezvous.wait()
+        response = client.post(path, headers=headers(actor), json={'approve': True, 'approval_id': 'gate'})
+        return actor, response.status_code
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = dict(pool.map(decide, ('ownMANAGER', 'ownORG_ADMIN')))
+    assert sorted(results.values()) == [202, 409]
+    result = client.get(path, headers=headers('ownORG_ADMIN')).json()
+    assert result['status'] == 'APPROVED'
+    assert results[result['resolved_by']] == 202
+    assert db.get_workflow_execution('exec').status == 'COMPLETED'
+
+
+@pytest.mark.parametrize('org,other', [('atlas', 'boreal'), ('boreal', 'atlas')])
+@pytest.mark.parametrize('department', ['engineering', 'finance', 'operations'])
+def test_approval_department_and_role_matrix(baseline, org, other, department):
+    db, client = baseline
+    scope = f'{org}_{department}'
+    db.create_workflow(id='matrix-workflow', name='Matrix', department_id=scope,
+                       organization_id=org, definition_json='{}')
+    db.create_workflow_execution('matrix-run', 'matrix-workflow', 'MANUAL',
+                                 department_id=scope, status='WAITING_APPROVAL')
+    now = datetime.now()
+    with db._get_connection() as conn:
+        conn.execute("""INSERT INTO workflow_approvals
+            (id,execution_id,step_run_id,task_id,organization_id,department_id,workflow_revision,status,
+             config_json,subjects_json,report,created_at,expires_at)
+            VALUES ('matrix-gate','matrix-run','step','task',?,?,1,'PENDING',?,'[]',?,?,?)""",
+            (org, scope, json.dumps({'kind': 'report', 'merge_after_approval': False}),
+             'Private approval report', now.isoformat(), (now + timedelta(hours=1)).isoformat()))
+        conn.execute('INSERT INTO workflow_execution_tool_contexts VALUES (?,?)',
+                     ('matrix-run', json.dumps({'initiator_id': f'{org}_ORG_ADMIN'})))
+    path = '/api/v1/workflows/executions/matrix-run/approval'
+    decision = {'approve': True, 'approval_id': 'matrix-gate'}
+    foreign = scoped_auth(org=other, department=department)
+    assert client.get(path, headers=foreign).status_code == 404
+    assert client.post(path, headers=foreign, json=decision).status_code == 404
+    if department != 'engineering':
+        assert client.get(path, headers=scoped_auth('MANAGER', org)).status_code == 404
+        for role in ('MANAGER', 'OPERATOR', 'MEMBER'):
+            db.add_user_to_department(scope, f'{org}_{role}', role=role)
+    for role in ('MEMBER', 'OPERATOR'):
+        headers = scoped_auth(role, org, department)
+        assert client.get(path, headers=headers).status_code == 200
+        assert client.post(path, headers=headers, json=decision).status_code == 404
+    manager = scoped_auth('MANAGER', org, department)
+    db.update_user(f'{org}_MANAGER', status='INACTIVE')
+    assert client.post(path, headers=manager, json=decision).status_code in (401, 403)
+    db.update_user(f'{org}_MANAGER', status='ACTIVE')
+    admin = scoped_auth(org=org, department=department)
+    assert client.get(path, headers=admin).json()['status'] == 'PENDING'
+    assert client.post(path, headers=manager, json=decision).status_code == 202
+    assert client.get(path, headers=admin).json()['resolved_by'] == f'{org}_MANAGER'
+
+
+def test_confirmed_final_merge_resumes_after_worker_restart(state):
+    from workflows.pr_approval_sequence import advance_confirmed
+
+    db, _ = state
+    receipt = {'status': 'COMPLETED', 'repository': 'owner/repo', 'pull_number': 20,
+               'merge_commit_sha': 'c' * 40}
+    with db._get_connection() as conn:
+        conn.execute("""UPDATE workflow_approvals SET status='RESOLVING',advance_pending=1,
+                        advance_claim_until=1,receipts_json=? WHERE id='gate'""", (json.dumps([receipt]),))
+    advance_confirmed(db)
+    advance_confirmed(db)
+    assert db.get_workflow_execution('exec').status == 'COMPLETED'
+    with db._get_connection() as conn:
+        row = conn.execute("SELECT status,advance_pending,receipts_json FROM workflow_approvals WHERE id='gate'").fetchone()
+        assert tuple(row) == ('APPROVED', 0, json.dumps([receipt]))
+
+
+
+def test_confirmed_merge_stops_if_the_channel_binding_was_revoked(state):
+    from workflows.pr_approval_sequence import advance_confirmed
+
+    db, _ = state
+    receipt = {'status': 'COMPLETED', 'repository': 'owner/repo', 'pull_number': 20}
+    remaining = [{'repository': 'owner/repo', 'pull_number': 23}]
+    with db._get_connection() as conn:
+        conn.execute("""UPDATE workflow_approvals SET status='RESOLVING',advance_pending=1,
+                        resolved_by='ownMANAGER',remaining_json=?,receipts_json=? WHERE id='gate'""",
+                     (json.dumps(remaining), json.dumps([receipt])))
+        conn.execute("""INSERT INTO pr_channel_deliveries (approval_id,binding_id,callback_id,status)
+                        VALUES ('gate','revoked','callback','DELIVERED')""")
+    advance_confirmed(db)
+    assert db.get_workflow_execution('exec').status == 'FAILED'
+    with db._get_connection() as conn:
+        row = conn.execute("SELECT error,advance_pending,receipts_json FROM workflow_approvals WHERE id='gate'").fetchone()
+        assert tuple(row) == ('The original approval channel is no longer authorized.', 0, json.dumps([receipt]))
