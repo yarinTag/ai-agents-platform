@@ -12,8 +12,15 @@ class WorkflowOutcome(BaseModel):
     blocker: Optional[str] = Field(max_length=8000)
 
 
+class PullRequestFinding(BaseModel):
+    model_config = ConfigDict(extra='forbid', strict=True, str_strip_whitespace=True)
+    pull_number: int = Field(gt=0)
+    findings: str = Field(min_length=1, max_length=500)
+
+
 class PullRequestOutcome(WorkflowOutcome):
     eligible_pull_numbers: list[int] = Field(max_length=10)
+    per_pull_findings: list[PullRequestFinding] = Field(default_factory=list, max_length=10)
 
 
 class OutcomeFormatError(ValueError):

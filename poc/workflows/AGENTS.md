@@ -277,3 +277,5 @@ The channel classifier checks its event-wide attempt cap against durable candida
 A confirmed PR receipt atomically schedules read-only advancement. The worker leases the continuation and reauthorizes before refreshing successor evidence. Lease expiry permits replay of reads only. The original merge claim is never replayed. Successor reports include current changed paths and observed merge blockers.
 
 Revoked channel bindings or credentials terminate confirmed-merge advancement with a sanitized outcome and retain the confirmed receipt.
+
+Sequential merge cards include the initial per-PR finding and uncertainty when supplied by the review, alongside fresh evidence. The excerpt is descriptive and cannot change the receipt-derived subject.
