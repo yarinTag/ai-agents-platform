@@ -42,7 +42,7 @@ Keep secrets out of URLs, proxy access logs, request tracing, shell history, and
 | 429 | Capacity limit. Check edge limits and the connector's 120 new events per minute and 1,000 unfinished jobs. The connector-level response includes a 60-second Retry-After. |
 | 503 | Storage unavailable. Check free disk, permissions, database health and write contention. Preserve the database and receipts. |
 
-Deduplication uses the organization, connector, provider and account plus the provider event ID or channel/message pair. Duplicates do not consume new-event quota. Terminal receipts become eligible for cleanup after 48 hours, on later staging for that connector. Provider redelivery and internal retries are separate. Internal consumers use a 60-second lease with a fencing token. The four possible retry delays after failures are 10, 20, 40 and 80 seconds. The fifth unsuccessful attempt becomes `FAILED`. The current release starts no outbox consumer. Future consumers must make external effects idempotent by internal event ID.
+Deduplication uses the organization, connector, provider and account plus the provider event ID or channel/message pair. Duplicates do not consume new-event quota. Terminal receipts become eligible for cleanup after 48 hours, on later staging for that connector. Provider redelivery and internal retries are separate. Internal consumers use a 60-second lease with a fencing token. The four possible retry delays after failures are 10, 20, 40 and 80 seconds. The fifth unsuccessful attempt becomes `FAILED`. The API lifespan starts the channel trigger consumer. It reserves dispatches by event and workflow. See the [operations runbook](operations-runbook.md) for stuck jobs and divergent databases.
 
 In MCP Hub, run **Check configuration** for local URL, secret, connector and SQLite checks. **Check public TLS** tests the configured public hostname and certificate at that moment. To establish actual delivery, use the provider's setup console and a supported message in an authorized test channel, then verify a new staged receipt. A successful TLS probe or Slack handshake alone cannot establish delivery.
 
@@ -50,7 +50,7 @@ In MCP Hub, run **Check configuration** for local URL, secret, connector and SQL
 
 1. Record the connector, time window, status counts, and latency from the edge and the MCP Hub. Use bounded diagnostic summaries. Raw bodies and headers may contain credentials or message content.
 2. Apply route-specific rate and connection limits at the trusted edge. If necessary, pause the affected provider subscription or webhook while preserving other connectors and the database. Keep request verification enabled. When repeated Slack delivery failures disable subscriptions, restore them in the app console after recovery.
-3. Check that storage can commit, identify whether the backlog has a supported consumer, and resume delivery gradually. With no consumer deployed, reduce or pause subscriptions before the unfinished-job cap is reached. Preserve receipts when reconciling provider redeliveries.
+3. Check that storage can commit, verify that the channel trigger consumer is healthy, and resume delivery gradually. If the consumer is unavailable, reduce or pause subscriptions before the unfinished-job cap is reached. Preserve receipts when reconciling provider redeliveries.
 
 ### Leaked webhook secret or signing secret
 
