@@ -225,3 +225,5 @@ The terminal Telegram approval contract checks that the claimed delivery include
 The terminal Telegram approval contract also exercises the internal polling ingress path against the persisted connector and verified callback.
 The terminal polling callback regression covers channel-attributed messages without a bot from field.
 Capability editor tests verify inherited GitHub resources and per-department revocation. Missing-grant execution tests explicitly disable GitHub inheritance to exercise admission with no effective grants.
+
+The API audit PR write-plan scenario includes the required dashboard checkpoint while verifying the unchanged write grant and inactive creation contract.
