@@ -14,6 +14,8 @@
 
 [AI-22 channel registry](docs/channel-bindings.md) adds tenant-scoped Telegram/Slack configuration, independent use flags, and audited administrator changes. Verified ingress, identity and runtime use remain separate stages.
 
+[Enterprise self-hosted roadmap](docs/roadmap/enterprise-self-hosted.md) tracks Kubernetes packaging, offline installation, internal inference and the release acceptance criteria.
+
 ## 1. Platform Identity & Architectural Mission
 The **AI Agents Platform** is an enterprise multi-tenant autonomous agent orchestration and governance platform. It blends agent hierarchy management, visual DAG workflow execution, real-time collaboration war rooms, scheduled background cron execution, and a virtual pixel office with enterprise multi-tenancy, per-department monthly spending limits, and tool-level Model Context Protocol (MCP) governance.
 
