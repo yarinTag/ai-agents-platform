@@ -251,3 +251,5 @@ test_channel_trigger_relevance.py verifies the deterministic preview, strict con
 PR approval tests cover recovery from a confirmed final merge receipt with an expired advancement claim without provider I/O.
 
 Confirmed-merge recovery covers revoked channel bindings, retained receipts and failed advancement without opening a provider connection.
+
+Completion validation tests cover bounded per-PR excerpts retained for authorized pull numbers and rejection of out-of-scope excerpts.
