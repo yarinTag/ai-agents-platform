@@ -67,6 +67,9 @@ def start_gate(db, step, task, step_record_id, execution_id, outputs):
                 raise ToolAccessError('PR review did not return a valid eligibility report.') from None
             eligible = set(assessment.eligible_pull_numbers)
             subjects = [subject for subject in subjects if subject['pull_number'] in eligible]
+            excerpts = {item.pull_number: item.findings for item in assessment.per_pull_findings}
+            subjects = [dict(subject, review_findings=excerpts[subject['pull_number']])
+                        if subject['pull_number'] in excerpts else subject for subject in subjects]
             report = assessment.findings
             batch_findings = report
     if config.kind == 'pull_requests' and not subjects:
