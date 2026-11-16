@@ -1,4 +1,4 @@
-import { Alert, Descriptions, Space, Tag, Typography } from 'antd';
+import { Alert, Descriptions, Space, Tag, theme, Typography } from 'antd';
 import { usePrGovernanceText } from '../../i18n/prGovernance';
 import { useTranslation } from '../../i18n';
 
@@ -19,6 +19,7 @@ export function prLocation(value: unknown) {
 export function PrEvidence({ value }: { value: unknown }) {
   const text = usePrGovernanceText();
   const { dir } = useTranslation();
+  const { token } = theme.useToken();
   const row = record(value);
   const location = prLocation(row);
   if (!location) return null;
@@ -48,27 +49,62 @@ export function PrEvidence({ value }: { value: unknown }) {
     [text.actor, str(row.approved_by)], [text.providerActor, str(row.provider_actor)],
     [text.started, str(row.started_at)], [text.completed, str(row.completed_at)],
   ].filter(([, v]) => v);
-  return <section dir={dir} style={{ overflowWrap: 'anywhere', marginBlock: 8 }} aria-label={text.title}>
-    <Space wrap>
-      <Typography.Link href={location.url} target="_blank" rel="noopener noreferrer"><bdi dir="ltr">{location.repository} #{location.number}</bdi></Typography.Link>
-      {operation && <Tag>{operation === 'open_pull_request' ? text.draft : operation === 'merge_pull_request' ? text.merge : operation === 'review_pull_request' ? text.review : operation === 'comment_pull_request' ? text.comment : operation.startsWith('get_pull_request') ? text.read : operation}</Tag>}
+  const revisions = fields.length > 0 && <Descriptions size="small" column={1}
+    items={fields.map(([label, v]) => ({ key: label, label, children: <bdi dir="ltr">{v}</bdi> }))} />;
+  const operationLabel = operation === 'open_pull_request' ? text.draft : operation === 'merge_pull_request' ? text.merge :
+    operation === 'review_pull_request' ? text.review : operation === 'comment_pull_request' ? text.comment :
+    operation.startsWith('get_pull_request') ? text.read : operation;
+  return <section dir={dir} aria-label={text.title} style={{
+    overflowWrap: 'anywhere', marginBlock: 8,
+    ...(evidence && {
+      border: `1px solid ${token.colorBorderSecondary}`,
+      borderRadius: token.borderRadiusLG,
+      padding: `${token.paddingXS}px ${token.paddingSM}px`,
+    }),
+  }}>
+    <Space size={[8, 4]} wrap>
+      <Typography.Link href={location.url} target="_blank" rel="noopener noreferrer">
+        <bdi dir="ltr">{location.repository} #{location.number}</bdi>
+      </Typography.Link>
+      {operation && !(proof && operation.startsWith('get_pull_request')) && <Tag>{operationLabel}</Tag>}
+      {proof && <Tag color={ready ? 'success' : 'warning'}>{ready ? text.ready : text.blocked}</Tag>}
+      {row.partial === true && evidence && <Tag color="warning">{text.partial}</Tag>}
       {base && head ? <Typography.Link href={`https://github.com/${location.repository}/compare/${base}...${head}`} target="_blank" rel="noopener noreferrer">{text.diff}</Typography.Link> :
         <Typography.Link href={`${location.url}/files`} target="_blank" rel="noopener noreferrer">{text.liveDiff}</Typography.Link>}
     </Space>
-    {fields.length > 0 && <Descriptions size="small" column={1} items={fields.map(([label, v]) => ({ key: label, label, children: <bdi dir="ltr">{v}</bdi> }))} />}
+    {!evidence && revisions}
     {evidence && <>
-      <Typography.Paragraph type="secondary">{text.recorded}</Typography.Paragraph>
-      {proof ? <Space wrap>
-        <Tag color={ready ? 'success' : 'warning'}>{ready ? text.ready : text.blocked}</Tag>
-        <Tag>{text.approved}: {fact(row.review_approved)}</Tag><Tag>{text.checks}: {fact(row.required_checks_satisfied)}</Tag>
-        <Tag>{text.currentBase}: {fact(row.base_up_to_date)}</Tag>
-      </Space> : <Alert type="info" message={checksOnly ? text.limited : text.legacy} />}
-      {row.partial === true && <Alert type="warning" message={text.partial} description={text.evidenceRecovery} />}
-      {blockers.map((code, index) => <Alert key={`${code}:${index}`} type="warning" message={text.blockers[code] || <bdi dir="ltr">{code}</bdi>} description={`${text.recovery}: ${recovery(code)}`} />)}
-      {Array.isArray(row.reviews) && row.reviews.map((v, i) => {
-        const review = record(v);
-        return <div key={i}><bdi dir="ltr">{str(review.author)} · {text.statuses[str(review.state)] || str(review.state)} · {sha(review.commit_id)}</bdi> · {text.eligible}: {fact(review.trusted_approval)}</div>;
-      })}
+      {!proof && <Typography.Text type="secondary" style={{ display: 'block', marginBlockStart: 4 }}>
+        {checksOnly ? text.limited : text.legacy}
+      </Typography.Text>}
+      <details style={{ marginBlockStart: 4 }}>
+        <summary style={{ cursor: 'pointer', color: token.colorTextSecondary }}>
+          {text.details}{blockers.length > 0 && <> · {text.blockerCount(blockers.length)}</>}
+        </summary>
+        <Space direction="vertical" size={8} style={{ display: 'flex', marginBlockStart: 8 }}>
+          {blockers.length > 0 && <ul style={{
+            listStyle: 'none', margin: 0, paddingInlineStart: token.paddingSM,
+            borderInlineStart: `2px solid ${token.colorWarningBorder}`,
+          }}>
+            {blockers.map((code, index) => <li key={`${code}:${index}`} style={{ marginBlockStart: index ? 8 : 0 }}>
+              <Typography.Text strong>{text.blockers[code] || <bdi dir="ltr">{code}</bdi>}</Typography.Text>
+              <Typography.Text type="secondary" style={{ display: 'block' }}>{recovery(code)}</Typography.Text>
+            </li>)}
+          </ul>}
+          {row.partial === true && <Typography.Text type="secondary">{text.evidenceRecovery}</Typography.Text>}
+          {proof && <Space wrap size={[4, 4]}>
+            <Tag>{text.approved}: {fact(row.review_approved)}</Tag>
+            <Tag>{text.checks}: {fact(row.required_checks_satisfied)}</Tag>
+            <Tag>{text.currentBase}: {fact(row.base_up_to_date)}</Tag>
+          </Space>}
+          {revisions}
+          {Array.isArray(row.reviews) && row.reviews.map((v, i) => {
+            const review = record(v);
+            return <div key={i}><bdi dir="ltr">{str(review.author)} · {text.statuses[str(review.state)] || str(review.state)} · {sha(review.commit_id)}</bdi> · {text.eligible}: {fact(review.trusted_approval)}</div>;
+          })}
+          <Typography.Text type="secondary">{text.recorded}</Typography.Text>
+        </Space>
+      </details>
     </>}
     {(status === 'STARTED' || status === 'UNKNOWN' || (status === 'FAILED' && ['open_pull_request', 'review_pull_request', 'comment_pull_request'].includes(operation))) && <Alert type="warning" message={text.reconcile} />}
     {status === 'NOT_DISPATCHED' && <Alert type="warning" message={text.notSent} />}

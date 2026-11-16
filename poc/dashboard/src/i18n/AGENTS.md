@@ -184,3 +184,21 @@ workflowRun.ts explains the ten-second active-run refresh in EN and HE.
 dagApprovals.ts includes EN/HE guidance when an open approval is no longer on the pending page.
 
 runAudit.ts owns EN/HE timeline and reconciliation copy.
+
+`workflowApproval.ts` provides matched Hebrew and English single-PR merge button labels and approval position text for sequential merge gates.
+
+prGovernance.ts localizes the PR review details disclosure and singular/plural blocker count in English and Hebrew.
+
+AI-41 localizes proposal dependencies, capability state, and setup guidance in workflowChat.ts for English and Hebrew.
+
+AI-49 Workflow Chat localizes the channel trigger badge and activation status.
+
+Approval card preview, setup hints and source labels cover both Telegram and Slack in English and Hebrew.
+
+Ingress diagnostics localize outbound transport, app-token presence, reconnection and last Socket Mode acknowledgment.
+
+Channel trigger relevance configuration, preview limitations and categorical decision reasons are localized in EN and HE.
+
+Channel trigger sender restrictions and capacity controls are localized in English and Hebrew.
+
+Workflow Chat labels and describes the scope of dashboard checkpoints in both locales.

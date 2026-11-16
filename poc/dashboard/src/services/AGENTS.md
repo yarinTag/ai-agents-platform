@@ -309,3 +309,13 @@ dagApprovalsApi.ts supports abortable pending/history requests for checkpoint an
 Approval summaries include an optional Telegram/dashboard decision_source. The editor reuses channel binding pagination, personal identity links and admin ingress diagnostics.
 
 getWorkflow, getWorkflowExecutions and getWorkflowExecution take an optional AbortSignal for cancellable log reads.
+
+`getWorkflowApproval(executionId, approvalId?)` optionally reads a historical round. `decideWorkflowApproval(executionId, approvalId, approve)` supplies `approval_id` with the decision. The API model exposes `position` and `remaining_count`.
+
+DAG and terminal inbox response types support decision_source=slack in addition to telegram and dashboard.
+
+Ingress diagnostics types expose optional socket transport, state and acknowledgment fields.
+
+Channel trigger client types include optional relevance configuration, requires_classification in dry-run output and the recent_classifications diagnostic projection.
+
+Trigger settings include optional sender_ids, cooldown_seconds and max_runs_per_hour. Dry-run request can take a sample sender ID.

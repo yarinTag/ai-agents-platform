@@ -308,3 +308,11 @@ The visual DAG approval editor supports Telegram destination selection and a loc
 Approval tables refresh every ten seconds while visible. Workflow Logs updates the execution list and selected run detail in place while there is a pending, queued, running or waiting-for-approval execution.
 
 The run audit timeline in logs and the execution drawer displays correlated trigger, workflow, approval and connector milestones.
+
+Workflow Chat proposal types include optional structured clarifications keyed by step and resource index. The preview shows declared DAG dependencies and capability state and supports older stored jobs without clarifications.
+
+The WorkflowChat proposal type supports approval_checkpoint, rendered as a human approval node with explicit predecessor edges.
+
+AI-47 browser acceptance uses the role, scope, language and viewport matrix in ../../docs/governed-workflow-browser-verification.md.
+
+AI-49 Workflow Chat context and proposal types include eligible bindings and an optional channel trigger. Approval and delivery permissions are independent.

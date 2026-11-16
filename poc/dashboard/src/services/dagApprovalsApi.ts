@@ -8,7 +8,7 @@ export type DagApproval = {
   execution_id: string;
   workflow_id: string;
   workflow_name: string;
-  decision_source?: 'telegram' | 'dashboard' | null;
+  decision_source?: 'telegram' | 'slack' | 'dashboard' | null;
   step_key: string;
   expires_at: number;
   decided_at: number | null;
@@ -31,7 +31,7 @@ export type TerminalApprovalSummary = {
   execution_id: string;
   workflow_id: string;
   workflow_name: string;
-  decision_source?: 'telegram' | 'dashboard' | null;
+  decision_source?: 'telegram' | 'slack' | 'dashboard' | null;
   status: string;
   expires_at: string;
   resolved_at: string | null;
