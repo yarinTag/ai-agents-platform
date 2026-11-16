@@ -7,8 +7,8 @@ export const getWorkflows = (departmentId?: string | null) =>
     params: departmentId ? { department_id: departmentId } : {},
   });
 
-export const getWorkflow = (id: string) =>
-  api.get<PlatformWorkflow>(`/api/v1/workflows/${id}`);
+export const getWorkflow = (id: string, signal?: AbortSignal) =>
+  api.get<PlatformWorkflow>(`/api/v1/workflows/${id}`, { signal });
 
 export const updateWorkflow = (id: string, data: Partial<PlatformWorkflow> & {
   expected_revision?: number; change_summary?: string;
@@ -44,16 +44,16 @@ export const executeWorkflow = (
 export const executeWorkflowPlayground = (workflowId: string, payload: Record<string, unknown>) =>
   api.post<WorkflowExecution>(`/api/v1/workflows/${workflowId}/playground`, payload);
 
-export const getWorkflowExecutions = (workflowId?: string, limit: number = 50, departmentId?: string | null) => {
+export const getWorkflowExecutions = (workflowId?: string, limit: number = 50, departmentId?: string | null, signal?: AbortSignal) => {
   const params = new URLSearchParams();
   if (workflowId) params.append('workflow_id', workflowId);
   if (departmentId) params.append('department_id', departmentId);
   params.append('limit', String(limit));
-  return api.get<WorkflowExecution[]>(`/api/v1/workflows/executions?${params.toString()}`);
+  return api.get<WorkflowExecution[]>(`/api/v1/workflows/executions?${params.toString()}`, { signal });
 };
 
-export const getWorkflowExecution = (executionId: string) =>
-  api.get<WorkflowExecution>(`/api/v1/workflows/executions/${executionId}`);
+export const getWorkflowExecution = (executionId: string, signal?: AbortSignal) =>
+  api.get<WorkflowExecution>(`/api/v1/workflows/executions/${executionId}`, { signal });
 
 export const createWorkflow = (data: {
   name: string;

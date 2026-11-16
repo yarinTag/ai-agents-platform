@@ -1,6 +1,7 @@
 import { useTranslation } from './I18nContext';
 
 const en = {
+  logsRefresh: 'Run history, step output, and runtime diagnostics. Active runs refresh every 10 seconds.',
   advanced: 'Advanced execution parameters (optional)',
   deliveryWarning: 'Summary may complete, but notification delivery is blocked',
   mode: 'Run location', local: 'Run on this server', queue: 'Send to message queue',
@@ -10,6 +11,7 @@ const en = {
   failed: 'Workflow execution could not be started.',
 };
 const he: typeof en = {
+  logsRefresh: 'היסטוריית הרצות, פלט שלבים ואבחון. הרצות פעילות מתעדכנות כל 10 שניות.',
   advanced: 'פרמטרים מתקדמים להרצה (אופציונלי)',
   deliveryWarning: 'אפשר להשלים את הסיכום, אך שליחת ההודעה חסומה',
   mode: 'מיקום ההרצה', local: 'הרצה בשרת הזה', queue: 'שליחה לתור ההודעות',

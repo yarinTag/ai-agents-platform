@@ -176,3 +176,9 @@ workflowRun.ts provides the English and Hebrew label for the optional execution 
 pluginSource.ts localizes the plugin source scope and inherited source controls. workflowMetrics.ts localizes reliability labels, categories and remediation suggestions.
 
 dagApprovals.ts localizes history, checkpoint results, recorded votes and run approval labels.
+
+channelApprovals.ts localizes Telegram preview, setup warnings, fallback and decision source in EN and HE.
+
+workflowRun.ts explains the ten-second active-run refresh in EN and HE.
+
+dagApprovals.ts includes EN/HE guidance when an open approval is no longer on the pending page.

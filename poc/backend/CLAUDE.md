@@ -211,3 +211,5 @@ Skill catalogs, content and runtime injection use the same source resolver. Work
 The reliability API normalizes explicit offsets, legacy local ISO timestamps and SQLite UTC timestamps before filtering.
 
 Approval history projects scoped persisted records without changing decision authority.
+
+Interactive approval provenance uses recorded callback and decision state in the scoped list API.

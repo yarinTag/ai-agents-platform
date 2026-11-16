@@ -121,3 +121,5 @@ Execution preflight defers receipt-scoped terminal PR approval delivery authoriz
 PR evidence exposes observed_ci_passed and approval_ready separately from candidate_ready. The PR gate can pin observed-CI approval candidates. Fresh merge evidence still requires the full GitHub merge policy.
 New approval subjects pin the directly observed target branch ref and SHA in addition to PR head and provider-reported base. Stable differences between the two base values are diagnostic. Fresh merge checks observed CI and both pins, then submits a head-pinned merge for GitHub to enforce repository rules. Legacy subjects retain the strict evidence path.
 Telegram approval callbacks accept channel-attributed posts when sender_chat matches the channel. The signed action and stored delivery receipt still bind the decision to the exact bot, channel and message.
+
+Telegram approval action payloads and provider verification are documented in docs/interactive-channel-approvals.md. Keep callback identifiers and secret material out of diagnostic responses.

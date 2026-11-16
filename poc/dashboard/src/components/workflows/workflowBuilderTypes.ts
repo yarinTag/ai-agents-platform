@@ -12,6 +12,8 @@ export interface DagApprovalPolicy {
   approver_roles?: ('OPERATOR' | 'MANAGER' | 'ORG_ADMIN')[];
   timeout_seconds?: number;
   quorum?: number;
+  channel_binding_id?: string;
+  summary_step?: string;
 }
 
 export interface WorkflowStep {

@@ -67,3 +67,5 @@ workflow notifications remain separate. No approvals resumed or messages/tests e
 
 
 AI-15 plans a shared exact-action approval engine with verified external identities and one-use callback actions, plus checkpointed continuation. Current dashboard terminal gates and denied legacy channel callbacks remain unchanged. Approval identity uses execution/approval/action/evidence, not agent ID; decision recorded is not provider success.
+
+Use the governed workflow approval service for Telegram cards. See docs/interactive-channel-approvals.md for callback receipts, fallback and incident response.

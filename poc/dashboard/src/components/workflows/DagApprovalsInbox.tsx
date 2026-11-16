@@ -1,3 +1,4 @@
+import { useChannelApprovalsText } from '../../i18n/channelApprovals';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Button, Card, ConfigProvider, Descriptions, Drawer, Modal, Space, Table, Tabs, Tag, Typography } from 'antd';
 import { Link } from 'react-router-dom';
@@ -19,13 +20,13 @@ export function DagApprovalsInbox({ open = true, onClose, execution }: {
   return <ConfigProvider direction={dir}>
     <Drawer open={open} size="large" title={execution ? t.runApprovals : t.title} onClose={onClose}>
       <ApprovalLists key={JSON.stringify([organization.id, user.id, user.role, department, execution?.id])}
-        department={department} execution={execution} />
+        department={department} execution={execution} active={open} />
     </Drawer>
   </ConfigProvider>;
 }
 
-function ApprovalLists({ department, execution }: {
-  department?: string | null; execution?: { id: string };
+function ApprovalLists({ department, execution, active }: {
+  department?: string | null; execution?: { id: string }; active: boolean;
 }) {
   const t = useDagApprovalsText();
   const [view, setView] = useState<ApprovalView>('pending');
@@ -34,23 +35,24 @@ function ApprovalLists({ department, execution }: {
     emptyMessage={t.emptyTerminal} />;
   if (!department) return terminal || <Alert type="info" title={t.selectDepartment} />;
   const checkpoints = <Inbox key={view} department={department} executionId={execution?.id}
-    view={view} onDecisionBusy={setDeciding} />;
+    view={view} active={active} onDecisionBusy={setDeciding} />;
   const views = <Tabs activeKey={view} onChange={key => {
     if (!deciding && (key === 'pending' || key === 'history')) setView(key);
   }} items={[{ key: 'pending', label: t.pending }, { key: 'history', label: t.history }]} />;
   return <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
     {views}
     <Card size="small" title={t.checkpoints}>{checkpoints}</Card>
-    <Card size="small" title={t.terminal}><TerminalApprovalsInbox key={view} department={department} view={view} executionId={execution?.id} /></Card>
+    <Card size="small" title={t.terminal}><TerminalApprovalsInbox key={view} department={department} view={view} active={active} executionId={execution?.id} /></Card>
   </Space>;
 }
 
 const statusColors = { PENDING: 'gold', APPROVED: 'green', REJECTED: 'red', TIMED_OUT: 'default' };
 
-function Inbox({ department, executionId, view, onDecisionBusy }: {
-  department: string; executionId?: string; view: ApprovalView; onDecisionBusy: (busy: boolean) => void;
+function Inbox({ department, executionId, view, active, onDecisionBusy }: {
+  department: string; executionId?: string; view: ApprovalView; active: boolean; onDecisionBusy: (busy: boolean) => void;
 }) {
   const t = useDagApprovalsText();
+  const channel = useChannelApprovalsText();
   const { locale } = useTranslation();
   const [rows, setRows] = useState<DagApproval[]>([]);
   const [cursors, setCursors] = useState<string[]>([]);
@@ -60,23 +62,35 @@ function Inbox({ department, executionId, view, onDecisionBusy }: {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<'loadError' | 'decisionError' | 'recorded'>();
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const [selected, setSelected] = useState<DagApproval>();
+  const [reviewed, setSelected] = useState<DagApproval>();
   const mutation = useRef<AbortController | undefined>(undefined);
+  const current = reviewed && rows.find(row => row.id === reviewed.id);
+  const selected = current ?? reviewed;
+  const canDecide = view === 'pending' && current?.can_decide;
   const after = cursors[cursors.length - 1];
   useEffect(() => () => mutation.current?.abort(), []);
   useEffect(() => {
+    if (!active) return;
     const request = new AbortController();
     setLoading(true);
     setNotice(previous => previous === 'loadError' ? undefined : previous);
-    void listDagApprovals(department, after, request.signal, view, executionId).then(({ data }) => {
-      if (!request.signal.aborted) { setRows(data.items); setNext(data.next_after); }
+    const load = () => listDagApprovals(department, after, request.signal, view, executionId).then(({ data }) => {
+      if (!request.signal.aborted) { setNotice(previous => previous === 'loadError' ? undefined : previous); setRows(data.items); setNext(data.next_after); }
     }).catch(() => { if (!request.signal.aborted) setNotice('loadError'); })
       .finally(() => { if (!request.signal.aborted) setLoading(false); });
-    return () => request.abort();
-  }, [department, after, reload, view, executionId]);
+    let fetching = false;
+    const refreshRows = async () => {
+      if (fetching || document.visibilityState === 'hidden') return;
+      fetching = true;
+      try { await load(); } finally { fetching = false; }
+    };
+    void refreshRows();
+    const timer = window.setInterval(() => void refreshRows(), 10_000);
+    return () => { window.clearInterval(timer); request.abort(); };
+  }, [department, after, reload, view, executionId, active]);
 
   const decide = async (approve: boolean) => {
-    if (!selected?.can_decide || mutation.current) return;
+    if (!selected || !canDecide || mutation.current) return;
     const request = new AbortController();
     mutation.current = request;
     setBusy(true); onDecisionBusy(true); setNotice(undefined);
@@ -101,6 +115,8 @@ function Inbox({ department, executionId, view, onDecisionBusy }: {
         { title: t.workflow, dataIndex: 'workflow_name' },
         { title: t.step, render: (_, item) => <bdi>{item.step_key}</bdi> },
         { title: t.status, render: (_, item) => <Tag color={statusColors[item.status]}>{t[item.status]}</Tag> },
+        { title: channel.source, render: (_, item) => item.decision_source === 'telegram'
+          ? channel.telegram : item.decision_source === 'dashboard' ? channel.dashboardSource : '—' },
         { title: view === 'history' ? t.decidedAt : t.expires, render: (_, item) => {
           const value = view === 'history' ? item.decided_at : item.expires_at;
           return <bdi>{value != null ? date(value) : '—'}</bdi>;
@@ -116,15 +132,18 @@ function Inbox({ department, executionId, view, onDecisionBusy }: {
       onCancel={() => { if (!busy) setDetailsOpen(false); }}
       footer={<Space wrap>
         <Button disabled={busy} onClick={() => setDetailsOpen(false)}>{t.close}</Button>
-        {selected.can_decide && <>
+        {canDecide && <>
           <Button danger disabled={busy} onClick={() => void decide(false)}>{t.reject}</Button>
           <Button type="primary" loading={busy} onClick={() => void decide(true)}>{t.approve}</Button>
         </>}
       </Space>}>
+      {view === 'pending' && !current && <Alert type="info" title={t.noLongerPending} />}
       <Descriptions column={1} items={[
         { key: 'workflow', label: t.workflow, children: selected.workflow_name },
         { key: 'step', label: t.step, children: <bdi>{selected.step_key}</bdi> },
-        { key: 'status', label: t.status, children: <Tag color={statusColors[selected.status]}>{t[selected.status]}</Tag> },
+        { key: 'status', label: t.status, children: current || view === 'history'
+          ? <Tag color={statusColors[selected.status]}>{t[selected.status]}</Tag> : '—' },
+        { key: 'votes', label: t.votes, children: <bdi>{selected.approvals}/{selected.quorum}</bdi> },
         { key: 'decision', label: t.decidedAt, children: selected.decided_at != null ? <bdi>{date(selected.decided_at)}</bdi> : '—' },
         { key: 'personal', label: t.myVote, children: selected.my_vote ? t[selected.my_vote] : '—' },
         { key: 'expires', label: t.expires, children: <bdi>{date(selected.expires_at)}</bdi> },

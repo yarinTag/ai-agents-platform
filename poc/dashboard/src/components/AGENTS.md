@@ -359,3 +359,9 @@ WorkflowApprovalPanel keeps the decision submission guards and reloads on execut
 The workflow builder scans plugin skills using the workflow department so its picker matches execution source selection.
 
 The shared inbox presents checkpoint and terminal approval tables under Pending and History. Closing details retains the current table, page and filter.
+
+ChannelApprovalFields renders Telegram destinations with Send and Approve enabled, direct dependency summary selection, a local preview, linked identity and administrator ingress readiness. Pending/history tables refresh while visible and display the recorded decision source.
+
+Open approval tables poll every ten seconds without clearing visible rows during background reads.
+
+DAG approval detail uses the latest polled row and disables deciding when the row leaves the pending page. Builder dependency edits clear an unavailable approval summary step.

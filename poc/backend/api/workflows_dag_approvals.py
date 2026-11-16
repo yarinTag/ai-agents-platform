@@ -46,8 +46,9 @@ def list_dag_approvals(department_id: str, request: Request,
 
 def _terminal_inbox(db, actor, resources, department_id, view, after, execution_id):
     base = """SELECT a.id,a.execution_id,a.status,a.expires_at,a.resolved_at,a.created_at,w.id AS workflow_id,
-                     w.name AS workflow_name
-              FROM workflow_approvals a
+                     w.name AS workflow_name, CASE WHEN d.callback_id IS NOT NULL THEN 'telegram'
+                         WHEN a.resolved_by IS NOT NULL THEN 'dashboard' END AS decision_source
+              FROM workflow_approvals a LEFT JOIN pr_channel_deliveries d ON d.approval_id=a.id
               JOIN workflow_executions x ON x.id=a.execution_id
               JOIN workflows w ON w.id=x.workflow_id AND w.organization_id=a.organization_id
               WHERE a.organization_id=? AND a.department_id=?"""

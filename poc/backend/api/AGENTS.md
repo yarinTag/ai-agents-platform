@@ -411,3 +411,5 @@ AI-6: GET /api/v1/skills/plugins/config, /scan and /content accept optional depa
 Department plugin writes infer git only when git_repo is supplied. Clearing an override requires explicit source_mode=inherit. Reliability uses UTC filters and buckets, converting legacy local ISO timestamps.
 
 GET /api/v1/workflows/dag-approvals supports view=pending|history, kind=checkpoint|terminal and optional execution_id. Current department and execution access applies to both lists. Pagination uses next_after.
+
+Approval list items now expose decision_source (telegram, dashboard or null) from persisted callback and decision records.

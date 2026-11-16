@@ -371,7 +371,7 @@ export function WorkflowStepsPanel({ model }: { model: ReturnType<typeof useWork
 
                       <PrPermissionSummary step={st} />
                       {/* MCP and Skill assignment per step */}
-                      <DagApprovalFields step={st} onChange={changes => handleUpdateStep(idx, changes)} />
+                      <DagApprovalFields department={model.effectiveDepartmentId} step={st} onChange={changes => handleUpdateStep(idx, changes)} />
                       {!st.params?.dag_approval && <WorkflowRepositoryFields step={st} catalog={model.workspaceCatalog}
                         error={model.workspaceCatalogError} loading={model.resourcesLoading}
                         onChange={changes => handleUpdateStep(idx, changes)} />}
