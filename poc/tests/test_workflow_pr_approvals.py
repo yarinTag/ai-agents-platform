@@ -221,8 +221,8 @@ def test_review_completion_serializes_findings_and_checks_batch_membership():
     payload['eligible_pull_numbers'] = [22]
     status, output = finalizer.inspect(response)
     assert status == 'completed'
-    assert ReviewReport.parse_output(output).model_dump() == {
-        'eligible_pull_numbers': [22], 'findings': payload['output']}
+    assert json.loads(output) == {'eligible_pull_numbers': [22], 'findings': payload['output']}
+    assert ReviewReport.parse_output(output).per_pull_findings == []
 
 
 def test_empty_pr_batch_completes_without_approval_delivery(state):
