@@ -365,3 +365,7 @@ ChannelApprovalFields renders Telegram destinations with Send and Approve enable
 Open approval tables poll every ten seconds without clearing visible rows during background reads.
 
 DAG approval detail uses the latest polled row and disables deciding when the row leaves the pending page. Builder dependency edits clear an unavailable approval summary step.
+
+RunAuditTimeline renders authorized execution provenance and receipt summaries with localized EN/HE labels and RTL.
+
+RunAuditTimeline treats SQLite CURRENT_TIMESTAMP values as UTC. Invalid dates sort after dated entries.

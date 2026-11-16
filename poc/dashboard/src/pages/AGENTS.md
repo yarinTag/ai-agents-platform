@@ -337,3 +337,5 @@ Skills Hub allows organization admins to switch between organization defaults an
 Workflow Logs opens approval details from the Run approvals button. Both inboxes use the same pending/history tables, scoped to the execution when opened from logs.
 
 useWorkflowLogData refreshes the execution list and selected run detail ten seconds after each completed request while an execution is active. It retains the selected run and last successful snapshot and stops after observing terminal state.
+
+Workflow Logs and the execution drawer render RunAuditTimeline from run_audit, alongside existing step and receipt views.

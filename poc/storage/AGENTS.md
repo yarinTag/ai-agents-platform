@@ -202,3 +202,5 @@ DAG approval history queries recorded decisions across revisions by department a
 DAG approval listings derive decision_source from the recorded decision actor and associated Telegram callback receipt. Decisions without a human actor have no source.
 
 The DAG decision source matches the final actor to the callback receipt by approval and user. Their atomic writes can cross a clock-second boundary.
+
+dag_channel_deliveries and pr_channel_deliveries add nullable claimed_at Unix seconds. Workers mark claims older than 300 seconds, including legacy untimed SENDING rows, UNCONFIRMED. The worker never requeues an ambiguous send.

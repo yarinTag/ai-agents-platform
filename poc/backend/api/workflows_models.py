@@ -78,6 +78,7 @@ class WorkflowExecutionResponse(BaseModel):
     completed_at: Optional[str] = None
     error_message: Optional[str] = None
     notification_error: Optional[str] = None
+    run_audit: Optional[Dict[str, Any]] = None
     created_at: Optional[str] = None
     payload_hash: Optional[str] = None
     is_deduplicated: Optional[bool] = False

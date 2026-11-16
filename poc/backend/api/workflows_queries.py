@@ -97,7 +97,6 @@ def get_execution_status(
     wf = db.get_workflow(exec_record.workflow_id)
     if not wf:
         raise HTTPException(status_code=404, detail="Workflow not found")
-    _check_workflow_scope(wf, get_authorized_scope(request, db))
     with db._get_connection() as conn:
         step_runs = [dict(row) for row in conn.execute(
             "SELECT * FROM workflow_step_runs WHERE execution_id = ? ORDER BY started_at, step_key",
@@ -110,7 +109,17 @@ def get_execution_status(
         step["events"] = task.events[-500:] if task else []
         step["error"] = task.error if task else None
         step["task_status"] = task.status.value if task else None
-    return _with_notification_status(db, exec_record, step_runs=step_runs)
+    from ..security.identity import load_actor
+    from ..security.resource_access import Resources
+    actor = getattr(request.state, "access_actor", None) or load_actor(request, db)
+    resources = getattr(request.state, "access_resources", None) or Resources(actor)
+    resources.require("execution", execution_id)
+    from integrations.tool_scopes import execution_context
+    from .workflow_run_audit import execution_audit
+    response = _with_notification_status(db, exec_record, step_runs=step_runs)
+    response.run_audit = execution_audit(db, exec_record, actor.organization_id,
+                                         execution_context(db, execution_id) or {})
+    return response
 
 @router.post("/executions/{execution_id}/evaluate", status_code=status.HTTP_201_CREATED)
 def evaluate_execution(

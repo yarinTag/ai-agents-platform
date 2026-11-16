@@ -182,3 +182,5 @@ channelApprovals.ts localizes Telegram preview, setup warnings, fallback and dec
 workflowRun.ts explains the ten-second active-run refresh in EN and HE.
 
 dagApprovals.ts includes EN/HE guidance when an open approval is no longer on the pending page.
+
+runAudit.ts owns EN/HE timeline and reconciliation copy.

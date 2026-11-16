@@ -213,3 +213,5 @@ The reliability API normalizes explicit offsets, legacy local ISO timestamps and
 Approval history projects scoped persisted records without changing decision authority.
 
 Interactive approval provenance uses recorded callback and decision state in the scoped list API.
+
+Workflow execution audit reads use the existing authorized execution endpoint. Card recovery exposes stalled sends for manual reconciliation.

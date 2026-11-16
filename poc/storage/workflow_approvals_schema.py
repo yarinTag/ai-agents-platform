@@ -19,5 +19,8 @@ def initialize(conn):
         message_id TEXT, bot_id TEXT, status TEXT NOT NULL, rendered TEXT,
         retry_at INTEGER NOT NULL DEFAULT 0, callback_id TEXT, decision INTEGER, identity_link_id TEXT
     )""")
-    if not any(row[1] == 'identity_link_id' for row in conn.execute('PRAGMA table_info(pr_channel_deliveries)')):
+    columns = {row[1] for row in conn.execute('PRAGMA table_info(pr_channel_deliveries)')}
+    if 'claimed_at' not in columns:
+        conn.execute('ALTER TABLE pr_channel_deliveries ADD COLUMN claimed_at INTEGER')
+    if 'identity_link_id' not in columns:
         conn.execute('ALTER TABLE pr_channel_deliveries ADD COLUMN identity_link_id TEXT')
