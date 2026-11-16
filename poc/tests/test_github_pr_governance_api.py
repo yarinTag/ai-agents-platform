@@ -75,9 +75,15 @@ def test_aggregate_requires_explicit_read_dependencies_without_grant_backfill(ba
 
 def test_ready_pr_write_plan_revalidates_grant_and_saves_inactive(baseline):
     db, client = baseline
-    proposal = {'name': 'PR comment plan', 'steps': [{'key': 'comment', 'name': 'Comment',
-        'agent_id': 'atlas_engineering', 'prompt_template': 'Read the exact current head and post the requested comment.',
-        'resources': [{'connector_id': 'atlas_github', 'repository': 'owner/repository', 'tool_name': 'comment_pull_request'}]}]}
+    proposal = {'name': 'PR comment plan', 'steps': [
+        {'key': 'approve_comment', 'name': 'Approve continuation', 'agent_id': 'atlas_engineering',
+         'prompt_template': 'Wait for an authorized person to approve the comment step.',
+         'approval_checkpoint': {'expires_hours': 2}},
+        {'key': 'comment', 'name': 'Comment', 'agent_id': 'atlas_engineering', 'depends_on': ['approve_comment'],
+         'prompt_template': 'Read the exact current head and post the requested comment.',
+         'resources': [{'connector_id': 'atlas_github', 'repository': 'owner/repository',
+                        'tool_name': 'comment_pull_request'}]},
+    ]}
     now = datetime.now().isoformat()
     with db._get_connection() as conn:
         conn.execute('''INSERT INTO workflow_builder_jobs
@@ -92,7 +98,10 @@ def test_ready_pr_write_plan_revalidates_grant_and_saves_inactive(baseline):
     assert response.status_code == 200, response.text
     workflow = db.get_workflow(response.json()['id'])
     assert not workflow.is_active
-    assert json.loads(workflow.definition_json)['steps'][0]['params']['authorized_resources'][0]['tool_name'] == 'comment_pull_request'
+    approval, comment = json.loads(workflow.definition_json)['steps']
+    assert approval['params'] == {'dag_approval': {'timeout_seconds': 7200}}
+    assert comment['depends_on'] == ['approve_comment']
+    assert comment['params']['authorized_resources'][0]['tool_name'] == 'comment_pull_request'
     with db._get_connection() as conn:
         assert conn.execute('SELECT COUNT(*) FROM workflow_executions').fetchone()[0] == 0
         assert conn.execute('SELECT COUNT(*) FROM mcp_tool_calls').fetchone()[0] == 0

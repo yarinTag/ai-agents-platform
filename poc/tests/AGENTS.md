@@ -253,3 +253,5 @@ PR approval tests cover recovery from a confirmed final merge receipt with an ex
 Confirmed-merge recovery covers revoked channel bindings, retained receipts and failed advancement without opening a provider connection.
 
 Completion validation tests cover bounded per-PR excerpts retained for authorized pull numbers and rejection of out-of-scope excerpts.
+
+The API audit PR write-plan scenario includes the required dashboard checkpoint while verifying the unchanged write grant and inactive creation contract.
