@@ -3,6 +3,7 @@ import json
 from datetime import datetime
 
 from runtime.models import TaskStatus
+from runtime.direct_outcomes import PullRequestFinding
 from integrations.tool_executor import WorkflowToolExecutor
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt
 
@@ -11,6 +12,7 @@ class ReviewReport(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
     eligible_pull_numbers: list[PositiveInt] = Field(max_length=10)
     findings: str = Field(min_length=1, max_length=40000)
+    per_pull_findings: list[PullRequestFinding] = Field(default_factory=list, max_length=10)
 
     @classmethod
     def parse_output(cls, report):
@@ -24,6 +26,8 @@ EMPTY_REVIEW = '{"eligible_pull_numbers":[],"findings":"No matching open pull re
 REVIEW_FORMAT = (
     'In the completion tool arguments, set eligible_pull_numbers to the PR numbers that passed your review '
     'and output to plain-text findings with one or two lines per PR and any deferred PR numbers. '
+    'Also fill per_pull_findings with one entry per reviewed PR. Include the material finding and any uncertainty '
+    'in each short entry so every later approval card can show the relevant finding. '
     'Summarize the decision and concrete blockers. Do not reproduce patches or enumerate successful checks. '
     'Include the reviewed head and base per PR. Inspect the returned diff for that exact revision, '
     'then identify the changed files or behavior that support your findings. '

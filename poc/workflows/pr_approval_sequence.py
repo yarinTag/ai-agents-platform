@@ -37,11 +37,13 @@ def prepare_next(db, approval, subject, approver_check):
         f"Changed paths ({len(files)}): {', '.join(paths[:5]) or 'none reported'}",
         f"Current merge blockers: {', '.join(blockers) or 'none reported'}",
     ))
+    original = pinned.get('review_findings')
+    initial_note = f"Initial review finding: {original}\n" if original else ""
     report = (f"Fresh GitHub evidence for {subject['repository']} #{number}\n"
               f"Reviewed head: {pinned['head_sha']}\n"
               f"Target: {pinned['target_ref']} at {pinned['target_sha']}\n"
               "Observed CI passed. The PR head and author match the initial review.\n"
-              f"{details}\n"
+              f"{initial_note}{details}\n"
               "The initial model review is available in the workflow logs.")
     return pinned, report
 

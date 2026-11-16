@@ -79,9 +79,11 @@ class ConnectorFinalizer:
                     raise OutcomeFormatError('MIXED_FINALIZATION', 'Finalization must be separate from connector calls.')
                 candidate = finish[0]['input']
             value = parse_outcome(candidate, self.schema)
-            if self.pull_numbers is not None and (
-                    len(value.output) > 40000 or not set(value.eligible_pull_numbers).issubset(self.pull_numbers)):
-                raise OutcomeFormatError('INVALID_PR_REPORT', 'The review must use only PR numbers in the authorized batch and bounded findings.')
+            if self.pull_numbers is not None:
+                found = [item.pull_number for item in value.per_pull_findings]
+                if (len(value.output) > 40000 or not set(value.eligible_pull_numbers).issubset(self.pull_numbers)
+                        or not set(found).issubset(self.pull_numbers) or len(found) != len(set(found))):
+                    raise OutcomeFormatError('INVALID_PR_REPORT', 'The review must use only PR numbers in the authorized batch and bounded findings.')
         except OutcomeFormatError as exc:
             self.diagnostic = rejection_event(candidate, exc, 2 if self.formatting_only else 1)
             self.diagnostic['recovery_action'] = ('fail_closed' if self.formatting_only or exc.code == 'MIXED_FINALIZATION' else 'formatting_only')
@@ -93,6 +95,11 @@ class ConnectorFinalizer:
         if blocker is not None:
             return 'blocked', redact_candidate(blocker)
         if self.pull_numbers is not None:
-            output = json.dumps({'eligible_pull_numbers': value.eligible_pull_numbers, 'findings': output},
-                                ensure_ascii=False)
+            report = {'eligible_pull_numbers': value.eligible_pull_numbers, 'findings': output}
+            if value.per_pull_findings:
+                report['per_pull_findings'] = [
+                    {'pull_number': item.pull_number, 'findings': redact_candidate(item.findings)}
+                    for item in value.per_pull_findings
+                ]
+            output = json.dumps(report, ensure_ascii=False)
         return 'completed', output
