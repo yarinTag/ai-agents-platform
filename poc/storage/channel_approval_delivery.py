@@ -47,7 +47,7 @@ def destination(conn, row):
     binding = conn.execute("""SELECT b.*,c.configuration FROM channel_bindings b
         JOIN mcp_connectors c ON c.id=b.connector_id AND c.organization_id=b.organization_id
         JOIN department_mcp_access g ON g.department_id=b.department_id AND g.connector_id=c.id
-        WHERE b.id=? AND b.organization_id=? AND b.department_id=? AND b.provider='telegram'
+        WHERE b.id=? AND b.organization_id=? AND b.department_id=? AND b.provider IN ('telegram', 'slack')
         AND b.approve_decisions=1 AND b.send_notifications=1 AND c.status='CONNECTED'
         AND lower(c.provider)=b.provider AND g.is_active=1
         AND (g.organization_id IS NULL OR g.organization_id=b.organization_id)""",
@@ -55,7 +55,9 @@ def destination(conn, row):
     if not binding:
         raise InvalidProof("APPROVAL_DESTINATION_UNAVAILABLE")
     config = json.loads(binding["configuration"] or "{}")
-    if binding["channel_id"] not in CHANNEL_PROVIDERS["telegram"].configured_ids(config):
+    if binding["channel_id"] not in CHANNEL_PROVIDERS[binding["provider"]].configured_ids(config):
+        raise InvalidProof("APPROVAL_DESTINATION_UNAVAILABLE")
+    if not config.get("bot_token"):
         raise InvalidProof("APPROVAL_DESTINATION_UNAVAILABLE")
     _, _, (_, account, _), version = connector_settings(conn, binding["connector_id"], row["organization_id"])
     return binding, config, account, version
@@ -94,7 +96,7 @@ def record_delivery(db, approval_id, status, *, connector=None, channel=None, me
             (status, connector, channel, message, bot, rendered, digest(token) if token else None, approval_id))
 
 
-def apply_callback(db, connector, version, callback):
+def apply_callback(db, connector, version, callback, *, provider="telegram"):
     with dag_approvals._transaction(db) as conn:
         row = conn.execute("""SELECT a.*,d.binding_id,d.connector_id,d.channel_id,d.message_id,d.bot_id
             FROM dag_channel_deliveries d JOIN workflow_dag_approvals a ON a.id=d.approval_id
@@ -109,8 +111,8 @@ def apply_callback(db, connector, version, callback):
         ):
             raise InvalidProof("INVALID_APPROVAL_CALLBACK")
         binding, config, account, current_version = destination(conn, row)
-        if (binding["connector_id"], binding["channel_id"], account, current_version) != (
-            connector, callback.channel_id, callback.bot_id, version,
+        if (binding["connector_id"], binding["channel_id"], account, current_version, binding["provider"]) != (
+            connector, callback.channel_id, callback.bot_id, version, provider,
         ):
             raise InvalidProof("INVALID_APPROVAL_CALLBACK")
         if not hmac.compare_digest(callback.token, action_token(config["bot_token"], row["id"])):
@@ -122,7 +124,7 @@ def apply_callback(db, connector, version, callback):
             if row["callback_id"] == callback.callback_id and row["resolved_by"] == user:
                 return
             from .terminal_channel_approval import claim
-            claim(conn, row, user, callback)
+            claim(conn, row, user, callback, provider)
             return
         if conn.execute("SELECT 1 FROM dag_channel_callbacks WHERE approval_id=? AND callback_id=?",
                         (row["id"], callback.callback_id)).fetchone():
@@ -162,6 +164,8 @@ def next_edit(db):
             WHERE d.status='DELIVERED' AND d.retry_at<=?
                 AND (d.rendered LIKE 'PENDING:%' OR d.rendered='DECIDED')
             ORDER BY d.retry_at,a.expires_at LIMIT 50""", (int(time.time()),)).fetchall()
+        # Remove the buttons for newly claimed PR decisions before the slow GitHub reads.
+        rows.sort(key=lambda row: not ("config_json" in row.keys() and row["status"] == "RESOLVING"))
         for row in rows:
             conn.execute(f"UPDATE {_table(row['id'])} SET retry_at=? WHERE approval_id=?",
                          (int(time.time()) + 30, row["id"]))

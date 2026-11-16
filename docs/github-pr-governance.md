@@ -164,3 +164,9 @@ Primary provider contracts: [PR endpoints](https://docs.github.com/en/rest/pulls
 [check runs](https://docs.github.com/en/rest/checks/runs),
 [required-check behavior](https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks).
 AI-20 owns richer UI evidence presentation; AI-21 owns the broader P02 operational contract.
+
+## Several PRs in one execution
+
+The terminal merge gate presents one PR at a time. After GitHub confirms a merge, the server refreshes evidence for the next PR and pins the current target SHA before offering a new approval. The initially reviewed head and author must still match. Each approval has its own expiry. A rejected or expired decision, changed evidence, or failed merge stops the sequence and leaves completed receipts available in the same execution's audit. If a claimed resolution is interrupted, inspect its persisted receipt before starting another run.
+
+The acknowledged receipt and continuation intent commit together. A worker can resume the read-only advancement after a restart. Unacknowledged or ambiguous merge attempts retain their existing reconciliation requirements.

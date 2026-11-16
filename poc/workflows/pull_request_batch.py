@@ -25,8 +25,10 @@ REVIEW_FORMAT = (
     'In the completion tool arguments, set eligible_pull_numbers to the PR numbers that passed your review '
     'and output to plain-text findings with one or two lines per PR and any deferred PR numbers. '
     'Summarize the decision and concrete blockers. Do not reproduce patches or enumerate successful checks. '
-    'Exclude any PR with breaking changes or missing evidence from eligible_pull_numbers.'
-    ' Use approval_ready and observed_ci_passed for the approval decision. Report branch protection, '
+    'Include the reviewed head and base per PR. Inspect the returned diff for that exact revision, '
+    'then identify the changed files or behavior that support your findings. '
+    'Exclude any PR with breaking changes, partial evidence, or a diff you could not inspect from eligible_pull_numbers. '
+    'Use approval_ready and observed_ci_passed for the approval decision. Report branch protection, '
     'required-check policy and GitHub review limitations separately as potential merge blockers. '
     'A major version bump warrants investigation but does not by itself prove a breaking change.'
 )

@@ -54,6 +54,17 @@ def initialize(conn):
         sender_user_id TEXT NOT NULL,
         PRIMARY KEY(event_id, workflow_id)
     )""")
+    conn.execute("""CREATE INDEX IF NOT EXISTS idx_channel_dispatch_workflow
+        ON channel_trigger_dispatches(workflow_id, event_id)""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS channel_trigger_classifications (
+        event_id TEXT NOT NULL REFERENCES channel_ingress_events(id) ON DELETE CASCADE,
+        workflow_id TEXT NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+        workflow_revision INTEGER NOT NULL, binding_id TEXT NOT NULL,
+        sender_user_id TEXT NOT NULL, principal_id TEXT NOT NULL,
+        state TEXT NOT NULL CHECK(state IN ('STARTED','MATCH','NO_MATCH','UNCERTAIN','ERROR')),
+        reason TEXT NOT NULL, confidence REAL, model TEXT, provider TEXT, updated_at INTEGER NOT NULL,
+        PRIMARY KEY(event_id, workflow_id)
+    )""")
     conn.execute("""CREATE TABLE IF NOT EXISTS channel_ingress_limits (
         connector_id TEXT PRIMARY KEY REFERENCES mcp_connectors(id) ON DELETE CASCADE,
         minute INTEGER NOT NULL, count INTEGER NOT NULL

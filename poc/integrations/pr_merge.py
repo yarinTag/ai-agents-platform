@@ -82,9 +82,11 @@ def merge_subject(db, approval, subject, approver_check, receipts):
             raise ToolAccessError('GitHub did not confirm the merge identity. Outcome may be unknown; no automatic retry.')
         receipt.update(status='COMPLETED', merge_commit_sha=value['sha'], completed_at=now())
         # Store the acknowledged receipt before any later checks can fail or a batch stops.
-        db.update_mcp_tool_call(identifier, 'COMPLETED', result=json.dumps(receipt), completed_at=receipt['completed_at'])
         with db._get_connection() as conn:
-            conn.execute('UPDATE workflow_approvals SET receipts_json=? WHERE id=?', (json.dumps(receipts), approval['id']))
+            conn.execute("UPDATE mcp_tool_calls SET status='COMPLETED',result=?,completed_at=? WHERE id=?",
+                         (json.dumps(receipt), receipt['completed_at'], identifier))
+            conn.execute('UPDATE workflow_approvals SET receipts_json=?,advance_pending=1 WHERE id=?',
+                         (json.dumps(receipts), approval['id']))
     except Exception:
         if receipt['status'] != 'COMPLETED':
             receipt.update(status='UNKNOWN' if dispatched else 'NOT_DISPATCHED', completed_at=now())

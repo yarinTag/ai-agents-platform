@@ -6,6 +6,7 @@ import time
 
 from storage import channel_ingress
 from workflows.channel_trigger_dispatch import reserve_dispatches
+from workflows.channel_trigger_classification import classify
 from .dependencies import get_workflow_engine
 
 logger = logging.getLogger(__name__)
@@ -19,6 +20,7 @@ def consume_one(engine):
     event_id = claim["event"]["id"]
     lease = claim["lease_token"]
     try:
+        classify(db, engine.runtime, claim)
         executions = reserve_dispatches(db, claim)
     except Exception:
         logger.error("Channel trigger reservation failed event_id=%s", event_id)

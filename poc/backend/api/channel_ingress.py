@@ -2,6 +2,7 @@
 import hashlib
 import json
 import os
+import re
 import sqlite3
 import time
 from urllib.parse import quote, urlsplit
@@ -45,20 +46,55 @@ def _receive(db, connector_id, raw, headers, *, polled_credentials=None):
                 raise InvalidProof("PROVIDER_ROTATED")
             # Only the local worker can enter this branch after authenticated provider HTTPS.
             headers = {"x-telegram-bot-api-secret-token": settings[0]}
+        elif provider == "slack":
+            configured = json.loads(conn.execute("SELECT configuration FROM mcp_connectors WHERE id=?",
+                                                 (connector_id,)).fetchone()[0])
+            if configured.get("ingress_mode") == "socket":
+                raise InvalidProof("CONNECTOR_UNAVAILABLE")
     now = int(time.time())
     event = verify_event(provider, raw, headers, settings, now)
+    return _apply_event(db, connector_id, provider, version, event,
+                        lambda: verify(provider, raw, headers, settings, now))
+
+
+def receive_slack_socket(db, connector_id, credential_version, app_token_digest, kind, payload):
+    from integrations.channel_ingress import project_slack_socket
+
+    with db._get_connection() as conn:
+        _, provider, settings, version = identities.connector_settings(conn, connector_id)
+        config = json.loads(conn.execute("SELECT configuration FROM mcp_connectors WHERE id=?",
+                                         (connector_id,)).fetchone()[0])
+    token = config.get("socket_app_token")
+    if (provider != "slack" or version != credential_version or config.get("ingress_mode") != "socket"
+            or not isinstance(token, str) or hashlib.sha256(token.encode()).hexdigest() != app_token_digest):
+        raise InvalidProof("PROVIDER_ROTATED")
+    event = project_slack_socket(kind, payload, settings)
+
+    def socket_identity():
+        subject, code = payload.get("user_id"), payload.get("text")
+        if (not isinstance(subject, str) or not re.fullmatch(r"[UW][A-Z0-9]{2,31}", subject)
+                or not isinstance(code, str) or not re.fullmatch(r"[A-Za-z0-9_-]{43}", code)):
+            raise InvalidProof("INVALID_PROOF")
+        return subject, code
+
+    return _apply_event(db, connector_id, provider, version, event, socket_identity)
+
+
+def _apply_event(db, connector_id, provider, version, event, identity_subject):
     from integrations.telegram_approval_cards import ApprovalCallback
     if isinstance(event, ApprovalCallback):
         from storage import channel_approval_delivery, dag_approvals
         message = "Decision recorded."
         try:
-            channel_approval_delivery.apply_callback(db, connector_id, version, event)
+            channel_approval_delivery.apply_callback(db, connector_id, version, event, provider=provider)
         except (InvalidProof, PermissionError, dag_approvals.ApprovalConflict):
             message = "Decision unavailable. Check the dashboard."
+        if provider == "slack":
+            return Response(status_code=200)
         return JSONResponse({"method": "answerCallbackQuery", "callback_query_id": event.callback_id,
                              "text": message})
     if isinstance(event, IdentityProof):
-        subject, code = verify(provider, raw, headers, settings, now)
+        subject, code = identity_subject()
         try:
             identities.record_proof(db, connector_id, version, subject, code)
         except InvalidProof as exc:
@@ -132,8 +168,19 @@ def _scope(request, db, connector_id):
         secret_configured = True
     except InvalidProof:
         secret_configured = False
-    webhook_url = _webhook_url(connector_id)
-    polling = provider == "telegram" and (connector.configuration or {}).get("ingress_mode") == "polling"
+    config = connector.configuration or {}
+    requested = config.get("ingress_mode")
+    mode = requested if (provider, requested) in (("telegram", "polling"), ("slack", "socket")) else "webhook"
+    webhook_url = _webhook_url(connector_id) if mode == "webhook" else None
+    transport = {}
+    if mode == "socket":
+        from ..slack_socket_worker import configured_app_token
+        acknowledged = db.get_setting(f"slack_socket_last_ack:{connector_id}")
+        transport = {
+            "socket_token_configured": bool(configured_app_token(config)),
+            "socket_status": db.get_setting(f"slack_socket_health:{connector_id}", "DISCONNECTED"),
+            "socket_last_ack_at": int(acknowledged) if acknowledged and acknowledged.isdecimal() else None,
+        }
     return actor, {
         "provider": provider,
         "webhook_url": webhook_url,
@@ -141,7 +188,8 @@ def _scope(request, db, connector_id):
         "https_configured": webhook_url is not None,
         "ssl_status": "UNVERIFIED",
         "connector_connected": connector.status == "CONNECTED",
-        "ingress_mode": "polling" if polling else "webhook",
+        "ingress_mode": mode,
+        **transport,
     }
 
 
@@ -170,6 +218,8 @@ def test_channel_ingress_configuration(connector_id: str, request: Request,
     checks = {key: status[key] for key in ("secret_configured", "connector_connected")}
     if status["ingress_mode"] == "webhook":
         checks["https_configured"] = status["https_configured"]
+    if status["ingress_mode"] == "socket":
+        checks["socket_token_configured"] = status["socket_token_configured"]
     checks["storage_ready"] = storage_ready
     tls_status, live_request = "UNVERIFIED", False
     if payload and payload.verify_tls and status["ingress_mode"] == "webhook" and status["webhook_url"]:

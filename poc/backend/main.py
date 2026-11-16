@@ -27,6 +27,7 @@ from .dependencies import init_services, shutdown_services
 from .channel_trigger_worker import run as run_channel_trigger_worker
 from .dag_approval_worker import run as run_dag_approval_worker
 from .channel_approval_worker import run as run_channel_approval_worker
+from .slack_socket_worker import run as run_slack_socket_worker
 from .telegram_polling_worker import run as run_telegram_polling_worker
 
 
@@ -40,12 +41,14 @@ async def lifespan(app: FastAPI):
     approval_worker = None
     card_worker = None
     polling_worker = None
+    socket_worker = None
     try:
         await init_services()
         channel_worker = asyncio.create_task(run_channel_trigger_worker(stop_channel_worker))
         approval_worker = asyncio.create_task(run_dag_approval_worker(stop_channel_worker))
         card_worker = asyncio.create_task(run_channel_approval_worker(stop_channel_worker))
         polling_worker = asyncio.create_task(run_telegram_polling_worker(stop_channel_worker))
+        socket_worker = asyncio.create_task(run_slack_socket_worker(stop_channel_worker))
         yield
     finally:
         stop_channel_worker.set()
@@ -57,6 +60,8 @@ async def lifespan(app: FastAPI):
             await card_worker
         if polling_worker is not None:
             await polling_worker
+        if socket_worker is not None:
+            await socket_worker
         await shutdown_services()
 
 

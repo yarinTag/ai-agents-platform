@@ -25,6 +25,24 @@ def sanitize_text(value: str) -> str:
     )
 
 
+class RelevanceRule(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True, str_strip_whitespace=True)
+
+    instructions: Annotated[str, Field(min_length=1, max_length=600)]
+    minimum_confidence: Annotated[float, Field(ge=0.5, le=1.0)] = 0.8
+
+
+class RelevanceDecision(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True, str_strip_whitespace=True)
+
+    decision: Literal["match", "no_match", "uncertain"]
+    confidence: Annotated[float, Field(ge=0.0, le=1.0, allow_inf_nan=False)]
+    reason: Literal["relevant", "unrelated", "insufficient_context", "ambiguous"]
+
+    def permits_run(self, rule: RelevanceRule) -> bool:
+        return self.decision == "match" and self.reason == "relevant" and self.confidence >= rule.minimum_confidence
+
+
 class TriggerRule(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
@@ -33,6 +51,11 @@ class TriggerRule(BaseModel):
     matcher: Matcher
     pattern: Annotated[str, Field(min_length=1, max_length=160)]
     parameters: dict[Parameter, InputField] = Field(default_factory=dict, max_length=16)
+    relevance: RelevanceRule | None = None
+    sender_ids: list[Annotated[str, Field(pattern=r"^(?:[0-9]{1,20}|[UW][A-Z0-9]{2,31})$")]] = Field(
+        default_factory=list, max_length=32)
+    cooldown_seconds: Annotated[int, Field(ge=0, le=86400)] = 0
+    max_runs_per_hour: Annotated[int, Field(ge=1, le=1000)] | None = None
 
     @model_validator(mode="after")
     def validate_pattern(self):
@@ -62,6 +85,8 @@ class ChannelTriggerInput(BaseModel):
 
 def match_trigger(rule: TriggerRule, event: ChannelTriggerInput) -> dict[str, str | None] | None:
     """Return only allowlisted mapped values. None means no match."""
+    if rule.sender_ids and event.sender_id not in rule.sender_ids:
+        return None
     text = sanitize_text(event.text)
     pattern = rule.pattern
     if rule.matcher == "event_type":

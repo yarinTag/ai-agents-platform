@@ -1,5 +1,6 @@
 """Terminal durable workflow approval gates; no blocked worker or model-held authority."""
 import json
+import time
 import uuid
 from datetime import datetime, timedelta
 from integrations.tool_definitions import ToolAccessError
@@ -82,14 +83,20 @@ def start_gate(db, step, task, step_record_id, execution_id, outputs):
                 'department_id': workflow.department_id, 'workflow_revision': workflow.revision}
     for subject in subjects:
         authorize_subject(db, approval, subject, config.merge_after_approval)
+    remaining = subjects[1:] if config.merge_after_approval else []
+    if remaining:
+        subjects = subjects[:1]
+        first = subjects[0]
+        report = (f"Approval covers {first['repository']} #{first['pull_number']} only. "
+                  f"{len(remaining)} more PR(s) will be checked separately.\n\n{report}")
     with db._get_connection() as conn:
         conn.execute('''INSERT INTO workflow_approvals
             (id,execution_id,step_run_id,task_id,organization_id,department_id,workflow_revision,
-             status,config_json,subjects_json,report,created_at,expires_at)
-            VALUES (?,?,?,?,?,?,?,'NOTIFYING',?,?,?,?,?)''',
+             status,config_json,subjects_json,report,created_at,expires_at,remaining_json)
+            VALUES (?,?,?,?,?,?,?,'NOTIFYING',?,?,?,?,?,?)''',
             (identifier, execution_id, step_record_id, task.run_id, workflow.organization_id, workflow.department_id,
              workflow.revision, config.model_dump_json(), json.dumps(subjects), report,
-             now.isoformat(), (now + timedelta(hours=config.expires_hours)).isoformat()))
+             now.isoformat(), (now + timedelta(hours=config.expires_hours)).isoformat(), json.dumps(remaining)))
         if config.channel_binding_id:
             from storage.channel_approval_delivery import destination
             binding, _, _, _ = destination(conn, {
@@ -125,21 +132,40 @@ def start_gate(db, step, task, step_record_id, execution_id, outputs):
     return True
 
 
-def finish(db, approval, status, error=None, receipts=None):
-    """Resolve the terminal gate atomically with its task, step and execution."""
+def finish(db, approval, status, error=None, receipts=None, next_review=None, *, advance_claim=None):
+    """Resolve this decision and atomically queue its successor or finish the run."""
+    from .pr_approval_sequence import enqueue_next, run_receipts
+
     now = datetime.now().isoformat()
-    completed = status == 'APPROVED'
-    state = 'COMPLETED' if completed else 'FAILED'
-    output = json.dumps({'approval_status': status, 'merge_receipts': receipts or [], 'error': error})
+    state = 'COMPLETED' if status == 'APPROVED' and not error else 'FAILED'
+    remaining = json.loads(approval.get('remaining_json', '[]'))
     with db._get_connection() as conn:
         conn.execute('BEGIN IMMEDIATE')
+        current = conn.execute('SELECT status,advance_pending,advance_claim_until FROM workflow_approvals WHERE id=?', (approval['id'],)).fetchone()
+        if not current or current['status'] not in ('RESOLVING', 'EXPIRING'):
+            return
+        if current['advance_pending'] and (advance_claim is None or current['advance_claim_until'] != advance_claim
+                                           or advance_claim <= int(time.time())):
+            return
         live = conn.execute('SELECT status FROM workflow_executions WHERE id=?', (approval['execution_id'],)).fetchone()
         if not live or live['status'] != 'WAITING_APPROVAL':
-            conn.execute("UPDATE workflow_approvals SET status='FAILED',error=?,receipts_json=?,resolved_at=? WHERE id=?",
+            conn.execute("UPDATE workflow_approvals SET status='FAILED',error=?,receipts_json=?,resolved_at=?,advance_pending=0,advance_claim_until=NULL WHERE id=?",
                 ('The execution stopped; recorded external receipts require inspection.', json.dumps(receipts or []), now, approval['id']))
             return
-        conn.execute('''UPDATE workflow_approvals SET status=?,error=?,receipts_json=?,resolved_at=? WHERE id=?''',
+        conn.execute('''UPDATE workflow_approvals SET status=?,error=?,receipts_json=?,resolved_at=?,advance_pending=0,advance_claim_until=NULL WHERE id=?''',
                      (status, error, json.dumps(receipts or []), now, approval['id']))
+        conn.execute('UPDATE pr_channel_deliveries SET retry_at=0 WHERE approval_id=?', (approval['id'],))
+        if next_review:
+            enqueue_next(conn, approval, next_review, remaining, now)
+            return
+        all_receipts = run_receipts(conn, approval['execution_id'])
+        merged = {(item['repository'], item['pull_number']) for item in all_receipts
+                  if item['status'] == 'COMPLETED'}
+        unresolved = [f"{item['repository']} #{item['pull_number']}"
+                      for item in json.loads(approval['subjects_json']) + remaining
+                      if (item['repository'], item['pull_number']) not in merged]
+        output = json.dumps({'approval_status': status, 'merge_receipts': all_receipts, 'error': error,
+                             'unresolved_pull_requests': unresolved if state == 'FAILED' else []})
         conn.execute('UPDATE workflow_step_runs SET status=?,output_data=?,error_message=?,completed_at=? WHERE id=?',
                      (state, output, error, now, approval['step_run_id']))
         conn.execute('UPDATE task_runs SET status=?,result=?,error=?,ended_at=? WHERE run_id=?',
@@ -169,17 +195,21 @@ def resolve(db, approval, approve, approver_check):
             return
         config = json.loads(approval['config_json'])
         subjects = json.loads(approval['subjects_json'])
-        for subject in subjects:
-            approver_check()
-            fresh_review(db, approval, subject, config['merge_after_approval'], approver_check)
         if config['merge_after_approval']:
+            if len(subjects) != 1:
+                raise ToolAccessError('Merging requires a separate approval per PR. Start a fresh run.')
+            from integrations.pr_merge import merge_subject
+            merge_subject(db, approval, subjects[0], approver_check, receipts)
+            return  # The confirmed receipt atomically schedules read-only advancement.
+        else:
             for subject in subjects:
-                from integrations.pr_merge import merge_subject
-                merge_subject(db, approval, subject, approver_check, receipts)
+                approver_check()
+                fresh_review(db, approval, subject, False, approver_check)
         finish(db, approval, 'APPROVED', receipts=receipts)
     except Exception as exc:
         message = str(exc) if isinstance(exc, ToolAccessError) else 'Approval action failed; an external outcome may be unknown. No automatic retry.'
-        finish(db, approval, 'FAILED', message, receipts)
+        merged = any(receipt['status'] == 'COMPLETED' for receipt in receipts)
+        finish(db, approval, 'APPROVED' if merged else 'FAILED', message, receipts)
 
 
 def expire_if_due(db, approval):
@@ -190,4 +220,4 @@ def expire_if_due(db, approval):
         claimed = conn.execute("UPDATE workflow_approvals SET status='EXPIRING' WHERE id=? AND status='PENDING' AND expires_at<=?",
                                (approval['id'], datetime.now().isoformat())).rowcount
     if claimed:
-        finish(db, approval, 'EXPIRED', 'Approval expired without a decision. Start a new review.')
+        finish(db, dict(approval), 'EXPIRED', 'Approval expired without a decision. Start a new review.')

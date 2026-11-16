@@ -34,7 +34,7 @@ def _scope(db, request, workflow_id, level=1):
     return actor, workflow
 
 
-def _eligible(db, workflow, binding_id=None):
+def eligible_trigger_bindings(db, organization_id, department_id, binding_id=None):
     with db._get_connection() as conn:
         rows = conn.execute("""
             SELECT b.id, b.provider, b.connector_id, b.channel_id
@@ -45,14 +45,14 @@ def _eligible(db, workflow, binding_id=None):
                 AND g.connector_id = b.connector_id
                 AND (g.organization_id IS NULL OR g.organization_id = b.organization_id)
             WHERE b.organization_id = ? AND b.department_id = ? AND b.trigger_workflows = 1
-                AND g.is_active = 1 AND (? IS NULL OR b.id = ?)
+                AND g.is_active = 1 AND c.status = 'CONNECTED' AND (? IS NULL OR b.id = ?)
             ORDER BY b.provider, b.channel_id, b.id
-        """, (workflow.organization_id, workflow.department_id, binding_id, binding_id))
+        """, (organization_id, department_id, binding_id, binding_id))
         return [dict(row) for row in rows]
 
 
 def _require_binding(db, workflow, rule):
-    eligible = _eligible(db, workflow, rule.binding_id)
+    eligible = eligible_trigger_bindings(db, workflow.organization_id, workflow.department_id, rule.binding_id)
     if not eligible:
         raise HTTPException(422, "Select a trigger-enabled binding in the workflow department.")
     return eligible[0]
@@ -63,12 +63,25 @@ def _public(workflow):
     return {"revision": workflow.revision, "rule": config}
 
 
+def _recent_classifications(db, workflow_id):
+    with db._get_connection() as conn:
+        rows = conn.execute("""SELECT c.event_id,c.workflow_revision,c.state,c.reason,c.confidence,
+                   c.model,c.provider,c.updated_at,d.execution_id
+            FROM channel_trigger_classifications c
+            LEFT JOIN channel_trigger_dispatches d ON d.event_id=c.event_id AND d.workflow_id=c.workflow_id
+                AND d.workflow_revision=c.workflow_revision
+            WHERE c.workflow_id=? ORDER BY c.updated_at DESC,c.event_id DESC LIMIT 20""",
+            (workflow_id,)).fetchall()
+    return [dict(row) for row in rows]
+
+
 @router.get("")
 def get_channel_trigger(workflow_id: str, request: Request, db=Depends(get_db_manager)):
     actor, workflow = _scope(db, request, workflow_id)
     can_edit = bool(actor.user_id and actor.allows(workflow.department_id, 3))
     return {**_public(workflow), "can_edit": can_edit,
-            "bindings": _eligible(db, workflow) if can_edit else []}
+            "bindings": eligible_trigger_bindings(db, workflow.organization_id, workflow.department_id) if can_edit else [],
+            "recent_classifications": _recent_classifications(db, workflow_id) if can_edit else []}
 
 
 @router.put("")
@@ -102,4 +115,7 @@ def preview_channel_trigger(workflow_id: str, request: Request, payload: Trigger
     binding = _require_binding(db, workflow, payload.rule)
     event = payload.event.model_copy(update={"channel_id": binding["channel_id"]})
     parameters = match_trigger(payload.rule, event)
-    return {"matched": parameters is not None, "parameters": parameters}
+    result = {"matched": parameters is not None, "parameters": parameters}
+    if payload.rule.relevance and parameters is not None:
+        result["requires_classification"] = True
+    return result

@@ -215,3 +215,11 @@ Approval history projects scoped persisted records without changing decision aut
 Interactive approval provenance uses recorded callback and decision state in the scoped list API.
 
 Workflow execution audit reads use the existing authorized execution endpoint. Card recovery exposes stalled sends for manual reconciliation.
+
+Terminal PR gates use a separate persistent approval ID per subject in the same execution. Keep dashboard decisions fenced to the displayed ID, preserve merge receipts across later failures, and update the original Telegram card before slow provider work when delivery permits it.
+
+Slack approval delivery uses the common durable approval authority and separately verified interactive ingress. Provider response URLs are not used.
+
+Slack Socket Mode uses the Slack-issued TLS socket URL, rejects WebSocket redirects, and keeps socket endpoints and tokens out of logs. Preserve acknowledgment after storage/admission checks.
+
+Channel classifier calls require deterministic eligibility, live lease and department budget reservation. Keep untrusted message data out of status, logs and authority fields.

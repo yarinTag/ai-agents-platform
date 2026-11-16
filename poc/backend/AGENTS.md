@@ -165,3 +165,13 @@ The API lifespan starts an opt-in local Telegram polling worker. It uses Telegra
 get_skill_context accepts workflow organization and department IDs. Tenant agent runtime adds the supervisor agent ID for configured-source inheritance.
 
 The approval delivery worker reconciles SENDING records to UNCONFIRMED after five minutes across both card types. It never retries an ambiguous initial send.
+
+The channel approval worker prioritizes editing a claimed PR card to DECIDED before consuming the saved decision and performing GitHub reads or a merge. Each successor card is queued separately with the same execution link and its own action token. The ingress acknowledgment still reports the recorded decision independently of GitHub processing.
+
+The approval card worker supports Telegram and Slack HTTPS bindings using the existing captured/current provider send capability. Slack updates the original message with chat.update after acknowledgment.
+
+Slack Socket Mode starts an outbound worker for explicitly configured connected Slack installations. A database-local lock fences same-host processes, duplicate configured team/app installations are skipped, and credential or mode changes replace the worker. Acknowledgment follows durable ingress or approval handling.
+
+The channel trigger worker evaluates opted-in relevance rules before reserving executions. It reuses the durable outbox lease, existing department budget ledger and tool-free runtime.
+
+Channel approval worker also advances confirmed PR receipts from either dashboard or channel. Only read-only evidence refresh can resume after a lease expires.

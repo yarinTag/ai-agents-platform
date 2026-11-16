@@ -3,6 +3,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from integrations.repo_workspace import RepositoryWorkspace
 from workflows.approval_config import HumanApproval
+from workflows.channel_trigger_rules import TriggerRule
 
 
 class StrictModel(BaseModel):
@@ -22,6 +23,10 @@ class ResourceRef(StrictModel):
         return self
 
 
+class ApprovalCheckpoint(StrictModel):
+    expires_hours: int = Field(default=24, ge=1, le=72)
+
+
 class ChatStep(StrictModel):
     key: str = Field(pattern=r'^[a-zA-Z][a-zA-Z0-9_-]{0,79}$')
     name: str = Field(min_length=1, max_length=200)
@@ -35,6 +40,7 @@ class ChatStep(StrictModel):
     workspace: RepositoryWorkspace | None = None
     required_outcome: Literal['analysis', 'pull_request'] = 'analysis'
     human_approval: HumanApproval | None = None
+    approval_checkpoint: ApprovalCheckpoint | None = None
     discover_open_prs_author: str | None = Field(default=None, pattern=r'^[A-Za-z0-9_\[\]-]{1,100}$')
     open_pr_source: str | None = Field(default=None, min_length=1, max_length=80)
 
@@ -51,6 +57,7 @@ class ChatWorkflow(StrictModel):
     steps: list[ChatStep] = Field(min_length=1, max_length=40)
     skills: list[str] = Field(default_factory=list, max_length=20)
     destination: Destination | None = None
+    channel_trigger: TriggerRule | None = None
     cron_expression: str | None = Field(default=None, max_length=100)
 
 

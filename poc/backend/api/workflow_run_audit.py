@@ -34,7 +34,7 @@ def execution_audit(db, execution, organization_id, context):
                 d.callback_id IS NOT NULL AS from_channel
             FROM workflow_approvals a LEFT JOIN pr_channel_deliveries d ON d.approval_id=a.id
             LEFT JOIN workflow_step_runs s ON s.id=a.step_run_id AND s.execution_id=a.execution_id
-            WHERE a.execution_id=? AND a.organization_id=?""", (identifier, organization_id)).fetchall()
+            WHERE a.execution_id=? AND a.organization_id=? ORDER BY a.position""", (identifier, organization_id)).fetchall()
         calls = conn.execute("""SELECT c.id,c.connector_id,t.name AS operation,m.provider,c.status,
                 c.started_at,c.completed_at,c.result,s.step_key
             FROM mcp_tool_calls c JOIN mcp_connectors m ON m.id=c.connector_id AND m.organization_id=?
@@ -47,7 +47,9 @@ def execution_audit(db, execution, organization_id, context):
     approvals = []
     for row in (*dag, *terminal):
         item = dict(row)
-        item["decision_source"] = "telegram" if item.pop("from_channel") else "dashboard" if item["decided_by"] else None
+        from_channel = item.pop("from_channel")
+        channel_provider = "slack" if "." in (item["message_id"] or "") else "telegram"
+        item["decision_source"] = channel_provider if from_channel else "dashboard" if item["decided_by"] else None
         if item["status"] == "CLAIMED":
             item["status"] = "APPROVED"
         approvals.append(item)
