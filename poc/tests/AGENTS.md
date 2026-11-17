@@ -259,3 +259,5 @@ The API audit PR write-plan scenario includes the required dashboard checkpoint 
 AI-authored PR write tests require fixed arguments and verify that changing the body changes the approval fingerprint. API audit verifies independent grant checks and inactive creation with the exact action in the saved revision.
 
 The exact write path rejects a persisted claimed fingerprint mismatch before preparing connector scope or recording any provider call.
+
+Channel relevance tests cover normalization of leading reasoning and a complete JSON fence.

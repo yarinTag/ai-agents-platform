@@ -65,3 +65,12 @@ def test_relevance_gates_dispatch_and_fences_repeat_classification(baseline):
     })
     assert preview.json() == {'matched': True, 'parameters': {}, 'requires_classification': True}
     assert len(db.list_workflow_executions('relevance')) == 1
+
+
+def test_relevance_accepts_reasoning_prefix_and_fenced_json():
+    from runtime.direct_outcomes import unwrap_model_json
+    from workflows.channel_trigger_rules import RelevanceRule
+
+    output = '<think>Private reasoning</think>\n```json\n{"decision":"match","confidence":0.9,"reason":"relevant"}\n```'
+    decision = RelevanceDecision.model_validate_json(unwrap_model_json(output))
+    assert decision.permits_run(RelevanceRule(instructions='Dependency reviews only.'))
