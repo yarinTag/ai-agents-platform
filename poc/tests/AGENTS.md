@@ -261,3 +261,5 @@ AI-authored PR write tests require fixed arguments and verify that changing the 
 The exact write path rejects a persisted claimed fingerprint mismatch before preparing connector scope or recording any provider call.
 
 Channel relevance tests cover normalization of leading reasoning and a complete JSON fence.
+
+Classifier regression tests exercise the actual tool-free capacity decision before command setup and verify zero-cost settlement in real SQLite releases its budget reservation.

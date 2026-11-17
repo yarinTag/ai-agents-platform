@@ -74,3 +74,29 @@ def test_relevance_accepts_reasoning_prefix_and_fenced_json():
     output = '<think>Private reasoning</think>\n```json\n{"decision":"match","confidence":0.9,"reason":"relevant"}\n```'
     decision = RelevanceDecision.model_validate_json(unwrap_model_json(output))
     assert decision.permits_run(RelevanceRule(instructions='Dependency reviews only.'))
+
+
+def test_busy_tool_free_runtime_returns_zero_cost_before_model_setup():
+    from types import SimpleNamespace
+    from runtime.workflow_chat import infer_tool_free
+
+    # Capacity zero is sufficient to exercise the admission decision.
+    # No command builder, credentials, subprocess or provider is available.
+    capacity = SimpleNamespace(_shutting_down=False, _processes={}, max_concurrent_runs=0)
+    outcome = infer_tool_free(capacity, {}, '', {}, 1, lambda: False, system='')
+    assert outcome['cost_usd'] == 0.0
+    assert 'busy' in outcome['error']
+
+
+def test_zero_cost_pre_dispatch_outcome_releases_budget(baseline):
+    from types import SimpleNamespace
+    from storage.hosted_budget import reserve, settle
+
+    db, _ = baseline
+    context = SimpleNamespace(organization_id='atlas', department_id='atlas_engineering',
+                              execution_id='classifier-budget', task_id='classifier-budget', model='configured')
+    hold = reserve(db, context, 0.1, {'source': 'CONFIGURED_ESTIMATE'})
+    settle(db, hold, 0.0, {'input_tokens': 0, 'output_tokens': 0})
+    with db._get_connection() as conn:
+        row = conn.execute('SELECT state,charged_micros FROM hosted_model_requests WHERE id=?', (hold,)).fetchone()
+        assert tuple(row) == ('SETTLED', 0)
