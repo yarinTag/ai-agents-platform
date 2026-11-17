@@ -289,3 +289,5 @@ PR batch completion optionally returns per_pull_findings with unique authorized 
 Workflow Chat asks for an explicit PR number, reviewed SHA and exact body for a comment/review plan. It does not infer any of those values from prose or model authority.
 
 Relevance JSON uses shared wrapper normalization and a 1,024-token cap. Explicit pre-dispatch errors settle at zero; unknown provider outcomes retain their reservation.
+
+Tool-free inference checks shutdown and capacity before building command or credentials, returning explicit zero cost when no request can start.
