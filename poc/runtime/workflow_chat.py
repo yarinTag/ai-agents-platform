@@ -138,6 +138,10 @@ def infer(adapter, selected, prompt, schema, budget, is_cancelled):
 
 def infer_tool_free(adapter, selected, prompt, schema, budget, is_cancelled, *, system,
                     maximum_tokens=12000, timeout=120):
+    if adapter._shutting_down or is_cancelled():
+        return {'error': 'Generation stopped.', 'cost_usd': 0.0}
+    if sum(process.poll() is None for process in adapter._processes.values()) >= adapter.max_concurrent_runs:
+        return {'error': 'The model is busy. Try again shortly.', 'cost_usd': 0.0}
     profile = AgentConfig(id='workflow-builder', name='Workflow builder', description='Tool-free planning',
         model=selected['model_id'], runtime_provider=selected['provider_id'], system_prompt=system,
         max_tokens=maximum_tokens, skills=[], dangerously_skip_permissions=False,
