@@ -54,6 +54,7 @@ async def run_session(args, session):
             '_INPUT_USD_PER_MILLION and _OUTPUT_USD_PER_MILLION on the server to enforce this API budget.')
     input_tokens = output_tokens = 0
     run_calls = []
+    request_attempted = False
 
     def result(text, **extra):
         event = {'type': 'result', 'is_error': False, 'result': text, 'model': model,
@@ -65,6 +66,8 @@ async def run_session(args, session):
             event['session_id'] = session.id
         if run_calls and totals(run_calls)['cost_usd'] is not None:
             event['total_cost_usd'] = totals(run_calls)['cost_usd']
+        if not request_attempted:
+            event['total_cost_usd'] = 0.0
         emit({**event, **extra})
 
     async with DirectTools(args) as tools:
@@ -94,6 +97,7 @@ async def run_session(args, session):
                     tools.connector.inventory()
 
             try:
+                request_attempted = True
                 response = await asyncio.to_thread(request, provider, model, system, messages,
                                                   inventory, args.max_tokens, session, guard)
             except DirectAPIError as exc:

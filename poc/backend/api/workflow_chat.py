@@ -2,7 +2,6 @@
 import hashlib
 import json
 import logging
-import re
 import sqlite3
 import uuid
 from datetime import datetime, timedelta
@@ -109,9 +108,8 @@ def chat(payload: ChatRequest, request: Request, background: BackgroundTasks,
 def parse_reply(output):
     if isinstance(output, dict):
         return ChatReply.model_validate(output)
-    text = re.sub(r'^\s*<think>.*?</think>', '', str(output or ''), count=1, flags=re.DOTALL).strip()
-    fenced = re.fullmatch(r'```(?:json)?\s*(.*?)\s*```', text, flags=re.DOTALL | re.IGNORECASE)
-    return ChatReply.model_validate_json(fenced.group(1) if fenced else text)
+    from runtime.direct_outcomes import unwrap_model_json
+    return ChatReply.model_validate_json(unwrap_model_json(str(output or '')))
 
 
 def generate(db, runtime, identity, job_id):

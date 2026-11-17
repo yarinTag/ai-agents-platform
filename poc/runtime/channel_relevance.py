@@ -5,7 +5,7 @@ from workflows.channel_trigger_rules import RelevanceDecision, sanitize_text
 from .direct_config import DIRECT_PROVIDERS
 from .workflow_chat import infer_tool_free
 
-MAX_OUTPUT_TOKENS = 96
+MAX_OUTPUT_TOKENS = 1024
 TIMEOUT_SECONDS = 10
 
 SYSTEM = (

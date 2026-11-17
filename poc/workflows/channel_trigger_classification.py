@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 from runtime.channel_relevance import MAX_OUTPUT_TOKENS, infer_relevance
 from runtime.direct_pricing import pricing
+from runtime.direct_outcomes import unwrap_model_json
 from storage.hosted_budget import reserve, settle
 
 from .channel_trigger_dispatch import plan_triggers
@@ -98,7 +99,7 @@ def _evaluate(db, runtime, claim, plan):
             _record(db, plan, 'ERROR', 'inference_unavailable', selected=selected)
             return
         output = result.get('output')
-        decision = RelevanceDecision.model_validate_json(output) if isinstance(output, str) else RelevanceDecision.model_validate(output)
+        decision = RelevanceDecision.model_validate_json(unwrap_model_json(output)) if isinstance(output, str) else RelevanceDecision.model_validate(output)
         state = 'MATCH' if decision.permits_run(plan.relevance) else (
             'NO_MATCH' if decision.decision == 'no_match' else 'UNCERTAIN')
         reason = 'below_confidence_threshold' if state == 'UNCERTAIN' and decision.decision == 'match' else decision.reason

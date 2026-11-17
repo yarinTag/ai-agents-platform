@@ -72,6 +72,8 @@ def receive_slack_socket(db, connector_id, credential_version, app_token_digest,
 
     def socket_identity():
         subject, code = payload.get("user_id"), payload.get("text")
+        if isinstance(code, str):
+            code = code.strip()
         if (not isinstance(subject, str) or not re.fullmatch(r"[UW][A-Z0-9]{2,31}", subject)
                 or not isinstance(code, str) or not re.fullmatch(r"[A-Za-z0-9_-]{43}", code)):
             raise InvalidProof("INVALID_PROOF")
