@@ -101,7 +101,7 @@ export function WorkflowChatModal({ onClose, onCreated }: Props) {
                     {step.depends_on.map(key => <Tag key={key}><bdi>{stepNames.get(key) || key}</bdi></Tag>)}
                   </Space>
                 </div>
-                {step.approval_checkpoint && <Tag color="orange" title={text.checkpointScope}>{text.dashboardCheckpoint}</Tag>}
+                {step.approval_checkpoint && <Tag color="orange" title={text.checkpointScope}>{step.approval_checkpoint.channel_binding_id ? text.channelCheckpoint : text.dashboardCheckpoint}</Tag>}
                 {step.pr_write_approval && <details style={{ marginBlock: 4 }}>
                   <summary>{text.exactPrWrite}</summary>
                   <Typography.Text><bdi dir="ltr">

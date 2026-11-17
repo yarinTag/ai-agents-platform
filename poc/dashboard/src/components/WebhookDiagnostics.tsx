@@ -161,7 +161,7 @@ function ConnectorDiagnostics({ connectorId }: { connectorId: string }) {
             key: 'transport', label: text.transport, children: details.ingress_mode === 'socket' ? text.socket : text.polling,
           }]),
           ...(details.ingress_mode === 'socket' ? [
-            { key: 'appToken', label: text.appToken, children: readyTag(Boolean(details.socket_token_configured)) },
+            { key: 'appToken', label: text.appToken, children: readyTag(Boolean(probeResult?.checks.socket_token_configured ?? details.socket_token_configured)) },
             { key: 'socketState', label: text.socket, children: details.socket_status === 'CONNECTED'
               ? text.connected : details.socket_status === 'RECONNECTING' ? text.reconnecting : text.disconnected },
             { key: 'lastAck', label: text.lastAck, children: time(details.socket_last_ack_at ?? null) ?? text.noDelivery },

@@ -5,10 +5,6 @@ export type IngressProvider = string;
 export interface IngressEvent {
   id: string;
   provider: IngressProvider;
-  ingress_mode?: 'webhook' | 'polling' | 'socket';
-  socket_token_configured?: boolean;
-  socket_status?: 'CONNECTED' | 'RECONNECTING' | 'DISCONNECTED';
-  socket_last_ack_at?: number | null;
   event_type: string;
   status: string;
   received_at: number;
@@ -24,12 +20,12 @@ export interface IngressChecks {
   https_configured: boolean;
   secret_configured: boolean;
   connector_connected: boolean;
+  socket_token_configured?: boolean;
 }
 
 export interface IngressDiagnostics extends IngressChecks {
   provider: IngressProvider;
   ingress_mode?: 'webhook' | 'polling' | 'socket';
-  socket_token_configured?: boolean;
   socket_status?: 'CONNECTED' | 'RECONNECTING' | 'DISCONNECTED';
   socket_last_ack_at?: number | null;
   webhook_url: string | null;

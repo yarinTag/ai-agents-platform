@@ -35,19 +35,14 @@ export interface WorkflowChatContext {
   departments: Array<{ id: string; name: string }>;
   selection: { provider_id: string; model_id: string; cost_source: string } | null;
   catalog: {
-    approval_checkpoint?: { expires_hours: number; channel_binding_id?: string | null } | null;
-    pr_write_approval?: { connector_id: string; approval_step: string; intent: {
-      operation: 'comment_pull_request' | 'review_pull_request';
-      arguments: { repository: string; pull_number: number; head_sha: string; body: string;
-        event?: 'COMMENT' | 'REQUEST_CHANGES' };
-    } } | null;
+    interactive_approval_bindings?: Array<{ id: string; connector_id: string; channel_id: string }>;
     channel_trigger_bindings?: Array<{ id: string; provider: string; connector_id: string; channel_id: string }>;
     human_approval?: { configured: boolean; terminal_only: boolean; delivery: string; missing_setup?: string | null };
     workspace_readiness?: { configured: boolean; errors: string[]; verification: 'configuration_only' };
     agents: Array<{ id: string; name: string; provision_on_create?: boolean; connector_tools: Record<string, string[]>;
       workspace_operations?: Record<string, string[]> }>;
     connectors: Array<{ id: string; name: string; provider: string;
-      tool_capabilities?: Record<string, string>; server_operations?: string[];
+      tool_capabilities?: Record<string, string>; server_operations?: string[]; exact_approval_tools?: string[];
       tools: string[]; repositories: string[]; channels: string[]; channel_labels?: Record<string, string>; execution_supported: boolean;
       workspace_operations?: string[] }>;
     skills?: Array<{ id: string; name: string; plugin: string; description: string }>;
