@@ -64,6 +64,11 @@ def card_content(row, state, dashboard_origin):
               "DECIDED": "Decision received · checking outcome", "FAILED": "Approval processing failed"}
     label = status.get(state, f"Waiting for approval · {state.removeprefix('PENDING:')}")
     text = f"ConduitCross · {label}\nStep: {row['step_key']}\nExpires: {expires}"
+    checkpoint = json.loads(row["checkpoint_json"]) if "checkpoint_json" in row else {}
+    intent = checkpoint.get("approved_pr_write")
+    if intent:
+        text += f"\n\n{intent['description']}"
+        return text, url
     source = json.loads(row["policy_json"]).get("summary_step") if "policy_json" in row else None
     if "report" in row:
         subjects = json.loads(row["subjects_json"])
@@ -73,7 +78,7 @@ def card_content(row, state, dashboard_origin):
             text += f"\n\nReviewed PRs:\n{pins}"
         text += f"\n\nFindings:\n{row['report'][:1000]}"
     if source:
-        summary = json.loads(row["checkpoint_json"])["outputs"].get(source, "").strip()
+        summary = checkpoint["outputs"].get(source, "").strip()
         if summary:
             excerpt = summary[:1000] + ("…" if len(summary) > 1000 else "")
             text += f"\n\nFindings:\n{excerpt}"

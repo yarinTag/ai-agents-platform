@@ -4,6 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from integrations.repo_workspace import RepositoryWorkspace
 from workflows.approval_config import HumanApproval
 from workflows.channel_trigger_rules import TriggerRule
+from workflows.pr_write_approval import PRWriteApproval
 
 
 class StrictModel(BaseModel):
@@ -25,6 +26,7 @@ class ResourceRef(StrictModel):
 
 class ApprovalCheckpoint(StrictModel):
     expires_hours: int = Field(default=24, ge=1, le=72)
+    channel_binding_id: str | None = Field(default=None, pattern=r"^chb_[a-f0-9]{32}$")
 
 
 class ChatStep(StrictModel):
@@ -41,6 +43,7 @@ class ChatStep(StrictModel):
     required_outcome: Literal['analysis', 'pull_request'] = 'analysis'
     human_approval: HumanApproval | None = None
     approval_checkpoint: ApprovalCheckpoint | None = None
+    pr_write_approval: PRWriteApproval | None = None
     discover_open_prs_author: str | None = Field(default=None, pattern=r'^[A-Za-z0-9_\[\]-]{1,100}$')
     open_pr_source: str | None = Field(default=None, min_length=1, max_length=80)
 

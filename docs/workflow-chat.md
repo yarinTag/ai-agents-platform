@@ -152,3 +152,5 @@ reporting. Missing or truncated diffs defer PR eligibility.
 An authorized department manager can include a deterministic channel trigger in the proposal. Only existing Listen-enabled bindings appear in the trigger catalog. Confirmation binds the signed-in manager as the execution principal. The workflow remains inactive until separately activated.
 
 A dashboard checkpoint approves continuation of the saved workflow step. Provider write tools still enforce their own scope and evidence contracts. For a personal approval tied to a particular PR and reviewed SHA, use the terminal PR approval gate.
+
+For a comment or review proposal, provide the PR number, reviewed head SHA and final text. The approval checkpoint displays the exact action before a person decides. For in-chat approval, select an eligible Send and Approve binding. Exact write execution occurs on the server and reuses current GitHub permissions and the provider-confirmed receipt.

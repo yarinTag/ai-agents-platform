@@ -282,12 +282,14 @@ class WorkflowEngine:
                 approval = dag_approval_policy(stage[0]) if len(stage) == 1 else None
                 if approval:
                     from storage.dag_approvals import suspend
+                    from .pr_write_approval import approval_manifest
                     suspend(self.db, execution_id=execution_id, step_key=stage[0].key,
                             revision=workflow.revision, initiator_id=user_context["sub"],
                             policy=approval.model_dump(), checkpoint={
                                 "outputs": step_outputs, "input_tokens": total_input_tokens,
                                 "output_tokens": total_output_tokens, "cost_usd": total_cost_usd,
                                 "trigger_payload": trigger_payload,
+                                "approved_pr_write": approval_manifest(wf_def, stage[0].key),
                             })
                     return self.db.get_workflow_execution(execution_id)
                 if len(stage) == 1:

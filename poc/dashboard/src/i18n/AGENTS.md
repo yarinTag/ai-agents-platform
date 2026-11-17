@@ -202,3 +202,5 @@ Channel trigger relevance configuration, preview limitations and categorical dec
 Channel trigger sender restrictions and capacity controls are localized in English and Hebrew.
 
 Workflow Chat labels and describes the scope of dashboard checkpoints in both locales.
+
+Workflow Chat localizes the exact GitHub action preview link in both locales.

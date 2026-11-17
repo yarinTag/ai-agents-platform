@@ -131,3 +131,7 @@ Authenticated Socket Mode payloads reuse Slack event, slash command and block ac
 All PR merges, including target-SHA approvals and successors, require current v2 candidate readiness, GitHub approval, base freshness and required checks before the provider write. Target revision changes, changed PR head/author and incomplete evidence surface separately.
 
 merge_subject commits both COMPLETED tool receipt and approval advance_pending in one SQLite transaction following verified provider acknowledgment.
+
+Exact approved PR writes reuse WorkflowToolExecutor with a server-provided approval recheck, existing tool scope and audited write claim. Approval text appears in chat cards before action buttons.
+
+Exact PR write scopes carry a server-only fingerprint. Preflight can inspect requires_approval capability decisions; execution requires the claimed action callback before preparing scope and on each provider request. Ordinary tool scopes cannot use the approval path.

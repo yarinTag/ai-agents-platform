@@ -102,6 +102,19 @@ export function WorkflowChatModal({ onClose, onCreated }: Props) {
                   </Space>
                 </div>
                 {step.approval_checkpoint && <Tag color="orange" title={text.checkpointScope}>{text.dashboardCheckpoint}</Tag>}
+                {step.pr_write_approval && <details style={{ marginBlock: 4 }}>
+                  <summary>{text.exactPrWrite}</summary>
+                  <Typography.Text><bdi dir="ltr">
+                    {step.pr_write_approval.intent.arguments.repository} #{step.pr_write_approval.intent.arguments.pull_number}
+                    {' · '}{step.pr_write_approval.intent.arguments.head_sha}
+                  </bdi></Typography.Text>
+                  <div><bdi dir="ltr">{step.pr_write_approval.intent.operation}
+                    {step.pr_write_approval.intent.arguments.event && ` · ${step.pr_write_approval.intent.arguments.event}`}
+                  </bdi></div>
+                  <Typography.Paragraph style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                    {step.pr_write_approval.intent.arguments.body}
+                  </Typography.Paragraph>
+                </details>}
                 {step.human_approval && <Tag color="orange">{text.humanApproval}{step.human_approval.merge_after_approval ? ` · ${text.mergeAfterApproval}` : ''}</Tag>}
                 {step.workspace && <div><Tag color={step.workspace.mode === 'write' ? 'orange' : 'blue'}>{text.workspace}: {step.workspace.repository} · {step.workspace.mode === 'write' ? text.draftPr : text.readWorkspace}</Tag></div>}
                 {step.resources.length > 0 && <Space size={[4, 4]} wrap>
