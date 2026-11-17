@@ -16,7 +16,12 @@ export interface ChatWorkflow {
     workspace?: { connector_id: string; repository: string; ref?: string | null;
       mode: 'read' | 'write'; pr_title?: string | null } | null;
     required_outcome?: 'analysis' | 'pull_request';
-    approval_checkpoint?: { expires_hours: number } | null;
+    approval_checkpoint?: { expires_hours: number; channel_binding_id?: string | null } | null;
+    pr_write_approval?: { connector_id: string; approval_step: string; intent: {
+      operation: 'comment_pull_request' | 'review_pull_request';
+      arguments: { repository: string; pull_number: number; head_sha: string; body: string;
+        event?: 'COMMENT' | 'REQUEST_CHANGES' };
+    } } | null;
     human_approval?: { source_step: string; connector_id: string; channel_id: string;
       kind: 'report' | 'pull_requests'; merge_after_approval: boolean; expires_hours: number } | null;
   }>;
@@ -30,7 +35,12 @@ export interface WorkflowChatContext {
   departments: Array<{ id: string; name: string }>;
   selection: { provider_id: string; model_id: string; cost_source: string } | null;
   catalog: {
-    approval_checkpoint?: { expires_hours: number } | null;
+    approval_checkpoint?: { expires_hours: number; channel_binding_id?: string | null } | null;
+    pr_write_approval?: { connector_id: string; approval_step: string; intent: {
+      operation: 'comment_pull_request' | 'review_pull_request';
+      arguments: { repository: string; pull_number: number; head_sha: string; body: string;
+        event?: 'COMMENT' | 'REQUEST_CHANGES' };
+    } } | null;
     channel_trigger_bindings?: Array<{ id: string; provider: string; connector_id: string; channel_id: string }>;
     human_approval?: { configured: boolean; terminal_only: boolean; delivery: string; missing_setup?: string | null };
     workspace_readiness?: { configured: boolean; errors: string[]; verification: 'configuration_only' };

@@ -393,3 +393,5 @@ ChannelTriggerPanel exposes provider sender IDs, cooldown, hourly limit and a sa
 WorkflowApprovalPanel releases the local submit guard on definitive declined requests while retaining the approval ID guard on responses with uncertain acceptance.
 
 Workflow Chat distinguishes generic dashboard checkpoints visually from terminal PR approvals tied to reviewed subject evidence.
+
+The Workflow Chat preview exposes the precise PR write target, pinned SHA, operation, review event and body before creation.
