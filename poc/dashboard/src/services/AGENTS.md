@@ -319,3 +319,5 @@ Ingress diagnostics types expose optional socket transport, state and acknowledg
 Channel trigger client types include optional relevance configuration, requires_classification in dry-run output and the recent_classifications diagnostic projection.
 
 Trigger settings include optional sender_ids, cooldown_seconds and max_runs_per_hour. Dry-run request can take a sample sender ID.
+
+The Socket Mode credential readiness field belongs to ingress checks, not per-event records.

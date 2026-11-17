@@ -38,6 +38,12 @@ def _unique_keys(pairs):
     return result
 
 
+def unwrap_model_json(text):
+    text = re.sub(r'^\s*<think>.*?</think>', '', text, count=1, flags=re.DOTALL).strip()
+    fence = re.fullmatch(r'```(?:json)?\s*(.*?)\s*```', text, flags=re.DOTALL | re.IGNORECASE)
+    return fence.group(1) if fence else text
+
+
 def parse_outcome(value, schema=WorkflowOutcome):
     """Accept a typed tool input or one whole JSON document, optionally fenced.
 

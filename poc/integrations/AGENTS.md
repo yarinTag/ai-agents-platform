@@ -135,3 +135,5 @@ merge_subject commits both COMPLETED tool receipt and approval advance_pending i
 Exact approved PR writes reuse WorkflowToolExecutor with a server-provided approval recheck, existing tool scope and audited write claim. Approval text appears in chat cards before action buttons.
 
 Exact PR write scopes carry a server-only fingerprint. Preflight can inspect requires_approval capability decisions; execution requires the claimed action callback before preparing scope and on each provider request. Ordinary tool scopes cannot use the approval path.
+
+Slack slash-command identity proof trims challenge whitespace before exact token matching.

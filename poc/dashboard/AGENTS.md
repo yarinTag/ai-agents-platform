@@ -316,3 +316,5 @@ The WorkflowChat proposal type supports approval_checkpoint, rendered as a human
 AI-47 browser acceptance uses the role, scope, language and viewport matrix in ../../docs/governed-workflow-browser-verification.md.
 
 AI-49 Workflow Chat context and proposal types include eligible bindings and an optional channel trigger. Approval and delivery permissions are independent.
+
+Workflow Chat context types represent interactive approval bindings and exact approval tools returned by the catalog.

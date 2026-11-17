@@ -75,7 +75,7 @@ def slack(raw, headers, settings, now):
     subject = field("user_id")
     if not re.fullmatch(r"[UW][A-Z0-9]{2,31}", subject):
         raise InvalidProof("INVALID_PROOF")
-    return subject, field("text")
+    return subject, field("text").strip()
 
 
 VERIFIERS = {"telegram": telegram, "slack": slack}

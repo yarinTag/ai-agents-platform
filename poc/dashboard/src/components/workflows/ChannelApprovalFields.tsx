@@ -98,6 +98,10 @@ function ChannelPreview({ connector, step, policy }: {
     <Alert type={linked === true ? 'success' : 'info'} title={linked == null ? text.unknownIdentity : linked ? text.linked : text.unlinked} />
     {!checks && <Alert type="info" title={text.unknown} />}
     {checks && (!checks.ingress_mode || checks.ingress_mode === 'webhook') && !checks.https_configured && <Alert type="warning" title={text.missingHttps} />}
+    {checks?.ingress_mode === 'socket' && checks.socket_token_configured === false &&
+      <Alert type="warning" title={text.missingSocketToken} />}
+    {checks?.ingress_mode === 'socket' && checks.socket_token_configured && checks.socket_status !== 'CONNECTED' &&
+      <Alert type="warning" title={text.socketDisconnected} />}
     {checks && !checks.secret_configured && <Alert type="warning" title={text.missingSecret} />}
   </Space>;
 }

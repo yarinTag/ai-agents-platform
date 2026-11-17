@@ -283,3 +283,5 @@ Sequential merge cards include the initial per-PR finding and uncertainty when s
 The exact GitHub write intent contract models comment/review separately and fingerprints the approved action, workflow step, connector, repository, PR, head, event and body. The shared parser requires one matching exact tool/resource scope and a direct approval dependency. This contract is pending authoring and execution integration.
 
 Native params.pr_write_approval requires an isolated matching declared GitHub tool and a single durable DAG checkpoint. The engine checkpoints the exact operation digest and display text before decision. After claim the server executes fixed arguments without model inference, rechecks current quorum and revision at each provider request, and requires a tool receipt.
+
+Merge resolution immediately attempts its own confirmed continuation, with the worker retained for recovery. Classification accepts only one JSON document after removing a supported outer wrapper.

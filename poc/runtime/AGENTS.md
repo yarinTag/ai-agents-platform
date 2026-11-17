@@ -287,3 +287,5 @@ Channel relevance inference has a dedicated strict classification prompt and use
 PR batch completion optionally returns per_pull_findings with unique authorized PR numbers and a 500-character excerpt. The worker redacts excerpts before persisting them. Legacy report output remains supported.
 
 Workflow Chat asks for an explicit PR number, reviewed SHA and exact body for a comment/review plan. It does not infer any of those values from prose or model authority.
+
+Relevance JSON uses shared wrapper normalization and a 1,024-token cap. Explicit pre-dispatch errors settle at zero; unknown provider outcomes retain their reservation.

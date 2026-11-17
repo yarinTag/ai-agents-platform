@@ -204,3 +204,5 @@ Channel trigger sender restrictions and capacity controls are localized in Engli
 Workflow Chat labels and describes the scope of dashboard checkpoints in both locales.
 
 Workflow Chat localizes the exact GitHub action preview link in both locales.
+
+Channel checkpoint and Socket Mode readiness messages are localized in Hebrew and English.

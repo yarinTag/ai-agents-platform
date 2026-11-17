@@ -441,3 +441,5 @@ Channel trigger GET/PUT/preview use TriggerRule sender_ids, cooldown_seconds and
 Workflow Chat requires pr_write_approval for new GitHub comment/review plans. The exact connector, operation and arguments must match the declared repository scope and a dedicated direct approval_checkpoint. An optional eligible channel_binding_id enables in-chat decisions on that checkpoint.
 
 Workflow Chat connector catalog exposes exact_approval_tools. A PR write still requires exact intent, checkpoint and independent resource/agent authorization.
+
+Slack installation proof trims surrounding challenge whitespace on both HTTP and Socket Mode transports.

@@ -395,3 +395,5 @@ WorkflowApprovalPanel releases the local submit guard on definitive declined req
 Workflow Chat distinguishes generic dashboard checkpoints visually from terminal PR approvals tied to reviewed subject evidence.
 
 The Workflow Chat preview exposes the precise PR write target, pinned SHA, operation, review event and body before creation.
+
+Approval previews distinguish channel checkpoints, show missing/disconnected Socket Mode, and prefer the latest probe for app token readiness.
