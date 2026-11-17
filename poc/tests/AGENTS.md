@@ -255,3 +255,7 @@ Confirmed-merge recovery covers revoked channel bindings, retained receipts and 
 Completion validation tests cover bounded per-PR excerpts retained for authorized pull numbers and rejection of out-of-scope excerpts.
 
 The API audit PR write-plan scenario includes the required dashboard checkpoint while verifying the unchanged write grant and inactive creation contract.
+
+AI-authored PR write tests require fixed arguments and verify that changing the body changes the approval fingerprint. API audit verifies independent grant checks and inactive creation with the exact action in the saved revision.
+
+The exact write path rejects a persisted claimed fingerprint mismatch before preparing connector scope or recording any provider call.

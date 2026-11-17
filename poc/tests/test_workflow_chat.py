@@ -117,6 +117,14 @@ def test_chat_compiles_checkpoint_and_keeps_tool_grants_separate(setup):
     checkpoint.approval_checkpoint = ApprovalCheckpoint(expires_hours=2)
     value.steps.insert(0, checkpoint)
     write.depends_on = [checkpoint.key]
+    assert any('exact PR write arguments' in error for error in validate_candidate(value, resources))
+    from workflows.pr_write_approval import PRWriteApproval
+    write.pr_write_approval = PRWriteApproval.model_validate({
+        'connector_id': 'github', 'approval_step': checkpoint.key,
+        'intent': {'operation': 'comment_pull_request', 'arguments': {
+            'repository': 'team/allowed', 'pull_number': 7, 'head_sha': 'a' * 40, 'body': 'Reviewed.',
+        }},
+    })
     errors = validate_candidate(value, resources)
     assert not any('human approval checkpoint' in error for error in errors)
     assert any('comment_pull_request' in error for error in errors)
@@ -124,6 +132,15 @@ def test_chat_compiles_checkpoint_and_keeps_tool_grants_separate(setup):
     assert compiled['mcp_servers'] == []
     assert compiled['params'] == {'dag_approval': {'timeout_seconds': 7200}}
     assert protected['depends_on'] == ['approval']
+    from workflows.parser import WorkflowParser
+    from workflows.pr_write_approval import approval_manifest
+    definition = WorkflowParser.from_dict(native_definition(value, resources))
+    manifest = approval_manifest(definition, 'approval')
+    assert manifest['fingerprint'] == write.pr_write_approval.fingerprint(write.key)
+    assert manifest['description'].endswith('Reviewed.')
+    amended = write.pr_write_approval.model_copy(deep=True)
+    amended.intent.arguments.body = 'Changed content.'
+    assert amended.fingerprint(write.key) != manifest['fingerprint']
 
 
 def test_creation_is_inactive_and_idempotent_with_dedicated_runner(setup):
@@ -300,3 +317,31 @@ def test_chat_channel_trigger_binds_server_principal_without_activating(setup):
     assert metadata['channel_trigger'] == value.channel_trigger.model_dump()
     assert metadata['channel_trigger_principal'] == 'chat-user'
     assert not workflow.is_active
+
+
+def test_exact_pr_write_refuses_mismatched_claim_before_preparing_tools(setup):
+    from workflows.pr_write_approval import PRWriteApproval, execute_approved_write
+    from integrations.tool_definitions import ToolAccessError
+
+    db, _, _ = setup
+    db.create_workflow(id='pinned-write', name='Pinned', organization_id='org-chat',
+                       department_id='dept-chat', definition_json='{}')
+    db.create_workflow_execution('pinned-run', 'pinned-write', 'MANUAL',
+                                 department_id='dept-chat', status='RUNNING')
+    config = PRWriteApproval.model_validate({
+        'connector_id': 'github', 'approval_step': 'approval',
+        'intent': {'operation': 'comment_pull_request', 'arguments': {
+            'repository': 'team/allowed', 'pull_number': 7, 'head_sha': 'a' * 40, 'body': 'Changed.',
+        }},
+    })
+    with db._get_connection() as conn:
+        conn.execute("""INSERT INTO workflow_dag_approvals
+            (id,execution_id,step_key,workflow_revision,organization_id,department_id,
+             initiator_id,policy_json,checkpoint_json,status,expires_at)
+            VALUES ('pinned-claim','pinned-run','approval',1,'org-chat','dept-chat','chat-user',
+                    '{}',?,'CLAIMED',unixepoch()+300)""",
+            (json.dumps({'approved_pr_write': {'step_key': 'summarize', 'fingerprint': '0' * 64}}),))
+    with pytest.raises(ToolAccessError, match='differs from the approved action'):
+        execute_approved_write(db, candidate().steps[0], config, None, 'pinned-run')
+    with db._get_connection() as conn:
+        assert conn.execute('SELECT count(*) FROM mcp_tool_calls').fetchone()[0] == 0
