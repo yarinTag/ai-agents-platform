@@ -43,8 +43,14 @@ def agent_tool_allowed(db, agent, connector, tool):
 
 
 def prepare_scope(db, task_id, execution_id, step, initiator_id=None, persist=True,
-                  pull_numbers=None, pull_author=None):
+                  pull_numbers=None, pull_author=None, *, approval_check=None):
     """Freeze the step's declared upper bound before launching its model process."""
+    from workflows.pr_write_approval import write_configuration
+    exact_write = write_configuration(step)
+    if persist and exact_write:
+        if approval_check is None:
+            raise ToolAccessError('Exact PR write scope requires the server approval check.')
+        approval_check()
     context = execution_context(db, execution_id)
     if not context and not step.mcp_servers:
         return
@@ -113,7 +119,8 @@ def prepare_scope(db, task_id, execution_id, step, initiator_id=None, persist=Tr
             from governance.enforcement import require_capability
             try:
                 for resource in operation_selected:
-                    require_capability(db, execution_id, agent, connector, operation, resource)
+                    require_capability(db, execution_id, agent, connector, operation, resource,
+                                       approval_path=bool(exact_write and operation == exact_write.intent.operation))
             except ToolAccessError:
                 continue
             suffix = hashlib.sha256(f'{identifier}:{operation}'.encode()).hexdigest()[:24]
@@ -128,6 +135,8 @@ def prepare_scope(db, task_id, execution_id, step, initiator_id=None, persist=Tr
     scope = {'organization_id': workflow.organization_id, 'department_id': workflow.department_id,
         'agent_id': agent.id, 'workflow_id': workflow.id, 'initiator_id': initiator_id, 'entries': entries,
         'deadline_at': (datetime.now() + timedelta(seconds=min(step.timeout_seconds or 180, 300))).isoformat()}
+    if exact_write:
+        scope['exact_pr_write'] = exact_write.fingerprint(step.key)
     if not persist:
         return scope
     if pull_numbers is not None:

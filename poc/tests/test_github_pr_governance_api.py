@@ -80,7 +80,10 @@ def test_ready_pr_write_plan_revalidates_grant_and_saves_inactive(baseline):
          'prompt_template': 'Wait for an authorized person to approve the comment step.',
          'approval_checkpoint': {'expires_hours': 2}},
         {'key': 'comment', 'name': 'Comment', 'agent_id': 'atlas_engineering', 'depends_on': ['approve_comment'],
-         'prompt_template': 'Read the exact current head and post the requested comment.',
+         'prompt_template': 'Post the exact approved comment.',
+         'pr_write_approval': {'connector_id': 'atlas_github', 'approval_step': 'approve_comment',
+             'intent': {'operation': 'comment_pull_request', 'arguments': {'repository': 'owner/repository',
+                         'pull_number': 12, 'head_sha': 'a' * 40, 'body': 'Reviewed the dependency change.'}}},
          'resources': [{'connector_id': 'atlas_github', 'repository': 'owner/repository',
                         'tool_name': 'comment_pull_request'}]},
     ]}
@@ -101,6 +104,7 @@ def test_ready_pr_write_plan_revalidates_grant_and_saves_inactive(baseline):
     approval, comment = json.loads(workflow.definition_json)['steps']
     assert approval['params'] == {'dag_approval': {'timeout_seconds': 7200}}
     assert comment['depends_on'] == ['approve_comment']
+    assert comment['params']['pr_write_approval'] == proposal['steps'][1]['pr_write_approval']
     assert comment['params']['authorized_resources'][0]['tool_name'] == 'comment_pull_request'
     with db._get_connection() as conn:
         assert conn.execute('SELECT COUNT(*) FROM workflow_executions').fetchone()[0] == 0

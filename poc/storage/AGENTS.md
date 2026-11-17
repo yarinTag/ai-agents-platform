@@ -214,3 +214,5 @@ channel_trigger_classifications is keyed by event/workflow and records revision,
 idx_channel_dispatch_workflow indexes workflow_id/event_id for trigger quota and cooldown lookups. Dispatch reservations, including runs that later fail, consume the configured allowance.
 
 workflow_approvals adds advance_pending (default 0) and advance_claim_until (epoch seconds). A confirmed merge sets advance_pending; worker claims fence advancement and are cleared on finishing.
+
+DAG checkpoint_json optionally stores approved_pr_write with step_key, fingerprint and description. Approval inbox projects the exact action text into the existing output excerpts.

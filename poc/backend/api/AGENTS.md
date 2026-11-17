@@ -437,3 +437,7 @@ Slack connector configuration accepts ingress_mode=socket and socket_app_token. 
 Channel trigger GET returns a manager-only, latest-20 recent_classifications projection with revision, categorical state/reason, model/provider and execution ID. Preview returns requires_classification only when an opted-in rule passes the deterministic filter. It does not call the model.
 
 Channel trigger GET/PUT/preview use TriggerRule sender_ids, cooldown_seconds and max_runs_per_hour. Preview checks a supplied sender ID against the saved shape but performs no identity lookup or capacity reservation.
+
+Workflow Chat requires pr_write_approval for new GitHub comment/review plans. The exact connector, operation and arguments must match the declared repository scope and a dedicated direct approval_checkpoint. An optional eligible channel_binding_id enables in-chat decisions on that checkpoint.
+
+Workflow Chat connector catalog exposes exact_approval_tools. A PR write still requires exact intent, checkpoint and independent resource/agent authorization.

@@ -154,12 +154,22 @@ def validate_candidate(candidate, resources, *, clarifications=None):
         if step.approval_checkpoint and (
             step.resources or step.workspace or step.human_approval or step.send_output_of
             or step.discover_open_prs_author or step.open_pr_source or step.required_outcome != 'analysis'
-            or step.skills
+            or step.skills or step.pr_write_approval
         ):
             errors.append(f'Approval checkpoint {step.key} must be a standalone step without tools or actions.')
-        if any(ref.tool_name in ('comment_pull_request', 'review_pull_request') for ref in step.resources):
-            if not checkpoints.intersection(step.depends_on):
-                errors.append(f'Step {step.key} must depend directly on a human approval checkpoint before writing to a PR.')
+        if step.approval_checkpoint and step.approval_checkpoint.channel_binding_id and not any(
+            binding['id'] == step.approval_checkpoint.channel_binding_id
+            for binding in resources.get('interactive_approval_bindings', [])
+        ):
+            errors.append(f'Approval checkpoint {step.key} requires an eligible interactive channel binding.')
+        write = step.pr_write_approval
+        if any(ref.tool_name in ('comment_pull_request', 'review_pull_request') for ref in step.resources) and not write:
+            errors.append(f'Step {step.key} needs exact PR write arguments and a human approval checkpoint.')
+        if write and (write.approval_step not in checkpoints or write.approval_step not in step.depends_on
+                      or step.workspace or step.send_output_of or step.human_approval or step.approval_checkpoint
+                      or step.discover_open_prs_author or step.open_pr_source or step.skills
+                      or step.required_outcome != 'analysis'):
+            errors.append(f'Exact PR write {step.key} must be isolated and depend on its dedicated checkpoint.')
         if step.discover_open_prs_author and (step.workspace or step.send_output_of or step.human_approval
                 or step.open_pr_source or len(step.resources) != 1
                 or step.resources[0].tool_name != 'list_open_pull_requests' or not step.resources[0].repository):
@@ -254,7 +264,7 @@ def native_definition(candidate: ChatWorkflow, resources, runner_agent_id=None):
     steps = []
     for step in candidate.steps:
         data = step.model_dump(exclude={'resources', 'send_output_of', 'skills', 'workspace', 'required_outcome',
-                                       'human_approval', 'approval_checkpoint', 'discover_open_prs_author', 'open_pr_source'})
+                                       'human_approval', 'approval_checkpoint', 'pr_write_approval', 'discover_open_prs_author', 'open_pr_source'})
         if step.agent_id == PLANNED_RUNNER_ID and runner_agent_id:
             data['agent_id'] = runner_agent_id
         data['mcp_servers'] = sorted({r.connector_id for r in step.resources})
@@ -285,9 +295,14 @@ def native_definition(candidate: ChatWorkflow, resources, runner_agent_id=None):
                 'source_step': step.send_output_of}
         if step.approval_checkpoint:
             data['mcp_servers'] = []
-            data['params'] = {'dag_approval': {'timeout_seconds': step.approval_checkpoint.expires_hours * 3600}}
+            approval = {'timeout_seconds': step.approval_checkpoint.expires_hours * 3600}
+            if step.approval_checkpoint.channel_binding_id:
+                approval['channel_binding_id'] = step.approval_checkpoint.channel_binding_id
+            data['params'] = {'dag_approval': approval}
+        elif step.pr_write_approval:
+            data['params']['pr_write_approval'] = step.pr_write_approval.model_dump()
         # Carry exact IDs into executable instructions, not just display metadata.
-        if step.resources and not step.approval_checkpoint:
+        if step.resources and 'authorized_resources' in data['params'] and not step.pr_write_approval:
             data['prompt_template'] += '\nUse only these configured resources: ' + json.dumps(data['params']['authorized_resources'])
         steps.append(data)
     metadata = {}

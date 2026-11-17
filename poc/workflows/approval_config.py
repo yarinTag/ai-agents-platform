@@ -51,9 +51,8 @@ def approval_configuration(step):
 
 
 def validate_gates(definition):
-    from .dag_approval_config import dag_approval_policy
-    for step in definition.steps:
-        dag_approval_policy(step)
+    from .pr_write_approval import validate_write_gates
+    validate_write_gates(definition)
     gates = [(step, approval_configuration(step)) for step in definition.steps]
     gates = [(step, config) for step, config in gates if config]
     if not gates:

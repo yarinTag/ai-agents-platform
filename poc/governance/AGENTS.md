@@ -29,3 +29,5 @@ Authoritative semantics: ../../docs/architecture/p01-policy-algebra.md; exact mo
 
 ## AI-19 descriptor dependencies and effects
 registry.public adds requires_capabilities from trusted operation_requirements; new GitHub comment/review effects are write. policy.decide recursively intersects required narrower reads using the same subject/resource/current/frozen gates and returns DEPENDENT_CAPABILITY_DENIED when needed. Existing explicit aggregate grants require reviewed read dependencies; no grant is backfilled. See ../../docs/github-pr-governance.md.
+
+The Workflow Chat catalog exposes conditional GitHub comment/review capabilities only as exact_approval_tools. Catalog availability never authorizes a runtime call.

@@ -279,3 +279,7 @@ A confirmed PR receipt atomically schedules read-only advancement. The worker le
 Revoked channel bindings or credentials terminate confirmed-merge advancement with a sanitized outcome and retain the confirmed receipt.
 
 Sequential merge cards include the initial per-PR finding and uncertainty when supplied by the review, alongside fresh evidence. The excerpt is descriptive and cannot change the receipt-derived subject.
+
+The exact GitHub write intent contract models comment/review separately and fingerprints the approved action, workflow step, connector, repository, PR, head, event and body. The shared parser requires one matching exact tool/resource scope and a direct approval dependency. This contract is pending authoring and execution integration.
+
+Native params.pr_write_approval requires an isolated matching declared GitHub tool and a single durable DAG checkpoint. The engine checkpoints the exact operation digest and display text before decision. After claim the server executes fixed arguments without model inference, rechecks current quorum and revision at each provider request, and requires a tool receipt.

@@ -12,14 +12,20 @@ from .tool_scopes import agent_tool_allowed, connector_authorized, live_scope, l
 
 
 class WorkflowToolExecutor:
-    def __init__(self, db, task_id):
+    def __init__(self, db, task_id, *, approval_check=None):
         self.db, self.task_id = db, task_id
+        self.approval_check = approval_check
         self.scope = load_scope(db, task_id)
         if not self.scope:
             raise ToolAccessError('No server-authorized connector scope exists for this task.')
         self.entries = {entry['name']: entry for entry in self.scope['entries']}
 
     def authorize(self, entry, inputs=None):
+        exact_write = bool(self.scope.get('exact_pr_write'))
+        if exact_write:
+            if self.approval_check is None:
+                raise ToolAccessError('Exact PR writes are restricted to the server approval path.')
+            self.approval_check()
         agent = live_scope(self.db, self.task_id, self.scope)
         connector = connector_authorized(self.db, entry['connector_id'], self.scope['organization_id'],
             self.scope['department_id'], agent)
@@ -48,7 +54,8 @@ class WorkflowToolExecutor:
         from governance.enforcement import require_capability
         targets = [inputs.repository if group == 'repositories' else inputs.channel_id] if inputs is not None else entry[group]
         for target in targets:
-            require_capability(self.db, self.scope['execution_id'], agent, connector, entry['operation'], target)
+            require_capability(self.db, self.scope['execution_id'], agent, connector, entry['operation'], target,
+                               approval_path=exact_write)
         return connector
 
     def inventory(self):
