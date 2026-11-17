@@ -74,7 +74,7 @@ def run_receipts(conn, execution_id):
 
 
 
-def advance_confirmed(db):
+def advance_confirmed(db, approval_id=None):
     """Claim a confirmed merge's continuation. This worker performs only reads."""
     from .human_approval import finish
 
@@ -84,9 +84,9 @@ def advance_confirmed(db):
         conn.execute('BEGIN IMMEDIATE')
         row = conn.execute("""SELECT a.*,d.callback_id,d.binding_id,d.identity_link_id
             FROM workflow_approvals a LEFT JOIN pr_channel_deliveries d ON d.approval_id=a.id
-            WHERE a.status='RESOLVING' AND a.advance_pending=1
+            WHERE a.status='RESOLVING' AND a.advance_pending=1 AND (? IS NULL OR a.id=?)
             AND (a.advance_claim_until IS NULL OR a.advance_claim_until<=?)
-            ORDER BY a.created_at,a.id LIMIT 1""", (now,)).fetchone()
+            ORDER BY a.created_at,a.id LIMIT 1""", (approval_id, approval_id, now)).fetchone()
         if not row:
             return
         conn.execute('UPDATE workflow_approvals SET advance_claim_until=? WHERE id=?', (claim_until, row['id']))

@@ -203,7 +203,9 @@ def resolve(db, approval, approve, approver_check):
                 raise ToolAccessError('Merging requires a separate approval per PR. Start a fresh run.')
             from integrations.pr_merge import merge_subject
             merge_subject(db, approval, subjects[0], approver_check, receipts)
-            return  # The confirmed receipt atomically schedules read-only advancement.
+            from .pr_approval_sequence import advance_confirmed
+            advance_confirmed(db, approval['id'])
+            return
         else:
             for subject in subjects:
                 approver_check()

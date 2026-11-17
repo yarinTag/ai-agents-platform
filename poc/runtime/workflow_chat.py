@@ -153,9 +153,9 @@ def infer_tool_free(adapter, selected, prompt, schema, budget, is_cancelled, *, 
     key = 'builder_' + uuid.uuid4().hex
     try:
         if adapter._shutting_down or is_cancelled():
-            return {'error': 'Generation stopped.'}
+            return {'error': 'Generation stopped.', 'cost_usd': 0.0}
         if sum(p.poll() is None for p in adapter._processes.values()) >= adapter.max_concurrent_runs:
-            return {'error': 'The model is busy. Try again shortly.'}
+            return {'error': 'The model is busy. Try again shortly.', 'cost_usd': 0.0}
         with tempfile.TemporaryDirectory(prefix='workflow_builder_') as directory:
             process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL, cwd=directory, env=env, text=True,
