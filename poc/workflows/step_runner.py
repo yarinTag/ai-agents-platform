@@ -83,7 +83,7 @@ class WorkflowStepRunner:
         workflow_for_skills = self.db.get_workflow(execution_for_skills.workflow_id)
         configured_skills = workflow_skill_ids(json.loads(workflow_for_skills.definition_json))
         # Server delivery uses predecessor text directly and performs no inference.
-        if (step.params or {}).get('channel_action') is not None or (step.params or {}).get('human_approval') is not None:
+        if (step.params or {}).get('channel_action') is not None or (step.params or {}).get('human_approval') is not None or (step.params or {}).get('pr_write_approval') is not None:
             configured_skills = []
         step_skills = []
         for sk in configured_skills:
@@ -171,7 +171,9 @@ class WorkflowStepRunner:
         updated_run = step_run
         workspace = None
         try:
-            if self.runtime is None:
+            from .pr_write_approval import execute_approved_write, write_configuration
+            pr_write = write_configuration(step)
+            if self.runtime is None and not pr_write:
                 raise RuntimeError("Runtime capability is unavailable")
             from .channel_action import action_configuration, execute_channel_action
             from integrations.repo_workspace import workspace_configuration
@@ -181,7 +183,11 @@ class WorkflowStepRunner:
                 raise RuntimeError("Channel delivery actions cannot run in the tool-free Playground")
             if workspace_config and playground_workspace:
                 raise RuntimeError("Repository workspaces cannot run in the tool-free Playground")
-            if playground_workspace:
+            if pr_write:
+                if playground_workspace:
+                    raise RuntimeError("Approved GitHub writes cannot run in the tool-free Playground")
+                execute_approved_write(self.db, step, pr_write, step_run, execution_id)
+            elif playground_workspace:
                 self.runtime.start_playground_task(
                     agent_id=actual_agent_id, task_id=task_id,
                     prompt=formatted_prompt, workspace=playground_workspace,
