@@ -1,5 +1,21 @@
 # Capability governance
 
+## AI-53 offline sandbox policy foundation
+
+`sandbox_profile.py` owns strict frozen SandboxProfile/SandboxAttempt v1 contracts.
+Profiles are server/operator owned, digest pinned, bounded and fingerprinted with
+canonical JSON SHA-256; no approved defaults or HTTP/workflow fields are added.
+`sandbox_manifests.py::build_sandbox_bundle` revalidates models and exact fingerprint
+binding, then returns a per-tenant/attempt Namespace, token-free ServiceAccount,
+deny-all ingress/egress NetworkPolicy, one-Pod ResourceQuota and bounded single Job.
+No caller PodSpec, command, credential, persistent/host mount or network extension
+is accepted. This is offline source only, with no active execution import/apply
+path, cluster admission controller or claim of VM runtime verification. AI-51
+decisions and cluster enforcement remain gates. Exact controls, limitations and
+implementation sequence: [AI-53 design](../../docs/architecture/ai-53-sandbox-isolation.md).
+No tests/imports/build/cluster or other runtime verification was performed.
+
+
 AI-16 introduces one shared provider-neutral policy evaluator. Exact HTTP/models,
 storage, role and compatibility contracts: [capability policy v1](../../docs/architecture/capability-policy-v1.md).
 

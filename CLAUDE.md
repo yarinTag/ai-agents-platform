@@ -1,5 +1,12 @@
 # CLAUDE.md - AI Agents Platform Root Repository Guide
 
+AI-53 adds offline sandbox profile and manifest contracts in `poc/governance/`.
+See [security design and staged acceptance](docs/architecture/ai-53-sandbox-isolation.md).
+They are not wired to execution or cluster admission. Product/runtime decisions,
+cluster enforcement and live acceptance remain pending; do not infer sandbox
+deployment or verification from a rendered manifest. No runtime checks were run.
+
+
 Welcome to the **AI Agents Platform** monorepo. This platform is an enterprise-grade autonomous agent management, workflow execution, and multi-tenant governance system featuring an interactive pixel office canvas, real-time collaboration war rooms, scheduled cron runners, DAG workflow orchestration, MCP integration hubs, and hierarchical supervisor delegation.
 
 ---
