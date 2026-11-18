@@ -17,6 +17,7 @@ def profile(**overrides):
         'runtime_class': 'test-vm', 'kubernetes_minor': 'v1.35',
         'image': 'registry.invalid/agent@sha256:' + 'a' * 64,
         'uid': 1000, 'gid': 1000, 'cpu_millis': 500, 'memory_mib': 512,
+        'runtime_cpu_overhead_millis': 100, 'runtime_memory_overhead_mib': 64,
         'scratch_mib': 32, 'deadline_seconds': 60, **overrides})
 
 
@@ -81,3 +82,14 @@ def test_closed_baseline_has_no_credential_or_network_delivery_path():
     assert all('hostPath' not in volume and 'secret' not in volume
                and 'projected' not in volume for volume in pod['volumes'])
     assert not any(item['kind'] in {'Role', 'RoleBinding', 'Secret'} for item in bundle)
+
+
+def test_vm_overhead_fits_quota_without_expanding_agent_limit():
+    policy = profile()
+    bundle = build_sandbox_bundle(policy, attempt(policy))
+    quota = bundle[3]['spec']['hard']
+    limits = bundle[-1]['spec']['template']['spec']['containers'][0]['resources']['limits']
+    assert quota['requests.cpu'] == quota['limits.cpu'] == '600m'
+    assert quota['requests.memory'] == quota['limits.memory'] == '576Mi'
+    assert limits['cpu'] == '500m'
+    assert limits['memory'] == '512Mi'

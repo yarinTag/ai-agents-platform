@@ -49,6 +49,11 @@ RuntimeClass configuration intentionally accepts the lowercase DNS-label subset
 (including one-character names). Images require an explicit DNS registry, optional
 numeric port and simple lowercase repository components; tags, implicit registries,
 IPv6 registry literals and empty path components are outside this initial contract.
+CPU/memory RuntimeClass overhead is explicitly recorded and fingerprinted. Namespace
+quota includes it while container limits remain unchanged. Deployment must compare
+the approved overhead to the actual RuntimeClass before creating a Pod; zero is an
+explicit operator assertion, not evidence of a free runtime. See
+[Pod overhead](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-overhead/).
 SHA-256 of canonical JSON binds every profile field; it is an integrity identifier,
 not a signature or approval. Images still require provenance, scan and explicit
 operator approval before a profile is registered.

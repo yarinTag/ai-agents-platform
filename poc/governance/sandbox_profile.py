@@ -29,6 +29,8 @@ class SandboxProfile(FrozenContract):
     gid: int = Field(ge=1000, le=65534)
     cpu_millis: int = Field(ge=100, le=4000)
     memory_mib: int = Field(ge=128, le=8192)
+    runtime_cpu_overhead_millis: int = Field(ge=0, le=4000)
+    runtime_memory_overhead_mib: int = Field(ge=0, le=8192)
     scratch_mib: int = Field(ge=16, le=512)
     deadline_seconds: int = Field(ge=1, le=3600)
 

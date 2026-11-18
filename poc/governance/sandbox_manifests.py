@@ -26,6 +26,9 @@ def build_sandbox_bundle(profile: SandboxProfile, attempt: SandboxAttempt) -> li
     annotations = {'platform.ai/profile-sha256': attempt.profile_sha256}
     resources = {'cpu': f'{profile.cpu_millis}m', 'memory': f'{profile.memory_mib}Mi',
                  'ephemeral-storage': f'{profile.scratch_mib * 2}Mi'}
+    quota = {**resources,
+             'cpu': f'{profile.cpu_millis + profile.runtime_cpu_overhead_millis}m',
+             'memory': f'{profile.memory_mib + profile.runtime_memory_overhead_mib}Mi'}
     security = {'runAsNonRoot': True, 'runAsUser': profile.uid,
                 'runAsGroup': profile.gid, 'seccompProfile': {'type': 'RuntimeDefault'}}
     container_security = {'allowPrivilegeEscalation': False, 'privileged': False,
@@ -68,8 +71,8 @@ def build_sandbox_bundle(profile: SandboxProfile, attempt: SandboxAttempt) -> li
         {'apiVersion': 'v1', 'kind': 'ResourceQuota',
          'metadata': metadata('attempt'), 'spec': {'hard': {
              'pods': '1', 'count/jobs.batch': '1',
-             **{f'requests.{key}': value for key, value in resources.items()},
-             **{f'limits.{key}': value for key, value in resources.items()}}}},
+             **{f'requests.{key}': value for key, value in quota.items()},
+             **{f'limits.{key}': value for key, value in quota.items()}}}},
         {'apiVersion': 'batch/v1', 'kind': 'Job',
          'metadata': {**metadata('agent'), 'annotations': dict(annotations)},
          'spec': {'backoffLimit': 0, 'completions': 1, 'parallelism': 1,

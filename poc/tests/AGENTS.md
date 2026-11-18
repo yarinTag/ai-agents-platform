@@ -6,6 +6,8 @@ via model_copy, tenant namespace separation, output mutation isolation and absen
 of credential/network delivery paths. No mocks, cluster, provider or database are
 needed for these pure contract cases. Tests were not executed and do not establish
 Kubernetes admission, runtime or network isolation.
+Sandbox profile source cases also cover nonzero VM overhead fitting namespace
+quota without expanding the agent container CPU/memory limit.
 
 
 The user currently prohibits running tests, builds, lint, type checking or application startup. The source refactor described here was not executed and collection/runtime compatibility remains unverified.

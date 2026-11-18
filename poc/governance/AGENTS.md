@@ -14,6 +14,9 @@ path, cluster admission controller or claim of VM runtime verification. AI-51
 decisions and cluster enforcement remain gates. Exact controls, limitations and
 implementation sequence: [AI-53 design](../../docs/architecture/ai-53-sandbox-isolation.md).
 No tests/imports/build/cluster or other runtime verification was performed.
+Reviewed VM runtime CPU/memory overhead is a required profile field and included
+in namespace quota without enlarging container limits. Actual RuntimeClass
+overhead equality remains a mandatory pre-dispatch deployment check.
 
 
 AI-16 introduces one shared provider-neutral policy evaluator. Exact HTTP/models,
