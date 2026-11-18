@@ -1,5 +1,13 @@
 # Test source organization
 
+AI-56 `test_runner_journal.py` defines real temporary SQLite contract cases for
+immutable plan idempotency, tenant-denied cancellation, concurrent single-winner
+claims, cancellation with late UID receipts, ambiguous-operation fencing and
+preventing not-dispatched settlement from restoring a cancelled attempt. No mock
+DB/cluster/provider is used. Source was not executed; no cluster lifecycle claim.
+Late UID acknowledgement after UNKNOWN is also covered: provenance is retained
+while revocation and the no-replay fence remain in force.
+
 AI-53 `test_sandbox_profile.py` adds offline source cases for unsafe or extended
 profiles, strict type rejection, stale profile fingerprints, validation bypass
 via model_copy, tenant namespace separation, output mutation isolation and absence

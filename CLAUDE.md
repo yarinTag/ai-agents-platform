@@ -1,5 +1,11 @@
 # CLAUDE.md - AI Agents Platform Root Repository Guide
 
+AI-56 source-only Runner contracts are in `poc/runner/` and the opt-in
+`storage/sandbox_runner.py` journal. See [module guide](poc/runner/AGENTS.md) and
+[lifecycle plan](docs/architecture/ai-56-runner-lifecycle.md). No execution backend,
+schema startup hook, Kubernetes mutation client or live readiness/cleanup claim
+is enabled. AI-51/52/53/55 and real infrastructure verification remain gates.
+
 AI-53 adds offline sandbox profile and manifest contracts in `poc/governance/`.
 See [security design and staged acceptance](docs/architecture/ai-53-sandbox-isolation.md).
 They are not wired to execution or cluster admission. Product/runtime decisions,
