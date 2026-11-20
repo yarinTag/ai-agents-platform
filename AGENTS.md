@@ -1,5 +1,11 @@
 # AGENTS.md - Root AI Agents Platform Architecture & Directory Index
 
+AI-56 inactive Runner source foundation: [module guide](poc/runner/AGENTS.md),
+[lifecycle contract](docs/architecture/ai-56-runner-lifecycle.md). Strict immutable
+plans, opt-in SQLite claims and read-only Kubernetes ownership inspection are not
+registered with startup/workflow execution. No mutation transport or verified
+Ready/Running/Released transitions are implemented; prerequisite gates remain open.
+
 AI-53 sandbox security planning and initial offline profile/manifest contracts are
 documented in [sandbox isolation](docs/architecture/ai-53-sandbox-isolation.md) and
 owned by [governance](poc/governance/AGENTS.md). No Kubernetes Runner/admission path

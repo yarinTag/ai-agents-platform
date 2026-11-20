@@ -1,5 +1,24 @@
 # SQLite storage components
 
+## AI-56 opt-in runner journal
+
+`sandbox_runner.py` exposes explicit initialize(conn) and RunnerJournal(connect).
+Neither is wired into DatabaseManager or startup. sandbox_runner_attempts has
+composite tenant/attempt PK, immutable plan_json/plan_sha256, state/revision/revoked,
+operation/operation_state/claim_token, resources_json, reason and updated_at.
+All mutations use BEGIN IMMEDIATE. Exact plan reuse is idempotent; a changed plan
+conflicts. Versioned exclusive claims never auto-replay STARTED/UNKNOWN effects.
+Stop revokes before cleanup and retains claims/UIDs, including late acknowledged
+resources. UNKNOWN is fenced and revoked.
+Late receipts under the exact retained UNKNOWN claim token can append provenance
+without releasing that fence or restoring authority.
+Successful Ready/Running/Released receipt validation is deliberately unavailable
+in this initial slice. No FK cascade may
+erase live-resource cleanup ownership; production tombstone/migration policy
+remains AI-52 work. Full state/schema/integration contract:
+[AI-56 lifecycle](../../docs/architecture/ai-56-runner-lifecycle.md).
+Source test cases use real temporary SQLite, but were not executed.
+
 This package owns SQLite persistence implementation. `poc/persistence.py` is the compatibility facade/composition entry point. It retains `DatabaseManager(db_path=None)`, `db_manager`, canonical record exports, `POC_ROOT`, `DEFAULT_DB_PATH`, `db_path` mutation, `max_agents`, `_get_connection()`, schema initialization and seed hooks.
 
 ## Boundaries and composition
