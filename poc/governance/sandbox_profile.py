@@ -3,7 +3,7 @@ import hashlib
 import json
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class FrozenContract(BaseModel):
@@ -33,6 +33,12 @@ class SandboxProfile(FrozenContract):
     runtime_memory_overhead_mib: int = Field(ge=0, le=8192)
     scratch_mib: int = Field(ge=16, le=512)
     deadline_seconds: int = Field(ge=1, le=3600)
+
+    @model_validator(mode='after')
+    def bounded_memory_scratch(self):
+        if self.scratch_mib >= self.memory_mib:
+            raise ValueError('Memory-backed scratch must leave memory for the worker.')
+        return self
 
     @field_validator('image')
     @classmethod

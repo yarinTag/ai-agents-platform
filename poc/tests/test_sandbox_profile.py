@@ -33,6 +33,8 @@ def attempt(policy, organization='org-a'):
     {'runtime_class': ''}, {'hostNetwork': True}, {'volumes': []},
     {'image': 'registry.invalid//agent@sha256:' + 'a' * 64},
     {'command': ['sh']}, {'env': {'TOKEN': 'secret'}},
+    {'memory_mib': 128, 'scratch_mib': 128},
+    {'memory_mib': 128, 'scratch_mib': 512},
 ])
 def test_untrusted_profile_extensions_and_weaker_settings_rejected(override):
     with pytest.raises(ValidationError):
