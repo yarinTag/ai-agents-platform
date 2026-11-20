@@ -357,3 +357,10 @@ WorkflowApprovalPanel submits the ID displayed by the clicked confirmation and p
 Keep historical PR evidence condensed in Workflow Logs. Retain pinned revisions and recovery details in the disclosure and keep ambiguous write warnings visible on action receipts.
 
 Workflow Chat preview renders DAG dependencies and server-provided capability clarifications. Preserve server authority and ensure setup links keep the current draft available.
+
+## Review: channel editor state and row identity
+Approval destination loads clear bindings/errors on department changes, including
+empty scope. Preview clears identity/readiness on connector/admin changes; preserve
+abort fencing. Trigger parameter rows use stable local rowId keys; only name/source
+are serialized. Production build and tsc --noEmit passed on the combined local
+source; no browser or application runtime check performed.

@@ -9,7 +9,7 @@ import {
   type TriggerPreview, type TriggerRule, type TriggerSettings,
 } from '../../services/channelTriggersApi';
 
-type Mapping = { name: string; source: typeof triggerFields[number] };
+type Mapping = { rowId: number; name: string; source: typeof triggerFields[number] };
 const initial: TriggerRule = { binding_id: '', enabled: false, matcher: 'event_type', pattern: 'MESSAGE', parameters: {} };
 
 export function ChannelTriggerPanel({ workflowId, onSaved }: { workflowId: string; onSaved?: (revision: number) => void }) {
@@ -26,6 +26,7 @@ export function ChannelTriggerPanel({ workflowId, onSaved }: { workflowId: strin
   const [reload, setReload] = useState(0);
   const [busy, setBusy] = useState(false);
   const current = useRef<AbortController | undefined>(undefined);
+  const nextMappingId = useRef(0);
   useEffect(() => {
     const request = new AbortController();
     current.current = request;
@@ -34,7 +35,9 @@ export function ChannelTriggerPanel({ workflowId, onSaved }: { workflowId: strin
       if (request.signal.aborted) return;
       setData(settings);
       setRule(settings.rule ?? initial);
-      setMapping(Object.entries(settings.rule?.parameters ?? {}).map(([name, source]) => ({ name, source })));
+      setMapping(Object.entries(settings.rule?.parameters ?? {}).map(([name, source]) => ({
+        rowId: nextMappingId.current++, name, source,
+      })));
     }).catch(() => { if (!request.signal.aborted) setNotice('unavailable'); });
     return () => request.abort();
   }, [workflowId, reload]);
@@ -124,7 +127,7 @@ export function ChannelTriggerPanel({ workflowId, onSaved }: { workflowId: strin
             }} />
         </Form.Item>
       </>}
-      {mapping.map((row, index) => <Space key={index} wrap style={{ marginBlockEnd: 8 }}>
+      {mapping.map((row, index) => <Space key={row.rowId} wrap style={{ marginBlockEnd: 8 }}>
         <Input aria-label={`${t.parameter} ${index + 1}`} placeholder={t.parameter} value={row.name}
           onChange={event => updateMapping(mapping.map((item, i) => i === index ? { ...item, name: event.target.value } : item))} />
         <Select aria-label={`${t.source} ${index + 1}`} value={row.source}
@@ -132,7 +135,9 @@ export function ChannelTriggerPanel({ workflowId, onSaved }: { workflowId: strin
           options={triggerFields.map(value => ({ value, label: t[value] }))} />
         <Button onClick={() => updateMapping(mapping.filter((_, i) => i !== index))}>{t.remove}</Button>
       </Space>)}
-      <Form.Item><Button disabled={busy || mapping.length >= 16} onClick={() => updateMapping([...mapping, { name: '', source: 'text' }])}>{t.add}</Button></Form.Item>
+      <Form.Item><Button disabled={busy || mapping.length >= 16} onClick={() => updateMapping([
+        ...mapping, { rowId: nextMappingId.current++, name: '', source: 'text' },
+      ])}>{t.add}</Button></Form.Item>
       <Form.Item label={t.event_type}><Input aria-label={t.event_type} value={eventType} maxLength={64}
         onChange={event => { setPreview(undefined); setEventType(event.target.value); }} /></Form.Item>
       {!!rule.sender_ids?.length && <Form.Item label={t.sender_id}>
