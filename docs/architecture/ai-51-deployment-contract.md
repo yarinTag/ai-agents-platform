@@ -98,11 +98,19 @@ No new Runner copy or active execution path is introduced by AI-51.
 
 ## Open operational decisions
 
-Exact Kubernetes/runtime/CNI/storage versions, inference model/server and Git
-product; capacity, latency and quality targets; availability topology and RPO/RTO;
-support grant approvers/TTL; retention and backup encryption/key custody. No
-numerical targets or vendor choice are invented here. Infrastructure/provider
-acceptance still requires separately authorized real environments.
+The concrete [pilot decision packet](ai-51-pilot-decision.md) now proposes the
+first profile, data-flow matrix, responsible roles and numeric acceptance targets.
+Yarin approved the baseline and independent architecture review was recorded on
+2026-11-20; it does not activate or certify a deployment. Use its product decisions
+and retain exact component locks/observed enforcement as downstream deployment gates.
+
+The accepted pilot packet records product choices, capacity/latency/quality and recovery
+targets, availability topology, support TTL, retention and key custody. They
+supersede this former open-decision inventory following Yarin's explicit approval.
+Exact component versions/digests and the inference model/server/hardware lock
+remain downstream acceptance gates with named accountable roles in that packet.
+Infrastructure/provider acceptance still requires separately authorized real
+environments; approving the product packet is not approval of an installation.
 
 ## Evidence
 

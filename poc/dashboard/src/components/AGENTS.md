@@ -1,5 +1,10 @@
 # AGENTS.md - UI Component Library & Design System
 
+AI-41 acceptance: WorkflowChatModal retains the localized rejection summary,
+resource badges and setup links after current-policy rejection. Raw server errors
+are in a collapsed localized validation-details disclosure, rendered wrapped LTR;
+they neither replace the proposal nor enable creation. No server API changes.
+
 ## 1. Overview & Directory Mission
 The `src/components/` directory provides modular, reusable, and typed React components implementing the platform's robotic dark aesthetic. All components adhere to Ant Design v5 dark tokens, strict TypeScript interfaces, and consistent color palettes (Emerald `#10b981`, Deep Obsidian `#0a0d12`, Slate borders `#30363d`).
 

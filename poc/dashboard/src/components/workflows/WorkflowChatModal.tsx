@@ -145,7 +145,11 @@ export function WorkflowChatModal({ onClose, onCreated }: Props) {
                 <Typography.Link href="/mcp" target="_blank" rel="noopener noreferrer">{text.connectorSetup}</Typography.Link>
               </Space>} style={{ marginBottom: 12 }} />}
             {!!job?.result?.errors.length && <Alert type="warning" message={text.invalid}
-              description={job.result.errors.map((value, index) => <div key={index}>{value}</div>)} style={{ marginBottom: 12 }} />}
+              description={<details><summary>{text.validationDetails}</summary>
+                <pre dir="ltr" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                  {job.result.errors.join('\n')}
+                </pre>
+              </details>} style={{ marginBottom: 12 }} />}
             {created ? <Alert type="success" showIcon message={text.created} /> : <>
               <Button type="primary" block disabled={!job?.result?.ready || working || loading} onClick={() => void model.create()}>{text.create}</Button>
               <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginTop: 8 }}>{text.inactive}</Typography.Paragraph>

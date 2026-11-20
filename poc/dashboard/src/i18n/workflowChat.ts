@@ -42,6 +42,7 @@ const en = {
   capabilityHelp: 'Choose an authorized tool and resource, or ask a manager to update the department’s access.',
   organizationSetup: 'Department access', connectorSetup: 'MCP Hub',
   invalid: 'A few details need attention before this workflow can be created.', settings: 'Runtime settings',
+  validationDetails: 'Technical validation details',
   example1: 'Summarize activity in a repository', example2: 'Review pull requests and notify my team',
 };
 const he: typeof en = {
@@ -85,6 +86,7 @@ const he: typeof en = {
   capabilityHelp: 'בחרו כלי ומשאב מורשים או בקשו ממנהל לעדכן את הרשאות המחלקה.',
   organizationSetup: 'הרשאות המחלקה', connectorSetup: 'מרכז MCP',
   invalid: 'יש פרטים שצריך לתקן לפני יצירת תהליך העבודה.', settings: 'הגדרות הפעלה',
+  validationDetails: 'פרטי בדיקה טכניים',
   example1: 'סיכום פעילות במאגר', example2: 'סקירת בקשות מיזוג ועדכון הצוות',
 };
 export function useWorkflowChatText() {
