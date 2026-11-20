@@ -273,3 +273,8 @@ The exact write path rejects a persisted claimed fingerprint mismatch before pre
 Channel relevance tests cover normalization of leading reasoning and a complete JSON fence.
 
 Classifier regression tests exercise the actual tool-free capacity decision before command setup and verify zero-cost settlement in real SQLite releases its budget reservation.
+
+## Review: pre-launch and unknown cost regression source
+Channel relevance tests cover malformed selection before worker launch reporting
+zero cost, and real SQLite UNKNOWN reservations surviving a later zero settlement.
+No tests were run locally; build/typecheck authorization does not run inference.

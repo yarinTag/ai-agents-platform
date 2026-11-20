@@ -38,6 +38,8 @@ def _rank(conn, organization_id, department_id, user_id):
 
 
 def _has_capacity(conn, rule, workflow_id, event_id):
+    # Only durable channel_trigger_dispatches participate. reserve_dispatches writes
+    # their execution created_at in UTC; manual/cron naive timestamps are excluded.
     if not (rule.cooldown_seconds or rule.max_runs_per_hour):
         return True
     now = datetime.now(timezone.utc)

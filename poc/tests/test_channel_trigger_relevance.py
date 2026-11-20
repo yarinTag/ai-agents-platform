@@ -100,3 +100,32 @@ def test_zero_cost_pre_dispatch_outcome_releases_budget(baseline):
     with db._get_connection() as conn:
         row = conn.execute('SELECT state,charged_micros FROM hosted_model_requests WHERE id=?', (hold,)).fetchone()
         assert tuple(row) == ('SETTLED', 0)
+
+
+def test_invalid_selection_is_zero_cost_before_worker_launch():
+    from types import SimpleNamespace
+    from runtime.workflow_chat import infer_tool_free
+
+    adapter = SimpleNamespace(_shutting_down=False, _processes={}, max_concurrent_runs=1)
+    result = infer_tool_free(adapter, {}, '', {}, 1, lambda: False, system='')
+    assert result['cost_usd'] == 0.0
+    assert 'could not be prepared' in result['error']
+    assert not adapter._processes
+
+
+def test_unknown_paid_outcome_retains_reservation(baseline):
+    from types import SimpleNamespace
+    from storage.hosted_budget import reserve, settle, reserved_total
+
+    db, _ = baseline
+    context = SimpleNamespace(organization_id='atlas', department_id='atlas_engineering',
+                              execution_id='unknown-classifier', task_id='unknown-classifier', model='configured')
+    hold = reserve(db, context, 0.1, {'source': 'CONFIGURED_ESTIMATE'})
+    settle(db, hold, None)
+    # A later generic zero-cost cleanup must not overwrite an ambiguous paid result.
+    settle(db, hold, 0.0)
+    with db._get_connection() as conn:
+        row = conn.execute('SELECT state,charged_micros,created_at FROM hosted_model_requests WHERE id=?',
+                           (hold,)).fetchone()
+        assert row['state'] == 'UNKNOWN' and row['charged_micros'] is None
+        assert reserved_total(conn, context.department_id, row['created_at'][:7] + '%') >= 100000

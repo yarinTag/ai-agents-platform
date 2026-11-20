@@ -318,3 +318,10 @@ AI-47 browser acceptance uses the role, scope, language and viewport matrix in .
 AI-49 Workflow Chat context and proposal types include eligible bindings and an optional channel trigger. Approval and delivery permissions are independent.
 
 Workflow Chat context types represent interactive approval bindings and exact approval tools returned by the catalog.
+
+## Review: channel editor state and row identity
+Approval destination loads clear bindings/errors on department changes, including
+empty scope. Preview clears identity/readiness on connector/admin changes; preserve
+abort fencing. Trigger parameter rows use stable local rowId keys; only name/source
+are serialized. Production build and tsc --noEmit passed on the combined local
+source; no browser or application runtime check performed.
