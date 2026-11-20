@@ -7,13 +7,12 @@ import { usePermissions } from '../../hooks/usePermissions';
 import { useWorkflowApprovalText } from '../../i18n/workflowApproval';
 import { decideWorkflowApproval, getWorkflowApproval, type WorkflowApproval } from '../../services/workflowApprovals';
 
-export function WorkflowApprovalPanel({ executionId, refresh, emptyMessage, onDecision }: { executionId: string; refresh?: number; emptyMessage?: string; onDecision?: () => void }) {
+export function WorkflowApprovalPanel({ executionId, approvalId, refresh, emptyMessage, onDecision }: { executionId: string; approvalId?: string; refresh?: number; emptyMessage?: string; onDecision?: () => void }) {
   const prText = usePrGovernanceText();
   const generation = useRef(0);
   const requestId = useRef(0);
   const decisionActive = useRef(false);
-  const decisionSent = useRef(false);
-  const [attempted, setAttempted] = useState(false);
+  const [attemptedId, setAttemptedId] = useState<string>();
   const text = useWorkflowApprovalText();
   const { canManage } = usePermissions();
   const [approval, setApproval] = useState<WorkflowApproval | null>(null);
@@ -23,35 +22,50 @@ export function WorkflowApprovalPanel({ executionId, refresh, emptyMessage, onDe
   useEffect(() => {
     const scope = ++generation.current;
     let cancelled = false;
-    setLoading(true); setApproval(null); setError(''); setBusy(false); setAttempted(false);
-    decisionActive.current = false; decisionSent.current = false;
+    setLoading(true); setApproval(null); setError(''); setBusy(false);
+    decisionActive.current = false;
+    let fetching = false;
     const load = async () => {
-      if (decisionActive.current) return;
+      if (decisionActive.current || fetching) return;
+      fetching = true;
       const request = ++requestId.current;
       try {
-        const { data } = await getWorkflowApproval(executionId);
+        const { data } = await getWorkflowApproval(executionId, approvalId);
         if (!cancelled && scope === generation.current && request === requestId.current) { setApproval(data); setError(''); }
       } catch { if (!cancelled && scope === generation.current && request === requestId.current) setError(text.failed); }
-      finally { if (!cancelled && scope === generation.current && request === requestId.current) setLoading(false); }
+      finally {
+        fetching = false;
+        if (!cancelled && scope === generation.current && request === requestId.current) setLoading(false);
+      }
     };
     void load();
-    return () => { cancelled = true; ++generation.current; };
-  }, [executionId, refresh, text.failed]);
-  const decide = async (approve: boolean) => {
-    if (decisionSent.current) return;
-    decisionSent.current = true; decisionActive.current = true; setAttempted(true);
+    const timer = approvalId ? undefined : window.setInterval(() => void load(), 3000);
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearInterval(timer);
+      ++generation.current;
+    };
+  }, [executionId, approvalId, refresh, text.failed]);
+  const decide = async (approve: boolean, displayedId: string) => {
+    if (decisionActive.current || attemptedId === displayedId || approval?.id !== displayedId) return;
+    decisionActive.current = true;
+    setAttemptedId(displayedId);
     const scope = generation.current;
     ++requestId.current;
     setBusy(true); setError('');
     try {
-      await decideWorkflowApproval(executionId, approve);
+      await decideWorkflowApproval(executionId, displayedId, approve);
       if (scope !== generation.current) return;
       ++requestId.current;
       setApproval(previous => previous ? { ...previous, status: 'RESOLVING' } : null);
       onDecision?.();
     } catch (cause) {
       if (scope !== generation.current) return;
-      const detail = axios.isAxiosError(cause) ? cause.response?.data?.detail : null;
+      const response = axios.isAxiosError(cause) ? cause.response : undefined;
+      if (response && [400, 401, 403, 404, 409, 422].includes(response.status)) {
+        setAttemptedId(undefined);
+      }
+      const detail = response?.data?.detail;
       setError(typeof detail === 'string' ? detail : text.failed);
     } finally { if (scope === generation.current) { decisionActive.current = false; setBusy(false); } }
   };
@@ -59,10 +73,13 @@ export function WorkflowApprovalPanel({ executionId, refresh, emptyMessage, onDe
     : emptyMessage ? <Empty description={emptyMessage} /> : null;
   const deadline = new Date(approval.expires_at).getTime();
   const expired = !Number.isFinite(deadline) || deadline <= Date.now();
+  const total = 1 + approval.position + approval.remaining_count;
+  const attempted = attemptedId === approval.id;
   const actionable = approval.status === 'PENDING' && !expired && canManage && !busy && !attempted;
   return <Card title={<Space>{text.title}<Tag>{prText.statuses[approval.status] || approval.status}</Tag></Space>}>
     <Space direction="vertical" style={{ width: '100%' }}>
       <Typography.Paragraph>{approval.merge_after_approval ? text.mergeHelp : text.help}</Typography.Paragraph>
+      {total > 1 && <Typography.Text>{text.progress(approval.position + 1, total)}</Typography.Text>}
       <Typography.Text type="secondary">{text.expires}: {new Date(approval.expires_at).toLocaleString()}</Typography.Text>
       {approval.resolved_by && <Typography.Text>{prText.actor}: <bdi dir="ltr">{approval.resolved_by}</bdi></Typography.Text>}
       {approval.subjects.map((subject, index) => <PrEvidence key={`${subject.repository}:${subject.pull_number}:${index}`} value={subject} />)}
@@ -75,10 +92,10 @@ export function WorkflowApprovalPanel({ executionId, refresh, emptyMessage, onDe
       {approval.status === 'RESOLVING' && <Alert type="info" message={text.resolving} />}
       {(error || approval.error) && <Alert type="error" message={error || approval.error} description={approval.status === 'RESOLVING' || approval.receipts.some(r => ['STARTED', 'UNKNOWN'].includes(r.status)) ? prText.reconcile : prText.evidenceRecovery} />}
       <Space>
-        <Popconfirm title={text.confirm} onConfirm={() => void decide(true)} disabled={!actionable}>
+        <Popconfirm key={approval.id + ':approve'} title={text.confirm} onConfirm={() => void decide(true, approval.id)} disabled={!actionable}>
           <Button type="primary" loading={busy} disabled={!actionable}>{approval.merge_after_approval ? text.approveMerge : text.approve}</Button>
         </Popconfirm>
-        <Popconfirm title={text.confirm} onConfirm={() => void decide(false)} disabled={!actionable}>
+        <Popconfirm key={approval.id + ':reject'} title={text.confirm} onConfirm={() => void decide(false, approval.id)} disabled={!actionable}>
           <Button danger disabled={!actionable}>{text.reject}</Button>
         </Popconfirm>
       </Space>

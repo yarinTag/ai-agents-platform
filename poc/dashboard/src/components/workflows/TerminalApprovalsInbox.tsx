@@ -51,7 +51,7 @@ export function TerminalApprovalsInbox({ department, view, executionId, active }
         { title: t.workflow, dataIndex: 'workflow_name' },
         { title: t.status, render: (_, item) => <Tag>{item.status}</Tag> },
         { title: channel.source, render: (_, item) => item.decision_source === 'telegram'
-          ? channel.telegram : item.decision_source === 'dashboard' ? channel.dashboardSource : '—' },
+          ? channel.telegram : item.decision_source === 'slack' ? channel.slack : item.decision_source === 'dashboard' ? channel.dashboardSource : '—' },
         { title: view === 'history' ? t.decidedAt : t.expires, render: (_, item) => {
           const value = view === 'history' ? item.resolved_at : item.expires_at;
           return <bdi>{value ? new Date(value).toLocaleString(locale) : '—'}</bdi>;
@@ -65,7 +65,8 @@ export function TerminalApprovalsInbox({ department, view, executionId, active }
     {selected && <Modal open={detailsOpen} width={760} title={t.review} footer={null}
       onCancel={() => setDetailsOpen(false)} afterClose={() => setSelected(undefined)}>
       <Space orientation="vertical" style={{ width: '100%' }}>
-        <WorkflowApprovalPanel key={selected.execution_id} executionId={selected.execution_id}
+        <WorkflowApprovalPanel key={selected.id} executionId={selected.execution_id}
+          approvalId={view === 'history' ? selected.id : undefined}
           refresh={0} emptyMessage={t.emptyTerminal} onDecision={() => setRefresh(value => value + 1)} />
         {!executionId && <Link to={`/workflows/${encodeURIComponent(selected.workflow_id)}/logs?execution=${encodeURIComponent(selected.execution_id)}`}>
           {t.logs}

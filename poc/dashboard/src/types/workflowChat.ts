@@ -16,23 +16,33 @@ export interface ChatWorkflow {
     workspace?: { connector_id: string; repository: string; ref?: string | null;
       mode: 'read' | 'write'; pr_title?: string | null } | null;
     required_outcome?: 'analysis' | 'pull_request';
+    approval_checkpoint?: { expires_hours: number; channel_binding_id?: string | null } | null;
+    pr_write_approval?: { connector_id: string; approval_step: string; intent: {
+      operation: 'comment_pull_request' | 'review_pull_request';
+      arguments: { repository: string; pull_number: number; head_sha: string; body: string;
+        event?: 'COMMENT' | 'REQUEST_CHANGES' };
+    } } | null;
     human_approval?: { source_step: string; connector_id: string; channel_id: string;
       kind: 'report' | 'pull_requests'; merge_after_approval: boolean; expires_hours: number } | null;
   }>;
   destination: { connector_id: string; channel_id: string;
     notify_mode?: 'COMPLETION_ONLY' | 'START_AND_COMPLETE' | 'EACH_STEP' | 'NONE' } | null;
+  channel_trigger?: { binding_id: string; enabled: boolean; matcher: string; pattern: string;
+    parameters: Record<string, string>; relevance?: { instructions: string; minimum_confidence: number } | null } | null;
   cron_expression: string | null;
 }
 export interface WorkflowChatContext {
   departments: Array<{ id: string; name: string }>;
   selection: { provider_id: string; model_id: string; cost_source: string } | null;
   catalog: {
+    interactive_approval_bindings?: Array<{ id: string; connector_id: string; channel_id: string }>;
+    channel_trigger_bindings?: Array<{ id: string; provider: string; connector_id: string; channel_id: string }>;
     human_approval?: { configured: boolean; terminal_only: boolean; delivery: string; missing_setup?: string | null };
     workspace_readiness?: { configured: boolean; errors: string[]; verification: 'configuration_only' };
     agents: Array<{ id: string; name: string; provision_on_create?: boolean; connector_tools: Record<string, string[]>;
       workspace_operations?: Record<string, string[]> }>;
     connectors: Array<{ id: string; name: string; provider: string;
-      tool_capabilities?: Record<string, string>; server_operations?: string[];
+      tool_capabilities?: Record<string, string>; server_operations?: string[]; exact_approval_tools?: string[];
       tools: string[]; repositories: string[]; channels: string[]; channel_labels?: Record<string, string>; execution_supported: boolean;
       workspace_operations?: string[] }>;
     skills?: Array<{ id: string; name: string; plugin: string; description: string }>;
@@ -40,13 +50,20 @@ export interface WorkflowChatContext {
   } | null;
 }
 export interface WorkflowChatMessage { role: 'user' | 'assistant'; content: string }
+export interface WorkflowChatClarification {
+  code: 'CAPABILITY_SELECTION_REQUIRED';
+  step_key: string;
+  resource_index: number;
+  action: 'select_authorized_resource_or_request_setup';
+}
+
 export interface WorkflowChatJob {
   id: string;
   status: 'GENERATING' | 'READY' | 'FAILED' | 'CANCELLED' | 'CREATING' | 'CREATED';
   department_id: string;
   messages: WorkflowChatMessage[];
   previous_workflow: ChatWorkflow | null;
-  result: { message: string; workflow: ChatWorkflow | null; errors: string[]; ready: boolean } | null;
+  result: { message: string; workflow: ChatWorkflow | null; errors: string[]; clarifications?: WorkflowChatClarification[]; ready: boolean } | null;
   error: string | null;
   diagnostics?: { stage: 'reply_validation'; issues: Array<{ path: Array<string | number>; code: string }>;
     issue_count: number; input_tokens: number; output_tokens: number } | null;

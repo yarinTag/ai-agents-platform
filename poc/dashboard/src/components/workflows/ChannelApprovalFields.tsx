@@ -5,7 +5,7 @@ import { useTranslation } from '../../i18n';
 import { useChannelApprovalsText } from '../../i18n/channelApprovals';
 import { useDagApprovalsText } from '../../i18n/dagApprovals';
 import { listChannelBindings, type ChannelBinding } from '../../services/channelBindingsApi';
-import { getIngressDiagnostics, type IngressChecks } from '../../services/channelIngressApi';
+import { getIngressDiagnostics, type IngressDiagnostics } from '../../services/channelIngressApi';
 import { getPersonalIdentityLinks } from '../../services/externalIdentitiesApi';
 import type { DagApprovalPolicy, WorkflowStep } from './workflowBuilderTypes';
 
@@ -19,6 +19,8 @@ export function ChannelApprovalFields({ department, step, policy, onChange }: {
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
+    setFailed(false);
+    setBindings(undefined);
     if (!department) return;
     const request = new AbortController();
     const load = async () => {
@@ -36,7 +38,7 @@ export function ChannelApprovalFields({ department, step, policy, onChange }: {
   }, [department]);
 
   const eligible = (bindings ?? []).filter(binding =>
-    binding.provider === 'telegram' && binding.uses.send_notifications && binding.uses.approve_decisions);
+    binding.uses.send_notifications && binding.uses.approve_decisions);
   const selected = eligible.find(binding => binding.id === policy.channel_binding_id);
   const options = [{ value: '', label: text.dashboard }, ...eligible.map(binding => ({
     value: binding.id, label: binding.channel_name ? `${binding.channel_name} (${binding.channel_id})` : binding.channel_id,
@@ -70,8 +72,10 @@ function ChannelPreview({ connector, step, policy }: {
   const { isAdmin } = usePermissions();
   const { locale } = useTranslation();
   const [linked, setLinked] = useState<boolean>();
-  const [checks, setChecks] = useState<IngressChecks>();
+  const [checks, setChecks] = useState<IngressDiagnostics>();
   useEffect(() => {
+    setLinked(undefined);
+    setChecks(undefined);
     const request = new AbortController();
     void getPersonalIdentityLinks(request.signal).then(({ data }) => {
       if (!request.signal.aborted) setLinked(data.some(link => link.connector_id === connector));
@@ -97,7 +101,11 @@ function ChannelPreview({ connector, step, policy }: {
     </Card>
     <Alert type={linked === true ? 'success' : 'info'} title={linked == null ? text.unknownIdentity : linked ? text.linked : text.unlinked} />
     {!checks && <Alert type="info" title={text.unknown} />}
-    {checks && !checks.https_configured && <Alert type="warning" title={text.missingHttps} />}
+    {checks && (!checks.ingress_mode || checks.ingress_mode === 'webhook') && !checks.https_configured && <Alert type="warning" title={text.missingHttps} />}
+    {checks?.ingress_mode === 'socket' && checks.socket_token_configured === false &&
+      <Alert type="warning" title={text.missingSocketToken} />}
+    {checks?.ingress_mode === 'socket' && checks.socket_token_configured && checks.socket_status !== 'CONNECTED' &&
+      <Alert type="warning" title={text.socketDisconnected} />}
     {checks && !checks.secret_configured && <Alert type="warning" title={text.missingSecret} />}
   </Space>;
 }

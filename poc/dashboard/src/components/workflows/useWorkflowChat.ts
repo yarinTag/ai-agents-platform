@@ -153,7 +153,19 @@ export function useWorkflowChat(onCreated: () => void) {
       const { data } = await api.createWorkflowFromChat(job.id);
       if (!alive.current) return;
       setJob({ ...job, status: 'CREATED', workflow_id: data.id }); onCreated();
-    } catch (e) { failure(e); }
+    } catch (e) {
+      if (!alive.current) return;
+      const detail = axios.isAxiosError(e) && e.response?.status === 422 ? e.response.data?.detail : null;
+      if (Array.isArray(detail?.errors)) {
+        setJob(current => {
+          if (current?.id !== job.id || !current.result) return current;
+          return { ...current, result: { ...current.result, ready: false,
+            errors: detail.errors, clarifications: detail.clarifications ?? [] } };
+        });
+      } else {
+        failure(e);
+      }
+    }
     finally { if (alive.current) setBusy(false); }
   };
   return { text, context, department, setDepartment, messages, input, setInput, job, workflow, error: error || connectionError,

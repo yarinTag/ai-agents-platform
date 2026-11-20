@@ -351,3 +351,16 @@ Keep live Workflow Logs updates in useWorkflowLogData. The ten-second poll seria
 Keep approval details and action availability synchronized with the currently polled approval rows.
 
 Link operators from ambiguous sends to MCP Hub and the approval inbox. Never present an unchecked retry for an unknown provider outcome.
+
+WorkflowApprovalPanel submits the ID displayed by the clicked confirmation and polls the latest round for active execution views. Approval history selects its immutable round by ID. Local submission lock and confirmations are scoped to the displayed ID.
+
+Keep historical PR evidence condensed in Workflow Logs. Retain pinned revisions and recovery details in the disclosure and keep ambiguous write warnings visible on action receipts.
+
+Workflow Chat preview renders DAG dependencies and server-provided capability clarifications. Preserve server authority and ensure setup links keep the current draft available.
+
+## Review: channel editor state and row identity
+Approval destination loads clear bindings/errors on department changes, including
+empty scope. Preview clears identity/readiness on connector/admin changes; preserve
+abort fencing. Trigger parameter rows use stable local rowId keys; only name/source
+are serialized. Production build and tsc --noEmit passed on the combined local
+source; no browser or application runtime check performed.

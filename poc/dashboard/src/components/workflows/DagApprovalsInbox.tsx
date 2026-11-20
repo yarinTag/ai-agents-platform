@@ -116,7 +116,7 @@ function Inbox({ department, executionId, view, active, onDecisionBusy }: {
         { title: t.step, render: (_, item) => <bdi>{item.step_key}</bdi> },
         { title: t.status, render: (_, item) => <Tag color={statusColors[item.status]}>{t[item.status]}</Tag> },
         { title: channel.source, render: (_, item) => item.decision_source === 'telegram'
-          ? channel.telegram : item.decision_source === 'dashboard' ? channel.dashboardSource : '—' },
+          ? channel.telegram : item.decision_source === 'slack' ? channel.slack : item.decision_source === 'dashboard' ? channel.dashboardSource : '—' },
         { title: view === 'history' ? t.decidedAt : t.expires, render: (_, item) => {
           const value = view === 'history' ? item.decided_at : item.expires_at;
           return <bdi>{value != null ? date(value) : '—'}</bdi>;

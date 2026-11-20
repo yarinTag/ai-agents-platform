@@ -144,7 +144,7 @@ export interface RunAudit {
     sender_user_id: string; connector_id: string; binding_id: string } | null;
   approvals: { id: string; step_key: string | null; status: string; opened_at?: string | null;
     decided_at: string | number | null; decided_by: string | null;
-    delivery_status: string | null; message_id: string | null; decision_source: 'telegram' | 'dashboard' | null }[];
+    delivery_status: string | null; message_id: string | null; decision_source: 'telegram' | 'slack' | 'dashboard' | null }[];
   receipts: { id: string; operation: string; provider: string; status: string; step_key: string | null;
     started_at: string; completed_at: string | null;
     receipt: { message_id?: string | number; pull_number?: number; status?: string; merge_commit_sha?: string } }[];

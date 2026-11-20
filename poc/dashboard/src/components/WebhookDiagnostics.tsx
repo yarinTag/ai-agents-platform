@@ -131,6 +131,7 @@ function ConnectorDiagnostics({ connectorId }: { connectorId: string }) {
   };
   const readyTag = (configured: boolean) => <Tag color={configured ? 'success' : 'warning'}>{configured ? text.configured : text.missing}</Tag>;
   const checks = probeResult?.checks ?? details;
+  const webhookMode = !details?.ingress_mode || details.ingress_mode === 'webhook';
   const tlsStatus = checkedTls ?? details?.ssl_status;
   const stateLabel = (state: string) => has(text.states, state)
     ? text.states[state as keyof typeof text.states] : text.states.UNKNOWN;
@@ -144,33 +145,41 @@ function ConnectorDiagnostics({ connectorId }: { connectorId: string }) {
         onClick={() => setRevision(value => value + 1)}>{text.refresh}</Button>
       <Button icon={<ExperimentOutlined />} loading={probing === 'configuration'} disabled={!details || loading || probing === 'tls'}
         onClick={() => void check()}>{text.test}</Button>
-      <Button loading={probing === 'tls'} disabled={!details?.https_configured || loading || probing === 'configuration'}
+      <Button loading={probing === 'tls'} disabled={!webhookMode || !details?.https_configured || loading || probing === 'configuration'}
         onClick={() => void check(true)}>{text.testTls}</Button>
     </Space>
     {error && <Alert type="error" showIcon title={text[error]} />}
     {details && checks && <>
       <Card size="small" title={text.title}>
         <Descriptions column={{ xs: 1, md: 2 }} items={[
-          { key: 'endpoint', label: text.endpoint, span: 'filled', children: details.webhook_url
+          ...(webhookMode ? [{ key: 'endpoint', label: text.endpoint, span: 'filled' as const, children: details.webhook_url
             ? <Typography.Text style={{ overflowWrap: 'anywhere' }}
               copyable={{ text: details.webhook_url, tooltips: [text.copyEndpoint, text.copiedEndpoint] }}>
               <bdi dir="ltr">{details.webhook_url}</bdi>
             </Typography.Text> : text.endpointMissing },
-          { key: 'https', label: text.https, children: readyTag(checks.https_configured) },
+          { key: 'https', label: text.https, children: readyTag(checks.https_configured) }] : [{
+            key: 'transport', label: text.transport, children: details.ingress_mode === 'socket' ? text.socket : text.polling,
+          }]),
+          ...(details.ingress_mode === 'socket' ? [
+            { key: 'appToken', label: text.appToken, children: readyTag(Boolean(probeResult?.checks.socket_token_configured ?? details.socket_token_configured)) },
+            { key: 'socketState', label: text.socket, children: details.socket_status === 'CONNECTED'
+              ? text.connected : details.socket_status === 'RECONNECTING' ? text.reconnecting : text.disconnected },
+            { key: 'lastAck', label: text.lastAck, children: time(details.socket_last_ack_at ?? null) ?? text.noDelivery },
+          ] : []),
           { key: 'secret', label: text.secret, children: readyTag(checks.secret_configured) },
           { key: 'connector', label: text.connectorConnection, children: <Tag color={checks.connector_connected ? 'success' : 'warning'}>
             {checks.connector_connected ? text.connected : text.disconnected}
           </Tag> },
-          { key: 'tls', label: text.ssl, children: <Tag color={tlsStatus === 'VALID' ? 'success' : tlsStatus === 'INVALID' ? 'error' : undefined}>
+          ...(webhookMode ? [{ key: 'tls', label: text.ssl, children: <Tag color={tlsStatus === 'VALID' ? 'success' : tlsStatus === 'INVALID' ? 'error' : undefined}>
             {tlsStatus === 'VALID' ? text.tlsValid : tlsStatus === 'INVALID' ? text.tlsInvalid : text.unverified}
-          </Tag> },
+          </Tag> }] : []),
           { key: 'last', label: text.lastVerified, children: time(details.last_verified_at) ?? text.noDelivery },
           ...(typeof probeResult?.checks.storage_ready === 'boolean' ? [{
             key: 'storage', label: text.storage, children: readyTag(probeResult.checks.storage_ready),
           }] : []),
         ]} />
         <Space orientation="vertical">
-          <Typography.Text type="secondary">{text.tlsHint}</Typography.Text>
+          {webhookMode && <Typography.Text type="secondary">{text.tlsHint}</Typography.Text>}
           {details.https_configured && ['slack', 'telegram'].includes(details.provider) && <Typography.Text type="secondary">
             {details.provider === 'slack' ? text.slackDeliveryHint : text.telegramDeliveryHint}
           </Typography.Text>}

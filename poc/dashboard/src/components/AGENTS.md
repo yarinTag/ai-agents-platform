@@ -369,3 +369,38 @@ DAG approval detail uses the latest polled row and disables deciding when the ro
 RunAuditTimeline renders authorized execution provenance and receipt summaries with localized EN/HE labels and RTL.
 
 RunAuditTimeline treats SQLite CURRENT_TIMESTAMP values as UTC. Invalid dates sort after dated entries.
+
+WorkflowApprovalPanel polls the latest approval every three seconds when showing a live execution, displays PR position and cumulative receipts, and uses the approval ID for button confirmation and submission state. TerminalApprovalsInbox loads historical decisions by their own ID. Each new round requires a new human decision.
+
+PrEvidence displays historical review logs as a compact PR entry with readiness and incomplete-evidence badges. A keyboard-accessible disclosure contains the blocker count, recovery guidance, pinned revisions and review details. Action receipts retain their visible reconciliation warnings.
+
+AI-41 WorkflowChatModal shows DAG predecessor names, marks exact tool/resource references using persisted AI-40 clarification positions, and links to department access and MCP Hub setup. Ready previews identify their validated references; the server remains authoritative at creation.
+
+Workflow Chat preview marks dashboard approval checkpoints using the same human approval badge as channel-delivered gates.
+
+Workflow Chat handles a create-time HTTP 422 with validation errors by applying the current errors and clarification positions to the preview and disabling creation until the draft changes.
+
+WorkflowChatModal previews the selected channel trigger and pattern with activation status. The server binds the principal at confirmation.
+
+AI-49 the approval editor accepts Slack and Telegram Send+Approve bindings. Approval inboxes and run audit distinguish the two verified providers.
+
+WebhookDiagnostics distinguishes webhook, polling and Socket Mode. Socket readiness shows only app-token presence, reported connection state and last acknowledgment time. Approval previews only require HTTPS in webhook mode.
+
+ChannelTriggerPanel edits optional relevance criteria and minimum confidence, distinguishes first-filter matches from model classification in preview, and renders recent categorized decisions with scoped run links.
+
+ChannelTriggerPanel exposes provider sender IDs, cooldown, hourly limit and a sample sender for deterministic preview.
+
+WorkflowApprovalPanel releases the local submit guard on definitive declined requests while retaining the approval ID guard on responses with uncertain acceptance.
+
+Workflow Chat distinguishes generic dashboard checkpoints visually from terminal PR approvals tied to reviewed subject evidence.
+
+The Workflow Chat preview exposes the precise PR write target, pinned SHA, operation, review event and body before creation.
+
+Approval previews distinguish channel checkpoints, show missing/disconnected Socket Mode, and prefer the latest probe for app token readiness.
+
+## Review: channel editor state and row identity
+Approval destination loads clear bindings/errors on department changes, including
+empty scope. Preview clears identity/readiness on connector/admin changes; preserve
+abort fencing. Trigger parameter rows use stable local rowId keys; only name/source
+are serialized. Production build and tsc --noEmit passed on the combined local
+source; no browser or application runtime check performed.

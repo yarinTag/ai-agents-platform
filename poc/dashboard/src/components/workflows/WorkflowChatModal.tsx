@@ -12,6 +12,11 @@ export function WorkflowChatModal({ onClose, onCreated }: Props) {
   const { dir } = useTranslation();
   const tail = useRef<HTMLDivElement>(null);
   useEffect(() => { tail.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }, [messages.length, active]);
+  const clarifications = job?.result?.clarifications || [];
+  const blockedResources = new Set(clarifications.map(item => `${item.step_key}:${item.resource_index}`));
+  const stepNames = new Map(workflow?.steps.map(step => [step.key, step.name]));
+  const trigger = workflow?.channel_trigger;
+  const triggerBinding = context?.catalog?.channel_trigger_bindings?.find(binding => binding.id === trigger?.binding_id);
   const created = job?.status === 'CREATED';
   const allowed = !!context?.selection && !!department;
   const close = async () => {
@@ -79,13 +84,51 @@ export function WorkflowChatModal({ onClose, onCreated }: Props) {
             <Typography.Title level={4} style={{ marginTop: 0 }}>{workflow.name}</Typography.Title>
             <Typography.Paragraph type="secondary">{workflow.description}</Typography.Paragraph>
             <Tag>{workflow.cron_expression ? `${text.schedule}: ${workflow.cron_expression}` : text.manual}</Tag>
+            {trigger && <Typography.Paragraph>
+              <Tag color={triggerBinding ? 'blue' : 'warning'}>{text.channelTrigger}</Tag>
+              <bdi dir="ltr">{triggerBinding ? channelLabel(triggerBinding.connector_id, triggerBinding.channel_id) : text.unavailable}</bdi>
+              {' · '}<bdi dir="auto">{trigger.pattern}</bdi>
+              {' · '}{trigger.enabled ? text.triggerAfterActivation : text.triggerDisabled}
+              {trigger.relevance && <><br /><Typography.Text strong>{text.triggerRelevance}</Typography.Text>{' '}
+                <bdi dir="auto">{trigger.relevance.instructions}</bdi></>}
+            </Typography.Paragraph>}
             <Steps direction="vertical" size="small" style={{ marginTop: 20, marginBottom: 16 }}
               items={workflow.steps.map(step => ({ status: 'wait' as const, title: step.name, description: <>
                 <Typography.Text type="secondary">{agentLabel(step.agent_id)}</Typography.Text>
+                <div>
+                  <Typography.Text type="secondary">{step.depends_on.length ? text.dependencies : text.noDependencies}</Typography.Text>{' '}
+                  <Space size={[4, 4]} wrap>
+                    {step.depends_on.map(key => <Tag key={key}><bdi>{stepNames.get(key) || key}</bdi></Tag>)}
+                  </Space>
+                </div>
+                {step.approval_checkpoint && <Tag color="orange" title={text.checkpointScope}>{step.approval_checkpoint.channel_binding_id ? text.channelCheckpoint : text.dashboardCheckpoint}</Tag>}
+                {step.pr_write_approval && <details style={{ marginBlock: 4 }}>
+                  <summary>{text.exactPrWrite}</summary>
+                  <Typography.Text><bdi dir="ltr">
+                    {step.pr_write_approval.intent.arguments.repository} #{step.pr_write_approval.intent.arguments.pull_number}
+                    {' · '}{step.pr_write_approval.intent.arguments.head_sha}
+                  </bdi></Typography.Text>
+                  <div><bdi dir="ltr">{step.pr_write_approval.intent.operation}
+                    {step.pr_write_approval.intent.arguments.event && ` · ${step.pr_write_approval.intent.arguments.event}`}
+                  </bdi></div>
+                  <Typography.Paragraph style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                    {step.pr_write_approval.intent.arguments.body}
+                  </Typography.Paragraph>
+                </details>}
                 {step.human_approval && <Tag color="orange">{text.humanApproval}{step.human_approval.merge_after_approval ? ` · ${text.mergeAfterApproval}` : ''}</Tag>}
                 {step.workspace && <div><Tag color={step.workspace.mode === 'write' ? 'orange' : 'blue'}>{text.workspace}: {step.workspace.repository} · {step.workspace.mode === 'write' ? text.draftPr : text.readWorkspace}</Tag></div>}
-                {!!step.resources.length && <div dir="ltr">{step.resources.map((r, i) =>
-                  <Tag key={i} style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{[r.repository, r.channel_id ? channelLabel(r.connector_id, r.channel_id) : null, r.tool_name].filter(Boolean).join(' · ')}</Tag>)}</div>}
+                {step.resources.length > 0 && <Space size={[4, 4]} wrap>
+                  {step.resources.map((resource, index) => {
+                    const blocked = blockedResources.has(`${step.key}:${index}`);
+                    const label = [resource.repository, resource.channel_id ? channelLabel(resource.connector_id, resource.channel_id) : null,
+                      resource.tool_name].filter(Boolean).join(' · ');
+                    return <Tag key={index} color={blocked ? 'warning' : job?.result?.ready ? 'success' : undefined}
+                      style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }}>
+                      <bdi dir="ltr">{label}</bdi>
+                      {blocked ? ` · ${text.capabilityBlocked}` : job?.result?.ready ? ` · ${text.capabilityAuthorized}` : ''}
+                    </Tag>;
+                  })}
+                </Space>}
               </> }))} />
             <Typography.Paragraph>{text.workflowSkills}: </Typography.Paragraph>
             {[...new Set([...(workflow.skills || []), ...workflow.steps.flatMap(step => step.skills || [])])].map(id =>
@@ -96,6 +139,11 @@ export function WorkflowChatModal({ onClose, onCreated }: Props) {
                 description={context.catalog.workspace_readiness.errors.join(' ')} style={{ marginBottom: 12 }} />}
             {workflow.destination && <Typography.Paragraph>{text.delivery}: <Typography.Text code>{channelLabel(workflow.destination.connector_id, workflow.destination.channel_id)}</Typography.Text>{' · '}
               {workflow.destination.notify_mode === 'EACH_STEP' ? text.notifyEachStep : workflow.destination.notify_mode === 'START_AND_COMPLETE' ? text.notifyStartComplete : workflow.destination.notify_mode === 'NONE' ? text.notifyNone : text.notifyCompletion}</Typography.Paragraph>}
+            {clarifications.length > 0 && <Alert type="info" message={text.capabilityHelp}
+              description={<Space wrap>
+                <Typography.Link href="/organization" target="_blank" rel="noopener noreferrer">{text.organizationSetup}</Typography.Link>
+                <Typography.Link href="/mcp" target="_blank" rel="noopener noreferrer">{text.connectorSetup}</Typography.Link>
+              </Space>} style={{ marginBottom: 12 }} />}
             {!!job?.result?.errors.length && <Alert type="warning" message={text.invalid}
               description={job.result.errors.map((value, index) => <div key={index}>{value}</div>)} style={{ marginBottom: 12 }} />}
             {created ? <Alert type="success" showIcon message={text.created} /> : <>
