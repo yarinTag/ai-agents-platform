@@ -291,3 +291,10 @@ Workflow Chat asks for an explicit PR number, reviewed SHA and exact body for a 
 Relevance JSON uses shared wrapper normalization and a 1,024-token cap. Explicit pre-dispatch errors settle at zero; unknown provider outcomes retain their reservation.
 
 Tool-free inference checks shutdown and capacity before building command or credentials, returning explicit zero cost when no request can start.
+
+## Review: definite pre-launch costs
+Tool-free command/profile/environment preparation errors return cost_usd=0.0.
+OS failures before a child exists also report zero; after launch cost stays unknown.
+Timeout/cancel/no-result after launch never proves zero provider charges. Messages
+are sanitized; hosted_budget settlement semantics are unchanged. Regression source
+belongs to the stacked verification PR. No local model/tests/provider calls run.

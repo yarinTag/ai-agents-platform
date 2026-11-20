@@ -19,6 +19,8 @@ export function ChannelApprovalFields({ department, step, policy, onChange }: {
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
+    setFailed(false);
+    setBindings(undefined);
     if (!department) return;
     const request = new AbortController();
     const load = async () => {
@@ -72,6 +74,8 @@ function ChannelPreview({ connector, step, policy }: {
   const [linked, setLinked] = useState<boolean>();
   const [checks, setChecks] = useState<IngressDiagnostics>();
   useEffect(() => {
+    setLinked(undefined);
+    setChecks(undefined);
     const request = new AbortController();
     void getPersonalIdentityLinks(request.signal).then(({ data }) => {
       if (!request.signal.aborted) setLinked(data.some(link => link.connector_id === connector));

@@ -397,3 +397,10 @@ Workflow Chat distinguishes generic dashboard checkpoints visually from terminal
 The Workflow Chat preview exposes the precise PR write target, pinned SHA, operation, review event and body before creation.
 
 Approval previews distinguish channel checkpoints, show missing/disconnected Socket Mode, and prefer the latest probe for app token readiness.
+
+## Review: channel editor state and row identity
+Approval destination loads clear bindings/errors on department changes, including
+empty scope. Preview clears identity/readiness on connector/admin changes; preserve
+abort fencing. Trigger parameter rows use stable local rowId keys; only name/source
+are serialized. Production build and tsc --noEmit passed on the combined local
+source; no browser or application runtime check performed.
