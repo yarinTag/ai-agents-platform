@@ -20,3 +20,11 @@ AI-52/53/55 remain prerequisite gates, not implicitly completed dependencies.
 Exact source scope, state/claim rules, integration gates and remaining work:
 [AI-56 lifecycle design](../../docs/architecture/ai-56-runner-lifecycle.md).
 No tests/imports/build/cluster/agent execution or other runtime verification run.
+
+## AI-51/52/55 PostgreSQL migration source
+Opt-in PostgreSQL ownership/effect journals and configuration/history import are
+implemented under poc/storage. Version2 execution history is archive-only with
+replay denial. No DATABASE_URL auto-switch, active backend, database migration or
+runtime verification. Exact contracts: docs/architecture/ai-52-configuration-migration.md
+and docs/architecture/ai-52-execution-history-migration.md at repository root.
+Production dashboard build and typecheck passed; backend tests remain unexecuted.

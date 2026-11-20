@@ -55,3 +55,20 @@ The Workflow Chat catalog exposes conditional GitHub comment/review capabilities
 SandboxProfile requires scratch_mib < memory_mib, including boundary revalidation.
 This is configuration headroom, not an OOM guarantee; VM runtime overhead fields
 and quota accounting remain intact. No cluster or runtime verification performed.
+
+## AI-51 deployment declarations
+
+`deployment_profile.py` owns strict frozen DeploymentProfile/ServicePlacement v1.
+Modes are customer_hosted and vendor_hosted_dedicated; connectivity is connected
+or air_gapped. Production declaration requires postgresql and approved_artifacts.
+Nine service categories cover execution/policy/inference/MCP/secrets/artifacts,
+execution logs/security audit/backups. Each placement binds a registry resource ID
+and customer/vendor/external boundary. Exact egress categories match remote
+placements; execution/policy/secrets stay local. Customer-hosted forbids remote
+customer-data services; Air-Gap also disables vendor management. Management fields
+are only installation_version/update_available/health_code, unique and absent when
+disabled. Fingerprinting revalidates, canonicalizes inventory order and hashes all
+fields; it is not approval or residency evidence. No registry, API, runtime wiring,
+network enforcement or PostgreSQL migration is added. Full decisions and AI-52/55
+ownership: ../../docs/architecture/ai-51-deployment-contract.md. Test source added;
+no runtime verification performed.

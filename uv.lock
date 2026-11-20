@@ -37,6 +37,9 @@ dev = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
 ]
+postgres = [
+    { name = "psycopg2" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -49,6 +52,7 @@ requires-dist = [
     { name = "fastembed", specifier = ">=0.8.1" },
     { name = "httpx", specifier = ">=0.25.0,<0.28.0" },
     { name = "mcp", specifier = ">=1.28,<2" },
+    { name = "psycopg2", marker = "extra == 'postgres'", specifier = ">=2.9,<3" },
     { name = "pydantic", specifier = ">=2.11,<3" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.21.0" },
@@ -58,7 +62,7 @@ requires-dist = [
     { name = "requests", specifier = ">=2.31.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.24.0" },
 ]
-provides-extras = ["aws", "dev"]
+provides-extras = ["postgres", "aws", "dev"]
 
 [[package]]
 name = "aio-pika"
@@ -1805,6 +1809,19 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/04/78/0acd37ca84ce3ddffaa92ef0f571e073faa6d8ff1f0559ab1272188ea2be/psutil-7.2.2-cp36-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:b58fabe35e80b264a4e3bb23e6b96f9e45a3df7fb7eed419ac0e5947c61e47cc", size = 148266, upload-time = "2026-01-28T18:15:31.597Z" },
     { url = "https://files.pythonhosted.org/packages/b4/90/e2159492b5426be0c1fef7acba807a03511f97c5f86b3caeda6ad92351a7/psutil-7.2.2-cp37-abi3-win_amd64.whl", hash = "sha256:eb7e81434c8d223ec4a219b5fc1c47d0417b12be7ea866e24fb5ad6e84b3d988", size = 137737, upload-time = "2026-01-28T18:15:33.849Z" },
     { url = "https://files.pythonhosted.org/packages/8c/c7/7bb2e321574b10df20cbde462a94e2b71d05f9bbda251ef27d104668306a/psutil-7.2.2-cp37-abi3-win_arm64.whl", hash = "sha256:8c233660f575a5a89e6d4cb65d9f938126312bca76d8fe087b947b3a1aaac9ee", size = 134617, upload-time = "2026-01-28T18:15:36.514Z" },
+]
+
+[[package]]
+name = "psycopg2"
+version = "2.9.13"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/91/81/6ea19b8b28feb9405c8c87a307776614d6e404bdb98467d1ce10a39d2c1d/psycopg2-2.9.13.tar.gz", hash = "sha256:d36784fc2dae69523ba4b79c7d1d1b4d6e83e87836874f111262f4db940b16a6", size = 378068, upload-time = "2026-09-09T23:56:21.749Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/79/51/31d303c9aec410b853861077acc7a9b1f0a5b43f003061f748ab486735f5/psycopg2-2.9.13-cp311-cp311-win_amd64.whl", hash = "sha256:d16e7a5f5e400ac51ca953d42255804eff6c8a9650b1a2074f6ca6261d740382", size = 2767445, upload-time = "2026-09-09T23:53:52.844Z" },
+    { url = "https://files.pythonhosted.org/packages/4e/8a/820b2f5ec521db28b5f113d7d64b0264f775fef611265039ba0cb5101858/psycopg2-2.9.13-cp312-cp312-win_amd64.whl", hash = "sha256:10f7408b34412e8c0d4f8b1565541f1d651b1d00447857e5d8561b38f5c1a738", size = 2767613, upload-time = "2026-09-09T23:53:56.076Z" },
+    { url = "https://files.pythonhosted.org/packages/e1/a5/a01216e7c2e477052469c0317a4e71e031293830c9882ca372bae167bec3/psycopg2-2.9.13-cp313-cp313-win_amd64.whl", hash = "sha256:165e25c1b0e616a1f28080c5c68bd2dc015051d83c90240b2171d3e76ca2b5ff", size = 2771568, upload-time = "2026-09-09T23:53:58.914Z" },
+    { url = "https://files.pythonhosted.org/packages/b9/f9/f6e9d47ea04e09282c618f5eeb67634f39ea4b04acedd0a6d8da4d986d50/psycopg2-2.9.13-cp314-cp314-win_amd64.whl", hash = "sha256:a6f54fd8e0024f35240866b5dfff9ead2a0dbd33b8096eec438bc6093412842d", size = 2866943, upload-time = "2026-09-09T23:54:01.268Z" },
+    { url = "https://files.pythonhosted.org/packages/44/0f/da6a374ed5e3b4040c53b29ab57b8b26c0872900cf8aed2265790889a1e3/psycopg2-2.9.13-cp315-cp315-win_amd64.whl", hash = "sha256:0d2fc7eedfaca0586dcf1476454598428d0d8471d3b5cb55f92015a5f9d0af40", size = 2863865, upload-time = "2026-09-09T23:54:03.316Z" },
 ]
 
 [[package]]

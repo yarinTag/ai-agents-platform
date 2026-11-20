@@ -289,3 +289,54 @@ No tests were run locally; build/typecheck authorization does not run inference.
 
 Sandbox profile denial source now covers tmpfs scratch equal to or above worker
 memory. No local test execution; existing runtime overhead cases are preserved.
+
+# Enterprise persistence contract source
+
+## Supplied PR review regression source
+
+test_sandbox_profile.py rejects tmpfs scratch at/above worker memory.
+test_channel_trigger_relevance.py covers definite zero cost for malformed selection
+before any worker setup and real SQLite UNKNOWN reservation retention after a later
+zero-settlement attempt. No tests/browser/typecheck/build/provider calls run.
+
+## AI-52/55 execution evidence profile source
+
+test_execution_migration.py reuses the actual SQLite configuration schema fixture
+and explicit disposable PostgreSQL fixture. Cases cover opaque receipt preservation,
+safe metadata-only preview, frozen tenant/JSON ambiguity denial, surviving foreign
+task references, cross-execution approval steps, exact roundtrip of source states,
+ARCHIVE_ONLY/UNKNOWN recovery holds, no hold recreation on retry and current reader
+revocation. PostgreSQL cases require RUNNER_TEST_POSTGRES_DSN. No service mocks,
+tests/imports/CLI/migration runs or CI registration were performed. Shared engine
+configuration-v1 tests remain relevant regression source.
+
+## AI-52 configuration migration and revision operations
+
+test_configuration_migration.py initializes actual SQLite schemas without importing
+the persistence singleton. It shares test_runner_postgres.py's real disposable
+PostgreSQL fixture and requires RUNNER_TEST_POSTGRES_DSN for connected cases.
+Cases cover schema/tenant/history denial, scoped safe reports and encrypted-byte
+roundtrip, immutable import retry, changed target/source rejection and constraint
+rollback; PostgreSQL workflow CAS/no-op/current-user revocation and policy
+two-layer capture/first-write races. No service mocks, tests/CLI/migrations executed
+or CI registration added. Preview-only source cases still need explicit execution
+authorization under current project restrictions.
+
+## AI-52/55 PostgreSQL source cases
+
+test_runner_postgres.py requires explicit RUNNER_TEST_POSTGRES_DSN, creates a unique
+disposable schema and uses real psycopg2 connections without service mocks. It covers
+bootstrap repetition, claim races, stale ownership, immutable plans/effects,
+IN_FLIGHT/UNKNOWN takeover denial, cross-attempt dedup, revoke/recovery invalidation,
+late receipts, terminal receipt immutability and rollback. RLS case requires a
+non-superuser/non-BYPASSRLS test role or reports a skip. No default database fallback.
+No tests were executed or added to CI by this task.
+
+## AI-51 deployment contract source
+
+`test_deployment_profile.py` covers incomplete inventory, unsupported persistence
+and continuity, strict scalar/unknown fields, prohibited content metadata, missing
+egress disclosure, external inference under customer-hosted mode, Air-Gap vendor
+management denial, fingerprint order stability and forged-instance revalidation.
+Pure model contracts; no service mocks, application/database/provider setup.
+Tests were not executed under the current runtime verification restriction.

@@ -29,6 +29,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+postgres = [
+    "psycopg2>=2.9,<3"
+]
 aws = [
     "boto3>=1.35,<2"
 ]
