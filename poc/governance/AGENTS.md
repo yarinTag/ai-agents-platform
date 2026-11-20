@@ -1,5 +1,24 @@
 # Capability governance
 
+## AI-53 offline sandbox policy foundation
+
+`sandbox_profile.py` owns strict frozen SandboxProfile/SandboxAttempt v1 contracts.
+Profiles are server/operator owned, digest pinned, bounded and fingerprinted with
+canonical JSON SHA-256; no approved defaults or HTTP/workflow fields are added.
+`sandbox_manifests.py::build_sandbox_bundle` revalidates models and exact fingerprint
+binding, then returns a per-tenant/attempt Namespace, token-free ServiceAccount,
+deny-all ingress/egress NetworkPolicy, one-Pod ResourceQuota and bounded single Job.
+No caller PodSpec, command, credential, persistent/host mount or network extension
+is accepted. This is offline source only, with no active execution import/apply
+path, cluster admission controller or claim of VM runtime verification. AI-51
+decisions and cluster enforcement remain gates. Exact controls, limitations and
+implementation sequence: [AI-53 design](../../docs/architecture/ai-53-sandbox-isolation.md).
+No tests/imports/build/cluster or other runtime verification was performed.
+Reviewed VM runtime CPU/memory overhead is a required profile field and included
+in namespace quota without enlarging container limits. Actual RuntimeClass
+overhead equality remains a mandatory pre-dispatch deployment check.
+
+
 AI-16 introduces one shared provider-neutral policy evaluator. Exact HTTP/models,
 storage, role and compatibility contracts: [capability policy v1](../../docs/architecture/capability-policy-v1.md).
 
@@ -31,3 +50,8 @@ Authoritative semantics: ../../docs/architecture/p01-policy-algebra.md; exact mo
 registry.public adds requires_capabilities from trusted operation_requirements; new GitHub comment/review effects are write. policy.decide recursively intersects required narrower reads using the same subject/resource/current/frozen gates and returns DEPENDENT_CAPABILITY_DENIED when needed. Existing explicit aggregate grants require reviewed read dependencies; no grant is backfilled. See ../../docs/github-pr-governance.md.
 
 The Workflow Chat catalog exposes conditional GitHub comment/review capabilities only as exact_approval_tools. Catalog availability never authorizes a runtime call.
+
+## Review: memory-backed scratch relation
+SandboxProfile requires scratch_mib < memory_mib, including boundary revalidation.
+This is configuration headroom, not an OOM guarantee; VM runtime overhead fields
+and quota accounting remain intact. No cluster or runtime verification performed.
