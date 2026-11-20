@@ -206,3 +206,7 @@ Workflow Chat labels and describes the scope of dashboard checkpoints in both lo
 Workflow Chat localizes the exact GitHub action preview link in both locales.
 
 Channel checkpoint and Socket Mode readiness messages are localized in Hebrew and English.
+
+AI-41 adds workflowChat.validationDetails in English and Hebrew for the optional
+raw-server diagnostic disclosure. Primary validation/setup guidance remains
+localized; technical server strings retain their original wording and LTR layout.

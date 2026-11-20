@@ -29,6 +29,11 @@ No runtime verification was performed.
 [AI-22 channel registry](docs/channel-bindings.md) adds tenant-scoped Telegram/Slack configuration, independent use flags, and audited administrator changes. Verified ingress, identity and runtime use remain separate stages.
 
 ## 1. Platform Identity & Architectural Mission
+AI-51's [pilot decision packet](docs/architecture/ai-51-pilot-decision.md) records
+the accepted reference profile, information routes, operating responsibilities and
+numeric acceptance targets. Yarin approved them and independent architecture
+source review was recorded on 2026-11-20;
+no runtime/deployment acceptance or active defaults are implied.
 The **AI Agents Platform** is an enterprise multi-tenant autonomous agent orchestration and governance platform. It blends agent hierarchy management, visual DAG workflow execution, real-time collaboration war rooms, scheduled background cron execution, and a virtual pixel office with enterprise multi-tenancy, per-department monthly spending limits, and tool-level Model Context Protocol (MCP) governance.
 
 ---

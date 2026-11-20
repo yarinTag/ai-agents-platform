@@ -364,3 +364,9 @@ empty scope. Preview clears identity/readiness on connector/admin changes; prese
 abort fencing. Trigger parameter rows use stable local rowId keys; only name/source
 are serialized. Production build and tsc --noEmit passed on the combined local
 source; no browser or application runtime check performed.
+
+## AI-41 acceptance: localized validation presentation
+Workflow Chat keeps capability badges, setup guidance and the rejection summary
+localized. Raw server validation strings are diagnostic evidence in a collapsed
+Technical validation details disclosure, with LTR, wrapped preformatted content.
+Preserve the proposal and current-policy creation block after a rejected create.
