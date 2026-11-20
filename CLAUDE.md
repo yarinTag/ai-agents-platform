@@ -299,3 +299,35 @@ Use [the channel trigger policy](docs/channel-trigger-policy.md) for AI-31–33.
 Follow [the DAG approval contract](docs/dag-approvals.md). Agents must never simulate or self-grant human approval. Preserve atomic checkpoint transitions and skip completed effects on continuation.
 
 For the governed workflow release, record evidence against docs/governed-workflow-release.md and reconcile post-backup provider effects before any approval-schema rollback.
+
+Supplied stacked-PR review dispositions: docs/pr-stack-review-followup.md.
+Local fixes reset channel editor request state, stabilize mapping row identity,
+bound tmpfs below worker memory and distinguish pre-launch zero cost from unknown
+post-launch charges. No tests/build/browser/provider execution or PR publication.
+
+AI-52/55 adds --profile execution-history to the explicit migration CLI. It imports
+an archive-only version2 snapshot, never upgrades v1 in place or resumes imported
+work. PostgreSQL evidence views reject writes and live policy capture. Every imported
+execution has a CHECK-enforced replay_allowed=false hold. Full source contracts and
+remaining migration gates: docs/architecture/ai-52-execution-history-migration.md.
+No tests/imports/CLI/database/provider or startup operations were performed.
+
+AI-52 configuration migration CLI is poc/migrate_configuration.py: explicit source
+and organization, preview by default; --apply requires a dedicated schema, preview
+hash and CONFIGURATION_MIGRATION_DSN. No production fallback or application import.
+storage/postgres_configuration_store.py provides inactive scoped workflow and policy
+operations with mandatory validators, not a full DatabaseManager replacement.
+See docs/architecture/ai-52-configuration-migration.md. No CLI/tests/migration run.
+
+AI-52/55 opt-in PostgreSQL Runner source: storage/runner_postgres.py,
+runner_postgres_effects.py and companion SQL; optional project extra postgres.
+See docs/architecture/ai-52-55-runner-persistence.md. No DATABASE_URL auto-switch,
+live migration or startup wiring. Attempts/effects are tenant scoped with RLS,
+leases/epochs and conservative UNKNOWN replay fencing. Tests remain unexecuted;
+full workflow/policy migration and broker/lifecycle integration are still gates.
+
+AI-51 offline deployment declarations live in governance/deployment_profile.py.
+See docs/architecture/ai-51-deployment-contract.md for exact modes, residency
+declarations, PostgreSQL target and AI-52/55 ownership. These models neither
+activate a deployment nor verify real endpoints, isolation or Air-Gap. No runtime
+verification, migrations or startup were performed for this source slice.

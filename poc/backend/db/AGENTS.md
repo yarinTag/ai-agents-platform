@@ -32,3 +32,11 @@ SQLite initialization in poc/persistence.py adds workflow_assistant_drafts, work
 
 ## Model-only YAML authoring and internal MCP
 workflow_assistant_tool_calls adds id INTEGER PK, generation_id FK to workflow_assistant_generations ON DELETE CASCADE, tool_name constrained to workflow_catalog/workflow_schema/validate_workflow_yaml, nullable proposal_hash, nullable unique validation_id, nullable proposal_json, created_at, and generation_id/id index. YAML validation stores the canonical candidate in proposal_json and returns an opaque wfc_ UUID; raw YAML tool arguments, credentials and the private context file are not recorded. Parent resolution is scoped to generation_id, verifies the candidate hash and rechecks live policy. Generations retain the old planner_agent_id column as an empty compatibility field; new selection is model_id/provider_id in request_json. No legacy records are rewritten.
+
+## AI-51/52/55 PostgreSQL migration source
+Opt-in PostgreSQL ownership/effect journals and configuration/history import are
+implemented under poc/storage. Version2 execution history is archive-only with
+replay denial. No DATABASE_URL auto-switch, active backend, database migration or
+runtime verification. Exact contracts: docs/architecture/ai-52-configuration-migration.md
+and docs/architecture/ai-52-execution-history-migration.md at repository root.
+Production dashboard build and typecheck passed; backend tests remain unexecuted.

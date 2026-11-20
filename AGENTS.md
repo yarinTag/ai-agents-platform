@@ -363,3 +363,54 @@ Terminal PR merge gates now pin and approve one PR at a time. Each acknowledged 
 The [AI-47 browser verification matrix](docs/governed-workflow-browser-verification.md) covers governed workflow authoring, role boundaries, channel linking, and approval journeys.
 
 [AI-48 governed workflow release checklist](docs/governed-workflow-release.md) indexes administrator/operator guides and tracks migration, CI, browser, provider and independent review evidence for AI-12.
+
+[Supplied PR review follow-up](docs/pr-stack-review-followup.md) records verified
+local fixes and dispositions for PR49/50/51/57/58. Channel editor state/keys,
+scratch memory relation and definite pre-launch cost outcomes are corrected in
+local source. Post-launch unknown costs and Runner ambiguity fences stay intact.
+No tests or PR updates were performed; local source differs from published heads.
+
+AI-52/55 execution evidence migration is documented in
+[archive-only history contract](docs/architecture/ai-52-execution-history-migration.md).
+The explicit version2 profile preserves 29 configuration/history tables and adds
+per-execution replay-denial holds; no automatic approval/dispatch/resume or source
+status changes. Read-only PostgreSQL views require current authorization callbacks.
+No runtime verification or database migration performed; active storage is SQLite.
+
+AI-52 configuration migration now has an explicit read-only SQLite preview and
+hash-bound transactional PostgreSQL import for 15 configuration tables, plus scoped
+workflow revisions and capability-policy operations. See
+[configuration migration contracts](docs/architecture/ai-52-configuration-migration.md).
+No active database switch or real migration was performed; executions, approvals,
+budgets and remaining resources must move before cutover. Source tests are unrun.
+
+AI-52/55 adds opt-in PostgreSQL Runner ownership and logical-effect persistence;
+see [Runner contracts](poc/runner/AGENTS.md) and
+[storage implementation and migration gates](docs/architecture/ai-52-55-runner-persistence.md).
+RunnerPlan is reused from AI-56; no active journal/backend, schema migration or
+platform PostgreSQL switch is introduced. Real PostgreSQL test source is unexecuted.
+
+AI-51 deployment declarations and the joint AI-52/55 implementation boundary are
+documented in [deployment contract](docs/architecture/ai-51-deployment-contract.md).
+Governance owns offline customer_hosted/vendor_hosted_dedicated placement models,
+explicit egress and metadata-only management declarations. No active deployment,
+PostgreSQL migration, registry or network enforcement is introduced; source-only
+contract tests remain unexecuted. Open operational decisions are listed in the ADR.
+
+[AI-45 workflow operations](docs/operations-runbook.md) and [credential and state recovery](docs/disaster-recovery.md) cover ingress incidents, stalled approvals, unknown PR outcomes and credential rotation.
+
+[AI-37–39 interactive channel approval design](docs/interactive-channel-approvals.md) specifies provider boundaries, decision fencing, expiry and original-message updates.
+
+[AI-31–33 channel trigger policy](docs/channel-trigger-policy.md) defines workflow rules, verified sender and fixed principal checks, and the untrusted input boundary.
+
+[AI-34–36 DAG approvals](docs/dag-approvals.md) defines dashboard decisions, checkpoint continuation, quorum and recovery.
+
+[AI-27 identity proof and recovery](docs/identity-proof-runbook.md) documents challenge and confirmation, approver identity boundaries, and response to compromised credentials.
+
+[AI-28 and AI-29 channel ingress](docs/channel-ingress.md) documents verified provider intake, durable event staging and the MCP webhook diagnostics view.
+
+[AI-30 webhook operations](docs/webhook-ingress.md) covers deployment topology, provider verification, receipt semantics and incident recovery.
+
+[AI-22 channel registry](docs/channel-bindings.md) adds tenant-scoped Telegram/Slack configuration, independent use flags, and audited administrator changes. Verified ingress, identity and runtime use remain separate stages.
+
+## 1. Platform Identity & Architectural Mission

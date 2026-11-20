@@ -235,3 +235,60 @@ idx_channel_dispatch_workflow indexes workflow_id/event_id for trigger quota and
 workflow_approvals adds advance_pending (default 0) and advance_claim_until (epoch seconds). A confirmed merge sets advance_pending; worker claims fence advancement and are cleared on finishing.
 
 DAG checkpoint_json optionally stores approved_pr_write with step_key, fingerprint and description. Approval inbox projects the exact action text into the existing output excerpts.
+
+## AI-52/55 archive-only execution profile
+
+execution_migration_spec.py defines a trusted version2 profile: configuration plus
+14 channel/identity/execution/frozen-context/approval/vote/delivery/callback tables
+(29 total). execution_snapshot.py validates exact scope/revision/sequence/JSON;
+execution_source_ownership.py checks surviving historical references in the same
+SQLite snapshot without recreating deleted identities. Shared configuration
+extraction/import now uses trusted profile attributes; v1 defaults/signatures stay
+unchanged. execution_postgres.py adds atomic source-preserving import and RLS
+execution_recovery_holds keyed by organization/execution with source digest,
+categorical reasons and replay_allowed=FALSE enforced by CHECK. Missing or changed
+holds on retry fail. No state rewrite, recovery worker or release API.
+postgres_execution_history.py provides mandatory-current-validator read-only
+execution summaries, bounded approval evidence and private frozen-context inspection;
+workflow/policy writes and live policy capture fail. CLI profile execution-history
+requires a fresh compatible namespace; no v1 in-place upgrade. No routes/adapters
+activated and no tests/extraction/migrations run. Full contract:
+../../docs/architecture/ai-52-execution-history-migration.md.
+
+## AI-52 configuration migration and PostgreSQL configuration store
+
+configuration_migration_spec.py defines 15 explicit identity/department/connector,
+workflow/history/secret, capability-policy/history and organization runtime/credential
+tables. configuration_snapshot.py reads one explicit existing SQLite file in a
+read-only transaction, rejects schema/ownership/reference/history drift and produces
+counts/digests without exposing payloads. No implicit tenant ownership or decryption.
+configuration_postgres.py applies a preview-hash-bound snapshot atomically into a
+dedicated versioned/fingerprinted-inventory namespace with composite tenant FKs, RLS and
+target re-read/checksum verification. Same snapshot is verified idempotently;
+changed snapshot/nonempty or modified target fails without upsert.
+postgres_configuration_store.py adds internal scoped workflow get/update with CAS,
+semantic JSON no-op and atomic revision append; policy save with parent locking,
+CAS/history and mandatory current-state validator; two-layer capture in one SQL
+snapshot. It is not a full facade replacement and cannot mix SQLite authorization
+with PostgreSQL attempts. CLI at poc/migrate_configuration.py defaults to preview.
+Exact contracts and remaining execution/approval/budget migration gates:
+../../docs/architecture/ai-52-configuration-migration.md. No runtime verification
+or real database extraction/migration performed.
+
+## AI-52/55 opt-in PostgreSQL Runner slice
+
+runner_postgres.py and runner_postgres_effects.py implement an inactive alternative
+backend for AI-56's sandbox_runner_attempts contract, not a parallel active journal.
+Companion runner_postgres_schema.sql explicitly bootstraps installations, attempts,
+effects and history with composite tenant keys, no cascade, ENABLE/FORCE RLS and
+transaction-local tenant context. create/get/claim/renew/revoke/recovery rotation
+use installation-before-attempt row locks; current revision/token/owner epoch and
+database time fence leases. IN_FLIGHT/UNKNOWN effects forbid automatic takeover.
+reserve -> INTENT; begin -> IN_FLIGHT once; settle -> SUCCEEDED/FAILED/UNKNOWN,
+with late UNKNOWN -> terminal receipts retained after revoke/expiry. Effect identity
+is organization/execution/effect ID; changed digest conflicts across retries.
+No reset/replay or cross-attempt rebinding. Receipts require trusted broker evidence.
+Explicit connection_factory DSN and caller-owned initialize only; no facade/startup
+wiring, SQLite import or platform PostgreSQL compatibility claim. Full columns,
+transactions, caveats and remaining migration gates:
+../../docs/architecture/ai-52-55-runner-persistence.md. Tests added but unexecuted.

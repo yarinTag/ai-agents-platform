@@ -223,3 +223,11 @@ Slack approval delivery uses the common durable approval authority and separatel
 Slack Socket Mode uses the Slack-issued TLS socket URL, rejects WebSocket redirects, and keeps socket endpoints and tokens out of logs. Preserve acknowledgment after storage/admission checks.
 
 Channel classifier calls require deterministic eligibility, live lease and department budget reservation. Keep untrusted message data out of status, logs and authority fields.
+
+## AI-51/52/55 PostgreSQL migration source
+Opt-in PostgreSQL ownership/effect journals and configuration/history import are
+implemented under poc/storage. Version2 execution history is archive-only with
+replay denial. No DATABASE_URL auto-switch, active backend, database migration or
+runtime verification. Exact contracts: docs/architecture/ai-52-configuration-migration.md
+and docs/architecture/ai-52-execution-history-migration.md at repository root.
+Production dashboard build and typecheck passed; backend tests remain unexecuted.
