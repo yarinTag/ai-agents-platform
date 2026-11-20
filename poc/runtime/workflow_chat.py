@@ -142,17 +142,21 @@ def infer_tool_free(adapter, selected, prompt, schema, budget, is_cancelled, *, 
         return {'error': 'Generation stopped.', 'cost_usd': 0.0}
     if sum(process.poll() is None for process in adapter._processes.values()) >= adapter.max_concurrent_runs:
         return {'error': 'The model is busy. Try again shortly.', 'cost_usd': 0.0}
-    profile = AgentConfig(id='workflow-builder', name='Workflow builder', description='Tool-free planning',
-        model=selected['model_id'], runtime_provider=selected['provider_id'], system_prompt=system,
-        max_tokens=maximum_tokens, skills=[], dangerously_skip_permissions=False,
-        organization_id=selected['organization_id'])
-    command = adapter._build_claude_command(profile, None, prompt, playground=True)
-    command[command.index('--system-prompt') + 1] = system
-    if selected['provider_id'] not in ('free_claude_code', 'custom_gateway'):
-        command.extend(['--json-schema', json.dumps(schema)])
-    if selected['cost_source'] == 'API_KEY':
-        command.extend(['--max-budget-usd', str(budget)])
-    env = adapter._build_claude_env(agent_config=profile)
+    try:
+        profile = AgentConfig(id='workflow-builder', name='Workflow builder', description='Tool-free planning',
+            model=selected['model_id'], runtime_provider=selected['provider_id'], system_prompt=system,
+            max_tokens=maximum_tokens, skills=[], dangerously_skip_permissions=False,
+            organization_id=selected['organization_id'])
+        command = adapter._build_claude_command(profile, None, prompt, playground=True)
+        command[command.index('--system-prompt') + 1] = system
+        if selected['provider_id'] not in ('free_claude_code', 'custom_gateway'):
+            command.extend(['--json-schema', json.dumps(schema)])
+        if selected['cost_source'] == 'API_KEY':
+            command.extend(['--max-budget-usd', str(budget)])
+        env = adapter._build_claude_env(agent_config=profile)
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        # Command/environment validation failed before any worker was launched.
+        return {'error': 'The model could not be prepared. Check runtime configuration.', 'cost_usd': 0.0}
     process = None
     key = 'builder_' + uuid.uuid4().hex
     try:
@@ -200,6 +204,10 @@ def infer_tool_free(adapter, selected, prompt, schema, budget, is_cancelled, *, 
                     result['output'] = event.get('structured_output') or event.get('result')
                 return result
             return {'error': 'The model process returned no result. Check runtime configuration.'}
+    except OSError:
+        # Once a child exists, lack of a result is not proof of zero provider cost.
+        return {'error': 'The model process could not complete. Check runtime configuration.',
+                'cost_usd': 0.0 if process is None else None}
     finally:
         if process:
             terminate_process(process)
