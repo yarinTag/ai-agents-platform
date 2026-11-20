@@ -99,9 +99,9 @@ Private reproducible script, predecessor source, reports and databases:
 
 This is explicitly a populated, derived legacy-schema rehearsal using real existing
 data, not a newly discovered historical customer backup. The independent Advisor
-review confirmed that this does not complete the authentic pre-migration snapshot
-acceptance requirement: splitting current rows does not test a complete original
-legacy dataset. That item of AI-46 remains open pending an actual older snapshot.
+review identified that split trials alone do not test one complete representative
+legacy dataset. The subsequent combined snapshot check below closes that gap;
+it does not pretend to be an original historical customer backup.
 It does not certify unknown customer
 installations, PostgreSQL cutover, provider delivery or all future schema migrations.
 Each customer upgrade still requires its own isolated backup/restore rehearsal.
@@ -120,8 +120,41 @@ No organization, user, department MCP grant or channel binding was created.
 Report: `/private/tmp/ai-platform-acceptance-evidence/historical/report.json`.
 These are actual full older database migrations, distinct from the derived
 approval-schema trials. They still contain no previous-version approval records
-and do not substitute for the specific populated pre-sequence approval snapshot
-required by the release checklist. That narrower historical acceptance remains open.
+and do not alone substitute for the specific populated pre-sequence approval
+snapshot required by the release checklist.
+
+### Combined representative previous-approval snapshot
+
+Following independent review, built one full representative database with the
+verbatim predecessor approval schema and six distinct existing executions, their
+six approval rows and six matching delivery records together. Selected the earliest
+round of each execution to respect the predecessor's single-approval uniqueness;
+all selected legacy values were copied unchanged. This includes APPROVED, FAILED
+and REJECTED decisions. The eight earlier trials separately cover every original
+row, including later rounds that cannot coexist in that old schema. All 64 other
+existing tables, including authorization and workflow context, remain intact.
+
+The input database passed FK validation before migration. The real current
+initializer ran twice: all six approval rows' legacy fields, all six delivery rows
+and the hashes of all 64 other tables remained unchanged; repeat initialization,
+integrity and foreign-key checks passed. A rolled-back savepoint then verified:
+an ordered second round is accepted, two simultaneously live rounds for one
+execution are rejected, and deleting the parent execution cascades to approvals
+and deliveries. After rollback the verified complete dataset was unchanged.
+
+Result: PASS. Private script and result:
+`populated-legacy/verify_combined.py` and `populated-legacy/combined-report.json`
+under the evidence directory. This is a documented reconstructed representative
+previous-schema snapshot, not an authentic historical backup. It supplies the
+full-dataset migration evidence missing from the split trials, without changing
+the acceptance criteria. Customer-specific upgrade rehearsals remain required.
+
+Final independent Advisor source review verified the combined script, report and
+old/current initializers and found the representative-snapshot gap closed. This
+explicitly supersedes the earlier pending assessment based only on split trials.
+The reviewed current backend is the baseline SHA at the top of this record;
+the predecessor is `504a622`. The reviewer did not rerun tests or certify a rollout.
+No PostgreSQL cutover, live provider operation or future migration is accepted here.
 
 ## AI-51: accepted product decision
 
