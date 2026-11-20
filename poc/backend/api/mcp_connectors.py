@@ -14,9 +14,10 @@ router = APIRouter()
 
 
 def validate_department_defaults(provider, configuration):
-    if configuration and "ingress_mode" in configuration and (
-            provider.lower() != "telegram" or configuration["ingress_mode"] not in ("webhook", "polling")):
-        raise HTTPException(422, "Telegram ingress mode must be webhook or polling.")
+    if configuration and "ingress_mode" in configuration:
+        modes = {"telegram": ("webhook", "polling"), "slack": ("webhook", "socket")}
+        if configuration["ingress_mode"] not in modes.get(provider.lower(), ()):
+            raise HTTPException(422, "Unsupported ingress mode for this connector provider.")
     if not configuration or 'department_default_tools' not in configuration:
         return
     from storage.department_permissions import github_default_operations

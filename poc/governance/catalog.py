@@ -1,5 +1,6 @@
 """Narrow legacy authoring projections without granting new operations/resources."""
 from .policy import decide
+from integrations.tool_definitions import WRITE_OPERATIONS
 
 
 def narrow_catalog(db, user, department_id, connectors, agents):
@@ -17,7 +18,8 @@ def narrow_catalog(db, user, department_id, connectors, agents):
                     value = decide(db, user.organization_id, department_id, identifier,
                                    connector['provider'] + '.' + operation, resource,
                                    user_id=user.id, purpose='authoring')
-                    if value['decision'] == 'allowed' or (approval_path and value['decision'] == 'requires_approval'):
+                    if value['decision'] == 'allowed' or ((approval_path or (field == 'tools' and operation in WRITE_OPERATIONS))
+                            and value['decision'] == 'requires_approval'):
                         selected.append(resource)
                 if selected:
                     resource_map[operation] = selected
@@ -25,6 +27,7 @@ def narrow_catalog(db, user, department_id, connectors, agents):
             connector[resource_field] = resource_map
         connector['tool_capabilities'] = {operation: description for operation, description in connector['tool_capabilities'].items()
                                          if operation in connector['tools']}
+        connector['exact_approval_tools'] = sorted(set(connector['tools']) & WRITE_OPERATIONS)
         connector['execution_supported'] = connector['execution_supported'] and bool(connector['tools'])
         for agent in agents:
             actual_id = agent['id'] if not agent.get('provision_on_create') else None
@@ -39,7 +42,8 @@ def narrow_catalog(db, user, department_id, connectors, agents):
                         value = decide(db, user.organization_id, department_id, identifier,
                                        connector['provider'] + '.' + operation, resource,
                                        user_id=user.id, agent_id=actual_id, purpose='authoring')
-                        if value['decision'] == 'allowed' or (approval_path and value['decision'] == 'requires_approval'):
+                        if value['decision'] == 'allowed' or ((approval_path or (field == 'tools' and operation in WRITE_OPERATIONS))
+                            and value['decision'] == 'requires_approval'):
                             selected.append(resource)
                     if selected:
                         resources[operation] = selected

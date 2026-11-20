@@ -64,26 +64,37 @@ def _telegram(raw, headers, settings, now):
 
 def _slack(raw, headers, settings, now):
     require_slack_signature(raw, headers, settings, now)
-    _, team, app = settings
     if headers.get("content-type", "").split(";", 1)[0].strip().lower() == "application/x-www-form-urlencoded":
-        form = parse_qs(raw.decode(), strict_parsing=True, max_num_fields=32)
-        if form.get("command") == ["/platform-link"]:
-            return IdentityProof()
-        if form.get("team_id") != [team] or form.get("api_app_id") != [app]:
-            raise InvalidProof("INVALID_PROOF")
-        command, = form["command"]
-        channel, = form["channel_id"]
-        sender, = form["user_id"]
-        receipt, = form["trigger_id"]
-        if (not re.fullmatch(r"/[A-Za-z][A-Za-z0-9_-]{0,63}", command)
-                or not re.fullmatch(r"[CGD][A-Z0-9]{7,30}", channel)
-                or not re.fullmatch(r"[UW][A-Z0-9]{2,31}", sender)
-                or not re.fullmatch(r"[A-Za-z0-9.]{1,120}", receipt)):
-            raise InvalidProof("INVALID_EVENT")
-        arguments, = form.get("text", [""])
-        identifier = f"command:{receipt}"
-        return Event(identifier, "COMMAND", channel, identifier, sender, f"{command} {arguments}".rstrip())
-    envelope = json.loads(raw)
+        return _slack_form(parse_qs(raw.decode(), strict_parsing=True, max_num_fields=32), settings)
+    return _slack_event(json.loads(raw), settings)
+
+
+def _slack_form(form, settings):
+    secret, team, app = settings
+    if "payload" in form:
+        from .slack_approval_cards import parse_callback as slack_callback
+        payload, = form["payload"]
+        return slack_callback(payload, team, app, secret)
+    if form.get("team_id") != [team] or form.get("api_app_id") != [app]:
+        raise InvalidProof("INVALID_PROOF")
+    if form.get("command") == ["/platform-link"]:
+        return IdentityProof()
+    command, = form["command"]
+    channel, = form["channel_id"]
+    sender, = form["user_id"]
+    receipt, = form["trigger_id"]
+    if (not re.fullmatch(r"/[A-Za-z][A-Za-z0-9_-]{0,63}", command)
+            or not re.fullmatch(r"[CGD][A-Z0-9]{7,30}", channel)
+            or not re.fullmatch(r"[UW][A-Z0-9]{2,31}", sender)
+            or not re.fullmatch(r"[A-Za-z0-9.]{1,120}", receipt)):
+        raise InvalidProof("INVALID_EVENT")
+    arguments, = form.get("text", [""])
+    identifier = f"command:{receipt}"
+    return Event(identifier, "COMMAND", channel, identifier, sender, f"{command} {arguments}".rstrip())
+
+
+def _slack_event(envelope, settings):
+    _, team, app = settings
     if envelope["type"] == "url_verification":
         challenge = envelope["challenge"]
         if not isinstance(challenge, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", challenge):
@@ -118,3 +129,25 @@ def verify_event(provider, raw, headers, settings, now):
         raise
     except (TypeError, ValueError, KeyError, AttributeError, RecursionError):
         raise InvalidProof("INVALID_EVENT") from None
+
+
+
+def project_slack_socket(kind, payload, settings):
+    """Project data received on the authenticated installation socket."""
+    from .slack_approval_cards import parse_callback
+    secret, team, app = settings
+    try:
+        if kind == "events_api" and payload.get("type") == "event_callback":
+            return _slack_event(payload, settings)
+        if kind == "interactive":
+            return parse_callback(json.dumps(payload), team, app, secret)
+        if kind == "slash_commands":
+            fields = ("team_id", "api_app_id", "command", "channel_id", "user_id", "trigger_id", "text")
+            if any(field in payload and not isinstance(payload[field], str) for field in fields):
+                raise InvalidProof("INVALID_EVENT")
+            return _slack_form({field: [payload[field]] for field in fields if field in payload}, settings)
+    except InvalidProof:
+        raise
+    except (TypeError, ValueError, KeyError, AttributeError, RecursionError):
+        raise InvalidProof("INVALID_EVENT") from None
+    return None

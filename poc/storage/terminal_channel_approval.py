@@ -4,13 +4,13 @@ from datetime import datetime
 from .dag_approvals import ApprovalConflict, _role
 
 
-def claim(conn, row, user_id, callback):
+def claim(conn, row, user_id, callback, provider):
     if _role(conn, row, user_id) not in ("MANAGER", "ORG_ADMIN"):
         raise PermissionError("Current department approval authority is required.")
     identity = conn.execute("""SELECT id FROM external_identity_links
         WHERE organization_id=? AND connector_id=? AND user_id=?
-          AND provider='telegram' AND account=? AND subject=?""",
-        (row["organization_id"], row["connector_id"], user_id, row["bot_id"], callback.sender_id)).fetchone()
+          AND provider=? AND account=? AND subject=?""",
+        (row["organization_id"], row["connector_id"], user_id, provider, row["bot_id"], callback.sender_id)).fetchone()
     if not identity:
         raise PermissionError("The verified identity link is unavailable.")
     now = datetime.now().isoformat()
@@ -24,7 +24,7 @@ def claim(conn, row, user_id, callback):
         )""", (user_id, row["id"], now))
     if not result.rowcount:
         raise ApprovalConflict("Approval is unavailable or no longer pending.")
-    conn.execute("""UPDATE pr_channel_deliveries SET callback_id=?,decision=?,identity_link_id=?
+    conn.execute("""UPDATE pr_channel_deliveries SET callback_id=?,decision=?,identity_link_id=?,retry_at=0
         WHERE approval_id=?""", (callback.callback_id, int(callback.approve), identity["id"], row["id"]))
 
 
@@ -60,8 +60,8 @@ def consume(db):
                 raise PermissionError("Approval destination changed.")
             linked = conn.execute("""SELECT 1 FROM external_identity_links
                 WHERE organization_id=? AND connector_id=? AND user_id=?
-                  AND provider='telegram' AND account=? AND id=?""",
-                (row["organization_id"], row["connector_id"], row["resolved_by"], account,
+                  AND provider=? AND account=? AND id=?""",
+                (row["organization_id"], row["connector_id"], row["resolved_by"], binding["provider"], account,
                  row["identity_link_id"])).fetchone()
             if not linked:
                 raise PermissionError("Approver identity link was revoked.")

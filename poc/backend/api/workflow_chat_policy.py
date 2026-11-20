@@ -91,26 +91,33 @@ def catalog(db, claims, department_id):
     except ValueError:
         approval_ready = False
     with db._get_connection() as conn:
-        candidates = conn.execute("""SELECT id,connector_id,channel_id FROM channel_bindings
-            WHERE organization_id=? AND department_id=? AND provider='telegram'
+        candidates = conn.execute("""SELECT id,connector_id,channel_id,provider FROM channel_bindings
+            WHERE organization_id=? AND department_id=? AND provider IN ('telegram', 'slack')
             AND approve_decisions=1 AND send_notifications=1""",
             (user.organization_id, department_id)).fetchall()
     from integrations.identity_proofs import InvalidProof, configuration
     bindings = []
     for binding in candidates:
-        if not any(c['id'] == binding['connector_id'] and c['provider'] == 'telegram'
-                   and binding['channel_id'] in c['channels'] and 'send_message' in c['tools'] for c in connectors):
+        provider = binding['provider']
+        operation = 'send_message' if provider == 'telegram' else 'post_chat_message'
+        if not any(c['id'] == binding['connector_id'] and c['provider'] == provider
+                   and binding['channel_id'] in c['resources_by_tool'].get(operation, []) for c in connectors):
             continue
         try:
-            configuration('telegram', db.get_mcp_connector(binding['connector_id']).configuration or {})
+            configuration(provider, db.get_mcp_connector(binding['connector_id']).configuration or {})
         except (InvalidProof, AttributeError):
             continue
-        bindings.append(dict(binding))
-    return {'interactive_approval_bindings': bindings,
+        bindings.append({key: binding[key] for key in ('id', 'connector_id', 'channel_id')})
+    from .workflows_channel_triggers import eligible_trigger_bindings
+    from workflows.channel_trigger_dispatch import _rank
+    with db._get_connection() as conn:
+        can_author_trigger = _rank(conn, user.organization_id, department_id, user.id) >= 3
+    trigger_bindings = eligible_trigger_bindings(db, user.organization_id, department_id) if can_author_trigger else []
+    return {'interactive_approval_bindings': bindings, 'channel_trigger_bindings': trigger_bindings,
         'human_approval': {'configured': approval_ready or bool(bindings), 'terminal_only': True,
              'dashboard_configured': approval_ready,
-             'delivery': 'Verified Telegram buttons for matching bindings, or authenticated dashboard approval',
-             'missing_setup': None if approval_ready or bindings else 'Configure an interactive Telegram binding or the dashboard HTTPS URL.'},
+             'delivery': 'Verified Telegram or Slack buttons for matching bindings, or authenticated dashboard approval',
+             'missing_setup': None if approval_ready or bindings else 'Configure an interactive channel binding or the dashboard HTTPS URL.'},
         'agents': agents, 'connectors': connectors, 'skills': skill_catalog(db, user.organization_id, department_id),
         'workspace_readiness': configuration_status(),
         'note': 'Only these configured resource IDs are authorized. Discovery does not grant access. '
@@ -119,7 +126,7 @@ def catalog(db, claims, department_id):
                 'Missing IDs require an administrator to configure or grant access; never invent them.'}
 
 
-def validate_candidate(candidate, resources):
+def validate_candidate(candidate, resources, *, clarifications=None):
     errors = []
     agents = {a['id']: a for a in resources['agents']}
     connectors = {c['id']: c for c in resources['connectors']}
@@ -142,7 +149,27 @@ def validate_candidate(candidate, resources):
     approved_skills = {skill['id'] for skill in resources.get('skills', [])}
     if set(candidate.skills) - approved_skills:
         errors.append('Workflow selects a skill outside the configured plugin catalog.')
+    checkpoints = {step.key for step in candidate.steps if step.approval_checkpoint}
     for step in candidate.steps:
+        if step.approval_checkpoint and (
+            step.resources or step.workspace or step.human_approval or step.send_output_of
+            or step.discover_open_prs_author or step.open_pr_source or step.required_outcome != 'analysis'
+            or step.skills or step.pr_write_approval
+        ):
+            errors.append(f'Approval checkpoint {step.key} must be a standalone step without tools or actions.')
+        if step.approval_checkpoint and step.approval_checkpoint.channel_binding_id and not any(
+            binding['id'] == step.approval_checkpoint.channel_binding_id
+            for binding in resources.get('interactive_approval_bindings', [])
+        ):
+            errors.append(f'Approval checkpoint {step.key} requires an eligible interactive channel binding.')
+        write = step.pr_write_approval
+        if any(ref.tool_name in ('comment_pull_request', 'review_pull_request') for ref in step.resources) and not write:
+            errors.append(f'Step {step.key} needs exact PR write arguments and a human approval checkpoint.')
+        if write and (write.approval_step not in checkpoints or write.approval_step not in step.depends_on
+                      or step.workspace or step.send_output_of or step.human_approval or step.approval_checkpoint
+                      or step.discover_open_prs_author or step.open_pr_source or step.skills
+                      or step.required_outcome != 'analysis'):
+            errors.append(f'Exact PR write {step.key} must be isolated and depend on its dedicated checkpoint.')
         if step.discover_open_prs_author and (step.workspace or step.send_output_of or step.human_approval
                 or step.open_pr_source or len(step.resources) != 1
                 or step.resources[0].tool_name != 'list_open_pull_requests' or not step.resources[0].repository):
@@ -164,28 +191,41 @@ def validate_candidate(candidate, resources):
         if step.send_output_of:
             if step.send_output_of not in step.depends_on or len(step.resources) != 1:
                 errors.append('A delivery step needs one explicit channel resource and its source as a dependency.')
-            elif not step.resources[0].channel_id or step.resources[0].repository:
-                errors.append('A delivery step must reference only its destination channel.')
+            else:
+                target = step.resources[0]
+                provider = connectors.get(target.connector_id, {}).get('provider')
+                delivery_tool = {'telegram': 'send_message', 'slack': 'post_chat_message'}.get(provider)
+                if not target.channel_id or target.repository or not delivery_tool or target.tool_name != delivery_tool:
+                    errors.append('A delivery step must declare the exact channel and its provider delivery tool.')
         if any(marker in step.prompt_template.casefold() for marker in
                ('inactive preview', 'do not claim execution', 'you have no tools')):
             errors.append(f'Step {step.key} contains draft-only instructions. Remove them from its execution prompt.')
         if step.agent_id not in agents:
             errors.append(f'Agent {step.agent_id} is not available in this department.')
-        for ref in step.resources:
+        for index, ref in enumerate(step.resources):
+            prior_errors = len(errors)
             reference(ref)
-            combinations = agents.get(step.agent_id, {}).get('capability_resources', {}).get(ref.connector_id)
+            provider = connectors.get(ref.connector_id, {}).get('provider')
+            if not ref.tool_name:
+                errors.append(f'Step {step.key} must select an explicit tool for each resource.')
+            if provider == 'github' and (not ref.repository or ref.channel_id):
+                errors.append(f'Step {step.key} must pair each GitHub tool with one exact repository.')
+            if provider in ('slack', 'telegram') and (not ref.channel_id or ref.repository):
+                errors.append(f'Step {step.key} must pair each channel tool with one exact channel ID.')
+            agent = agents.get(step.agent_id, {})
+            combinations = agent.get('capability_resources', {}).get(ref.connector_id)
             if combinations is not None and ref.tool_name and (ref.repository or ref.channel_id) not in combinations.get(ref.tool_name, []):
                 errors.append(f'Agent {step.agent_id} is not authorized for this capability/resource combination.')
-        for identifier in {r.connector_id for r in step.resources}:
-            connector = connectors.get(identifier)
-            assigned = agents.get(step.agent_id, {}).get('connector_tools', {}).get(identifier, [])
-            requested = {r.tool_name for r in step.resources if r.connector_id == identifier and r.tool_name}
-            if not assigned or requested - set(assigned):
+            assigned = agent.get('connector_tools', {}).get(ref.connector_id, [])
+            if ref.tool_name and ref.tool_name not in assigned:
                 errors.append(f'Agent {step.agent_id} lacks the required connector tool access.')
-            if connector and connector['provider'] == 'github' and not any(r.connector_id == identifier and r.repository for r in step.resources):
-                errors.append('GitHub steps require an explicit approved repository reference.')
-            if connector and connector['provider'] in ('slack', 'telegram') and not any(r.connector_id == identifier and r.channel_id for r in step.resources):
-                errors.append('Channel send steps require an explicit approved channel ID.')
+            if clarifications is not None and len(errors) != prior_errors:
+                clarifications.append({
+                    'code': 'CAPABILITY_SELECTION_REQUIRED',
+                    'step_key': step.key,
+                    'resource_index': index,
+                    'action': 'select_authorized_resource_or_request_setup',
+                })
     if candidate.destination:
         reference(candidate.destination)
         destination = connectors.get(candidate.destination.connector_id)
@@ -199,8 +239,14 @@ def validate_candidate(candidate, resources):
                 errors.append('The destination requires a granted message-delivery tool.')
             notification_agent = agents.get(candidate.steps[0].agent_id, {})
             per_agent = notification_agent.get('capability_resources', {}).get(candidate.destination.connector_id)
-            if per_agent is not None and candidate.destination.channel_id not in per_agent.get(delivery_tool, []):
+            assigned = notification_agent.get('connector_tools', {}).get(candidate.destination.connector_id, [])
+            if delivery_tool not in assigned or (per_agent is not None and
+                    candidate.destination.channel_id not in per_agent.get(delivery_tool, [])):
                 errors.append('The notification agent is not authorized for this exact channel.')
+    if candidate.channel_trigger and not any(
+        binding['id'] == candidate.channel_trigger.binding_id for binding in resources.get('channel_trigger_bindings', [])
+    ):
+        errors.append('A channel trigger requires an exact Listen-enabled binding and department management authority.')
     if candidate.cron_expression:
         from croniter import croniter
         if not croniter.is_valid(candidate.cron_expression):
@@ -218,7 +264,7 @@ def native_definition(candidate: ChatWorkflow, resources, runner_agent_id=None):
     steps = []
     for step in candidate.steps:
         data = step.model_dump(exclude={'resources', 'send_output_of', 'skills', 'workspace', 'required_outcome',
-                                       'human_approval', 'discover_open_prs_author', 'open_pr_source'})
+                                       'human_approval', 'approval_checkpoint', 'pr_write_approval', 'discover_open_prs_author', 'open_pr_source'})
         if step.agent_id == PLANNED_RUNNER_ID and runner_agent_id:
             data['agent_id'] = runner_agent_id
         data['mcp_servers'] = sorted({r.connector_id for r in step.resources})
@@ -247,8 +293,16 @@ def native_definition(candidate: ChatWorkflow, resources, runner_agent_id=None):
             data['params']['channel_action'] = {'action': 'send_channel_message',
                 'connector_id': ref.connector_id, 'channel_id': ref.channel_id,
                 'source_step': step.send_output_of}
+        if step.approval_checkpoint:
+            data['mcp_servers'] = []
+            approval = {'timeout_seconds': step.approval_checkpoint.expires_hours * 3600}
+            if step.approval_checkpoint.channel_binding_id:
+                approval['channel_binding_id'] = step.approval_checkpoint.channel_binding_id
+            data['params'] = {'dag_approval': approval}
+        elif step.pr_write_approval:
+            data['params']['pr_write_approval'] = step.pr_write_approval.model_dump()
         # Carry exact IDs into executable instructions, not just display metadata.
-        if step.resources:
+        if step.resources and 'authorized_resources' in data['params'] and not step.pr_write_approval:
             data['prompt_template'] += '\nUse only these configured resources: ' + json.dumps(data['params']['authorized_resources'])
         steps.append(data)
     metadata = {}
@@ -271,7 +325,7 @@ def validate_approval(step, candidate, resources, agents, connectors):
     errors = []
     readiness = resources.get('human_approval', {})
     if not _interactive_binding(config, resources) and not readiness.get('dashboard_configured', readiness.get('configured')):
-        errors.append('This destination needs an eligible interactive Telegram binding or an HTTPS dashboard URL.')
+        errors.append('This destination needs an eligible interactive channel binding or an HTTPS dashboard URL.')
     if step.workspace or step.send_output_of:
         errors.append('Human approval cannot be combined with repository editing or a send-output action.')
     if config.source_step not in step.depends_on:

@@ -229,15 +229,20 @@ def inbox(db, organization_id, department_id, user_id, *, after="", view="pendin
             checkpoint = json.loads(row["checkpoint_json"])
             votes = conn.execute("SELECT user_id,decision FROM workflow_dag_approval_votes WHERE approval_id=?",
                                  (row["id"],)).fetchall()
-            outputs = checkpoint["outputs"]
+            outputs = dict(checkpoint["outputs"])
+            intent = checkpoint.get("approved_pr_write")
+            if intent:
+                outputs["approved_pr_write"] = intent["description"]
+            source = conn.execute("""SELECT d.message_id FROM dag_channel_callbacks c
+                JOIN dag_channel_deliveries d ON d.approval_id=c.approval_id WHERE c.approval_id=? AND c.user_id=?""",
+                (row["id"], row["decided_by"])).fetchone() if row["decided_by"] else None
             items.append({
                 **{key: row[key] for key in (
                     "id", "execution_id", "workflow_id", "workflow_name", "step_key", "expires_at", "decided_at",
                 )},
                 "status": "APPROVED" if row["status"] == "CLAIMED" else row["status"],
-                "decision_source": ("telegram" if conn.execute(
-                    """SELECT 1 FROM dag_channel_callbacks WHERE approval_id=? AND user_id=?""", (row["id"], row["decided_by"]),
-                ).fetchone() else "dashboard") if row["decided_by"] else None,
+                "decision_source": ("slack" if "." in (source["message_id"] or "") else "telegram") if source
+                else "dashboard" if row["decided_by"] else None,
                 "my_vote": next(("APPROVED" if v["decision"] else "REJECTED"
                                  for v in votes if v["user_id"] == user_id), None),
                 "approver_roles": policy["approver_roles"], "quorum": policy["quorum"],

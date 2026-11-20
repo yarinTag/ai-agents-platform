@@ -259,3 +259,34 @@ Batch PR review asks for concise per-PR decisions and concrete blockers in the e
 For new receipt-scoped reviews the connector worker serializes the eligibility report from validated completion arguments. Models supply plain-text findings and a separate eligible_pull_numbers array.
 
 Workflow step skill resolution passes the saved workflow department to the shared plugin resolver. Workflow chat builds its skill catalog using the same department.
+
+## Sequential terminal PR merges
+
+`human_approval.start_gate` keeps the initially eligible subjects in order and exposes only the first for merge approval. `pr_approval_sequence.prepare_next` reads fresh v2 GitHub evidence after a confirmed merge and requires the same reviewed head, author and target branch name, complete evidence and passing observed CI. It pins the new target SHA and opens a new approval with its own expiry. No model call is needed when the initially reviewed head remains the same. The previous decision and new pending row (and Telegram delivery when configured) commit together. The execution, gate step and task remain waiting until the queue is exhausted or resolution stops. Changed evidence, failed or ambiguous merge, rejection, or expiry stops the run and preserves earlier receipts. Final step output collects `merge_receipts` and `unresolved_pull_requests`. For link-only delivery, the initial workflow logs link shows all successive decisions. Existing active multi-subject approvals require a fresh run before any additional merge.
+
+AI-42: aggregate PR review instructions require inspecting the diff on the reviewed head/base and grounding findings in changed files or behavior. Partial or uninspected diffs are excluded from model eligibility; server receipt and merge checks still apply.
+
+Optional channel trigger relevance policy defines bounded instructions and minimum confidence. Deterministic matching remains the first filter. Dispatch reservation and restoration require a durable MATCH for the exact event, workflow revision, binding, linked sender and principal before an opted-in rule can launch.
+
+Channel relevance worker claims one row per deterministically eligible event/workflow under the live ingress lease, reserves department model budget, then invokes the organization Direct API model. Only persisted MATCH can enter normal revalidated dispatch. Interrupted STARTED attempts stay fenced. Four model calls are allowed per event.
+
+TriggerRule supports up to 32 stable provider sender IDs, cooldown_seconds (0–86400) and max_runs_per_hour (1–1000 optional). Sender filtering supplements linked-user authorization. Capacity checks use all earlier durable dispatch reservations and run before inference and again in the dispatch write transaction, across revisions. Admission honors the already-reserved slot.
+
+The channel classifier checks its event-wide attempt cap against durable candidate rows in the same transaction as the claim, so lease recovery or changing eligibility cannot reset the count.
+
+A confirmed PR receipt atomically schedules read-only advancement. The worker leases the continuation and reauthorizes before refreshing successor evidence. Lease expiry permits replay of reads only. The original merge claim is never replayed. Successor reports include current changed paths and observed merge blockers.
+
+Revoked channel bindings or credentials terminate confirmed-merge advancement with a sanitized outcome and retain the confirmed receipt.
+
+Sequential merge cards include the initial per-PR finding and uncertainty when supplied by the review, alongside fresh evidence. The excerpt is descriptive and cannot change the receipt-derived subject.
+
+The exact GitHub write intent contract models comment/review separately and fingerprints the approved action, workflow step, connector, repository, PR, head, event and body. The shared parser requires one matching exact tool/resource scope and a direct approval dependency. This contract is pending authoring and execution integration.
+
+Native params.pr_write_approval requires an isolated matching declared GitHub tool and a single durable DAG checkpoint. The engine checkpoints the exact operation digest and display text before decision. After claim the server executes fixed arguments without model inference, rechecks current quorum and revision at each provider request, and requires a tool receipt.
+
+Merge resolution immediately attempts its own confirmed continuation, with the worker retained for recovery. Classification accepts only one JSON document after removing a supported outer wrapper.
+
+## Trigger cooldown timestamp scope
+_has_capacity joins only channel_trigger_dispatches. reserve_dispatches writes
+those execution timestamps in UTC; manual/cron naive rows do not participate.
+This is a documented query invariant, not a timestamp migration.

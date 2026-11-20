@@ -123,3 +123,17 @@ New approval subjects pin the directly observed target branch ref and SHA in add
 Telegram approval callbacks accept channel-attributed posts when sender_chat matches the channel. The signed action and stored delivery receipt still bind the decision to the exact bot, channel and message.
 
 Telegram approval action payloads and provider verification are documented in docs/interactive-channel-approvals.md. Keep callback identifiers and secret material out of diagnostic responses.
+
+AI-49 Slack approval cards use fixed-host chat.postMessage/chat.update and exact channel plus timestamp receipts. Slack form block_actions are decoded only after raw signature verification, and the button value binds the token to its exact action.
+
+Authenticated Socket Mode payloads reuse Slack event, slash command and block action projection. HTTPS continues verifying raw signatures before parsing. The socket dispatcher checks the current installation and credential digest before handling each envelope.
+
+All PR merges, including target-SHA approvals and successors, require current v2 candidate readiness, GitHub approval, base freshness and required checks before the provider write. Target revision changes, changed PR head/author and incomplete evidence surface separately.
+
+merge_subject commits both COMPLETED tool receipt and approval advance_pending in one SQLite transaction following verified provider acknowledgment.
+
+Exact approved PR writes reuse WorkflowToolExecutor with a server-provided approval recheck, existing tool scope and audited write claim. Approval text appears in chat cards before action buttons.
+
+Exact PR write scopes carry a server-only fingerprint. Preflight can inspect requires_approval capability decisions; execution requires the claimed action callback before preparing scope and on each provider request. Ordinary tool scopes cannot use the approval path.
+
+Slack slash-command identity proof trims challenge whitespace before exact token matching.

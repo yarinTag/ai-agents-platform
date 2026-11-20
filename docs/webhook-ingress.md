@@ -60,3 +60,17 @@ In MCP Hub, run **Check configuration** for local URL, secret, connector and SQL
 4. Restore delivery, verify a new staged receipt, and check that unexpected proof failures and event rates have subsided. Avoid deleting receipts as a way to recover delivery.
 
 Implementation references are the [HTTP receiver](../poc/backend/api/channel_ingress.py), [provider verification](../poc/integrations/identity_proofs.py), [event projection](../poc/integrations/channel_ingress.py), [TLS probe](../poc/integrations/ingress_tls.py), and [SQLite inbox and outbox](../poc/storage/channel_ingress.py). This documentation was checked against source. Production proxy configuration, external TLS, and live provider delivery require verification in the deployment environment.
+
+### Slack Socket Mode
+
+For a dedicated Slack app, enable Socket Mode in Slack and configure an app-level
+token with `connections:write`. On the connected Slack connector set
+`configuration.ingress_mode=socket` and `configuration.socket_app_token`.
+The exact workspace/app, signing secret, bot credential, channel binding and
+linked-identity requirements still apply. The outbound worker acknowledges
+accepted and duplicate events after storage. A storage or backpressure failure
+leaves the envelope unacknowledged and the worker reconnects. Socket Mode needs
+no public HTTPS endpoint. The same connector's HTTP receiver rejects requests
+while Socket Mode is selected. Configure one consumer installation per local
+database and coordinate consumers across deployments. Last acknowledgment can
+include ignored provider events. No live socket verification was performed.

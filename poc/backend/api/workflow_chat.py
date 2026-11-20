@@ -2,7 +2,6 @@
 import hashlib
 import json
 import logging
-import re
 import sqlite3
 import uuid
 from datetime import datetime, timedelta
@@ -109,9 +108,8 @@ def chat(payload: ChatRequest, request: Request, background: BackgroundTasks,
 def parse_reply(output):
     if isinstance(output, dict):
         return ChatReply.model_validate(output)
-    text = re.sub(r'^\s*<think>.*?</think>', '', str(output or ''), count=1, flags=re.DOTALL).strip()
-    fenced = re.fullmatch(r'```(?:json)?\s*(.*?)\s*```', text, flags=re.DOTALL | re.IGNORECASE)
-    return ChatReply.model_validate_json(fenced.group(1) if fenced else text)
+    from runtime.direct_outcomes import unwrap_model_json
+    return ChatReply.model_validate_json(unwrap_model_json(str(output or '')))
 
 
 def generate(db, runtime, identity, job_id):
@@ -163,10 +161,19 @@ def generate(db, runtime, identity, job_id):
                 result = {'diagnostics': diagnostics}
                 logger.warning('Workflow chat reply rejected for job %s: %s', job_id, diagnostics)
                 raise HTTPException(422, 'The model did not return a valid workflow draft. Retry generation.') from None
-            errors = validate_candidate(reply.workflow, resources) if reply.workflow else []
-            message = reply.message if not errors else ('הטיוטה דורשת תיקון לפני היצירה. הפרטים מופיעים בתצוגה המקדימה.' if payload.locale == 'he' else 'This draft needs corrections before it can be created. See the details in the preview.')
+            clarifications = []
+            errors = validate_candidate(reply.workflow, resources, clarifications=clarifications) if reply.workflow else []
+            message = reply.message
+            if clarifications:
+                message = ('באילו כלים ומשאבים מורשים להשתמש בשלבים המסומנים? אם הבחירה הדרושה חסרה, יש לבקש ממנהל להגדיר אותה.'
+                           if payload.locale == 'he' else
+                           'Which authorized tools and resources should these steps use? Ask an administrator to configure any required option that is missing.')
+            elif errors:
+                message = ('הטיוטה דורשת תיקון לפני היצירה. הפרטים מופיעים בתצוגה המקדימה.'
+                           if payload.locale == 'he' else
+                           'This draft needs corrections before it can be created. See the details in the preview.')
             result = {'message': message, 'workflow': reply.workflow.model_dump() if reply.workflow else None,
-                'errors': errors, 'ready': bool(reply.workflow) and not errors}
+                'errors': errors, 'clarifications': clarifications, 'ready': bool(reply.workflow) and not errors}
     except HTTPException as exc:
         error = str(exc.detail)
     except ValueError:
@@ -212,9 +219,11 @@ def create_from_chat(job_id: str, request: Request, db=Depends(get_db_manager)):
         raise HTTPException(422, 'Answer the assistant’s questions before creating a workflow.')
     candidate = ChatWorkflow.model_validate(result['workflow'])
     resources = catalog(db, claims(request), row['department_id'])
-    errors = validate_candidate(candidate, resources)
+    clarifications = []
+    errors = validate_candidate(candidate, resources, clarifications=clarifications)
     if errors:
-        raise HTTPException(422, {'message': 'Resource permissions changed. Refine the workflow before creating it.', 'errors': errors})
+        raise HTTPException(422, {'message': 'Refine the workflow before creating it.',
+                                  'errors': errors, 'clarifications': clarifications})
     with db._get_connection() as conn:
         conn.execute('BEGIN IMMEDIATE')
         current = conn.execute('SELECT * FROM workflow_builder_jobs WHERE id=?', (job_id,)).fetchone()
@@ -232,7 +241,8 @@ def create_from_chat(job_id: str, request: Request, db=Depends(get_db_manager)):
             department_id=row['department_id'], definition_json=json.dumps(definition),
             cron_expression=candidate.cron_expression, webhook_enabled=False)
         try:
-            response = persist_workflow(payload, request, db, workflow_id=workflow_id, initially_active=False)
+            response = persist_workflow(payload, request, db, workflow_id=workflow_id, initially_active=False,
+                                        channel_trigger=candidate.channel_trigger)
         except sqlite3.IntegrityError:
             existing = db.get_workflow(workflow_id)
             if not existing:

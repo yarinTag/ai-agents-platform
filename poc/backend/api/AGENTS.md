@@ -417,3 +417,29 @@ Approval list items now expose decision_source (telegram, dashboard or null) fro
 GET /api/v1/workflows/executions/{execution_id} adds run_audit with execution correlation ID, dispatch provenance, approval actor and card status, and at most 100 allowlisted GitHub/chat connector receipts. Scope checks precede projection. List responses do not compute this projection.
 
 Execution detail reuses the request-scoped actor and resource checks when admission has populated them.
+
+GET `/api/v1/workflows/executions/{execution_id}/approval` defaults to the latest round with cumulative merge receipts. Optional `approval_id` selects a specific round and its receipts. The response adds zero-based `position` and `remaining_count`. POST accepts `{approve, approval_id}` and requires the displayed ID for sequential runs. The legacy boolean-only body is accepted for single-round gates. Old, claimed or expired rows return 409. Run audit returns all terminal decisions in sequence order under the same execution.
+
+AI-40 authoring validation requires each proposed connector reference to bind an explicit tool and exactly one provider-appropriate repository or channel. Deterministic delivery requires the provider delivery tool, and workflow notifications require it for the selected agent. Generation and confirmation both use current catalog validation. Existing native workflows retain their compatibility behavior.
+
+AI-40: workflow chat result and create-time HTTP 422 details include `clarifications` entries for invalid capability selections with `code=CAPABILITY_SELECTION_REQUIRED`, `step_key`, zero-based `resource_index` and `action=select_authorized_resource_or_request_setup`. Existing job results can omit the field. Invalid drafts remain in preview with `ready=false`.
+
+ChatStep.approval_checkpoint accepts expires_hours (1–72, default 24). The compiler emits an isolated params.dag_approval barrier with the same TTL and server-default role, quorum and initiator separation. AI-authored GitHub comment/review steps require a direct checkpoint dependency and independently pass exact capability validation.
+
+AI-42: Workflow Chat uses catalog-filtered selections and deterministic capability clarifications. The native compiler emits checkpoint and explicit resource declarations. Runtime authorization remains authoritative.
+
+AI-49: Workflow Chat draft supports optional channel_trigger using the existing TriggerRule contract. The catalog exposes channel_trigger_bindings only to eligible managers/admins, independently of Send and Approve. Confirmation checks the current exact Listen binding and stores the authenticated creator as channel_trigger_principal on the inactive workflow. General workflow creation still rejects caller-supplied trigger metadata.
+
+Signed Slack block_actions use the same connector ingress endpoint and shared decision authority. Callbacks return empty HTTP 200 after authenticated processing. Approval audit decision_source includes slack. Workflow Chat accepts eligible Slack Send+Approve bindings.
+
+Slack connector configuration accepts ingress_mode=socket and socket_app_token. HTTPS ingress for that connector is disabled while Socket Mode is selected. Diagnostics expose socket_token_configured, socket_status and socket_last_ack_at with no token or socket URL. Setup probes do not open a socket.
+
+Channel trigger GET returns a manager-only, latest-20 recent_classifications projection with revision, categorical state/reason, model/provider and execution ID. Preview returns requires_classification only when an opted-in rule passes the deterministic filter. It does not call the model.
+
+Channel trigger GET/PUT/preview use TriggerRule sender_ids, cooldown_seconds and max_runs_per_hour. Preview checks a supplied sender ID against the saved shape but performs no identity lookup or capacity reservation.
+
+Workflow Chat requires pr_write_approval for new GitHub comment/review plans. The exact connector, operation and arguments must match the declared repository scope and a dedicated direct approval_checkpoint. An optional eligible channel_binding_id enables in-chat decisions on that checkpoint.
+
+Workflow Chat connector catalog exposes exact_approval_tools. A PR write still requires exact intent, checkpoint and independent resource/agent authorization.
+
+Slack installation proof trims surrounding challenge whitespace on both HTTP and Socket Mode transports.

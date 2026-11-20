@@ -53,16 +53,10 @@ def signed_action(secret, token, action):
     return hmac.new(secret.encode(), f"{token}:{action}".encode(), hashlib.sha256).hexdigest()[:12]
 
 
-def write_card(bot_token, channel, row, state, dashboard_origin, *, message_id=None, token=None, proof_secret=None):
-    if not re.fullmatch(r"[0-9]+:[A-Za-z0-9_-]+", bot_token):
-        raise InvalidProof("APPROVAL_DESTINATION_UNAVAILABLE")
-    buttons = []
+def card_content(row, state, dashboard_origin):
+    url = None
     if dashboard_origin:
         url = f"{dashboard_origin}/workflows/{quote(row['workflow_id'], safe='')}/logs?execution={quote(row['execution_id'], safe='')}"
-        buttons.append([{"text": "Details", "url": url}])
-    if state.startswith("PENDING:") and token:
-        buttons.insert(0, [{"text": "Approve", "callback_data": f"dga:a:{token}:{signed_action(proof_secret, token, 'a')}"},
-                           {"text": "Reject", "callback_data": f"dga:r:{token}:{signed_action(proof_secret, token, 'r')}"}])
     expiry = row["expires_at"]
     deadline = datetime.fromisoformat(expiry).astimezone(timezone.utc) if isinstance(expiry, str) else datetime.fromtimestamp(expiry, timezone.utc)
     expires = deadline.strftime("%Y-%m-%d %H:%M UTC")
@@ -70,6 +64,11 @@ def write_card(bot_token, channel, row, state, dashboard_origin, *, message_id=N
               "DECIDED": "Decision received · checking outcome", "FAILED": "Approval processing failed"}
     label = status.get(state, f"Waiting for approval · {state.removeprefix('PENDING:')}")
     text = f"ConduitCross · {label}\nStep: {row['step_key']}\nExpires: {expires}"
+    checkpoint = json.loads(row["checkpoint_json"]) if "checkpoint_json" in row else {}
+    intent = checkpoint.get("approved_pr_write")
+    if intent:
+        text += f"\n\n{intent['description']}"
+        return text, url
     source = json.loads(row["policy_json"]).get("summary_step") if "policy_json" in row else None
     if "report" in row:
         subjects = json.loads(row["subjects_json"])
@@ -79,10 +78,23 @@ def write_card(bot_token, channel, row, state, dashboard_origin, *, message_id=N
             text += f"\n\nReviewed PRs:\n{pins}"
         text += f"\n\nFindings:\n{row['report'][:1000]}"
     if source:
-        summary = json.loads(row["checkpoint_json"])["outputs"].get(source, "").strip()
+        summary = checkpoint["outputs"].get(source, "").strip()
         if summary:
             excerpt = summary[:1000] + ("…" if len(summary) > 1000 else "")
             text += f"\n\nFindings:\n{excerpt}"
+    return text, url
+
+
+def write_card(bot_token, channel, row, state, dashboard_origin, *, message_id=None, token=None, proof_secret=None):
+    if not re.fullmatch(r"[0-9]+:[A-Za-z0-9_-]+", bot_token):
+        raise InvalidProof("APPROVAL_DESTINATION_UNAVAILABLE")
+    buttons = []
+    text, url = card_content(row, state, dashboard_origin)
+    if url:
+        buttons.append([{"text": "Details", "url": url}])
+    if state.startswith("PENDING:") and token:
+        buttons.insert(0, [{"text": "Approve", "callback_data": f"dga:a:{token}:{signed_action(proof_secret, token, 'a')}"},
+                           {"text": "Reject", "callback_data": f"dga:r:{token}:{signed_action(proof_secret, token, 'r')}"}])
     if len(text.encode("utf-16-le")) // 2 > 4096:
         raise InvalidProof("APPROVAL_REPORT_TOO_LARGE")
     payload = {"chat_id": channel, "text": text,

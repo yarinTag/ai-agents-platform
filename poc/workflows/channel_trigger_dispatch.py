@@ -1,6 +1,6 @@
 """Plan a channel-triggered run from a verified ingress claim and current policy."""
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 import time
 from uuid import uuid4
@@ -8,7 +8,7 @@ from uuid import uuid4
 from integrations.channel_providers import CHANNEL_PROVIDERS
 from integrations.identity_proofs import InvalidProof
 from storage.external_identities import connector_settings, resolve_user
-from .channel_trigger_rules import ChannelTriggerInput, TriggerRule, match_trigger
+from .channel_trigger_rules import ChannelTriggerInput, RelevanceRule, TriggerRule, match_trigger
 
 
 @dataclass(frozen=True)
@@ -20,6 +20,7 @@ class TriggerPlan:
     binding_id: str
     event_id: str
     parameters: dict[str, str | None]
+    relevance: RelevanceRule | None = None
 
 
 def _rank(conn, organization_id, department_id, user_id):
@@ -36,11 +37,28 @@ def _rank(conn, organization_id, department_id, user_id):
     return min(levels.get(row["role"], 0), levels.get(row["department_role"], 0))
 
 
-def plan_triggers(db, claim, *, connection=None):
+def _has_capacity(conn, rule, workflow_id, event_id):
+    # Only durable channel_trigger_dispatches participate. reserve_dispatches writes
+    # their execution created_at in UTC; manual/cron naive timestamps are excluded.
+    if not (rule.cooldown_seconds or rule.max_runs_per_hour):
+        return True
+    now = datetime.now(timezone.utc)
+    cooldown = (now - timedelta(seconds=rule.cooldown_seconds)).isoformat()
+    hour = (now - timedelta(hours=1)).isoformat()
+    counts = conn.execute("""SELECT COALESCE(SUM(x.created_at > ?),0), COALESCE(SUM(x.created_at > ?),0)
+        FROM channel_trigger_dispatches d JOIN workflow_executions x ON x.id=d.execution_id
+        WHERE d.workflow_id=? AND d.event_id<>? AND x.created_at>?""",
+        (cooldown, hour, workflow_id, event_id, min(cooldown, hour))).fetchone()
+    return (not rule.cooldown_seconds or not counts[0]) and (
+        rule.max_runs_per_hour is None or counts[1] < rule.max_runs_per_hour)
+
+
+def plan_triggers(db, claim, *, connection=None, include_unclassified=False, check_capacity=True):
     if connection is None:
         with db._get_connection() as conn:
             conn.execute("BEGIN")
-            return plan_triggers(db, claim, connection=conn)
+            return plan_triggers(db, claim, connection=conn, include_unclassified=include_unclassified,
+                                 check_capacity=check_capacity)
     conn = connection
     event = claim["event"]
     org, connector_id = event["organization_id"], event["connector_id"]
@@ -56,12 +74,12 @@ def plan_triggers(db, claim, *, connection=None):
         adapter = CHANNEL_PROVIDERS.get(provider)
         if not adapter or event["channel_id"] not in adapter.configured_ids(json.loads(connector[0] or "{}")):
             return []
-        return _eligible_plans(conn, event, sender, claim.get("trigger_text"))
+        return _eligible_plans(conn, event, sender, claim.get("trigger_text"), include_unclassified, check_capacity)
     except InvalidProof:
         return []
 
 
-def _eligible_plans(conn, event, sender, text):
+def _eligible_plans(conn, event, sender, text, include_unclassified, check_capacity):
     rows = conn.execute("""
         SELECT w.id, w.revision, w.department_id, w.definition_json, b.id AS binding_id
         FROM channel_bindings b JOIN workflows w
@@ -92,9 +110,20 @@ def _eligible_plans(conn, event, sender, text):
             message_id=event["message_id"], sender_id=event["sender_id"], text=text or "",
         )
         parameters = match_trigger(rule, inputs)
-        if parameters is not None:
-            plans.append(TriggerPlan(row["id"], row["revision"], principal, sender,
-                                     rule.binding_id, event["id"], parameters))
+        if parameters is None:
+            continue
+        if check_capacity and not _has_capacity(conn, rule, row["id"], event["id"]):
+            continue
+        if rule.relevance:
+            if text is None:
+                continue
+            if not include_unclassified and not conn.execute("""SELECT 1 FROM channel_trigger_classifications
+                WHERE event_id=? AND workflow_id=? AND workflow_revision=? AND binding_id=?
+                AND sender_user_id=? AND principal_id=? AND state='MATCH'""",
+                (event["id"], row["id"], row["revision"], rule.binding_id, sender, principal)).fetchone():
+                continue
+        plans.append(TriggerPlan(row["id"], row["revision"], principal, sender,
+                                     rule.binding_id, event["id"], parameters, rule.relevance))
     return plans
 
 
@@ -156,7 +185,8 @@ def admit_dispatch(db, execution_id, workflow, lease_token):
         if row is None:
             return None
         parameters = json.loads(row["trigger_payload"])
-        plans = plan_triggers(db, {"event": dict(row), "trigger_text": row["trigger_text"]}, connection=conn)
+        plans = plan_triggers(db, {"event": dict(row), "trigger_text": row["trigger_text"]}, connection=conn,
+                              check_capacity=False)
         if not any(plan.workflow_id == workflow.id and plan.revision == workflow.revision
                    and plan.binding_id == row["binding_id"] and plan.principal_id == row["principal_id"]
                    and plan.sender_user_id == row["sender_user_id"] and plan.parameters == parameters

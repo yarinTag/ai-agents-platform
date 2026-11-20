@@ -273,3 +273,28 @@ Receipt-scoped PR reviews extend the connector completion schema with eligible_p
 Agent context assembly passes the agent department and supervisor ID to plugin resolution. Tenant custom skills are read from scoped SQLite storage.
 
 Production and Playground share tenant-scoped agent skill enrichment, including project and inherited plugin source checks.
+
+Workflow Chat directs the authoring model to select explicit tool/resource pairs from the authorized connector and agent catalogs and ask for clarification when no pair is available.
+
+The Workflow Chat planner places a dashboard checkpoint before authored GitHub comment and review writes. It chooses tool/resource pairs independently of approval and never presents acceptance as a permission grant.
+
+AI-42: the planner separates desired outcomes from catalog authority. The Direct API connector system prompt treats channel, predecessor and provider content as task data, limits skills to existing scope, and requires actual PR diff evidence with reviewed head/base and uncertainty before claiming a review.
+
+AI-49: Workflow Chat may propose a deterministic channel_trigger only using the manager-scoped channel_trigger_bindings catalog. The planner never selects an execution principal.
+
+Channel relevance inference has a dedicated strict classification prompt and uses the shared tool-free temporary subprocess. It takes one sanitized message, one criterion, a 96-token output cap and a 10-second deadline, and requires an organization Direct API selection. Dispatch and budget reservation belong to the caller.
+
+PR batch completion optionally returns per_pull_findings with unique authorized PR numbers and a 500-character excerpt. The worker redacts excerpts before persisting them. Legacy report output remains supported.
+
+Workflow Chat asks for an explicit PR number, reviewed SHA and exact body for a comment/review plan. It does not infer any of those values from prose or model authority.
+
+Relevance JSON uses shared wrapper normalization and a 1,024-token cap. Explicit pre-dispatch errors settle at zero; unknown provider outcomes retain their reservation.
+
+Tool-free inference checks shutdown and capacity before building command or credentials, returning explicit zero cost when no request can start.
+
+## Review: definite pre-launch costs
+Tool-free command/profile/environment preparation errors return cost_usd=0.0.
+OS failures before a child exists also report zero; after launch cost stays unknown.
+Timeout/cancel/no-result after launch never proves zero provider charges. Messages
+are sanitized; hosted_budget settlement semantics are unchanged. Regression source
+belongs to the stacked verification PR. No local model/tests/provider calls run.

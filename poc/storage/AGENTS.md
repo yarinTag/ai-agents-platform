@@ -142,7 +142,7 @@ The user-requested lab data was explicitly inserted with marker10da4d25; read-on
 The private credential file is outside source control. No application/tests were started.
 
 
-workflow_approvals_schema initializes workflow_approvals: id PK, execution_id UNIQUE FK, step_run_id,task_id,organization_id,department_id,workflow_revision,status,config_json,subjects_json,report,created_at,expires_at,resolved_at,resolved_by,error,receipts_json(default[]). States NOTIFYING/PENDING/RESOLVING/APPROVED/REJECTED/EXPIRED/EXPIRING/FAILED. API GET lazily resolves expired pending gates. Execution dedup includes unexpired PENDING/RESOLVING WAITING_APPROVAL records; expired approvals do not block new runs. No live migration/database initialization executed in this task.
+workflow_approvals_schema initializes workflow_approvals: id PK, execution_id FK, step_run_id,task_id,organization_id,department_id,workflow_revision,status,config_json,subjects_json,report,created_at,expires_at,resolved_at,resolved_by,error,receipts_json(default[]). States NOTIFYING/PENDING/RESOLVING/APPROVED/REJECTED/EXPIRED/EXPIRING/FAILED. API GET lazily resolves expired pending gates. Execution dedup includes unexpired PENDING/RESOLVING WAITING_APPROVAL records; expired approvals do not block new runs. No live migration/database initialization executed in this task.
 
 
 AI-15 migration decision: preserve existing workflow revisions, approval/call receipts and denials while adding versioned policy/bindings/checkpoints in later owning tickets. P00 performs no schema/migration/data writes. Unknown grants remain inert and read wildcard cannot become write authority. No auto-claim, identity link, credential copy or replay of completed/unknown external writes.
@@ -204,3 +204,15 @@ DAG approval listings derive decision_source from the recorded decision actor an
 The DAG decision source matches the final actor to the callback receipt by approval and user. Their atomic writes can cross a clock-second boundary.
 
 dag_channel_deliveries and pr_channel_deliveries add nullable claimed_at Unix seconds. Workers mark claims older than 300 seconds, including legacy untimed SENDING rows, UNCONFIRMED. The worker never requeues an ambiguous send.
+
+`workflow_approvals` now uses `UNIQUE(execution_id, position)` with zero-based `position` and `remaining_json` (ordered remaining subjects, default empty array). A partial unique index admits one active NOTIFYING/PENDING/RESOLVING/EXPIRING row per execution. The schema migration copies legacy approval and PR delivery rows together so IDs, decisions, foreign keys and receipts survive. The callback claim clears the card edit backoff to give feedback before GitHub processing. The channel worker's existing once-consumed claim still requires reconciliation if interrupted.
+
+Slack and Telegram use the same delivery and callback tables. Legacy bot_id stores the verified provider account (Slack workspace ID, Telegram bot ID); message_id stores Slack message ts or Telegram integer ID. Terminal resolution checks the saved identity link against the binding provider.
+
+channel_trigger_classifications is keyed by event/workflow and records revision, binding, sender, principal, state STARTED/MATCH/NO_MATCH/UNCERTAIN/ERROR, categorical reason, confidence, model/provider and update time. The row cascades with event/workflow retention. No message text or provider response body is stored.
+
+idx_channel_dispatch_workflow indexes workflow_id/event_id for trigger quota and cooldown lookups. Dispatch reservations, including runs that later fail, consume the configured allowance.
+
+workflow_approvals adds advance_pending (default 0) and advance_claim_until (epoch seconds). A confirmed merge sets advance_pending; worker claims fence advancement and are cleared on finishing.
+
+DAG checkpoint_json optionally stores approved_pr_write with step_key, fingerprint and description. Approval inbox projects the exact action text into the existing output excerpts.

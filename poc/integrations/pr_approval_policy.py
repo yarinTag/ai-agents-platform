@@ -94,16 +94,17 @@ def fresh_review(db, approval, subject, merge, extra_authorize=None):
     client = GitHubReads(connector.configuration or {}, subject['repository'], authorize)
     result = client.review(subject['pull_number'])
     pull = result['pull_request']
+    if pull['head']['sha'] != subject['head_sha'] or pull.get('author') != subject['author']:
+        raise ToolAccessError('PR head or author changed after approval. Create a fresh review and approval.')
     if subject.get('target_sha'):
-        if (result.get('approval_ready') is not True or result.get('observed_ci_passed') is not True
-                or result.get('target_sha') != subject['target_sha'] or pull['base']['ref'] != subject['target_ref']
-                or pull['head']['sha'] != subject['head_sha'] or pull.get('author') != subject['author']):
-            raise ToolAccessError('PR revisions, author, or CI changed after approval. Create a fresh review and approval.')
-        return client
-    if (not result['candidate_ready'] or result['partial'] or result.get('evidence_version') != 2
-            or result.get('review_approved') is not True or result.get('base_up_to_date') is not True
-            or result.get('required_checks_satisfied') is not True or pull['head']['sha'] != subject['head_sha']
-            or pull['base']['sha'] != subject['base_sha']
-            or pull.get('author') != subject['author']):
-        raise ToolAccessError('PR author, commits, checks or reviews changed or are not merge-ready. Create a fresh review and approval.')
+        if result.get('target_sha') != subject['target_sha'] or pull['base']['ref'] != subject['target_ref']:
+            raise ToolAccessError('The target branch changed after approval. Create a fresh review and approval.')
+    elif pull['base']['sha'] != subject['base_sha']:
+        raise ToolAccessError('PR base changed after approval. Create a fresh review and approval.')
+    if (result.get('partial') is not False or result.get('evidence_version') != 2
+            or result.get('approval_ready') is not True or result.get('observed_ci_passed') is not True):
+        raise ToolAccessError('Current PR evidence is incomplete or observed CI is not passing.')
+    if merge and (result.get('candidate_ready') is not True or result.get('review_approved') is not True
+                  or result.get('base_up_to_date') is not True or result.get('required_checks_satisfied') is not True):
+        raise ToolAccessError('PR merge requires current GitHub approval, an up-to-date base and passing protected-branch checks.')
     return client

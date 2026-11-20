@@ -33,7 +33,7 @@ def create_workflow(
     return persist_workflow(req, request, db)
 
 
-def persist_workflow(req, request, db, workflow_id=None, initially_active=True):
+def persist_workflow(req, request, db, workflow_id=None, initially_active=True, *, channel_trigger=None):
     """Shared creation/provisioning path; chat supplies a stable ID and starts inactive."""
     def_json = req.definition_json
     if not def_json and req.definition_yaml:
@@ -72,6 +72,17 @@ def persist_workflow(req, request, db, workflow_id=None, initially_active=True):
     # Authoring must not grant scheduled execution/activation to read-level members.
     if not actor.allows(target_dept_id, 3):
         initially_active = False
+
+    if channel_trigger is not None:
+        from .workflows_channel_triggers import eligible_trigger_bindings
+        actor.require(target_dept_id, 3)
+        if not actor.user_id or not eligible_trigger_bindings(db, org_id, target_dept_id, channel_trigger.binding_id):
+            raise HTTPException(422, "Select a trigger-enabled binding in the workflow department.")
+        definition.setdefault("metadata", {}).update({
+            "channel_trigger": channel_trigger.model_dump(),
+            "channel_trigger_principal": actor.user_id,
+        })
+        def_json = json.dumps(definition)
 
     wf_id = workflow_id or f"wf_{uuid.uuid4().hex[:10]}"
     runner_agent_id = f"wf-agent-{wf_id}"
