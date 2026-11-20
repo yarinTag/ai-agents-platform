@@ -81,7 +81,7 @@ Merged baseline CI: https://github.com/yarinTag/ai-agents-platform/actions/runs/
 2. Apply the current approval initializer twice to the full current-schema copy:
    all eight approvals and eight delivery records remain byte-for-byte equal at
    row level; integrity and foreign-key checks pass.
-3. No original historical backup was available. Reconstruct the predecessor
+3. No original populated pre-sequence approval backup was available. Reconstruct the predecessor
    approval tables verbatim from committed source `504a622`, retaining all other
    database tables. Populate legacy columns from the actual snapshot rows without
    editing their values. The old schema allows one row per execution; partition
@@ -105,6 +105,23 @@ legacy dataset. That item of AI-46 remains open pending an actual older snapshot
 It does not certify unknown customer
 installations, PostgreSQL cutover, provider delivery or all future schema migrations.
 Each customer upgrade still requires its own isolated backup/restore rehearsal.
+
+### Authentic older baseline snapshots
+
+A subsequent Git-history search found two authentic SQLite snapshots in initial
+commit `3394c7f` (2026-09-20): `poc/data/agents_platform.db` (one agent and one
+project) and `poc/backend/data/agents_platform.db` (seven agents). They predate
+organization, channel and approval tables entirely. Extracted the original Git
+blobs into private files and initialized disposable copies with the current real
+DatabaseManager three times. Every original row/column value was preserved; all
+tables were unchanged on repeated initialization; integrity and FK checks passed.
+No organization, user, department MCP grant or channel binding was created.
+
+Report: `/private/tmp/ai-platform-acceptance-evidence/historical/report.json`.
+These are actual full older database migrations, distinct from the derived
+approval-schema trials. They still contain no previous-version approval records
+and do not substitute for the specific populated pre-sequence approval snapshot
+required by the release checklist. That narrower historical acceptance remains open.
 
 ## AI-51: accepted product decision
 
