@@ -11,7 +11,7 @@ from config import AgentConfig
 from persistence import DatabaseManager
 from backend.api.workflow_chat import router
 from backend.api.workflow_chat_models import ChatWorkflow
-from backend.api.workflow_chat_policy import catalog, validate_candidate
+from backend.api.workflow_chat_policy import catalog, native_definition, validate_candidate
 from backend.dependencies import get_db_manager
 from backend.security import authenticate_request, create_access_token
 
@@ -85,6 +85,62 @@ def test_unknown_repository_channel_tool_and_cycles_are_rejected(setup):
     assert any('C_FORBIDDEN' in error for error in errors)
     assert any('write' in error for error in errors)
     assert any('cycle' in error for error in errors)
+
+
+def test_chat_requires_exact_tool_resource_pairs(setup):
+    db, identity, _ = setup
+    resources = catalog(db, identity, 'dept-chat')
+    value = candidate()
+    valid = value.steps[0].resources[0]
+    value.steps[0].resources.append(valid.model_copy(update={'tool_name': None}))
+    value.steps[0].resources.append(valid.model_copy(update={'repository': None}))
+    clarifications = []
+    errors = validate_candidate(value, resources, clarifications=clarifications)
+    assert any('explicit tool for each resource' in error for error in errors)
+    assert any('each GitHub tool with one exact repository' in error for error in errors)
+    assert clarifications == [
+        {'code': 'CAPABILITY_SELECTION_REQUIRED', 'step_key': value.steps[0].key,
+         'resource_index': index, 'action': 'select_authorized_resource_or_request_setup'}
+        for index in (1, 2)
+    ]
+
+
+def test_chat_compiles_checkpoint_and_keeps_tool_grants_separate(setup):
+    db, identity, _ = setup
+    resources = catalog(db, identity, 'dept-chat')
+    value = candidate()
+    write = value.steps[0]
+    write.resources[0].tool_name = 'comment_pull_request'
+    assert any('human approval checkpoint' in error for error in validate_candidate(value, resources))
+    checkpoint = write.model_copy(update={'key': 'approval', 'resources': []})
+    from backend.api.workflow_chat_models import ApprovalCheckpoint
+    checkpoint.approval_checkpoint = ApprovalCheckpoint(expires_hours=2)
+    value.steps.insert(0, checkpoint)
+    write.depends_on = [checkpoint.key]
+    assert any('exact PR write arguments' in error for error in validate_candidate(value, resources))
+    from workflows.pr_write_approval import PRWriteApproval
+    write.pr_write_approval = PRWriteApproval.model_validate({
+        'connector_id': 'github', 'approval_step': checkpoint.key,
+        'intent': {'operation': 'comment_pull_request', 'arguments': {
+            'repository': 'team/allowed', 'pull_number': 7, 'head_sha': 'a' * 40, 'body': 'Reviewed.',
+        }},
+    })
+    errors = validate_candidate(value, resources)
+    assert not any('human approval checkpoint' in error for error in errors)
+    assert any('comment_pull_request' in error for error in errors)
+    compiled, protected = native_definition(value, resources)['steps']
+    assert compiled['mcp_servers'] == []
+    assert compiled['params'] == {'dag_approval': {'timeout_seconds': 7200}}
+    assert protected['depends_on'] == ['approval']
+    from workflows.parser import WorkflowParser
+    from workflows.pr_write_approval import approval_manifest
+    definition = WorkflowParser.from_dict(native_definition(value, resources))
+    manifest = approval_manifest(definition, 'approval')
+    assert manifest['fingerprint'] == write.pr_write_approval.fingerprint(write.key)
+    assert manifest['description'].endswith('Reviewed.')
+    amended = write.pr_write_approval.model_copy(deep=True)
+    amended.intent.arguments.body = 'Changed content.'
+    assert amended.fingerprint(write.key) != manifest['fingerprint']
 
 
 def test_creation_is_inactive_and_idempotent_with_dedicated_runner(setup):
@@ -240,3 +296,52 @@ def test_manual_creation_binds_planned_runner_to_real_agent(setup):
     assert definition['steps'][0]['agent_id'] == definition['runner_agent_id']
     runner = db.get_agent(definition['runner_agent_id'])
     assert runner.is_workflow_agent and runner.department_id == 'dept-chat'
+
+
+def test_chat_channel_trigger_binds_server_principal_without_activating(setup):
+    from storage.channel_bindings import create
+    from workflows.channel_trigger_rules import TriggerRule
+
+    db, identity, client = setup
+    binding = create(db, 'org-chat', 'dept-chat', 'chat-user', 'slack', 'slack',
+                     'C01234567', {'trigger_workflows': True, 'send_notifications': False, 'approve_decisions': False})
+    value = candidate()
+    value.channel_trigger = TriggerRule(binding_id=binding['id'], enabled=True,
+                                        matcher='command', pattern='/review')
+    assert validate_candidate(value, catalog(db, identity, 'dept-chat')) == []
+    seed_job(db, value)
+    response = client.post('/api/v1/workflows/ai/chat/chat-ready-request/create')
+    assert response.status_code == 200, response.text
+    workflow = db.get_workflow(response.json()['id'])
+    metadata = json.loads(workflow.definition_json)['metadata']
+    assert metadata['channel_trigger'] == value.channel_trigger.model_dump()
+    assert metadata['channel_trigger_principal'] == 'chat-user'
+    assert not workflow.is_active
+
+
+def test_exact_pr_write_refuses_mismatched_claim_before_preparing_tools(setup):
+    from workflows.pr_write_approval import PRWriteApproval, execute_approved_write
+    from integrations.tool_definitions import ToolAccessError
+
+    db, _, _ = setup
+    db.create_workflow(id='pinned-write', name='Pinned', organization_id='org-chat',
+                       department_id='dept-chat', definition_json='{}')
+    db.create_workflow_execution('pinned-run', 'pinned-write', 'MANUAL',
+                                 department_id='dept-chat', status='RUNNING')
+    config = PRWriteApproval.model_validate({
+        'connector_id': 'github', 'approval_step': 'approval',
+        'intent': {'operation': 'comment_pull_request', 'arguments': {
+            'repository': 'team/allowed', 'pull_number': 7, 'head_sha': 'a' * 40, 'body': 'Changed.',
+        }},
+    })
+    with db._get_connection() as conn:
+        conn.execute("""INSERT INTO workflow_dag_approvals
+            (id,execution_id,step_key,workflow_revision,organization_id,department_id,
+             initiator_id,policy_json,checkpoint_json,status,expires_at)
+            VALUES ('pinned-claim','pinned-run','approval',1,'org-chat','dept-chat','chat-user',
+                    '{}',?,'CLAIMED',unixepoch()+300)""",
+            (json.dumps({'approved_pr_write': {'step_key': 'summarize', 'fingerprint': '0' * 64}}),))
+    with pytest.raises(ToolAccessError, match='differs from the approved action'):
+        execute_approved_write(db, candidate().steps[0], config, None, 'pinned-run')
+    with db._get_connection() as conn:
+        assert conn.execute('SELECT count(*) FROM mcp_tool_calls').fetchone()[0] == 0

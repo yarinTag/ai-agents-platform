@@ -97,3 +97,19 @@ def test_diagnostic_is_bounded_redacted_and_never_contains_provider_metadata(mon
     assert len(event['candidate_sha256']) == 64
     assert set(event) == {'type', 'status', 'error_code', 'message', 'attempt', 'candidate_preview',
                           'candidate_truncated', 'candidate_characters', 'candidate_sha256'}
+
+
+def test_pr_completion_preserves_only_bounded_findings_for_authorized_pulls():
+    import json
+
+    finalizer = ConnectorFinalizer(pull_numbers=[20, 23])
+    outcome = {'status': 'completed', 'blocker': None, 'output': 'Reviewed two PRs.',
+               'eligible_pull_numbers': [20],
+               'per_pull_findings': [{'pull_number': 20, 'findings': 'Verified the diff.'}]}
+    status, serialized = finalizer.inspect({'text': json.dumps(outcome), 'calls': []})
+    assert status == 'completed'
+    assert json.loads(serialized)['per_pull_findings'] == outcome['per_pull_findings']
+
+    outcome['per_pull_findings'][0]['pull_number'] = 99
+    status, _ = finalizer.inspect({'text': json.dumps(outcome), 'calls': []})
+    assert status == 'repair'

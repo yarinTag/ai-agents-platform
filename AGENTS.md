@@ -343,3 +343,11 @@ The Workflows inbox and Execution Logs show pending and historical checkpoint an
 AI-38 adds Telegram destination setup and previews to the approval step editor. AI-39 documents callback verification and recovery in docs/interactive-channel-approvals.md.
 
 AI-43/44 execution audit projection and recovery limits are documented in docs/workflow-run-audit.md.
+
+## Sequential PR approvals within one execution
+
+Terminal PR merge gates now pin and approve one PR at a time. Each acknowledged merge advances to a fresh GitHub evidence check and a new approval ID in the same execution. Dashboard and Telegram decisions bind to the displayed approval. Earlier receipts remain visible if a later PR is blocked, rejected or expires. See the workflow, storage and API guides. No runtime verification performed.
+
+The [AI-47 browser verification matrix](docs/governed-workflow-browser-verification.md) covers governed workflow authoring, role boundaries, channel linking, and approval journeys.
+
+[AI-48 governed workflow release checklist](docs/governed-workflow-release.md) indexes administrator/operator guides and tracks migration, CI, browser, provider and independent review evidence for AI-12.

@@ -73,6 +73,27 @@ def test_telegram_atomic_dedup_and_diagnostics(baseline, monkeypatch):
         assert conn.execute("SELECT sender_id FROM channel_ingress_events LIMIT 1").fetchone()[0] == "12345"
 
 
+def test_simultaneous_verified_telegram_receipts_stage_one_event(baseline):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    db, client = baseline
+    connector = configure(client, db, "telegram")
+    payload = telegram_message()
+    rendezvous = Barrier(2, timeout=10)
+
+    def post_receipt():
+        rendezvous.wait()
+        return client.post(f"{BASE}/{connector}", json=payload, headers=telegram_headers()).status_code
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        receipts = [pool.submit(post_receipt) for _ in range(2)]
+        assert sorted(receipt.result() for receipt in receipts) == [200, 202]
+    with db._get_connection() as conn:
+        assert conn.execute("SELECT count(*) FROM channel_ingress_events").fetchone()[0] == 1
+        assert conn.execute("SELECT count(*) FROM channel_ingress_outbox").fetchone()[0] == 1
+
+
 def test_telegram_private_identity_proof_shares_receiver_without_staging_code(baseline):
     db, client = baseline
     connector = configure(client, db, "telegram")
@@ -295,6 +316,9 @@ def test_terminal_telegram_claim_cannot_survive_relink(baseline):
     update["callback_query"]["message"]["message_id"] = 7
     for _ in range(2):
         assert client.post(path, json=update, headers=telegram_headers()).json()["text"] == "Decision recorded."
+    update["callback_query"]["id"] = "457"
+    assert client.post(path, json=update, headers=telegram_headers()).json()["text"].startswith("Decision unavailable")
+    assert delivery.next_edit(db)[1] == "DECIDED"
     with db._get_connection() as conn:
         row = conn.execute("SELECT callback_id,decision,identity_link_id FROM pr_channel_deliveries").fetchone()
         assert tuple(row) == ("456", 1, "original-link")
@@ -394,3 +418,78 @@ def test_dag_approval_resume_preserves_prior_barrier_runs(baseline):
             WHERE execution_id=? ORDER BY step_key""", (execution.id,))] == [
             ("first", "COMPLETED"), ("second", "FAILED"),
         ]
+
+
+def test_slack_signed_card_decision_uses_exact_installation_and_message(baseline):
+    from urllib.parse import urlencode
+    from integrations.slack_approval_cards import APPROVE
+    from integrations.telegram_approval_cards import action_token, signed_action
+    from storage import channel_approval_delivery as delivery, dag_approvals
+
+    db, client = baseline
+    connector = configure(client, db, 'slack')
+    binding = client.post('/api/v1/governance/channel-bindings', headers=auth(), json={
+        'department_id': 'atlas_engineering', 'connector_id': connector, 'provider': 'slack',
+        'channel_id': 'C12345678', 'uses': {'approve_decisions': True, 'send_notifications': True},
+    })
+    assert binding.status_code == 201, binding.text
+    workflow = db.create_workflow(id='slack-approval', name='Slack approval', definition_json='{}',
+                                  department_id='atlas_engineering', organization_id='atlas')
+    db.create_workflow_execution('slack-run', workflow.id, 'MANUAL', department_id=workflow.department_id)
+    identifier = dag_approvals.suspend(db, execution_id='slack-run', step_key='review',
+        revision=workflow.revision, initiator_id='atlas_OPERATOR',
+        policy={'approver_roles': ['MANAGER'], 'quorum': 1, 'timeout_seconds': 60,
+                'channel_binding_id': binding.json()['id']},
+        checkpoint={'outputs': {}, 'input_tokens': 0, 'output_tokens': 0, 'cost_usd': 0})
+    assert delivery.next_delivery(db)['id'] == identifier
+    token = action_token(db.get_mcp_connector(connector).configuration['bot_token'], identifier)
+    delivery.record_delivery(db, identifier, 'DELIVERED', connector=connector, channel='C12345678',
+                             message='1730000000.123', bot='T12345678', rendered='PENDING:0/1', token=token)
+    with db._get_connection() as conn:
+        conn.execute("""INSERT INTO external_identity_links
+            (id,organization_id,connector_id,user_id,provider,account,subject,created_at)
+            VALUES ('slack-manager','atlas',?,'atlas_MANAGER','slack','T12345678','U12345678',?)""",
+            (connector, int(time.time())))
+    envelope = {'type': 'block_actions', 'team': {'id': 'T12345678'}, 'api_app_id': 'A12345678',
+        'user': {'id': 'U12345678', 'team_id': 'T12345678'}, 'channel': {'id': 'C12345678'},
+        'container': {'type': 'message', 'channel_id': 'C12345678', 'message_ts': '1730000000.124'},
+        'actions': [{'action_id': APPROVE, 'action_ts': '1730000001.101',
+                     'value': f'{token}:{signed_action(SECRET, token, APPROVE)}'}]}
+    def post():
+        body = urlencode({'payload': json.dumps(envelope)}).encode()
+        return client.post(f'{BASE}/{connector}', content=body, headers={
+            **slack_headers(body), 'Content-Type': 'application/x-www-form-urlencoded',
+        })
+
+    assert post().status_code == 200
+    with db._get_connection() as conn:
+        assert conn.execute('SELECT count(*) FROM workflow_dag_approval_votes').fetchone()[0] == 0
+    envelope['container']['message_ts'] = '1730000000.123'
+    assert post().status_code == 200
+    assert post().status_code == 200
+    with db._get_connection() as conn:
+        assert conn.execute('SELECT count(*) FROM dag_channel_callbacks').fetchone()[0] == 1
+        assert conn.execute('SELECT count(*) FROM workflow_dag_approval_votes').fetchone()[0] == 1
+        assert conn.execute('SELECT count(*) FROM channel_ingress_events').fetchone()[0] == 0
+
+
+def test_socket_mode_fences_webhook_and_reuses_event_deduplication(baseline):
+    from backend.api.channel_ingress import receive_slack_socket
+    from storage.external_identities import connector_settings
+
+    db, client = baseline
+    identifier = configure(client, db, 'slack')
+    connector = db.get_mcp_connector(identifier)
+    token = 'xapp-example-fixture-socket'
+    connector.configuration.update(ingress_mode='socket', socket_app_token=token)
+    db.save_mcp_connector(connector)
+    with db._get_connection() as conn:
+        _, _, _, version = connector_settings(conn, identifier)
+    payload = {'type': 'event_callback', 'event_id': 'Ev87654321', 'team_id': 'T12345678',
+               'api_app_id': 'A12345678', 'event': {'type': 'message', 'channel': 'C12345678',
+               'ts': '1730000000.123', 'user': 'U12345678', 'text': 'fixture'}}
+    raw = json.dumps(payload).encode()
+    assert client.post(f'{BASE}/{identifier}', content=raw, headers=slack_headers(raw)).status_code == 403
+    digest = hashlib.sha256(token.encode()).hexdigest()
+    assert receive_slack_socket(db, identifier, version, digest, 'events_api', payload).status_code == 202
+    assert receive_slack_socket(db, identifier, version, digest, 'events_api', payload).status_code == 200

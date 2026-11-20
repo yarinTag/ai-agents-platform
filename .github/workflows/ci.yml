@@ -60,6 +60,8 @@ jobs:
           - suite: security
             files: >-
               poc/tests/test_workflow_pr_approvals.py
+              poc/tests/test_channel_ingress_api.py
+              poc/tests/test_channel_trigger_relevance.py
               poc/tests/test_access_policy.py
               poc/tests/test_access_lab_setup.py
               poc/tests/test_skill_connections.py
