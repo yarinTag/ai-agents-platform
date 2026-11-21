@@ -65,3 +65,14 @@ The existing provider destination is a broadcast channel: approval cards work,
 but a personal-sender live trigger requires a Telegram test group. Live relevance
 and remaining Chrome journeys are still open; AI-47/49/48 are not closed by these
 direct tests. No production grants or bindings were changed.
+
+## Real Telegram group input — 2026-11-21
+
+[Live-group input evidence](telegram-live-group-acceptance-2026-11-21.md) now proves
+actual provider matching/nonmatching messages, verified sender provenance and
+hourly capacity through the real engine on disposable backend state: three events,
+one completed execution/vote, no inference. This supersedes the earlier lack of a
+usable group. The earlier card49 proves Telegram approval on the active installation;
+the new run's independent decision used the lab dashboard API. Active deployment
+trigger configuration/worker acceptance and optional live model relevance remain
+unverified; remaining AI-47 journeys and AI-48 sign-off stay open.

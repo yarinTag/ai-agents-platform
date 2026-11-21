@@ -419,3 +419,9 @@ contract tests remain unexecuted. Open operational decisions are listed in the A
 [AI-22 channel registry](docs/channel-bindings.md) adds tenant-scoped Telegram/Slack configuration, independent use flags, and audited administrator changes. Verified ingress, identity and runtime use remain separate stages.
 
 ## 1. Platform Identity & Architectural Mission
+
+## Telegram live-group acceptance evidence (2026-11-21)
+[Provider input and isolated engine results](docs/telegram-live-group-acceptance-2026-11-21.md)
+complement the 65 direct cases and earlier active-installation Telegram card49 vote.
+Actual matching/nonmatching commands produced one completed lab execution with no
+model tasks; no production trigger binding, grants or worker was activated.
