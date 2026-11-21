@@ -12,10 +12,10 @@ steps:
         approver_roles: [MANAGER, ORG_ADMIN]
         timeout_seconds: 86400
         quorum: 2
-        separate_initiator: true
+        mode: INDEPENDENT
 ```
 
-Allowed roles are OPERATOR, MANAGER and ORG_ADMIN. They match the current effective role exactly. Quorum counts distinct eligible personal users, from 1 to 10, and the TTL is 60 to 259200 seconds. The initiating account and the recorded author of the pinned revision cannot decide. Any eligible rejection terminates the wait. Agents must never simulate or self-grant approval.
+Allowed roles are OPERATOR, MANAGER and ORG_ADMIN. They match the current effective role exactly. Quorum counts distinct eligible personal users, from 1 to 10, and the TTL is 60 to 259200 seconds. In INDEPENDENT mode (also the legacy default), the initiating account and the recorded author of the pinned revision cannot decide. CONTINUATION allows them when they meet the current role and scope requirements. Any eligible rejection terminates the wait. Agents must never simulate or self-grant approval.
 
 ```mermaid
 stateDiagram-v2
@@ -38,4 +38,4 @@ The approval and vote tables are authoritative. Votes are unique by approval and
 
 The API returns pending requests for the selected department and scopes evidence to executions the caller can read. It exposes bounded prior-output excerpts and recorded cost. Full step details remain in execution logs. Decision submission takes only a boolean and rechecks current authority server-side. Neither an inbox badge nor a prior vote authorizes a subsequent action by itself.
 
-The visual step builder can convert an action-free step to a dashboard barrier and edit its roles, timeout, and quorum.
+The visual step builder can convert an action-free step to a dashboard barrier and edit its policy mode, roles, timeout, and quorum. See [explicit mode and protected-action rules](explicit-approval-policy.md); exact governed GitHub write checkpoints cannot use CONTINUATION.

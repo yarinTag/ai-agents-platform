@@ -130,7 +130,7 @@ def test_chat_compiles_checkpoint_and_keeps_tool_grants_separate(setup):
     assert any('comment_pull_request' in error for error in errors)
     compiled, protected = native_definition(value, resources)['steps']
     assert compiled['mcp_servers'] == []
-    assert compiled['params'] == {'dag_approval': {'timeout_seconds': 7200}}
+    assert compiled['params'] == {'dag_approval': {'timeout_seconds': 7200, 'mode': 'INDEPENDENT'}}
     assert protected['depends_on'] == ['approval']
     from workflows.parser import WorkflowParser
     from workflows.pr_write_approval import approval_manifest

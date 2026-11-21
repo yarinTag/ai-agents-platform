@@ -25,6 +25,7 @@ class ResourceRef(StrictModel):
 
 
 class ApprovalCheckpoint(StrictModel):
+    mode: Literal['CONTINUATION', 'INDEPENDENT'] = 'INDEPENDENT'
     expires_hours: int = Field(default=24, ge=1, le=72)
     channel_binding_id: str | None = Field(default=None, pattern=r"^chb_[a-f0-9]{32}$")
 

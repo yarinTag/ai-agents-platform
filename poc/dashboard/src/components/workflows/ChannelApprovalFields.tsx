@@ -93,6 +93,7 @@ function ChannelPreview({ connector, step, policy }: {
       <Space orientation="vertical">
         <Typography.Text strong>ConduitCross · {approval.waiting} · <bdi>0/{policy.quorum ?? 1}</bdi></Typography.Text>
         <Typography.Text><bdi>{step.key}</bdi></Typography.Text>
+        <Typography.Text>{approval.policyMode}: {policy.mode === 'CONTINUATION' ? approval.continuation : approval.independent}</Typography.Text>
         <Typography.Text>{approval.expires} <bdi>{deadline} UTC</bdi></Typography.Text>
         {policy.summary_step && <Typography.Text>{text.findings} <bdi>{policy.summary_step}</bdi></Typography.Text>}
         <Space><Button size="small" disabled>{approval.approve}</Button><Button size="small" disabled>{approval.reject}</Button></Space>

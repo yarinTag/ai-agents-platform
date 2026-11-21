@@ -355,3 +355,15 @@ Both files passed 26 cases under a no-network/no-subprocess audit guard; 39 exis
 Telegram/shared cases passed separately. These are direct integration tests, not
 provider-originated live events. Private provider readiness and limitations are
 recorded in docs/telegram-direct-acceptance-2026-11-21.md.
+
+## Explicit approval policy regression contracts
+test_approval_modes.py uses actual SQLite/FastAPI/engine and signed callback fixtures
+for explicit/legacy independence, continuation self/author votes, roles/status/quorum,
+revocation before resume, invalid policy rejection, Chat compilation/card labels and
+protected exact PR-write downgrade denial at authoring/suspend/write authorization.
+No mocked services or live provider/model calls. Selected together with the existing
+Telegram, ingress, chat and PR approval cases in security CI.
+
+The guarded API audit's PR-write creation case explicitly asserts the compiled
+checkpoint mode=INDEPENDENT alongside its TTL, retaining current grant revalidation
+and inactive-workflow assertions.

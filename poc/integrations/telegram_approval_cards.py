@@ -9,6 +9,7 @@ from urllib.parse import quote
 
 from .identity_proofs import InvalidProof
 from .provider_http import request_json
+from workflows.dag_approval_config import approval_mode
 
 
 @dataclass(frozen=True)
@@ -64,6 +65,10 @@ def card_content(row, state, dashboard_origin):
               "DECIDED": "Decision received · checking outcome", "FAILED": "Approval processing failed"}
     label = status.get(state, f"Waiting for approval · {state.removeprefix('PENDING:')}")
     text = f"ConduitCross · {label}\nStep: {row['step_key']}\nExpires: {expires}"
+    if "policy_json" in row:
+        mode = approval_mode(json.loads(row["policy_json"]))
+        text += ("\nPolicy: Continuation · eligible initiator/author may approve."
+                 if mode == "CONTINUATION" else "\nPolicy: Independent · another eligible person must approve.")
     checkpoint = json.loads(row["checkpoint_json"]) if "checkpoint_json" in row else {}
     intent = checkpoint.get("approved_pr_write")
     if intent:

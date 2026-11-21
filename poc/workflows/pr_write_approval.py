@@ -95,8 +95,12 @@ def validate_write_gates(definition):
     checkpoints = {step.key: step for step in definition.steps if dag_approval_policy(step)}
     for step in definition.steps:
         config = write_configuration(step)
-        if config and config.approval_step not in checkpoints:
-            raise ToolAccessError('An exact PR write must depend on a durable DAG approval checkpoint.')
+        if config:
+            gate = checkpoints.get(config.approval_step)
+            if gate is None:
+                raise ToolAccessError('An exact PR write must depend on a durable DAG approval checkpoint.')
+            if dag_approval_policy(gate).mode != 'INDEPENDENT':
+                raise ToolAccessError('An exact PR write requires INDEPENDENT approval.')
     for key in checkpoints:
         approval_manifest(definition, key)
 
@@ -121,6 +125,9 @@ def execute_approved_write(db, step, config, task, execution_id):
             if (manifest.get('step_key'), manifest.get('fingerprint')) != (step.key, config.fingerprint(step.key)):
                 raise ToolAccessError('The GitHub write differs from the approved action.')
             policy = json.loads(approval['policy_json'])
+            from .dag_approval_config import approval_mode
+            if approval_mode(policy) != 'INDEPENDENT':
+                raise ToolAccessError('An exact PR write requires INDEPENDENT approval.')
             votes = conn.execute('SELECT user_id FROM workflow_dag_approval_votes WHERE approval_id=? AND decision=1',
                                  (approval['id'],)).fetchall()
             if sum(_eligible(conn, approval, policy, vote['user_id']) for vote in votes) < policy['quorum']:

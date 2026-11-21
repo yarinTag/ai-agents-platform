@@ -107,3 +107,7 @@ test_telegram_trigger_acceptance.py. Actual temporary SQLite/FastAPI and the rea
 workflow engine verify negative actors/scopes, rejection/expiry, restart fencing,
 concurrent callbacks, preview, deterministic trigger dispatch, bot/unlinked exclusion,
 capacity and post-reservation policy checks. No Telegram credentials or model calls.
+
+Security CI additionally selects test_approval_modes.py: actual SQLite/FastAPI/engine
+checkpoint mode compatibility, authority and protected-write fencing without live
+Telegram, model credentials or application lifespan.

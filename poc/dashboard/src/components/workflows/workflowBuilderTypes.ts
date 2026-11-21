@@ -9,6 +9,8 @@ export interface RepositoryWorkspaceConfig {
 }
 
 export interface DagApprovalPolicy {
+  mode?: 'CONTINUATION' | 'INDEPENDENT';
+  separate_initiator?: true;
   approver_roles?: ('OPERATOR' | 'MANAGER' | 'ORG_ADMIN')[];
   timeout_seconds?: number;
   quorum?: number;

@@ -290,3 +290,14 @@ Merge resolution immediately attempts its own confirmed continuation, with the w
 _has_capacity joins only channel_trigger_dispatches. reserve_dispatches writes
 those execution timestamps in UTC; manual/cron naive rows do not participate.
 This is a documented query invariant, not a timestamp migration.
+
+## Explicit checkpoint approval modes
+DagApprovalPolicy.mode is CONTINUATION or INDEPENDENT (default). CONTINUATION permits
+a currently eligible initiator/revision author; INDEPENDENT excludes both. Roles,
+quorum, expiry, live initiator checks and single continuation claims still apply.
+Legacy omitted mode / separate_initiator:true remain independent; false or a
+conflicting legacy flag is rejected. Frozen policy_json is authoritative; existing
+waits are not rewritten. Exact GitHub pr_write_approval requires an INDEPENDENT
+checkpoint at definition validation, suspend and actual write authorization. The
+terminal human_approval/merge contract is separate and has no new mode opt-out.
+See ../../docs/explicit-approval-policy.md.

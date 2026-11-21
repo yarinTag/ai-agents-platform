@@ -58,3 +58,11 @@ DAG callback receipts record approval ID, provider callback ID, actor, action an
 In the workflow builder, choose Dashboard only or a Telegram department binding with Send and Approve enabled. Listen remains independent in channel settings. A direct dependency may provide the findings excerpt. The preview uses sample values and sends no message. Administrator readiness checks report configured HTTPS and webhook secret presence, and the identity indicator reflects the signed-in user. These checks do not verify provider delivery.
 
 Slack HTTPS interactive cards are now implemented in source using the same exact Send+Approve binding, identity link, dashboard fallback and persisted gate. Point Slack Interactivity to the connector-specific HTTPS ingress, configure the app/team/signing secret, and give its bot posting rights in the selected channel. Slack Socket Mode is also available through the outbound worker. Live Slack verification remains pending.
+
+## Explicit checkpoint decision mode
+
+Checkpoint cards display their frozen [approval policy](explicit-approval-policy.md):
+CONTINUATION permits eligible initiators/authors, while INDEPENDENT (legacy default)
+requires another eligible person. Telegram/Slack callbacks, dashboard decisions and
+resume use the same current-role/quorum checks. A click cannot override the mode.
+Existing cards/requests are not migrated; select the policy before a new run.

@@ -16,7 +16,7 @@ export interface ChatWorkflow {
     workspace?: { connector_id: string; repository: string; ref?: string | null;
       mode: 'read' | 'write'; pr_title?: string | null } | null;
     required_outcome?: 'analysis' | 'pull_request';
-    approval_checkpoint?: { expires_hours: number; channel_binding_id?: string | null } | null;
+    approval_checkpoint?: { mode?: 'CONTINUATION' | 'INDEPENDENT'; expires_hours: number; channel_binding_id?: string | null } | null;
     pr_write_approval?: { connector_id: string; approval_step: string; intent: {
       operation: 'comment_pull_request' | 'review_pull_request';
       arguments: { repository: string; pull_number: number; head_sha: string; body: string;

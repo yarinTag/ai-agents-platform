@@ -14,6 +14,7 @@ export type DagApproval = {
   decided_at: number | null;
   status: DagApprovalStatus;
   my_vote: Exclude<DagApprovalStatus, 'PENDING' | 'TIMED_OUT'> | null;
+  mode?: 'CONTINUATION' | 'INDEPENDENT';
   approver_roles: string[];
   quorum: number;
   approvals: number;
