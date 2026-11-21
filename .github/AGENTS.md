@@ -101,3 +101,9 @@ AI-28 adds signed Telegram and Slack webhook ingress contracts to the isolated A
 AI-46 security CI also selects test_channel_ingress_api.py for verified ingress, channel trigger and approval callback contracts on temporary SQLite/FastAPI, without sending live provider actions.
 
 Security CI includes the real SQLite/FastAPI relevance admission, deduplication and capacity contracts.
+
+Telegram-only acceptance CI additionally selects test_telegram_acceptance.py and
+test_telegram_trigger_acceptance.py. Actual temporary SQLite/FastAPI and the real
+workflow engine verify negative actors/scopes, rejection/expiry, restart fencing,
+concurrent callbacks, preview, deterministic trigger dispatch, bot/unlinked exclusion,
+capacity and post-reservation policy checks. No Telegram credentials or model calls.

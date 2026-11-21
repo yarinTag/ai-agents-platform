@@ -56,3 +56,12 @@ record of any authorized provider checks. Record independent review findings,
 their resolution and the base/head of each stacked PR. A green automated
 suite alone does not establish that a provider installation is configured or
 that the approved production channel can deliver.
+
+## Telegram-only direct acceptance — 2026-11-21
+
+The user deferred unavailable Slack. [65 direct passing cases](telegram-direct-acceptance-2026-11-21.md)
+cover callback denials/races/recovery and deterministic ingress-to-engine dispatch.
+The existing provider destination is a broadcast channel: approval cards work,
+but a personal-sender live trigger requires a Telegram test group. Live relevance
+and remaining Chrome journeys are still open; AI-47/49/48 are not closed by these
+direct tests. No production grants or bindings were changed.
