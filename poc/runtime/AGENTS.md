@@ -298,3 +298,8 @@ OS failures before a child exists also report zero; after launch cost stays unkn
 Timeout/cancel/no-result after launch never proves zero provider charges. Messages
 are sanitized; hosted_budget settlement semantics are unchanged. Regression source
 belongs to the stacked verification PR. No local model/tests/provider calls run.
+
+Workflow Chat's checkpoint schema now includes mode CONTINUATION|INDEPENDENT. Model
+instructions default to INDEPENDENT and allow proposing CONTINUATION only for an
+explicitly requested personal confirmation/pause. The model cannot waive protected
+PR-write independence, current permissions or frozen decision authority.

@@ -137,3 +137,9 @@ Exact approved PR writes reuse WorkflowToolExecutor with a server-provided appro
 Exact PR write scopes carry a server-only fingerprint. Preflight can inspect requires_approval capability decisions; execution requires the claimed action callback before preparing scope and on each provider request. Ordinary tool scopes cannot use the approval path.
 
 Slack slash-command identity proof trims challenge whitespace before exact token matching.
+
+Telegram checkpoint cards render the frozen approval mode: eligible initiator/author
+may decide CONTINUATION; INDEPENDENT requires another eligible person. Slack reuses
+the same card content. Delivery/callback signatures and identity checks are unchanged.
+The shared storage eligibility applies mode to callbacks and quorum/resume, and
+protected exact PR writes retain mandatory INDEPENDENT authorization.

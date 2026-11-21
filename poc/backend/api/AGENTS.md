@@ -443,3 +443,11 @@ Workflow Chat requires pr_write_approval for new GitHub comment/review plans. Th
 Workflow Chat connector catalog exposes exact_approval_tools. A PR write still requires exact intent, checkpoint and independent resource/agent authorization.
 
 Slack installation proof trims surrounding challenge whitespace on both HTTP and Socket Mode transports.
+
+## Explicit approval mode contract
+ChatStep.approval_checkpoint.mode accepts CONTINUATION|INDEPENDENT, default
+INDEPENDENT, and compiles unchanged into params.dag_approval.mode. Native create/
+update and chat validation reject CONTINUATION for exact governed PR write gates.
+GET /api/v1/workflows/dag-approvals adds mode from frozen policy (legacy independent).
+POST decision remains {approve:boolean}; callers cannot override mode on a decision.
+Existing actor/department/role checks apply. No endpoint or live-state migration.

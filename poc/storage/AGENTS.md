@@ -292,3 +292,11 @@ Explicit connection_factory DSN and caller-owned initialize only; no facade/star
 wiring, SQLite import or platform PostgreSQL compatibility claim. Full columns,
 transactions, caveats and remaining migration gates:
 ../../docs/architecture/ai-52-55-runner-persistence.md. Tests added but unexecuted.
+
+## Frozen explicit approval modes
+workflow_dag_approvals.policy_json stores mode=CONTINUATION|INDEPENDENT; absent means
+legacy INDEPENDENT. _eligible shares current roles/status with dashboard, provider
+callbacks, counted quorum and claim_resume. Only CONTINUATION permits initiator or
+revision author; it grants no role or identity. Invalid modes fail eligibility. A
+checkpoint carrying approved_pr_write cannot suspend/vote/resume with CONTINUATION.
+Inbox items add mode. No columns, migration or existing-policy rewrite.

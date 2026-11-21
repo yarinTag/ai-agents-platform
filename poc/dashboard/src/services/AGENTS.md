@@ -321,3 +321,7 @@ Channel trigger client types include optional relevance configuration, requires_
 Trigger settings include optional sender_ids, cooldown_seconds and max_runs_per_hour. Dry-run request can take a sample sender ID.
 
 The Socket Mode credential readiness field belongs to ingress checks, not per-event records.
+
+dagApprovalsApi.DagApproval adds optional mode CONTINUATION|INDEPENDENT for legacy
+server compatibility. workflowChat ApprovalCheckpoint DTO preserves optional mode.
+The decision body stays {approve}; no caller policy override, credentials or cache.

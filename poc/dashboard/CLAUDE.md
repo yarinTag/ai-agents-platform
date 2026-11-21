@@ -384,3 +384,10 @@ canRead checks and displays localized guidance; no route or permission changes.
 
 ## AI-47 Chrome authentication acceptance
 AI-47: localize the exact disabled/inactive login response in AuthPage without converting unknown failures into success or changing authentication behavior.
+
+## Approval policy UI
+DagApprovalFields writes mode CONTINUATION|INDEPENDENT and removes the deprecated
+separate_initiator flag on edits. Absent mode displays Independent. Preserve mode
+through workflow/chat DTOs; show it in AI preview and approval details. Respect the
+server's can_decide regardless of mode. Protected PR write downgrade is rejected
+server-side, including YAML/API paths; no existing waiting request is migrated.

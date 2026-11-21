@@ -231,3 +231,10 @@ replay denial. No DATABASE_URL auto-switch, active backend, database migration o
 runtime verification. Exact contracts: docs/architecture/ai-52-configuration-migration.md
 and docs/architecture/ai-52-execution-history-migration.md at repository root.
 Production dashboard build and typecheck passed; backend tests remain unexecuted.
+
+## Checkpoint mode implementation
+Keep params.dag_approval.mode explicit: CONTINUATION allows eligible self/author
+confirmation; INDEPENDENT (also legacy default) excludes both. Never infer authority
+from the selected mode. Chat compilation preserves it, protected exact GitHub write
+gates require INDEPENDENT, and existing waiting policy_json is immutable. Verify
+actual FastAPI/SQLite and provider callback paths without model/provider calls.

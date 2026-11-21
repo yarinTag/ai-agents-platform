@@ -430,3 +430,9 @@ A later explicitly authorized active-database Telegram trigger test reached one
 WAITING_APPROVAL checkpoint and denied self-approval403 with no inference. Its gate
 expired during an interruption; audited cleanup restored the connector and disabled
 the temporary workflow/user/binding. See the later active-admission evidence section.
+
+## Explicit checkpoint approval policies
+[Approval mode contract](docs/explicit-approval-policy.md) defines CONTINUATION
+versus default/legacy INDEPENDENT across authoring, frozen decisions, callbacks and
+resume. Exact governed GitHub writes require independent approval server-side.
+No existing pending policy or active workflow/grant was changed.

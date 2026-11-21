@@ -295,7 +295,8 @@ def native_definition(candidate: ChatWorkflow, resources, runner_agent_id=None):
                 'source_step': step.send_output_of}
         if step.approval_checkpoint:
             data['mcp_servers'] = []
-            approval = {'timeout_seconds': step.approval_checkpoint.expires_hours * 3600}
+            approval = {'timeout_seconds': step.approval_checkpoint.expires_hours * 3600,
+                        'mode': step.approval_checkpoint.mode}
             if step.approval_checkpoint.channel_binding_id:
                 approval['channel_binding_id'] = step.approval_checkpoint.channel_binding_id
             data['params'] = {'dag_approval': approval}

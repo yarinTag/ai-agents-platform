@@ -224,3 +224,8 @@ canRead checks and displays localized guidance; no route or permission changes.
 
 ## AI-47 Chrome authentication acceptance
 auth.accountUnavailable adds English/Hebrew disabled-or-inactive login guidance. AuthenticatedShell uses localized authenticating/noDepartmentAccess; raw unknown authentication failures retain their server detail.
+
+DAG and workflow-chat EN/HE text now labels Continuation/Independent approval policy,
+explains eligible self/author confirmation versus independent decisions and states
+that protected GitHub write approvals cannot be downgraded. Read-only guidance uses
+the saved policy rather than claiming every approval excludes its initiator.

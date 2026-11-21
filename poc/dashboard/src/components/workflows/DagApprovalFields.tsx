@@ -5,7 +5,7 @@ import { useDagApprovalsText } from '../../i18n/dagApprovals';
 import type { DagApprovalPolicy, WorkflowStep } from './workflowBuilderTypes';
 
 const roles = ['OPERATOR', 'MANAGER', 'ORG_ADMIN'] as const;
-const defaults: DagApprovalPolicy = { approver_roles: ['MANAGER', 'ORG_ADMIN'], timeout_seconds: 86400, quorum: 1 };
+const defaults: DagApprovalPolicy = { mode: 'INDEPENDENT', approver_roles: ['MANAGER', 'ORG_ADMIN'], timeout_seconds: 86400, quorum: 1 };
 
 export function DagApprovalFields({ step, onChange, department }: {
   step: WorkflowStep;
@@ -16,7 +16,9 @@ export function DagApprovalFields({ step, onChange, department }: {
   const t = useDagApprovalsText();
   const policy = step.params?.dag_approval;
   const update = (patch: Partial<DagApprovalPolicy>) => {
-    onChange({ params: { dag_approval: { ...defaults, ...policy, ...patch } } });
+    const next = { ...defaults, ...policy, ...patch };
+    delete next.separate_initiator;
+    onChange({ params: { dag_approval: next } });
   };
   const canConvert = !step.mcp_servers?.length && !Object.keys(step.params ?? {}).length;
   return <Form.Item extra={!policy && !canConvert ? t.removeTools : undefined}>
@@ -26,6 +28,11 @@ export function DagApprovalFields({ step, onChange, department }: {
       <Button danger type="text">{channelText.remove}</Button>
     </Popconfirm>}
     {policy && <>
+      <Form.Item label={t.policyMode} extra={t.modeHelp}>
+        <Select aria-label={t.policyMode} value={policy.mode ?? 'INDEPENDENT'}
+          options={[{ value: 'INDEPENDENT', label: t.independent }, { value: 'CONTINUATION', label: t.continuation }]}
+          onChange={mode => update({ mode })} />
+      </Form.Item>
       <Form.Item label={t.roles}>
         <Select mode="multiple" aria-label={t.roles} value={policy.approver_roles ?? defaults.approver_roles}
           options={roles.map(role => ({ value: role, label: role }))}

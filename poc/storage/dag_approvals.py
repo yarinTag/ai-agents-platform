@@ -5,6 +5,8 @@ import json
 import time
 from uuid import uuid4
 
+from workflows.dag_approval_config import approval_mode
+
 
 def initialize(conn):
     conn.execute("""CREATE TABLE IF NOT EXISTS workflow_dag_approvals (
@@ -41,6 +43,9 @@ def _transaction(db):
 
 def suspend(db, *, execution_id, step_key, revision, initiator_id, policy, checkpoint):
     """Publish the wait and its complete predecessor checkpoint in one commit."""
+    mode = approval_mode(policy)
+    if checkpoint.get("approved_pr_write") and mode != "INDEPENDENT":
+        raise ApprovalConflict("Protected writes require INDEPENDENT approval.")
     identifier = f"dga_{uuid4().hex}"
     with _transaction(db) as conn:
         owner = conn.execute("""SELECT w.organization_id,w.department_id
@@ -85,7 +90,18 @@ def _role(conn, row, user_id):
 
 
 def _eligible(conn, row, policy, user_id):
-    if _role(conn, row, user_id) not in policy["approver_roles"] or user_id == row["initiator_id"]:
+    if _role(conn, row, user_id) not in policy["approver_roles"]:
+        return False
+    try:
+        mode = approval_mode(policy)
+        checkpoint = json.loads(row["checkpoint_json"])
+    except (ValueError, TypeError):
+        return False
+    if checkpoint.get("approved_pr_write") and mode != "INDEPENDENT":
+        return False
+    if mode == "CONTINUATION":
+        return True
+    if user_id == row["initiator_id"]:
         return False
     authored = conn.execute("""SELECT 1 FROM workflow_revisions r
         JOIN workflow_executions x ON x.workflow_id=r.workflow_id
@@ -245,6 +261,7 @@ def inbox(db, organization_id, department_id, user_id, *, after="", view="pendin
                 else "dashboard" if row["decided_by"] else None,
                 "my_vote": next(("APPROVED" if v["decision"] else "REJECTED"
                                  for v in votes if v["user_id"] == user_id), None),
+                "mode": approval_mode(policy),
                 "approver_roles": policy["approver_roles"], "quorum": policy["quorum"],
                 "approvals": sum(v["decision"] and (view == "history" or _eligible(conn, row, policy, v["user_id"])) for v in votes),
                 "can_decide": view == "pending" and _eligible(conn, row, policy, user_id) and not any(v["user_id"] == user_id for v in votes),

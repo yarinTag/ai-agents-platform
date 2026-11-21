@@ -415,3 +415,9 @@ empty scope. Preview clears identity/readiness on connector/admin changes; prese
 abort fencing. Trigger parameter rows use stable local rowId keys; only name/source
 are serialized. Production build and tsc --noEmit passed on the combined local
 source; no browser or application runtime check performed.
+
+DagApprovalFields adds a localized mode Select (CONTINUATION|INDEPENDENT, independent
+default), with current-role and protected-write guidance. Updates canonicalize the
+legacy separate_initiator flag. WorkflowChatModal shows proposal checkpoint mode;
+DagApprovalsInbox displays the server's frozen mode, defaulting absent legacy data
+to Independent. Decision buttons still depend solely on server can_decide/my_vote.

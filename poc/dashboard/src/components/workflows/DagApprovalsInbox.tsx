@@ -143,6 +143,7 @@ function Inbox({ department, executionId, view, active, onDecisionBusy }: {
       <Descriptions column={1} items={[
         { key: 'workflow', label: t.workflow, children: selected.workflow_name },
         { key: 'step', label: t.step, children: <bdi>{selected.step_key}</bdi> },
+        { key: 'mode', label: t.policyMode, children: selected.mode === 'CONTINUATION' ? t.continuation : t.independent },
         { key: 'status', label: t.status, children: current || view === 'history'
           ? <Tag color={statusColors[selected.status]}>{t[selected.status]}</Tag> : '—' },
         { key: 'votes', label: t.votes, children: <bdi>{selected.approvals}/{selected.quorum}</bdi> },

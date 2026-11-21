@@ -331,3 +331,8 @@ source; no browser or application runtime check performed.
 AuthenticatedShell uses auth.authenticating and auth.noDepartmentAccess from the
 English/Hebrew locale dictionaries. The unassigned-account guard retains current
 canRead checks and displays localized guidance; no route or permission changes.
+
+The workflow step editor offers explicit Continuation/Independent checkpoint policy
+(default Independent). AI preview, pending/history details and provider cards show
+the saved mode. The UI uses server can_decide and never derives permission from the
+mode. EN/HE guidance explains roles and protected PR-write independence.
