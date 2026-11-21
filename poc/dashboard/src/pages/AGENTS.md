@@ -339,3 +339,7 @@ Workflow Logs opens approval details from the Run approvals button. Both inboxes
 useWorkflowLogData refreshes the execution list and selected run detail ten seconds after each completed request while an execution is active. It retains the selected run and last successful snapshot and stops after observing terminal state.
 
 Workflow Logs and the execution drawer render RunAuditTimeline from run_audit, alongside existing step and receipt views.
+
+
+## AI-47 Chrome authentication acceptance
+AuthPage localizes the exact DISABLED/INACTIVE login rejection while preserving server status and unknown error details. No authentication or authorization semantics change.

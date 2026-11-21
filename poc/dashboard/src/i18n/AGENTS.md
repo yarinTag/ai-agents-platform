@@ -1,5 +1,9 @@
 # AGENTS.md - Internationalization (i18n) Engine
 
+AI-47: dagApprovals.readOnlyDecision and voteAlreadyRecorded explain current
+pending approval read-only states in English and Hebrew, using the server-owned
+can_decide and my_vote fields; no client-side role assumption grants a vote.
+
 ## 1. Overview & Directory Mission
 The `src/i18n/` directory provides type-safe, lightweight internationalization for the AI Agents Platform Dashboard. It is built natively without third-party runtime bloat, supporting English as the default primary language while providing complete infrastructure and dictionaries for bidirectional RTL Hebrew localization.
 
@@ -210,3 +214,13 @@ Channel checkpoint and Socket Mode readiness messages are localized in Hebrew an
 AI-41 adds workflowChat.validationDetails in English and Hebrew for the optional
 raw-server diagnostic disclosure. Primary validation/setup guidance remains
 localized; technical server strings retain their original wording and LTR layout.
+
+
+## AI-47 role acceptance: unassigned account guidance
+AuthenticatedShell uses auth.authenticating and auth.noDepartmentAccess from the
+English/Hebrew locale dictionaries. The unassigned-account guard retains current
+canRead checks and displays localized guidance; no route or permission changes.
+
+
+## AI-47 Chrome authentication acceptance
+auth.accountUnavailable adds English/Hebrew disabled-or-inactive login guidance. AuthenticatedShell uses localized authenticating/noDepartmentAccess; raw unknown authentication failures retain their server detail.

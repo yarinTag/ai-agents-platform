@@ -48,4 +48,7 @@ the commit, browser, viewport, locale, role, department, expected and observed
 result, and console exceptions. A browser pass requires actual observations;
 API and unit checks provide separate evidence.
 
-Status: browser journeys have not yet been executed for AI-47.
+Status: partial Chrome role/access/approval journeys were executed on 2026-11-21;
+see [observations and remaining coverage](governed-workflow-chrome-acceptance-2026-11-21.md).
+Firefox was explicitly deferred by the user. This does not close the full AI-47
+matrix, remaining localization/keyboard coverage or provider-trigger journeys.

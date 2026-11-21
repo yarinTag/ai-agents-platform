@@ -10,8 +10,8 @@ open until the listed evidence is available.
 | AI-41 | Inspect a proposal with dependencies, an approval node, and a blocked resource. Verify setup links, preservation of the draft, correct state after rejected creation, and both locales. | Actual component + real API/SQLite browser checks passed in EN/HE, desktop/narrow; diagnostic presentation corrected. See acceptance record below. |
 | AI-42 | Inspect planner and worker instructions against the capability catalog, trust boundaries and diff evidence contract. | Independent Advisor source review passed; synchronized guides and master CI. Done; no claim of model comprehension. |
 | AI-46 | Verify the two-organization role matrix, decision and ingress races, and migration from the previous approval schema using a representative database snapshot. | Guarded API audit and nine focused cases passed; two authentic older baseline upgrades, current preservation, eight per-row trials and one complete reconstructed previous-schema snapshot passed. Six approvals/deliveries and all 64 other tables preserved; constraints verified. See provenance/limits below. |
-| AI-47 | Complete the [browser role and channel matrix](governed-workflow-browser-verification.md). | Journeys defined. Browser results pending. |
-| AI-49 | Verify exact identity and callback binding, durable trigger deduplication and expiry, and transport diagnostics. Verify authorized Telegram and Slack test journeys, including Slack Socket Mode, and test relevance classification and dry-run behavior. | Deterministic trigger and chat approval source present. Classifier and end-to-end evidence pending. |
+| AI-47 | Complete the [browser role and channel matrix](governed-workflow-browser-verification.md). | Partial Chrome role, department, denial, pending/history and Hebrew mobile evidence recorded 2026-11-21; three guidance defects fixed. Firefox explicitly deferred; remaining full-matrix/localization/keyboard coverage is open. |
+| AI-49 | Verify exact identity and callback binding, durable trigger deduplication and expiry, and transport diagnostics. Verify authorized Telegram and Slack test journeys, including Slack Socket Mode, and test relevance classification and dry-run behavior. | Real Telegram gate passed: one linked independent approver, one callback/vote, one completed continuation, edited message49, zero inference. Slack/Socket Mode, trigger, negative/restart and model relevance acceptance remain open. |
 | AI-48 | Review module instructions, release notes and operational guides against the final implementation. Add CI, browser, provider and independent review evidence. | Checklist and guide index assembled. Sign-off pending. |
 
 ## Administrator and operator guides
@@ -20,6 +20,11 @@ open until the listed evidence is available.
 AI-41/46 verification and AI-51 product approval, including the difference between
 reconstructed representative migration inputs and original historical backups. The
 broader AI-47 browser matrix, AI-49 live providers and AI-48 sign-off remain open.
+
+[2026-11-21 Chrome and Telegram observations](governed-workflow-chrome-acceptance-2026-11-21.md)
+record partial role-matrix results, fixes, the separate live authorization boundary,
+the real provider receipt and outstanding acceptance work. These partial results
+do not mark AI-47/49 or release sign-off complete.
 
 - [Capability policy](governance-policy-guide.md) and [binding permissions](channel-bindings.md)
   describe setup and exact department grants. Configure Send, Listen and Approve

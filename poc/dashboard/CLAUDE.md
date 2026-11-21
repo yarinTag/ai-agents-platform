@@ -366,7 +366,21 @@ are serialized. Production build and tsc --noEmit passed on the combined local
 source; no browser or application runtime check performed.
 
 ## AI-41 acceptance: localized validation presentation
+AI-47 pending approval details show localized read-only guidance when current
+server can_decide is false, with distinct text for an already recorded vote.
+Keep server authority, pending/history separation and stale-row handling intact.
+
 Workflow Chat keeps capability badges, setup guidance and the rejection summary
 localized. Raw server validation strings are diagnostic evidence in a collapsed
 Technical validation details disclosure, with LTR, wrapped preformatted content.
 Preserve the proposal and current-policy creation block after a rejected create.
+
+
+## AI-47 role acceptance: unassigned account guidance
+AuthenticatedShell uses auth.authenticating and auth.noDepartmentAccess from the
+English/Hebrew locale dictionaries. The unassigned-account guard retains current
+canRead checks and displays localized guidance; no route or permission changes.
+
+
+## AI-47 Chrome authentication acceptance
+AI-47: localize the exact disabled/inactive login response in AuthPage without converting unknown failures into success or changing authentication behavior.

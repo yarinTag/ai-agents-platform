@@ -138,6 +138,8 @@ function Inbox({ department, executionId, view, active, onDecisionBusy }: {
         </>}
       </Space>}>
       {view === 'pending' && !current && <Alert type="info" title={t.noLongerPending} />}
+      {view === 'pending' && current && !canDecide && <Alert type="info" showIcon
+        title={current.my_vote ? t.voteAlreadyRecorded : t.readOnlyDecision} />}
       <Descriptions column={1} items={[
         { key: 'workflow', label: t.workflow, children: selected.workflow_name },
         { key: 'step', label: t.step, children: <bdi>{selected.step_key}</bdi> },

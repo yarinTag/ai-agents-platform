@@ -30,7 +30,8 @@ export const AuthPage: React.FC = () => {
       });
     } catch (err: any) {
       const detail = err.response?.data?.detail || err.message || t('auth.loginFailed');
-      setErrorMessage(detail);
+      setErrorMessage(detail === 'User account is DISABLED' || detail === 'User account is INACTIVE'
+        ? t('auth.accountUnavailable') : detail);
     } finally {
       setLoading(false);
     }

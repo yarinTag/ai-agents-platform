@@ -325,3 +325,9 @@ empty scope. Preview clears identity/readiness on connector/admin changes; prese
 abort fencing. Trigger parameter rows use stable local rowId keys; only name/source
 are serialized. Production build and tsc --noEmit passed on the combined local
 source; no browser or application runtime check performed.
+
+
+## AI-47 role acceptance: unassigned account guidance
+AuthenticatedShell uses auth.authenticating and auth.noDepartmentAccess from the
+English/Hebrew locale dictionaries. The unassigned-account guard retains current
+canRead checks and displays localized guidance; no route or permission changes.
