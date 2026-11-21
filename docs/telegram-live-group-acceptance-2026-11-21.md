@@ -74,3 +74,49 @@ and tracked separately at https://trello.com/c/DCmFqHZG . AI-47 still has its
 remaining Chrome journeys; Firefox is user-deferred. AI-48 final sign-off and
 AI-12 completion therefore remain open. Do not move these complete-scope tickets
 to Done solely on the basis of this isolated acceptance record.
+
+## Later authorized active-database admission and cleanup
+
+The user separately approved production-test-plan.json: one exact test-group
+destination, Trigger-only binding in the existing test department, one temporary
+MANAGER principal, one gate-only workflow and no inference/messages/global workers.
+The installation's existing department MCP grant was retained without expansion.
+The administrator helper checked the existing ACTIVE linked ORG_ADMIN, tenant and
+department before creating the audited binding. Connector configuration changed
+through exact compare-and-swap, preserving every existing destination/credential.
+The temporary manager used normal password login/JWT and real protected workflow
+creation/trigger APIs; no admin JWT or authorization override was fabricated.
+
+A new addressed command was received from Telegram as actual update140871831,
+message9. The body included a trailing confirmation word; the exact leading
+command matched the saved keyword rule without changing the provider payload.
+No earlier group message was replayed for this active test. The user approved
+one additional bounded update read; unrelated updates were not processed and the
+provider cursor was not advanced.
+
+Only this new event was admitted to the active database after asserting there was
+no unrelated queued ingress. The real consumer ran once with WorkflowEngine and
+a no-network/no-subprocess guard; no application lifespan/global worker started.
+It created exactly one CHANNEL execution and stopped at WAITING_APPROVAL. Duplicate
+admission returned200, a reopened consumer found no further work and the temporary
+initiator's actual authenticated decision request returned403 (self-approval denied).
+Input/output tokens and cost were0; no task-run/model reference existed.
+
+Workflow: wf_e1c54d0d97. Execution: wf_exec_6263dd49760847e1a33f52ee246ada3b.
+Approval: dga_de0b063f1ff54ebe9ced6d5e8f119dde.
+
+The dashboard at localhost:5173 was unavailable. Following an interruption, a
+read-only audit found the gate had already passed its600-second deadline. The
+pending UI-approval request was withdrawn; no independent decision was fabricated.
+Exact test-only cleanup settled it as TIMED_OUT / execution FAILED, deactivated the
+workflow and principal, set all three test-binding uses tofalse, and restored the
+original connector configuration with compare-and-swap. The disabled binding and
+audit/execution history remain; no global expiration or consumer sweep was used.
+All cleanup conditions were reread and passed. Private receipts are
+active-admission-result.json and active-cleanup-result.json in the same private
+evidence directory. No credential or raw command is committed.
+
+This closes the active-database trigger-admission gap, not an always-on deployment
+worker/crash-recovery or independent-decision/continuation acceptance claim for this
+execution. The earlier successful card49 remains separate evidence. Optional live
+model relevance, remaining Chrome journeys and final sign-off are still open.
