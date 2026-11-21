@@ -340,3 +340,18 @@ egress disclosure, external inference under customer-hosted mode, Air-Gap vendor
 management denial, fingerprint order stability and forged-instance revalidation.
 Pure model contracts; no service mocks, application/database/provider setup.
 Tests were not executed under the current runtime verification restriction.
+
+## Telegram direct acceptance (2026-11-21)
+
+`test_telegram_acceptance.py` covers real signed Telegram callback admission on
+temporary SQLite/FastAPI: unlinked/self/member/foreign/inactive actors, membership
+and binding revocation, wrong channel/message, changed revision, reject/expiry,
+concurrent distinct clicks, reopen plus one resume claim and post-vote revocation.
+`test_telegram_trigger_acceptance.py` uses the real engine and approval-only DAG to
+verify preview creates no run, matching input reaches one WAITING_APPROVAL gate,
+duplicate/reopened consumers do not repeat it, hourly capacity, unrelated/bot/unlinked
+exclusion and current principal/workflow/binding/revision/lease/text expiry checks.
+Both files passed 26 cases under a no-network/no-subprocess audit guard; 39 existing
+Telegram/shared cases passed separately. These are direct integration tests, not
+provider-originated live events. Private provider readiness and limitations are
+recorded in docs/telegram-direct-acceptance-2026-11-21.md.
