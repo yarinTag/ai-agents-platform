@@ -425,3 +425,8 @@ contract tests remain unexecuted. Open operational decisions are listed in the A
 complement the 65 direct cases and earlier active-installation Telegram card49 vote.
 Actual matching/nonmatching commands produced one completed lab execution with no
 model tasks; no production trigger binding, grants or worker was activated.
+
+A later explicitly authorized active-database Telegram trigger test reached one
+WAITING_APPROVAL checkpoint and denied self-approval403 with no inference. Its gate
+expired during an interruption; audited cleanup restored the connector and disabled
+the temporary workflow/user/binding. See the later active-admission evidence section.

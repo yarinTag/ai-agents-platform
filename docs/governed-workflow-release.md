@@ -76,3 +76,13 @@ usable group. The earlier card49 proves Telegram approval on the active installa
 the new run's independent decision used the lab dashboard API. Active deployment
 trigger configuration/worker acceptance and optional live model relevance remain
 unverified; remaining AI-47 journeys and AI-48 sign-off stay open.
+
+## Active Telegram admission and rollback
+
+The later explicitly authorized test reached WAITING_APPROVAL in the active DB
+with one real group command, one execution, denied self-approval403 and no inference.
+The dashboard was unavailable; the gate expired during an interruption. Test-only
+cleanup verified inactive principal/workflow, disabled exact binding and exact
+connector restoration. See the later section of the live-group evidence record.
+Independent decision/continuation was not completed for this run; no ticket is
+closed on the strength of an expired test.
