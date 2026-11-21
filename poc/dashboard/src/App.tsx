@@ -2,7 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ConfigProvider, theme, App as AntdApp, Spin } from 'antd';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { I18nProvider } from './i18n';
+import { I18nProvider, useTranslation } from './i18n';
 import AuthPage from './pages/AuthPage';
 import AppLayout from './components/layout/AppLayout';
 import { LazyFeatureRoute } from './components/common/LazyFeatureRoute';
@@ -28,6 +28,7 @@ const featureRoutes = [
 ];
 
 const AuthenticatedShell: React.FC = () => {
+  const { t } = useTranslation();
   const { isAuthenticated, isLoading, organization, user, activeDepartmentId } = useAuth();
   const permissions = usePermissions();
   const pageScope = JSON.stringify([organization?.id, user?.id, user?.role, activeDepartmentId, permissions.rank]);
@@ -47,7 +48,7 @@ const AuthenticatedShell: React.FC = () => {
       >
         <Spin size="large" />
         <div style={{ color: '#8b949e', fontSize: 13, letterSpacing: 0.5, fontWeight: 600 }}>
-          AUTHENTICATING AUTONOMOUS OFFICE...
+          {t('auth.authenticating')}
         </div>
       </div>
     );
@@ -70,7 +71,7 @@ const AuthenticatedShell: React.FC = () => {
                 key={path}
                 path={path}
                 element={path === '/organization' && !permissions.isAdmin ? <DepartmentAccessPage key={pageScope} />
-                  : !permissions.canRead ? <Alert type="info" message="No department access is assigned. Ask your organization administrator to add you to a department." />
+                  : !permissions.canRead ? <Alert type="info" title={t('auth.noDepartmentAccess')} />
                   : <LazyFeatureRoute key={`${pageScope}:${path}`} load={load} capability={capability} />}
               />
             ))}

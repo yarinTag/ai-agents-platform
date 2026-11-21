@@ -46,6 +46,9 @@ export const he: TranslationDictionary = {
     none: 'ללא',
   },
   auth: {
+    accountUnavailable: 'החשבון מושבת או אינו פעיל. יש לפנות למנהל הארגון.',
+    authenticating: 'מאמת את הכניסה…',
+    noDepartmentAccess: 'אין גישה למחלקה. יש לפנות למנהל הארגון כדי שיצרף אתכם למחלקה.',
     title: 'ConduitCross',
     subtitle: 'Enterprise Autonomous AI Fleet & Organizational Governance',
     rbacBadge: 'Multi-Tenant Tenant Isolation & RBAC',

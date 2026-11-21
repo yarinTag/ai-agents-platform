@@ -1,5 +1,11 @@
 # AGENTS.md - UI Component Library & Design System
 
+AI-47 Chrome role acceptance: DagApprovalsInbox shows localized read-only guidance
+for a current pending approval when server can_decide is false, distinguishing a
+recorded personal vote from missing authority/separation of duties. This adds no
+authority or API field; current server decisions and stale-row handling remain
+authoritative. History and vanished pending rows do not show this eligibility hint.
+
 AI-41 acceptance: WorkflowChatModal retains the localized rejection summary,
 resource badges and setup links after current-policy rejection. Raw server errors
 are in a collapsed localized validation-details disclosure, rendered wrapped LTR;

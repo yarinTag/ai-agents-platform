@@ -44,6 +44,9 @@ export const en = {
     none: 'None',
   },
   auth: {
+    accountUnavailable: 'This account is disabled or inactive. Contact your organization administrator.',
+    authenticating: 'Authenticating...',
+    noDepartmentAccess: 'No department access is assigned. Ask your organization administrator to add you to a department.',
     title: 'ConduitCross',
     subtitle: 'Enterprise Autonomous AI Fleet & Organizational Governance',
     rbacBadge: 'Multi-Tenant Tenant Isolation & RBAC',
