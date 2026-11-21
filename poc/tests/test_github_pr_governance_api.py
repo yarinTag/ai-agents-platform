@@ -102,7 +102,7 @@ def test_ready_pr_write_plan_revalidates_grant_and_saves_inactive(baseline):
     workflow = db.get_workflow(response.json()['id'])
     assert not workflow.is_active
     approval, comment = json.loads(workflow.definition_json)['steps']
-    assert approval['params'] == {'dag_approval': {'timeout_seconds': 7200}}
+    assert approval['params'] == {'dag_approval': {'timeout_seconds': 7200, 'mode': 'INDEPENDENT'}}
     assert comment['depends_on'] == ['approve_comment']
     assert comment['params']['pr_write_approval'] == proposal['steps'][1]['pr_write_approval']
     assert comment['params']['authorized_resources'][0]['tool_name'] == 'comment_pull_request'

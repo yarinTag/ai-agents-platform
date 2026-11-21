@@ -363,3 +363,7 @@ revocation before resume, invalid policy rejection, Chat compilation/card labels
 protected exact PR-write downgrade denial at authoring/suspend/write authorization.
 No mocked services or live provider/model calls. Selected together with the existing
 Telegram, ingress, chat and PR approval cases in security CI.
+
+The guarded API audit's PR-write creation case explicitly asserts the compiled
+checkpoint mode=INDEPENDENT alongside its TTL, retaining current grant revalidation
+and inactive-workflow assertions.
