@@ -1,10 +1,11 @@
-import { RunAuditTimeline } from '../components/workflows/RunAuditTimeline';
+import { auditTime, RunAuditTimeline } from '../components/workflows/RunAuditTimeline';
 import { PrAuditEvidence } from '../components/workflows/PrEvidence';
+import { useTranslation } from '../i18n';
 import { useWorkflowRunText } from '../i18n/workflowRun';
 import { formatCost } from '../services/workflowCosts';
 import React, { useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { Alert, Button, Card, Col, Collapse, Empty, Input, Row, Segmented, Space, Spin, Tag, Typography } from 'antd';
+import { Alert, Button, Card, Col, Collapse, Empty, Grid, Input, Row, Segmented, Space, Spin, Tag, Typography } from 'antd';
 import {
   ReloadOutlined,
   DownloadOutlined,
@@ -79,10 +80,9 @@ const detailsStyle: React.CSSProperties = {
   borderRadius: 6,
   padding: '8px 12px',
 };
-const formatTime = (value?: string) => (value ? new Date(value).toLocaleString() : '—');
 const duration = (start?: string, end?: string) => {
   if (!start) return '';
-  const ms = (end ? new Date(end).getTime() : Date.now()) - new Date(start).getTime();
+  const ms = (end ? auditTime(end) ?? NaN : Date.now()) - (auditTime(start) ?? NaN);
   if (!Number.isFinite(ms) || ms < 0) return '';
   const seconds = Math.round(ms / 1000);
   return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
@@ -90,6 +90,9 @@ const duration = (start?: string, end?: string) => {
 
 export const WorkflowLogsPage: React.FC = () => {
   const runText = useWorkflowRunText();
+  const { locale, dir } = useTranslation();
+  const screens = Grid.useBreakpoint();
+  const formatTime = (value?: string) => { const time = auditTime(value); return time == null ? '—' : new Date(time).toLocaleString(locale); };
   const approvalText = useDagApprovalsText();
   const { workflowId } = useParams<{ workflowId: string }>();
   const [params, setParams] = useSearchParams();
@@ -109,24 +112,24 @@ export const WorkflowLogsPage: React.FC = () => {
   const steps = execution?.step_runs || [];
 
   return (
-    <div style={{ padding: 24, minHeight: '100vh', background: '#0a0d12' }}>
+    <div dir={dir} style={{ padding: 24, minHeight: '100vh', background: '#0a0d12' }}>
       <Space direction="vertical" size="large" style={{ width: '100%' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
           <div>
             <Link to="/workflows" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#8b949e', fontSize: 13, marginBottom: 6 }}>
-              <ArrowLeftOutlined /> Back to Workflows
+              <ArrowLeftOutlined /> {runText.back}
             </Link>
-            <Title level={3} style={{ margin: 0, color: '#f0f6fc', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Title level={3} style={{ margin: 0, color: '#f0f6fc', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10 }}>
               <CodeOutlined style={{ color: '#10b981' }} />
-              <span>{workflow?.name || 'Workflow'}</span>
-              <Text type="secondary" style={{ fontSize: 16, fontWeight: 400 }}>· Execution Logs</Text>
+              <span>{workflow?.name || runText.workflow}</span>
+              <Text type="secondary" style={{ fontSize: 16, fontWeight: 400 }}>· {runText.logs}</Text>
             </Title>
             <Text type="secondary" style={{ fontSize: 13 }}>
               {runText.logsRefresh}
             </Text>
           </div>
           <Button icon={<ReloadOutlined spin={loading} />} onClick={() => refresh()}>
-            Refresh
+            {runText.refresh}
           </Button>
         </div>
 
@@ -134,7 +137,7 @@ export const WorkflowLogsPage: React.FC = () => {
           id: execution.id, department_id: execution.department_id,
         }} onClose={() => setApprovalRunId(null)} />}
 
-        {error && <Alert type="error" showIcon message="Unable to load logs" description={error} />}
+        {error && <Alert type="error" showIcon message={runText.loadFailed} description={error} />}
 
         {loading && !workflow ? (
           <div style={{ padding: 64, textAlign: 'center' }}><Spin size="large" /></div>
@@ -144,7 +147,7 @@ export const WorkflowLogsPage: React.FC = () => {
               <Card
                 title={
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span>Runs History</span>
+                    <span>{runText.history}</span>
                     <Tag style={{ marginInlineEnd: 0 }}>{visibleRuns.length} / {runs.length}</Tag>
                   </div>
                 }
@@ -152,19 +155,20 @@ export const WorkflowLogsPage: React.FC = () => {
                 style={{ background: '#161b22', borderColor: '#30363d' }}
               >
                 <Segmented
+                  vertical={!screens.sm}
                   block
                   value={mode}
                   onChange={value => setMode(String(value))}
                   style={{ marginBottom: 14, background: '#0d1117', padding: 3 }}
                   options={[
-                    { value: 'ALL', label: 'All Runs' },
-                    { value: 'LIVE', label: 'Live' },
-                    { value: 'PLAYGROUND', label: 'Playground' },
+                    { value: 'ALL', label: runText.allRuns },
+                    { value: 'LIVE', label: runText.live },
+                    { value: 'PLAYGROUND', label: runText.playground },
                   ]}
                 />
 
                 {!visibleRuns.length && (
-                  <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No runs match the current filter." />
+                  <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={runText.noRuns} />
                 )}
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: '72vh', overflowY: 'auto', paddingRight: 2 }}>
@@ -216,7 +220,7 @@ export const WorkflowLogsPage: React.FC = () => {
                             )}
                             {(
                               <Text style={{ fontSize: 11, fontFamily: 'monospace', color: '#58a6ff' }}>
-                                {formatCost(run.cost_summary, run.total_cost_usd)}
+                                {formatCost(run.cost_summary, run.total_cost_usd, locale)}
                               </Text>
                             )}
                           </Space>
@@ -258,7 +262,7 @@ export const WorkflowLogsPage: React.FC = () => {
             <Col xs={24} lg={16}>
               {!execution ? (
                 <Card style={{ background: '#161b22', borderColor: '#30363d', textAlign: 'center', padding: 32 }}>
-                  <Empty description="Select a run from the left panel to inspect its logs" />
+                  <Empty description={runText.chooseRun} />
                 </Card>
               ) : (
                 <Space direction="vertical" size="middle" style={{ width: '100%' }}>
@@ -279,21 +283,21 @@ export const WorkflowLogsPage: React.FC = () => {
                       {execution.trigger_type !== 'PLAYGROUND' && <Button size="small" onClick={() => setApprovalRunId(execution.id)}>
                         {approvalText.runApprovals}
                       </Button>}
-                      <Button size="small" icon={<DownloadOutlined />} onClick={download}>Export JSON</Button>
+                      <Button size="small" icon={<DownloadOutlined />} onClick={download}>{runText.exportJson}</Button>
                     </Space>}
                   >
                     <Row gutter={[12, 12]}>
                       <Col xs={12} sm={6}>
                         <div style={metaBoxStyle}>
-                          <div style={{ fontSize: 11, color: '#8b949e' }}>STARTED</div>
+                          <div style={{ fontSize: 11, color: '#8b949e' }}>{runText.started}</div>
                           <div style={{ fontSize: 12, color: '#e6edf3', fontWeight: 500, marginTop: 2 }}>
-                            {execution.started_at ? formatTime(execution.started_at) : 'Pending'}
+                            {execution.started_at ? formatTime(execution.started_at) : runText.pending}
                           </div>
                         </div>
                       </Col>
                       <Col xs={12} sm={6}>
                         <div style={metaBoxStyle}>
-                          <div style={{ fontSize: 11, color: '#8b949e' }}>FINISHED</div>
+                          <div style={{ fontSize: 11, color: '#8b949e' }}>{runText.finished}</div>
                           <div style={{ fontSize: 12, color: '#e6edf3', fontWeight: 500, marginTop: 2 }}>
                             {formatTime(execution.completed_at)}
                           </div>
@@ -301,15 +305,15 @@ export const WorkflowLogsPage: React.FC = () => {
                       </Col>
                       <Col xs={12} sm={6}>
                         <div style={metaBoxStyle}>
-                          <div style={{ fontSize: 11, color: '#8b949e' }}>DURATION & COST</div>
+                          <div style={{ fontSize: 11, color: '#8b949e' }}>{runText.durationCost}</div>
                           <div style={{ fontSize: 12, color: '#58a6ff', fontWeight: 600, marginTop: 2, fontFamily: 'monospace' }}>
-                            {duration(execution.started_at, execution.completed_at) || '—'} · {formatCost(execution.cost_summary, execution.total_cost_usd)}
+                            {duration(execution.started_at, execution.completed_at) || '—'} · {formatCost(execution.cost_summary, execution.total_cost_usd, locale)}
                           </div>
                         </div>
                       </Col>
                       <Col xs={12} sm={6}>
                         <div style={metaBoxStyle}>
-                          <div style={{ fontSize: 11, color: '#8b949e' }}>TOKENS (IN / OUT)</div>
+                          <div style={{ fontSize: 11, color: '#8b949e' }}>{runText.tokens}</div>
                           <div style={{ fontSize: 12, color: '#e6edf3', fontWeight: 500, marginTop: 2, fontFamily: 'monospace' }}>
                             {(execution.total_input_tokens || 0).toLocaleString()} / {(execution.total_output_tokens || 0).toLocaleString()}
                           </div>
@@ -331,13 +335,13 @@ export const WorkflowLogsPage: React.FC = () => {
                         style={{ marginTop: 12 }}
                         type="error"
                         showIcon
-                        message="Run failed"
+                        message={runText.runFailed}
                         description={<pre style={preStyle}>{execution.error_message}</pre>}
                       />
                     )}
                     <details style={{ ...detailsStyle, marginTop: 12 }}>
                       <summary style={{ cursor: 'pointer', fontSize: 12, color: '#8b949e', fontWeight: 600 }}>
-                        Run Input Payload
+                        {runText.payload}
                       </summary>
                       <pre style={preStyle}>{execution.trigger_payload || '{}'}</pre>
                     </details>
@@ -346,7 +350,7 @@ export const WorkflowLogsPage: React.FC = () => {
                     ? undefined : () => setApprovalRunId(execution.id)} />
 
                   <Input.Search
-                    placeholder="Search step output, input, and runtime events…"
+                    placeholder={runText.search}
                     value={search}
                     onChange={event => setSearch(event.target.value)}
                     allowClear
@@ -356,10 +360,10 @@ export const WorkflowLogsPage: React.FC = () => {
                     <Alert
                       type={execution.status === 'FAILED' ? 'warning' : 'info'}
                       showIcon
-                      message={active(execution.status) ? 'Waiting for the first step' : 'No step logs were recorded'}
+                      message={active(execution.status) ? runText.waitingFirst : runText.noSteps}
                       description={
                         execution.status === 'FAILED'
-                          ? 'This run failed before a step started, or predates step logging. See the run error above.'
+                          ? runText.beforeStep
                           : undefined
                       }
                     />
@@ -382,7 +386,7 @@ export const WorkflowLogsPage: React.FC = () => {
                               </Tag>
                               <strong style={{ color: '#f0f6fc', fontSize: 13 }}>{step.step_key}</strong>
                               {(step.events || []).some(event => event.type === 'reasoning_summary' && event.status === 'available') && (
-                                <Tag color="geekblue">Reasoning ({(step.events || []).filter(event => event.type === 'reasoning_summary' && event.status === 'available').length})</Tag>
+                                <Tag color="geekblue">{runText.reasoning} ({(step.events || []).filter(event => event.type === 'reasoning_summary' && event.status === 'available').length})</Tag>
                               )}
                               <Tag icon={<RobotOutlined />} style={{ marginInlineEnd: 0, fontFamily: 'monospace', fontSize: 11 }}>
                                 {step.agent_id}
@@ -396,7 +400,7 @@ export const WorkflowLogsPage: React.FC = () => {
                               )}
                               {(
                                 <Text style={{ fontSize: 12, fontFamily: 'monospace', color: '#58a6ff' }}>
-                                  {formatCost(step.cost_summary, step.cost_usd)}
+                                  {formatCost(step.cost_summary, step.cost_usd, locale)}
                                 </Text>
                               )}
                             </Space>
@@ -405,35 +409,35 @@ export const WorkflowLogsPage: React.FC = () => {
                         children: (
                           <Space direction="vertical" size={12} style={{ width: '100%' }}>
                             <Text type="secondary" style={{ fontSize: 12 }}>
-                              Started: {formatTime(step.started_at)} · Finished: {formatTime(step.completed_at)}
+                              {runText.started}: {formatTime(step.started_at)} · {runText.finished}: {formatTime(step.completed_at)}
                             </Text>
                             <PrAuditEvidence entries={step.pr_evidence || []} />
-                            {step.session_cost_summary && <Text style={{ fontSize: 12 }}>Session total: {formatCost(step.session_cost_summary)}</Text>}
+                            {step.session_cost_summary && <Text style={{ fontSize: 12 }}>{runText.sessionTotal}: {formatCost(step.session_cost_summary, 0, locale)}</Text>}
                             {step.error && (
                               <Alert
                                 type="error"
                                 showIcon
-                                message="Step failed"
+                                message={runText.stepFailed}
                                 description={<pre style={preStyle}>{step.error}</pre>}
                               />
                             )}
                             <div>
                               <Text strong style={{ fontSize: 12, color: '#8b949e', textTransform: 'uppercase', letterSpacing: 0.4 }}>
-                                Step Output
+                                {runText.output}
                               </Text>
                               <pre style={preStyle}>
-                                {step.output_data || (active(step.status) ? 'Running…' : 'No output')}
+                                {step.output_data || (active(step.status) ? runText.running : runText.noOutput)}
                               </pre>
                             </div>
                             <details style={detailsStyle}>
                               <summary style={{ cursor: 'pointer', fontSize: 12, color: '#8b949e', fontWeight: 600 }}>
-                                Step Input
+                                {runText.input}
                               </summary>
                               <pre style={preStyle}>{step.input_data || '—'}</pre>
                             </details>
                             <details open={step.status === 'FAILED' || (step.events || []).some(event => event.type === 'reasoning_summary')} style={detailsStyle}>
                               <summary style={{ cursor: 'pointer', fontSize: 12, color: '#8b949e', fontWeight: 600 }}>
-                                Runtime Events ({step.events?.length || 0})
+                                {runText.events} ({step.events?.length || 0})
                               </summary>
                               <div style={{ marginTop: 8 }}>
                                 <StepEventTimeline events={step.events || []} />

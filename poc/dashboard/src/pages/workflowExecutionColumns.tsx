@@ -1,3 +1,4 @@
+import type { WorkflowHubText } from '../i18n/workflowHub';
 import { Button, Tag, Space } from 'antd';
 import { EyeOutlined, CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined, SyncOutlined } from '@ant-design/icons';
 import { WorkflowExecution } from '../types/mcp';
@@ -10,7 +11,7 @@ export const createWorkflowExecutionColumns = (model: Pick<
   | 'workflows'
   | 'setDetailDrawerOpen'
   | 'setSelectedExecution'
->) => {
+>, text: WorkflowHubText, locale: string) => {
   const {
     workflows,
     setDetailDrawerOpen,
@@ -18,7 +19,7 @@ export const createWorkflowExecutionColumns = (model: Pick<
   } = model;
   const executionColumns = [
     {
-      title: 'Execution ID',
+      title: text.executionId,
       dataIndex: 'id',
       key: 'id',
       render: (id: string, record: WorkflowExecution) => (
@@ -28,14 +29,14 @@ export const createWorkflowExecutionColumns = (model: Pick<
           </span>
           {record.is_deduplicated && (
             <Tag color="purple" style={{ fontSize: 10, lineHeight: '14px' }}>
-              ⚡ DEDUPLICATED / CACHED
+              ⚡ {text.cachedRun}
             </Tag>
           )}
         </Space>
       ),
     },
     {
-      title: 'Workflow',
+      title: text.workflow,
       dataIndex: 'workflow_id',
       key: 'workflow_id',
       render: (wfId: string) => {
@@ -49,7 +50,7 @@ export const createWorkflowExecutionColumns = (model: Pick<
       },
     },
     {
-      title: 'Trigger',
+      title: text.trigger,
       dataIndex: 'trigger_type',
       key: 'trigger_type',
       render: (trigger: string) => {
@@ -62,7 +63,7 @@ export const createWorkflowExecutionColumns = (model: Pick<
       },
     },
     {
-      title: 'Status',
+      title: text.status,
       dataIndex: 'status',
       key: 'status',
       render: (status: string) => {
@@ -82,31 +83,31 @@ export const createWorkflowExecutionColumns = (model: Pick<
       },
     },
     {
-      title: 'Tokens & Cost',
+      title: text.tokensCost,
       key: 'tokens',
       render: (_: any, record: WorkflowExecution) => (
         <div>
           <span style={{ color: '#c9d1d9', fontSize: 12 }}>
-            {(record.total_input_tokens + record.total_output_tokens).toLocaleString()} tokens
+            {(record.total_input_tokens + record.total_output_tokens).toLocaleString(locale)} {text.tokens}
           </span>
           <div style={{ color: '#58a6ff', fontSize: 11 }}>
-            {formatCost(record.cost_summary, record.total_cost_usd)}
+            {formatCost(record.cost_summary, record.total_cost_usd, locale)}
           </div>
         </div>
       ),
     },
     {
-      title: 'Created At',
+      title: text.created,
       dataIndex: 'created_at',
       key: 'created_at',
       render: (d: string) => (
         <span style={{ color: '#8b949e', fontSize: 12 }}>
-          {d ? new Date(d).toLocaleString() : '-'}
+          {d ? new Date(d).toLocaleString(locale) : '-'}
         </span>
       ),
     },
     {
-      title: 'Actions',
+      title: text.actions,
       key: 'actions',
       width: 90,
       render: (_: any, record: WorkflowExecution) => (
@@ -118,7 +119,7 @@ export const createWorkflowExecutionColumns = (model: Pick<
             setDetailDrawerOpen(true);
           }}
         >
-          Inspect
+          {text.inspect}
         </Button>
       ),
     },

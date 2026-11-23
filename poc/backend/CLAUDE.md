@@ -238,3 +238,7 @@ confirmation; INDEPENDENT (also legacy default) excludes both. Never infer autho
 from the selected mode. Chat compilation preserves it, protected exact GitHub write
 gates require INDEPENDENT, and existing waiting policy_json is immutable. Verify
 actual FastAPI/SQLite and provider callback paths without model/provider calls.
+
+
+## Scoped ingress verification
+For explicitly scoped operational verification, consume_one accepts event_id and does not fall through to another pending ingress event. Default global worker behavior is unchanged. Always establish external authorization separately; this selector creates none.

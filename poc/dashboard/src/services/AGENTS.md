@@ -325,3 +325,6 @@ The Socket Mode credential readiness field belongs to ingress checks, not per-ev
 dagApprovalsApi.DagApproval adds optional mode CONTINUATION|INDEPENDENT for legacy
 server compatibility. workflowChat ApprovalCheckpoint DTO preserves optional mode.
 The decision body stays {approve}; no caller policy override, credentials or cache.
+
+
+workflowCosts.formatCost accepts optional locale (default en); Hebrew presentation labels preserve free, no_usage, unavailable, estimate and reference distinctions without changing numeric amounts. Workflow logs/execution columns pass their selected locale.

@@ -4,7 +4,7 @@ import { useTranslation } from '../../i18n';
 import { useRunAuditText } from '../../i18n/runAudit';
 import type { WorkflowExecution } from '../../types/mcp';
 
-function auditTime(value?: string | number | null) {
+export function auditTime(value?: string | number | null) {
   if (typeof value === 'number') return Number.isFinite(value) ? value * 1000 : null;
   if (!value) return null;
   // SQLite CURRENT_TIMESTAMP uses a space separator and stores UTC.

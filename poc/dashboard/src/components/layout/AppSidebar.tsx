@@ -1,5 +1,5 @@
 import React from 'react';
-import { useTranslation } from '../../i18n';
+import { useNavigationText } from '../../i18n/navigation';
 import { Link, useLocation } from 'react-router-dom';
 import { Tooltip, Button } from 'antd';
 import {
@@ -36,79 +36,79 @@ interface NavSection {
 
 export const AppSidebar: React.FC<AppSidebarProps> = ({ collapsed, onToggleCollapse }) => {
   const location = useLocation();
-  const { t } = useTranslation();
+  const text = useNavigationText();
 
   const sections: NavSection[] = [
     {
-      title: 'OPERATIONS',
+      title: text.operations,
       items: [
         {
           to: '/workflows',
-          label: 'Workflows',
+          label: text.workflows,
           icon: <ApartmentOutlined style={{ fontSize: '15px' }} />,
           badge: 'DAG',
           badgeColor: '#8b5cf6',
         },
         {
           to: '/flow',
-          label: 'Live Flow',
+          label: text.flow,
           icon: <DeploymentUnitOutlined style={{ fontSize: '15px' }} />,
         },
         {
           to: '/agents',
-          label: 'Agents Roster',
+          label: text.agents,
           icon: <TeamOutlined style={{ fontSize: '15px' }} />,
         },
       ],
     },
     {
-      title: 'TOOLS & PLUGINS',
+      title: text.tools,
       items: [
         {
           to: '/skills',
-          label: 'Plugins Hub',
+          label: text.plugins,
           icon: <AppstoreOutlined style={{ fontSize: '15px' }} />,
         },
         {
           to: '/mcp',
-          label: 'MCP Hub',
+          label: text.mcp,
           icon: <ApiOutlined style={{ fontSize: '15px' }} />,
           badge: 'MCP',
           badgeColor: '#38bdf8',
         },
         {
           to: '/tasks',
-          label: 'Tasks Queue',
+          label: text.tasks,
           icon: <CheckSquareOutlined style={{ fontSize: '15px' }} />,
         },
       ],
     },
     {
-      title: 'WORKSPACE & DATA',
+      title: text.workspace,
       items: [
         {
           to: '/projects',
-          label: 'Projects',
+          label: text.projects,
           icon: <FolderOpenOutlined style={{ fontSize: '15px' }} />,
         },
         {
           to: '/calendar',
-          label: 'Schedule & Calendar',
+          label: text.calendar,
           icon: <CalendarOutlined style={{ fontSize: '15px' }} />,
         },
         {
           to: '/dashboard',
-          label: 'System Metrics',
+          label: text.metrics,
           icon: <BarChartOutlined style={{ fontSize: '15px' }} />,
         },
       ],
     },
     {
-      title: 'ORGANIZATION & GOVERNANCE',
+      title: text.governance,
       items: [
         {
           to: '/organization',
-          label: 'Org & Teams',
+          label: text.organization,
           icon: <BankOutlined style={{ fontSize: '15px' }} />,
           badge: 'ORG',
           badgeColor: '#a855f7',
@@ -184,7 +184,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ collapsed, onToggleColla
 
                 const linkElement = (
                   <Link
-                    to={item.to}
+                    to={item.to} aria-label={item.label}
                     key={item.to}
                     style={{
                       display: 'flex',
@@ -326,7 +326,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ collapsed, onToggleColla
       >
         <Button
           type="text"
-          onClick={onToggleCollapse}
+          aria-label={collapsed ? text.expandSidebar : text.collapseSidebar} onClick={onToggleCollapse}
           style={{
             width: '100%',
             height: '36px',
@@ -354,13 +354,13 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ collapsed, onToggleColla
           }}
         >
           {collapsed ? (
-            <Tooltip title="Expand Sidebar" placement="right">
+            <Tooltip title={text.expandSidebar} placement="right">
               <RightOutlined style={{ fontSize: '13px' }} />
             </Tooltip>
           ) : (
             <>
               <LeftOutlined style={{ fontSize: '12px' }} />
-              <span>COLLAPSE SIDEBAR</span>
+              <span>{text.collapseSidebar}</span>
             </>
           )}
         </Button>

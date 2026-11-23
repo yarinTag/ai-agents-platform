@@ -2,6 +2,8 @@ import { PrResultEvidence } from './PrEvidence';
 import React, { useState } from 'react';
 import { Button, Space, Tag, Typography } from 'antd';
 import { asCostSummary, formatCost } from '../../services/workflowCosts';
+import { useWorkflowRunText } from '../../i18n/workflowRun';
+import { useTranslation } from '../../i18n';
 
 const { Text } = Typography;
 type RuntimeEvent = Record<string, unknown>;
@@ -122,16 +124,18 @@ export const describeEvent = (event: RuntimeEvent): EventDescription => {
 };
 
 const EventRow: React.FC<{ event: RuntimeEvent }> = ({ event }) => {
+  const copy = useWorkflowRunText();
+  const { locale } = useTranslation();
   const [open, setOpen] = useState<'none' | 'detail' | 'raw'>('none');
   const { kind, label, summary, detail } = describeEvent(event);
-  const time = typeof event._timestamp === 'number' ? new Date(event._timestamp * 1000).toLocaleTimeString() : '';
+  const time = typeof event._timestamp === 'number' ? new Date(event._timestamp * 1000).toLocaleTimeString(locale) : '';
   return <div style={{ padding: '4px 0', borderBottom: '1px solid rgba(128,128,128,0.15)' }}>
     <Space size={6} align="start" style={{ width: '100%' }}>
       <Text type="secondary" style={{ fontFamily: 'monospace', fontSize: 11, minWidth: 72, display: 'inline-block' }}>{time}</Text>
       <Tag color={COLORS[kind] || 'default'} style={{ marginInlineEnd: 0 }}>{label}</Tag>
       <Text style={{ fontSize: 12, overflowWrap: 'anywhere' }}>{summary}</Text>
-      {detail && <Button size="small" type="link" onClick={() => setOpen(open === 'detail' ? 'none' : 'detail')}>{open === 'detail' ? 'Less' : 'More'}</Button>}
-      <Button size="small" type="link" onClick={() => setOpen(open === 'raw' ? 'none' : 'raw')}>{open === 'raw' ? 'Hide JSON' : 'JSON'}</Button>
+      {detail && <Button size="small" type="link" onClick={() => setOpen(open === 'detail' ? 'none' : 'detail')}>{open === 'detail' ? copy.less : copy.more}</Button>}
+      <Button size="small" type="link" onClick={() => setOpen(open === 'raw' ? 'none' : 'raw')}>{open === 'raw' ? copy.hideJson : 'JSON'}</Button>
     </Space>
     {kind === EventKind.ToolResult && <PrResultEvidence value={event.content} />}
     {open === 'detail' && <pre style={preStyle}>{detail}</pre>}
@@ -140,7 +144,8 @@ const EventRow: React.FC<{ event: RuntimeEvent }> = ({ event }) => {
 };
 
 export const StepEventTimeline: React.FC<{ events: RuntimeEvent[] }> = ({ events }) => {
-  if (!events.length) return <Text type="secondary">No runtime events captured for this step.</Text>;
+  const copy = useWorkflowRunText();
+  if (!events.length) return <Text type="secondary">{copy.noEvents}</Text>;
   return <div style={{ maxHeight: 420, overflow: 'auto' }}>
     {events.map((event, index) => <EventRow key={index} event={event} />)}
   </div>;

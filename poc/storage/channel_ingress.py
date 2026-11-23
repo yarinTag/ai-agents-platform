@@ -179,18 +179,20 @@ def diagnostics(db, organization_id, connector_id):
     }
 
 
-def claim(db, now=None):
-    """Claim a job for a future trusted consumer. Expired claims can be recovered."""
+def claim(db, now=None, *, event_id=None):
+    """Claim one event; optional trusted selection also scopes maintenance writes."""
     now = int(time.time()) if now is None else now
     with db._get_connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
-        conn.execute("DELETE FROM channel_ingress_trigger_inputs WHERE expires_at<=?", (now,))
+        conn.execute("DELETE FROM channel_ingress_trigger_inputs WHERE expires_at<=? AND (? IS NULL OR event_id=?)",
+                     (now, event_id, event_id))
         conn.execute("""UPDATE channel_ingress_outbox SET status='FAILED',finished_at=?,lease_token=NULL,lease_until=NULL
-            WHERE status='PROCESSING' AND lease_until<=? AND attempts>=?""", (now, now, MAX_ATTEMPTS))
+            WHERE status='PROCESSING' AND lease_until<=? AND attempts>=? AND (? IS NULL OR event_id=?)""",
+            (now, now, MAX_ATTEMPTS, event_id, event_id))
         row = conn.execute("""SELECT event_id FROM channel_ingress_outbox
             WHERE attempts<? AND ((status IN ('QUEUED','RETRY') AND available_at<=?)
-                OR (status='PROCESSING' AND lease_until<=?)) ORDER BY available_at,event_id LIMIT 1""",
-            (MAX_ATTEMPTS, now, now)).fetchone()
+                OR (status='PROCESSING' AND lease_until<=?)) AND (? IS NULL OR event_id=?)
+            ORDER BY available_at,event_id LIMIT 1""", (MAX_ATTEMPTS, now, now, event_id, event_id)).fetchone()
         if row is None:
             return None
         token = secrets.token_urlsafe(24)

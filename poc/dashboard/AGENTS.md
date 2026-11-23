@@ -336,3 +336,7 @@ The workflow step editor offers explicit Continuation/Independent checkpoint pol
 (default Independent). AI preview, pending/history details and provider cards show
 the saved mode. The UI uses server can_decide and never derives permission from the
 mode. EN/HE guidance explains roles and protected PR-write independence.
+
+
+## AI-47 component locale boundary
+I18nProvider now wraps LocalizedApp so the shared Ant Design ConfigProvider receives the selected EN/HE locale and direction, including table pagination, empty states and confirmation controls. AuthProvider remains inside the same UI boundary; no authentication or permission contract changes.

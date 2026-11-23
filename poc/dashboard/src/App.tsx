@@ -1,6 +1,8 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ConfigProvider, theme, App as AntdApp, Spin } from 'antd';
+import enUS from 'antd/locale/en_US';
+import heIL from 'antd/locale/he_IL';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { I18nProvider, useTranslation } from './i18n';
 import AuthPage from './pages/AuthPage';
@@ -82,9 +84,11 @@ const AuthenticatedShell: React.FC = () => {
   );
 };
 
-export const App: React.FC = () => {
+const LocalizedApp: React.FC = () => {
+  const { locale, dir } = useTranslation();
   return (
     <ConfigProvider
+      locale={locale === 'he' ? heIL : enUS} direction={dir}
       theme={{
         algorithm: theme.darkAlgorithm,
         token: {
@@ -103,14 +107,14 @@ export const App: React.FC = () => {
       }}
     >
       <AntdApp>
-        <I18nProvider>
           <AuthProvider>
             <AuthenticatedShell />
           </AuthProvider>
-        </I18nProvider>
       </AntdApp>
     </ConfigProvider>
   );
 };
+
+export const App: React.FC = () => <I18nProvider><LocalizedApp /></I18nProvider>;
 
 export default App;

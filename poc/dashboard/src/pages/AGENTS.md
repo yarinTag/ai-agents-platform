@@ -343,3 +343,10 @@ Workflow Logs and the execution drawer render RunAuditTimeline from run_audit, a
 
 ## AI-47 Chrome authentication acceptance
 AuthPage localizes the exact DISABLED/INACTIVE login rejection while preserving server status and unknown error details. No authentication or authorization semantics change.
+
+
+## AI-47 workflow and navigation locale completion
+Workflows uses workflowHub EN/HE copy and passes the dictionary to its column builders. WorkflowLogs uses workflowRun and selected-locale dates. Both roots use the selected direction; narrow hub headers wrap and tables scroll. Raw statuses, evidence and outputs remain canonical server data.
+
+
+WorkflowLogs shares exported auditTime with RunAuditTimeline so SQLite UTC timestamps and durations agree with audit rows. It stacks its run filter below sm and wraps the heading at narrow widths.

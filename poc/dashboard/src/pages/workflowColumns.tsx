@@ -1,3 +1,4 @@
+import type { WorkflowHubText } from '../i18n/workflowHub';
 import { RowActionMenu } from './RowActionMenu';
 import { Link } from 'react-router-dom';
 import { Button, Tag, Space, Tooltip, Modal, Badge } from 'antd';
@@ -22,7 +23,7 @@ export const createWorkflowColumns = (model: Pick<
   | 'openRunModal'
   | 'copyToClipboard'
   | 'getParsedWorkflowSteps'
->, access: { canManage: boolean; canOperate: boolean; isOrgAdmin: boolean }, departments: Department[]) => {
+>, access: { canManage: boolean; canOperate: boolean; isOrgAdmin: boolean }, departments: Department[], text: WorkflowHubText) => {
   const {
     setEditingWorkflow,
     setHistoryWorkflow,
@@ -51,7 +52,7 @@ export const createWorkflowColumns = (model: Pick<
   };
   const workflowColumns = [
     {
-      title: 'Workflow Name',
+      title: text.name,
       key: 'name',
       render: (_: any, record: PlatformWorkflow) => (
         <div>
@@ -66,7 +67,7 @@ export const createWorkflowColumns = (model: Pick<
       ),
     },
     ...(access.isOrgAdmin ? [{
-      title: 'Department',
+      title: text.department,
       dataIndex: 'department_id',
       key: 'department_id',
       render: (dept: string) =>
@@ -75,28 +76,28 @@ export const createWorkflowColumns = (model: Pick<
             <Tag color="cyan">{departmentNames.get(dept)?.trim() || dept}</Tag>
           </Tooltip>
         ) : (
-          <Tag color="default">Global</Tag>
+          <Tag color="default">{text.global}</Tag>
         ),
     }] : []),
     {
-      title: 'Triggers & Bindings',
+      title: text.triggers,
       key: 'triggers',
       render: (_: any, record: PlatformWorkflow) => (
         <Space direction="vertical" size={2}>
           {record.cron_expression && (
-            <Tooltip title={`Cron schedule: ${record.cron_expression}`}>
+            <Tooltip title={`${text.cron}: ${record.cron_expression}`}>
               <Tag icon={<ClockCircleOutlined />} color="purple">
                 {record.cron_expression}
               </Tag>
             </Tooltip>
           )}
           {record.webhook_enabled && record.webhook_token && (
-            <Tooltip title="Webhook enabled. Click to copy webhook token.">
+            <Tooltip title={text.webhookHelp}>
               <Tag
                 icon={<ThunderboltOutlined />}
                 color="blue"
                 style={{ cursor: 'pointer' }}
-                onClick={() => copyToClipboard(record.webhook_token || '', 'Webhook Token')}
+                onClick={() => copyToClipboard(record.webhook_token || '', text.webhookToken)}
               >
                 Webhook: {record.webhook_token.slice(0, 8)}...
               </Tag>
@@ -119,43 +120,43 @@ export const createWorkflowColumns = (model: Pick<
             </Tooltip>
           )}
           {!record.cron_expression && !record.webhook_enabled && !record.channel_binding && (
-            <Tag color="default">Manual Trigger Only</Tag>
+            <Tag color="default">{text.manual}</Tag>
           )}
         </Space>
       ),
     },
     {
-      title: 'Steps',
+      title: text.steps,
       key: 'steps',
       render: (_: any, record: PlatformWorkflow) => {
         const steps = getParsedWorkflowSteps(record);
         return (
-          <Tooltip title={`${steps.length} DAG execution stages`}>
+          <Tooltip title={`${steps.length} ${text.stages}`}>
             <Tag icon={<BranchesOutlined />} color="geekblue">
-              {steps.length} Steps
+              {steps.length} {text.steps}
             </Tag>
           </Tooltip>
         );
       },
     },
     {
-      title: 'Status',
+      title: text.status,
       dataIndex: 'is_active',
       key: 'is_active',
       render: (active: boolean) =>
         active ? (
-          <Badge status="success" text={<span style={{ color: '#52c41a' }}>Active</span>} />
+          <Badge status="success" text={<span style={{ color: '#52c41a' }}>{text.active}</span>} />
         ) : (
-          <Badge status="default" text={<span style={{ color: '#8b949e' }}>Inactive</span>} />
+          <Badge status="default" text={<span style={{ color: '#8b949e' }}>{text.inactive}</span>} />
         ),
     },
     {
-      title: 'Actions',
+      title: text.actions,
       key: 'actions',
       width: 150,
       render: (_: any, record: PlatformWorkflow) => (
         <Space size={6}>
-          <Tooltip title="Execute Workflow">
+          <Tooltip title={text.execute}>
             <Button
               type="primary"
               size="small"
@@ -163,29 +164,29 @@ export const createWorkflowColumns = (model: Pick<
               onClick={() => openRunModal(record)}
               style={{ background: '#238636', borderColor: '#238636' }}
             >
-              Run
+              {text.run}
             </Button>
           </Tooltip>
-          <RowActionMenu label={`Actions for workflow ${record.name}`} items={[
-            { key: 'playground', label: 'Playground', disabled: !access.canOperate, onClick: () => openRunModal(record, true) },
-            { key: 'edit', label: 'Edit', icon: <EditOutlined />, disabled: !access.canManage, onClick: () => {
+          <RowActionMenu label={`${text.actionsFor} ${record.name}`} items={[
+            { key: 'playground', label: text.playground, disabled: !access.canOperate, onClick: () => openRunModal(record, true) },
+            { key: 'edit', label: text.edit, icon: <EditOutlined />, disabled: !access.canManage, onClick: () => {
               setEditingWorkflow(record); setCreateModalOpen(true);
             } },
-            { key: 'history', label: 'History', icon: <HistoryOutlined />, onClick: () => setHistoryWorkflow(record) },
+            { key: 'history', label: text.history, icon: <HistoryOutlined />, onClick: () => setHistoryWorkflow(record) },
             { key: 'settings', label: settingsText.settingsAction, icon: <SettingOutlined />, onClick: () => setSettingsWorkflow(record) },
-            { key: 'logs', label: <Link to={`/workflows/${record.id}/logs`}>Logs</Link>, icon: <EyeOutlined /> },
-            { key: 'canvas', label: 'Canvas', icon: <ApartmentOutlined />, onClick: () => {
+            { key: 'logs', label: <Link to={`/workflows/${record.id}/logs`}>{text.logs}</Link>, icon: <EyeOutlined /> },
+            { key: 'canvas', label: text.canvasAction, icon: <ApartmentOutlined />, onClick: () => {
               setSelectedWorkflow(record); setCanvasModalOpen(true);
             } },
-            { key: 'definition', label: 'YAML / JSON Definition', icon: <CodeOutlined />, onClick: () => {
+            { key: 'definition', label: text.definitionAction, icon: <CodeOutlined />, onClick: () => {
               setSelectedWorkflow(record); setViewDefModalOpen(true);
             } },
             { type: 'divider' },
-            { key: 'delete', label: 'Delete', icon: <DeleteOutlined />, danger: true, disabled: !access.canManage,
+            { key: 'delete', label: text.delete, icon: <DeleteOutlined />, danger: true, disabled: !access.canManage,
               onClick: () => Modal.confirm({
-                title: 'Delete this workflow?',
-                content: 'This will permanently delete this playbook and its configuration.',
-                okText: 'Yes, Delete', cancelText: 'Cancel', okButtonProps: { danger: true },
+                title: text.deletePrompt,
+                content: text.deleteHelp,
+                okText: text.deleteConfirm, cancelText: text.cancel, okButtonProps: { danger: true },
                 onOk: () => handleDelete(record.id),
               }) },
           ]} />
