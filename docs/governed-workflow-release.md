@@ -86,3 +86,7 @@ cleanup verified inactive principal/workflow, disabled exact binding and exact
 connector restoration. See the later section of the live-group evidence record.
 Independent decision/continuation was not completed for this run; no ticket is
 closed on the strength of an expired test.
+
+
+## Chrome acceptance update — 2026-11-23
+Additional actual Chrome observations cover trigger preview, member confirmation/revocation, identity proof UI and sequential PR history; [2026-11-23 evidence](governed-workflow-chrome-acceptance-2026-11-23.md). Terminal confirmation labels/date were localized. AI-47/49 and sign-off remain open pending the documented gaps.
