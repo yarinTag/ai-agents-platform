@@ -5,6 +5,7 @@ import { Alert, Button, Card, Empty, Spin, Popconfirm, Space, Tag, Typography } 
 import axios from 'axios';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useWorkflowApprovalText } from '../../i18n/workflowApproval';
+import { useTranslation } from '../../i18n';
 import { decideWorkflowApproval, getWorkflowApproval, type WorkflowApproval } from '../../services/workflowApprovals';
 
 export function WorkflowApprovalPanel({ executionId, approvalId, refresh, emptyMessage, onDecision }: { executionId: string; approvalId?: string; refresh?: number; emptyMessage?: string; onDecision?: () => void }) {
@@ -14,6 +15,7 @@ export function WorkflowApprovalPanel({ executionId, approvalId, refresh, emptyM
   const decisionActive = useRef(false);
   const [attemptedId, setAttemptedId] = useState<string>();
   const text = useWorkflowApprovalText();
+  const { locale } = useTranslation();
   const { canManage } = usePermissions();
   const [approval, setApproval] = useState<WorkflowApproval | null>(null);
   const [error, setError] = useState('');
@@ -80,7 +82,7 @@ export function WorkflowApprovalPanel({ executionId, approvalId, refresh, emptyM
     <Space direction="vertical" style={{ width: '100%' }}>
       <Typography.Paragraph>{approval.merge_after_approval ? text.mergeHelp : text.help}</Typography.Paragraph>
       {total > 1 && <Typography.Text>{text.progress(approval.position + 1, total)}</Typography.Text>}
-      <Typography.Text type="secondary">{text.expires}: {new Date(approval.expires_at).toLocaleString()}</Typography.Text>
+      <Typography.Text type="secondary">{text.expires}: <bdi>{new Date(approval.expires_at).toLocaleString(locale)}</bdi></Typography.Text>
       {approval.resolved_by && <Typography.Text>{prText.actor}: <bdi dir="ltr">{approval.resolved_by}</bdi></Typography.Text>}
       {approval.subjects.map((subject, index) => <PrEvidence key={`${subject.repository}:${subject.pull_number}:${index}`} value={subject} />)}
       {expired && approval.status === 'PENDING' && <Alert type="warning" message={prText.expired} />}
@@ -92,10 +94,10 @@ export function WorkflowApprovalPanel({ executionId, approvalId, refresh, emptyM
       {approval.status === 'RESOLVING' && <Alert type="info" message={text.resolving} />}
       {(error || approval.error) && <Alert type="error" message={error || approval.error} description={approval.status === 'RESOLVING' || approval.receipts.some(r => ['STARTED', 'UNKNOWN'].includes(r.status)) ? prText.reconcile : prText.evidenceRecovery} />}
       <Space>
-        <Popconfirm key={approval.id + ':approve'} title={text.confirm} onConfirm={() => void decide(true, approval.id)} disabled={!actionable}>
+        <Popconfirm key={approval.id + ':approve'} title={text.confirm} okText={text.confirmAction} cancelText={text.cancel} onConfirm={() => void decide(true, approval.id)} disabled={!actionable}>
           <Button type="primary" loading={busy} disabled={!actionable}>{approval.merge_after_approval ? text.approveMerge : text.approve}</Button>
         </Popconfirm>
-        <Popconfirm key={approval.id + ':reject'} title={text.confirm} onConfirm={() => void decide(false, approval.id)} disabled={!actionable}>
+        <Popconfirm key={approval.id + ':reject'} title={text.confirm} okText={text.confirmAction} cancelText={text.cancel} onConfirm={() => void decide(false, approval.id)} disabled={!actionable}>
           <Button danger disabled={!actionable}>{text.reject}</Button>
         </Popconfirm>
       </Space>

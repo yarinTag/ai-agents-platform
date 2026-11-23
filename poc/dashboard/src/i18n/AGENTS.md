@@ -229,3 +229,7 @@ DAG and workflow-chat EN/HE text now labels Continuation/Independent approval po
 explains eligible self/author confirmation versus independent decisions and states
 that protected GitHub write approvals cannot be downgraded. Read-only guidance uses
 the saved policy rather than claiming every approval excludes its initiator.
+
+
+## AI-47 terminal approval locale acceptance
+workflowApproval.ts owns confirmAction/cancel in EN/HE for terminal decision confirmations; expiry formatting uses the current locale.

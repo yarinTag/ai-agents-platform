@@ -421,3 +421,7 @@ default), with current-role and protected-write guidance. Updates canonicalize t
 legacy separate_initiator flag. WorkflowChatModal shows proposal checkpoint mode;
 DagApprovalsInbox displays the server's frozen mode, defaulting absent legacy data
 to Independent. Decision buttons still depend solely on server can_decide/my_vote.
+
+
+## AI-47 terminal approval locale acceptance
+WorkflowApprovalPanel localizes both decision confirmation buttons and formats its expiry in the selected UI locale inside bdi. Displayed-ID fencing and server authority remain unchanged.

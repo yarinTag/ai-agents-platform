@@ -391,3 +391,7 @@ separate_initiator flag on edits. Absent mode displays Independent. Preserve mod
 through workflow/chat DTOs; show it in AI preview and approval details. Respect the
 server's can_decide regardless of mode. Protected PR write downgrade is rejected
 server-side, including YAML/API paths; no existing waiting request is migrated.
+
+
+## AI-47 terminal approval locale acceptance
+Terminal approval confirmation labels and expiry use the selected EN/HE locale. Preserve per-approval submission fencing and current server authorization.

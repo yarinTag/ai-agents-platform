@@ -52,3 +52,7 @@ Status: partial Chrome role/access/approval journeys were executed on 2026-11-21
 see [observations and remaining coverage](governed-workflow-chrome-acceptance-2026-11-21.md).
 Firefox was explicitly deferred by the user. This does not close the full AI-47
 matrix, remaining localization/keyboard coverage or provider-trigger journeys.
+
+
+## Chrome acceptance update — 2026-11-23
+Additional Chrome trigger, proposal/revocation, identity and sequential/PR-round observations: [2026-11-23 record](governed-workflow-chrome-acceptance-2026-11-23.md). Remaining Hebrew labels and live combined acceptance are still open.
