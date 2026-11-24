@@ -114,3 +114,7 @@ Telegram, model credentials or application lifespan.
 
 
 Security CI selects test_scoped_ingress_claim.py to ensure exact-event claims and scoped maintenance/consumer processing never advance unrelated pending work. These contracts use actual temporary SQLite/FastAPI with no provider or model calls.
+
+
+## PostgreSQL acceptance CI
+PostgreSQL persistence contracts is a required CI job, using an isolated postgres:17 service and disposable runner_ci NOSUPERUSER/NOBYPASSRLS role with namespace-creation rights only in its test database. It installs the locked postgres extra and runs runner/configuration/execution migration suites with --noconftest. RUNNER_TEST_REQUIRE_RLS=1 forbids missing DSN/dependency or privileged-role evidence. Empty/skipped JUnit evidence fails; CI required includes this job. No production credentials, migrations, provider calls or application workers.

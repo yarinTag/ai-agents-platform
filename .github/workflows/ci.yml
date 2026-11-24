@@ -121,6 +121,74 @@ jobs:
             ${{ runner.temp }}/ai13-api-audit/api-audit-summary.json
           if-no-files-found: ignore
           retention-days: 14
+  postgres:
+    name: PostgreSQL persistence contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: disposable-ci-admin
+          POSTGRES_DB: runner_acceptance
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d runner_acceptance"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      PLATFORM_DEV_MODE: '1'
+      RUNNER_TEST_POSTGRES_DSN: postgresql://runner_ci:disposable-ci-runner@127.0.0.1:5432/runner_acceptance
+      RUNNER_TEST_REQUIRE_RLS: '1'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.11'
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          enable-cache: true
+      - name: Install locked PostgreSQL test dependencies
+        run: uv sync --frozen --extra dev --extra postgres --no-install-project
+      - name: Create restricted disposable test role
+        env:
+          TEST_ADMIN_DSN: postgresql://postgres:disposable-ci-admin@127.0.0.1:5432/runner_acceptance
+        run: |
+          uv run --no-sync python - <<'PY'
+          import os
+          import psycopg2
+          with psycopg2.connect(os.environ['TEST_ADMIN_DSN']) as conn:
+              with conn.cursor() as cursor:
+                  cursor.execute("CREATE ROLE runner_ci LOGIN PASSWORD 'disposable-ci-runner' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS")
+                  cursor.execute('GRANT CONNECT, CREATE ON DATABASE runner_acceptance TO runner_ci')
+          PY
+      - name: Run real migration, ownership and RLS contracts
+        run: >-
+          uv run --no-sync python -m pytest --noconftest -q
+          poc/tests/test_runner_postgres.py
+          poc/tests/test_configuration_migration.py
+          poc/tests/test_execution_migration.py
+          --junitxml=reports/postgres.xml
+      - name: Reject skipped PostgreSQL evidence
+        if: always()
+        run: |
+          uv run --no-sync python - <<'PY'
+          import xml.etree.ElementTree as ET
+          cases = ET.parse('reports/postgres.xml').getroot().findall('.//testcase')
+          assert cases, 'PostgreSQL tests did not produce evidence'
+          assert not any(case.find('skipped') is not None for case in cases), 'Skipped PostgreSQL checks cannot satisfy acceptance'
+          PY
+      - name: Upload PostgreSQL report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: postgres-persistence-contracts
+          path: reports/postgres.xml
+          if-no-files-found: ignore
+          retention-days: 14
   frontend:
     name: Dashboard checks
     runs-on: ubuntu-latest
@@ -172,7 +240,7 @@ jobs:
   gate:
     name: CI required
     if: always()
-    needs: [plan, backend, frontend, containers]
+    needs: [plan, backend, postgres, frontend, containers]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
@@ -181,11 +249,13 @@ jobs:
           PLAN: ${{ needs.plan.result }}
           PUBLISH: ${{ needs.plan.outputs.publish }}
           BACKEND: ${{ needs.backend.result }}
+          POSTGRES: ${{ needs.postgres.result }}
           FRONTEND: ${{ needs.frontend.result }}
           CONTAINERS: ${{ needs.containers.result }}
         run: |
           test "$PLAN" = success
           test "$BACKEND" = success
+          test "$POSTGRES" = success
           test "$FRONTEND" = success
           if [ "$PUBLISH" = true ]; then
             test "$CONTAINERS" = skipped

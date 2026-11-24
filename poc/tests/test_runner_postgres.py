@@ -1,7 +1,7 @@
 """Real disposable PostgreSQL contracts. Never uses platform/default databases.
 
-Not executed in this task. Explicit RUNNER_TEST_POSTGRES_DSN is required; each
-case uses a unique schema. This fixture needs schema-creation permission.
+Explicit RUNNER_TEST_POSTGRES_DSN is required; each case uses a unique schema.
+CI requires a restricted role; no default platform database is ever selected.
 """
 import os
 import time
@@ -19,16 +19,25 @@ from storage.runner_postgres_effects import PostgresRunnerEffects
 
 @pytest.fixture
 def journal():
+    required = os.environ.get('RUNNER_TEST_REQUIRE_RLS') == '1'
     dsn = os.environ.get('RUNNER_TEST_POSTGRES_DSN')
     if not dsn:
+        if required:
+            pytest.fail('Required disposable PostgreSQL DSN missing.')
         pytest.skip('Explicit disposable PostgreSQL DSN required.')
-    psycopg2 = pytest.importorskip('psycopg2')
+    if required:
+        import psycopg2
+    else:
+        psycopg2 = pytest.importorskip('psycopg2')
     from psycopg2 import sql
     from psycopg2.extras import RealDictCursor
     schema = 'runner_test_' + uuid.uuid4().hex
     admin = psycopg2.connect(dsn)
     try:
         with admin.cursor() as cursor:
+            if required:
+                cursor.execute('SELECT rolsuper,rolbypassrls FROM pg_roles WHERE rolname=current_user')
+                assert cursor.fetchone() == (False, False), 'CI requires non-superuser, non-BYPASSRLS role'
             cursor.execute(sql.SQL('CREATE SCHEMA {}').format(sql.Identifier(schema)))
         admin.commit()
 

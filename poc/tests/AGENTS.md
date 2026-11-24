@@ -371,3 +371,7 @@ and inactive-workflow assertions.
 
 ## Scoped ingress verification
 test_scoped_ingress_claim.py uses real SQLite/FastAPI to verify exact-event claim/maintenance isolation, unchanged unrelated outbox rows and expired inputs, missing/terminal selection behavior, default global compatibility and targeted worker processing without inference.
+
+
+## PostgreSQL acceptance CI
+PostgreSQL fixture supports RUNNER_TEST_REQUIRE_RLS=1: missing explicit DSN or psycopg2 is failure, and a superuser/BYPASSRLS role fails before schema creation. Non-required local runs retain explicit opt-in/skip behavior. Every test schema is uniquely named and dropped after the case. CI rejects any skipped test in these suites.
