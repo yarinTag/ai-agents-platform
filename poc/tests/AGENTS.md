@@ -367,3 +367,7 @@ Telegram, ingress, chat and PR approval cases in security CI.
 The guarded API audit's PR-write creation case explicitly asserts the compiled
 checkpoint mode=INDEPENDENT alongside its TTL, retaining current grant revalidation
 and inactive-workflow assertions.
+
+
+## Scoped ingress verification
+test_scoped_ingress_claim.py uses real SQLite/FastAPI to verify exact-event claim/maintenance isolation, unchanged unrelated outbox rows and expired inputs, missing/terminal selection behavior, default global compatibility and targeted worker processing without inference.

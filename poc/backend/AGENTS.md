@@ -175,3 +175,7 @@ Slack Socket Mode starts an outbound worker for explicitly configured connected 
 The channel trigger worker evaluates opted-in relevance rules before reserving executions. It reuses the durable outbox lease, existing department budget ledger and tool-free runtime.
 
 Channel approval worker also advances confirmed PR receipts from either dashboard or channel. Only read-only evidence refresh can resume after a lease expires.
+
+
+## Scoped ingress verification
+channel_trigger_worker.consume_one(engine, *, event_id=None) forwards an optional trusted exact-event selector to storage.claim. Selected processing never claims unrelated pending ingress. The normal background run loop still omits it; no new route, worker startup or permissions are introduced.

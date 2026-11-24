@@ -233,3 +233,7 @@ the saved policy rather than claiming every approval excludes its initiator.
 
 ## AI-47 terminal approval locale acceptance
 workflowApproval.ts owns confirmAction/cancel in EN/HE for terminal decision confirmations; expiry formatting uses the current locale.
+
+
+## AI-47 workflow and navigation locale completion
+workflowHub.ts owns workflow list/run/action labels and navigation.ts owns shell navigation/department/logout labels in EN/HE. workflowRun.ts now covers log controls, state guidance and metadata labels. Canonical machine statuses and user/provider content are not translated.

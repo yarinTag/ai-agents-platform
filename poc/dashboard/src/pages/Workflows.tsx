@@ -1,3 +1,5 @@
+import { useWorkflowHubText } from '../i18n/workflowHub';
+import { useTranslation } from '../i18n';
 import { usePermissions } from '../hooks/usePermissions';
 import { useAuth } from '../context/AuthContext';
 import React, { useEffect, useState } from 'react';
@@ -23,6 +25,8 @@ export const WorkflowsPage: React.FC = () => {
   const { user, departments } = useAuth();
   const { canRead, canManage, canOperate } = usePermissions();
   const model = useWorkflowsPage();
+  const text = useWorkflowHubText();
+  const { locale, dir } = useTranslation();
   const [chatSearch, setChatSearch] = useSearchParams();
   const [chatOpen, setChatOpen] = useState(() => chatSearch.has('workflowChat'));
   const [approvalsOpen, setApprovalsOpen] = useState(false);
@@ -86,16 +90,17 @@ export const WorkflowsPage: React.FC = () => {
 
   const workflowColumns = createWorkflowColumns(model, {
     canManage, canOperate, isOrgAdmin: user?.role === 'ORG_ADMIN',
-  }, departments);
-  const executionColumns = createWorkflowExecutionColumns(model);
+  }, departments, text);
+  const executionColumns = createWorkflowExecutionColumns(model, text, locale);
   return (
-    <div style={{ padding: '24px', minHeight: '100vh', background: '#0a0d12' }}>
+    <div dir={dir} style={{ padding: '24px', minHeight: '100vh', background: '#0a0d12' }}>
       {/* Header */}
       <div
         style={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
+          flexWrap: 'wrap', gap: 12,
           marginBottom: '20px',
         }}
       >
@@ -113,14 +118,14 @@ export const WorkflowsPage: React.FC = () => {
             }}
           >
             <ApartmentOutlined style={{ color: '#8b5cf6' }} />
-            Workflows & Automations Hub
+            {text.title}
           </h2>
           <div style={{ color: '#8b949e', fontSize: '13px', marginTop: '4px' }}>
-            Multi-agent DAG orchestration, automated triggers, and smart execution deduplication.
+            {text.subtitle}
           </div>
         </div>
 
-        <Space size={10}>
+        <Space size={10} wrap>
           <Button disabled={!canRead} onClick={() => setApprovalsOpen(true)}>{approvalText.title}</Button>
           <Button disabled={!canRead} onClick={() => setChatOpen(true)}>{chatText.entry}</Button>
           <Button
@@ -132,7 +137,7 @@ export const WorkflowsPage: React.FC = () => {
               color: '#c9d1d9',
             }}
           >
-            Refresh
+            {text.refresh}
           </Button>
           <Button
             type="primary"
@@ -144,7 +149,7 @@ export const WorkflowsPage: React.FC = () => {
               fontWeight: 600,
             }}
           >
-            + Create Workflow
+            {text.create}
           </Button>
         </Space>
       </div>
@@ -161,7 +166,7 @@ export const WorkflowsPage: React.FC = () => {
             }}
           >
             <Statistic
-              title={<span style={{ color: '#8b949e', fontSize: 12 }}>TOTAL WORKFLOWS</span>}
+              title={<span style={{ color: '#8b949e', fontSize: 12 }}>{text.total}</span>}
               value={totalWorkflows}
               prefix={<ApartmentOutlined style={{ color: '#8b5cf6', marginRight: 6 }} />}
               styles={{ content: { color: '#f0f6fc', fontWeight: 700 } }}
@@ -178,7 +183,7 @@ export const WorkflowsPage: React.FC = () => {
             }}
           >
             <Statistic
-              title={<span style={{ color: '#8b949e', fontSize: 12 }}>ACTIVE PIPELINES</span>}
+              title={<span style={{ color: '#8b949e', fontSize: 12 }}>{text.activePipelines}</span>}
               value={activeWorkflows}
               prefix={<CheckCircleOutlined style={{ color: '#52c41a', marginRight: 6 }} />}
               styles={{ content: { color: '#f0f6fc', fontWeight: 700 } }}
@@ -195,7 +200,7 @@ export const WorkflowsPage: React.FC = () => {
             }}
           >
             <Statistic
-              title={<span style={{ color: '#8b949e', fontSize: 12 }}>QUEUED RUNS</span>}
+              title={<span style={{ color: '#8b949e', fontSize: 12 }}>{text.queued}</span>}
               value={queuedRuns}
               prefix={<ThunderboltOutlined style={{ color: '#fa8c16', marginRight: 6 }} />}
               styles={{ content: { color: '#fa8c16', fontWeight: 700 } }}
@@ -212,7 +217,7 @@ export const WorkflowsPage: React.FC = () => {
             }}
           >
             <Statistic
-              title={<span style={{ color: '#8b949e', fontSize: 12 }}>DEDUPLICATED RUNS</span>}
+              title={<span style={{ color: '#8b949e', fontSize: 12 }}>{text.deduplicated}</span>}
               value={deduplicatedRuns}
               prefix={<SafetyCertificateOutlined style={{ color: '#38bdf8', marginRight: 6 }} />}
               styles={{ content: { color: '#38bdf8', fontWeight: 700 } }}
@@ -239,7 +244,7 @@ export const WorkflowsPage: React.FC = () => {
               key: 'workflows',
               label: (
                 <span style={{ fontSize: 14, fontWeight: 600 }}>
-                  <ApartmentOutlined /> Playbooks & Pipelines ({workflows.length})
+                  <ApartmentOutlined /> {text.playbooks} ({workflows.length})
                 </span>
               ),
               children: (
@@ -248,7 +253,7 @@ export const WorkflowsPage: React.FC = () => {
                   columns={workflowColumns}
                   rowKey="id"
                   loading={loading}
-                  pagination={{ pageSize: 10 }}
+                  scroll={{ x: 'max-content' }} pagination={{ pageSize: 10 }}
                   style={{ marginTop: 8 }}
                 />
               ),
@@ -257,7 +262,7 @@ export const WorkflowsPage: React.FC = () => {
               key: 'executions',
               label: (
                 <span style={{ fontSize: 14, fontWeight: 600 }}>
-                  <SyncOutlined /> Execution History & Queue ({executions.length})
+                  <SyncOutlined /> {text.executionHistory} ({executions.length})
                 </span>
               ),
               children: (
@@ -266,7 +271,7 @@ export const WorkflowsPage: React.FC = () => {
                   columns={executionColumns}
                   rowKey="id"
                   loading={loading}
-                  pagination={{ pageSize: 15 }}
+                  scroll={{ x: 'max-content' }} pagination={{ pageSize: 15 }}
                   style={{ marginTop: 8 }}
                 />
               ),
@@ -280,19 +285,19 @@ export const WorkflowsPage: React.FC = () => {
         title={
           <span style={{ color: '#f0f6fc', display: 'flex', alignItems: 'center', gap: 8 }}>
             <PlayCircleOutlined style={{ color: '#52c41a' }} />
-            {playgroundMode ? 'Playground' : 'Execute Workflow'}: {runningWorkflow?.name}
+            {playgroundMode ? text.playground : text.execute}: {runningWorkflow?.name}
           </span>
         }
         open={runModalOpen}
         onCancel={() => setRunModalOpen(false)}
         onOk={handleExecute}
         confirmLoading={executing}
-        okText={playgroundMode ? 'Run in Playground' : 'Launch Execution'}
-        cancelText="Cancel"
+        okText={playgroundMode ? text.runPlayground : text.launch}
+        cancelText={text.cancel}
       >
         {playgroundMode && <Alert type="info" showIcon style={{ marginBottom: 16 }}
-          message="Tool-free workflow exercise"
-          description="Runs the same DAG with real model calls and normal token costs. MCP, file and shell tools, channel notifications, and external approvals are disabled. Supply all required data in the JSON input. Each run starts fresh; results may differ from workflows using live tools."
+          message={text.exercise}
+          description={text.exerciseHelp}
         />}
         <Form form={runForm} layout="vertical">
           {!playgroundMode && <Form.Item name="dispatch_mode" label={runText.mode} initialValue="local">
@@ -311,8 +316,8 @@ export const WorkflowsPage: React.FC = () => {
               children: (
                 <Form.Item
                   name="payload"
-                  label={<span style={{ color: '#c9d1d9' }}>Execution Trigger Payload (JSON)</span>}
-                  tooltip="Custom input variables passed to workflow steps as {{variable_name}}"
+                  label={<span style={{ color: '#c9d1d9' }}>{text.payload}</span>}
+                  tooltip={text.payloadHelp}
                 >
                   <TextArea
                     rows={5}
@@ -327,10 +332,10 @@ export const WorkflowsPage: React.FC = () => {
           {!playgroundMode && <Form.Item
             name="force_rerun"
             valuePropName="checked"
-            label={<span style={{ color: '#c9d1d9' }}>Force Re-run</span>}
-            tooltip="Bypass deduplication and caching, forcing all agents to execute from scratch"
+            label={<span style={{ color: '#c9d1d9' }}>{text.forceRerun}</span>}
+            tooltip={text.forceHelp}
           >
-            <Switch checkedChildren="Force" unCheckedChildren="Cached" />
+            <Switch checkedChildren={text.force} unCheckedChildren={text.cached} />
           </Form.Item>}
         </Form>
       </Modal>
@@ -340,7 +345,7 @@ export const WorkflowsPage: React.FC = () => {
         title={
           <span style={{ color: '#f0f6fc', display: 'flex', alignItems: 'center', gap: 8 }}>
             <ApartmentOutlined style={{ color: '#8b5cf6' }} />
-            Workflow DAG Canvas: {selectedWorkflow?.name}
+            {text.canvas}: {selectedWorkflow?.name}
           </span>
         }
         open={canvasModalOpen}
@@ -368,7 +373,7 @@ export const WorkflowsPage: React.FC = () => {
         title={
           <span style={{ color: '#f0f6fc', display: 'flex', alignItems: 'center', gap: 8 }}>
             <CodeOutlined style={{ color: '#38bdf8' }} />
-            Playbook Definition: {selectedWorkflow?.name}
+            {text.definition}: {selectedWorkflow?.name}
           </span>
         }
         open={viewDefModalOpen}
@@ -380,14 +385,14 @@ export const WorkflowsPage: React.FC = () => {
             onClick={() =>
               copyToClipboard(
                 selectedWorkflow?.definition_yaml || selectedWorkflow?.definition_json || '',
-                'Playbook Definition'
+                text.definition
               )
             }
           >
-            Copy
+            {text.copy}
           </Button>,
           <Button key="close" type="primary" onClick={() => setViewDefModalOpen(false)}>
-            Close
+            {text.close}
           </Button>,
         ]}
         width={750}

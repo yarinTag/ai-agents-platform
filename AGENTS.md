@@ -436,3 +436,7 @@ the temporary workflow/user/binding. See the later active-admission evidence sec
 versus default/legacy INDEPENDENT across authoring, frozen decisions, callbacks and
 resume. Exact governed GitHub writes require independent approval server-side.
 No existing pending policy or active workflow/grant was changed.
+
+
+## AI-47 component locale boundary
+I18nProvider now wraps LocalizedApp so the shared Ant Design ConfigProvider receives the selected EN/HE locale and direction, including table pagination, empty states and confirmation controls. AuthProvider remains inside the same UI boundary; no authentication or permission contract changes.

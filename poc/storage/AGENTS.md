@@ -300,3 +300,7 @@ callbacks, counted quorum and claim_resume. Only CONTINUATION permits initiator 
 revision author; it grants no role or identity. Invalid modes fail eligibility. A
 checkpoint carrying approved_pr_write cannot suspend/vote/resume with CONTINUATION.
 Inbox items add mode. No columns, migration or existing-policy rewrite.
+
+
+## Scoped ingress verification
+channel_ingress.claim(db, now=None, *, event_id=None) optionally selects one exact event and scopes expired-input deletion and exhausted-lease failure updates to that event. Missing/finished selections return None and never fall through to another job. Omitted selection retains existing global worker behavior, leases and deduplication. This is an internal operational boundary, not an authorization API.

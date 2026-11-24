@@ -90,3 +90,11 @@ closed on the strength of an expired test.
 
 ## Chrome acceptance update — 2026-11-23
 Additional actual Chrome observations cover trigger preview, member confirmation/revocation, identity proof UI and sequential PR history; [2026-11-23 evidence](governed-workflow-chrome-acceptance-2026-11-23.md). Terminal confirmation labels/date were localized. AI-47/49 and sign-off remain open pending the documented gaps.
+
+
+## Further acceptance — 2026-11-23
+[Live relevance sample](telegram-relevance-acceptance-2026-11-23.md): user authorized up toUSD5; eight real tool-free NVIDIA classifier cases passed (EN/HE, positive/negative, injection, ambiguous, historical), recordedUSD0, no unknown costs. No saved workflow relevance setting changed. The combined active Telegram trigger/approval test remains in progress; source and isolated Chrome evidence do not substitute for its outcome.
+
+
+## Active transport diagnosis — 2026-11-23
+Authenticated getUpdates returned the exact new group command under a user-approved bounded window. Current connector configuration lacked a valid identity proof configuration and polling mode; provider webhook was also absent. No trigger execution was admitted. A temporary polling-mode inspection under exclusive consumer lock restored its original mode in finally. Temporary principal/workflow were deactivated, Trigger binding disabled and connector configuration restored; cleanup checks all passed. Four unrelated ingress jobs were left untouched. Persistent connector setup requires the pending explicit user approval; do not claim operational Telegram acceptance yet. Internal exact-event claim support now enables scoped testing without advancing unrelated jobs.

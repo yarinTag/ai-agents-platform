@@ -12,9 +12,9 @@ from .dependencies import get_workflow_engine
 logger = logging.getLogger(__name__)
 
 
-def consume_one(engine):
+def consume_one(engine, *, event_id=None):
     db = engine.db
-    claim = channel_ingress.claim(db)
+    claim = channel_ingress.claim(db, event_id=event_id)
     if claim is None:
         return False
     event_id = claim["event"]["id"]

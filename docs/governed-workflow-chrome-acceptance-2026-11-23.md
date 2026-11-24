@@ -65,3 +65,10 @@ change. Existing Vite chunk-size warning remains. No live provider call, model
 request, production grant or workflow change was made by this acceptance pass.
 
 Post-fix Chrome verification: the Hebrew dialog displayed ביטול / אישור ההחלטה, and expiry displayed 24.11.2026, 21:12:15 under the selected Hebrew locale. The confirmation was cancelled without changing that new fixture gate.
+
+
+## Further acceptance — 2026-11-23
+Workflow hub/list/run controls, shell navigation/logout/department labels and logs now use EN/HE dictionaries; Ant Design receives the selected locale/direction, including pagination. Narrow headers wrap, tables scroll, log titles wrap and run filters stack below sm. Collapsed navigation retains localized accessible names. Browser observed readable HE hub/logs at390x844 and no page-width overflow. SQLite UTC step timestamps now agree with audit/run timestamps; second gate ended21:02:56 throughout. Raw enum values and provider/fixture content remain unchanged. Production build/typecheck and167 existing frontend tests passed before the final narrow-layout correction; final checks are recorded in the publication PR.
+
+
+Post-change verification: 167 existing frontend tests, final production build/typecheck and lint passed (existing lint/deprecation and bundle warnings remain). 28 ingress/trigger tests passed, including two new exact-event isolation contracts. Fresh-tab ORG_ADMIN signed in through the HE form, dismissed optional setup and switched Engineering→Finance by keyboard; only Finance workflow appeared, history count0. A stale browser handle stopped responding to clicks; a new tab on the same browser restored normal interaction, so unchanged trees from that handle were not counted as product failures or passes. Full-application legacy runtime/provider descriptions are outside these governed-flow observations.

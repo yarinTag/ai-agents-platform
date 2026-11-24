@@ -395,3 +395,11 @@ server-side, including YAML/API paths; no existing waiting request is migrated.
 
 ## AI-47 terminal approval locale acceptance
 Terminal approval confirmation labels and expiry use the selected EN/HE locale. Preserve per-approval submission fencing and current server authorization.
+
+
+## AI-47 workflow and navigation locale completion
+Workflow hub/log and shell labels use typed EN/HE dictionaries. Preserve the server role/membership checks and fixed enum values; translate presentation only. Headers wrap and tables scroll at narrow widths.
+
+
+## AI-47 component locale boundary
+I18nProvider now wraps LocalizedApp so the shared Ant Design ConfigProvider receives the selected EN/HE locale and direction, including table pagination, empty states and confirmation controls. AuthProvider remains inside the same UI boundary; no authentication or permission contract changes.

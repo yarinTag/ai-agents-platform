@@ -1,3 +1,5 @@
+import { useNavigationText } from '../../i18n/navigation';
+import { useTranslation } from '../../i18n';
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Tooltip, Button, Tag, Popconfirm, Select } from 'antd';
@@ -15,6 +17,8 @@ interface OfficeTopBarProps {
 }
 
 export const OfficeTopBar: React.FC<OfficeTopBarProps> = ({ collapsed = false, onToggleCollapse }) => {
+  const text = useNavigationText();
+  const { locale } = useTranslation();
   const [timeStr, setTimeStr] = useState('');
   const { user, departments, activeDepartmentId, setActiveDepartmentId, logout } = useAuth();
 
@@ -22,11 +26,11 @@ export const OfficeTopBar: React.FC<OfficeTopBarProps> = ({ collapsed = false, o
     const updateClock = () => {
       const now = new Date();
       setTimeStr(
-        now.toLocaleTimeString('en-US', {
+        now.toLocaleTimeString(locale, {
           hour: '2-digit',
           minute: '2-digit',
           second: '2-digit',
-          hour12: true,
+          hour12: locale !== 'he',
         }).toLowerCase()
       );
     };
@@ -34,12 +38,12 @@ export const OfficeTopBar: React.FC<OfficeTopBarProps> = ({ collapsed = false, o
     updateClock();
     const timer = setInterval(updateClock, 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [locale]);
 
   return (
     <header
       style={{
-        height: '52px',
+        minHeight: '52px', flexWrap: 'wrap', gap: 8, paddingBlock: 8,
         flexShrink: 0,
         background: '#0d1117',
         borderBottom: '1px solid #21262d',
@@ -52,9 +56,9 @@ export const OfficeTopBar: React.FC<OfficeTopBarProps> = ({ collapsed = false, o
       }}
     >
       {/* Left: Collapse Toggle + Brand + Live Status */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap', maxWidth: '100%' }}>
         {onToggleCollapse && (
-          <Tooltip title={collapsed ? 'Expand Menu' : 'Collapse Menu'} placement="bottom">
+          <Tooltip title={collapsed ? text.expand : text.collapse} placement="bottom">
             <Button
               type="text"
               icon={
@@ -64,7 +68,7 @@ export const OfficeTopBar: React.FC<OfficeTopBarProps> = ({ collapsed = false, o
                   <MenuFoldOutlined style={{ fontSize: '16px', color: '#8b949e' }} />
                 )
               }
-              onClick={onToggleCollapse}
+              aria-label={collapsed ? text.expand : text.collapse} onClick={onToggleCollapse}
               style={{
                 width: 34,
                 height: 34,
@@ -115,16 +119,16 @@ export const OfficeTopBar: React.FC<OfficeTopBarProps> = ({ collapsed = false, o
           }}
         >
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981' }} />
-          <span>ACTIVE PLATFORM</span>
+          <span>{text.active}</span>
         </div>
       </div>
 
       {/* Right: Department Selector + User & Role + Logout + Clock */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', maxWidth: '100%' }}>
         {/* Compact Department Selector Dropdown */}
         {departments && departments.length > 0 && (() => {
           const deptOptions = [
-            ...(user?.role === 'ORG_ADMIN' ? [{ label: '🌐 All Departments', value: 'all' }] : []),
+            ...(user?.role === 'ORG_ADMIN' ? [{ label: '🌐 ' + text.allDepartments, value: 'all' }] : []),
             ...departments.map((d) => {
               const deptId = d.id || d.department_id || '';
               return {
@@ -142,7 +146,7 @@ export const OfficeTopBar: React.FC<OfficeTopBarProps> = ({ collapsed = false, o
 
           return (
             <Select
-              size="small"
+              size="small" aria-label={text.department}
               value={selectedValue}
               optionFilterProp="label"
               onChange={(val) => {
@@ -181,17 +185,17 @@ export const OfficeTopBar: React.FC<OfficeTopBarProps> = ({ collapsed = false, o
         )}
 
         <Popconfirm
-          title="Are you sure you want to log out?"
+          title={text.logoutPrompt}
           onConfirm={logout}
-          okText="Log out"
-          cancelText="Cancel"
+          okText={text.logout}
+          cancelText={text.cancel}
           placement="bottomRight"
         >
-          <Tooltip title="Log out">
+          <Tooltip title={text.logout}>
             <Button
               type="text"
               size="small"
-              icon={<LogoutOutlined style={{ color: '#ef4444' }} />}
+              aria-label={text.logout} icon={<LogoutOutlined style={{ color: '#ef4444' }} />}
               style={{
                 width: 28,
                 height: 28,

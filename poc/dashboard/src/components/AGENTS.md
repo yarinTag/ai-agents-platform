@@ -425,3 +425,10 @@ to Independent. Decision buttons still depend solely on server can_decide/my_vot
 
 ## AI-47 terminal approval locale acceptance
 WorkflowApprovalPanel localizes both decision confirmation buttons and formats its expiry in the selected UI locale inside bdi. Displayed-ID fencing and server authority remain unchanged.
+
+
+## AI-47 workflow and navigation locale completion
+AppSidebar and OfficeTopBar use navigation EN/HE copy. Menu, logout and department controls have localized accessible names. The top bar wraps at narrow widths and its clock follows the UI locale. Department selection, membership filtering and logout semantics are unchanged.
+
+
+RunAuditTimeline exports auditTime for log date/duration presentation (SQLite space-separated timestamps are UTC). StepEventTimeline localizes disclosure/empty-state controls and event times; raw diagnostic content remains unchanged.
