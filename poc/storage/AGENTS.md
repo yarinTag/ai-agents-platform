@@ -304,3 +304,7 @@ Inbox items add mode. No columns, migration or existing-policy rewrite.
 
 ## Scoped ingress verification
 channel_ingress.claim(db, now=None, *, event_id=None) optionally selects one exact event and scopes expired-input deletion and exhausted-lease failure updates to that event. Missing/finished selections return None and never fall through to another job. Omitted selection retains existing global worker behavior, leases and deduplication. This is an internal operational boundary, not an authorization API.
+
+
+## PostgreSQL acceptance CI
+Existing Runner/configuration/execution-history PostgreSQL contracts are now selected by a dedicated required CI job using a real disposable server and non-BYPASSRLS role. This verifies implemented slices only; full platform migration/cutover, key recovery and active Runner wiring remain separate acceptance gates.
