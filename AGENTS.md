@@ -9,7 +9,7 @@ Ready/Running/Released transitions are implemented; prerequisite gates remain op
 AI-53 sandbox security planning and initial offline profile/manifest contracts are
 documented in [sandbox isolation](docs/architecture/ai-53-sandbox-isolation.md) and
 owned by [governance](poc/governance/AGENTS.md). No Kubernetes Runner/admission path
-is activated; AI-51 decisions and real cluster acceptance remain outstanding.
+is activated. AI-51 pilot decisions are recorded in docs/architecture/ai-51-pilot-decision.md; real cluster acceptance remains outstanding.
 No runtime verification was performed.
 
 [AI-45 workflow operations](docs/operations-runbook.md) and [credential and state recovery](docs/disaster-recovery.md) cover ingress incidents, stalled approvals, unknown PR outcomes and credential rotation.
@@ -118,14 +118,14 @@ The **AI Agents Platform** is an enterprise multi-tenant autonomous agent orches
 * [**War Room Deliberation**](poc/backend/war_room/AGENTS.md): Multi-agent deliberation councils, debate rounds, consensus synthesis.
 
 ### Frontend & UI Guides
-* [**Frontend Core**](poc/dashboard/AGENTS.md): React 18, Vite, Ant Design, TypeScript, pixel canvas integration.
+* [**Frontend Core**](poc/dashboard/AGENTS.md): React 19, Vite, Ant Design, TypeScript, pixel canvas integration.
 * [**Frontend Guidelines**](poc/dashboard/CLAUDE.md): Build verification, component standards, strict TypeScript typing.
 * [**UI Component Library**](poc/dashboard/src/components/AGENTS.md): Standardized `Robotic` UI component kit and layouts.
 * [**UI Pages & Routes**](poc/dashboard/src/pages/AGENTS.md): Application route pages (Organization, Workflows, MCP, War Room, Office).
 * [**UI Context & State**](poc/dashboard/src/context/AGENTS.md): React context providers (AuthContext, OfficeContext, NotificationContext).
 * [**UI Custom Hooks**](poc/dashboard/src/hooks/AGENTS.md): Custom hooks (useOfficeEvents, usePermissions, useLocalStorage).
 * [**UI Internationalization**](poc/dashboard/src/i18n/AGENTS.md): English (`en.ts`) and Hebrew (`he.ts`) translations, RTL handling.
-* [**Pixel Canvas Engine**](poc/dashboard/src/canvas/AGENTS.md): Virtual pixel office canvas, agent sprites, desk coordinates.
+* [**Pixel Canvas Engine**](poc/dashboard/src/engine/AGENTS.md): Virtual pixel office canvas, agent sprites, desk coordinates.
 
 ---
 
@@ -179,7 +179,7 @@ The protected `/api/v1/workflow-assistant` service reads current database user/m
 Workflow Assistant phase two adds /workflow-assistant chat and isolated asynchronous model generation; its backend contract is documented in poc/backend/workflow_assistant/AGENTS.md. Configured runtime model/provider routing is reused without agent tasks or Office events; the internal MCP tool inventory is limited to catalog/schema/YAML validation. Draft save remains explicit and versioned; External MCP login/transport and workflow activation remain future work.
 
 ## Model-only YAML authoring and internal MCP
-The Workflow Assistant now selects model_id/provider_id directly, uses an internal process-bound MCP server (catalog/schema/YAML validation only), and emits inactive native workflow YAML. Canonical governed schema: [Workflow authoring schema](poc/workflows/workflow-authoring.schema.yaml), generated from workflows.authoring_schema.WorkflowDocument. Execution agents remain per-step assignments; no planning agent is selected or persisted. The external installable OAuth MCP server remains future work.
+The Workflow Assistant now selects model_id/provider_id directly, uses an internal process-bound MCP server (catalog/schema/YAML validation only), and emits inactive native workflow YAML. Historical schema (removed2026-10-31): workflow-authoring.schema.yaml was generated from workflows.authoring_schema.WorkflowDocument. Current authoring is documented in [Workflow chat](docs/workflow-chat.md). Execution agents remain per-step assignments; no planning agent is selected or persisted. The external installable OAuth MCP server remains future work.
 
 The model returns a generation-scoped validation_id for a server-stored YAML candidate instead of regenerating the document after validation; current permissions and candidate integrity are rechecked before presenting/saving.
 

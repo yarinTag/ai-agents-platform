@@ -10,9 +10,15 @@ open until the listed evidence is available.
 | AI-41 | Inspect a proposal with dependencies, an approval node, and a blocked resource. Verify setup links, preservation of the draft, correct state after rejected creation, and both locales. | Actual component + real API/SQLite browser checks passed in EN/HE, desktop/narrow; diagnostic presentation corrected. See acceptance record below. |
 | AI-42 | Inspect planner and worker instructions against the capability catalog, trust boundaries and diff evidence contract. | Independent Advisor source review passed; synchronized guides and master CI. Done; no claim of model comprehension. |
 | AI-46 | Verify the two-organization role matrix, decision and ingress races, and migration from the previous approval schema using a representative database snapshot. | Guarded API audit and nine focused cases passed; two authentic older baseline upgrades, current preservation, eight per-row trials and one complete reconstructed previous-schema snapshot passed. Six approvals/deliveries and all 64 other tables preserved; constraints verified. See provenance/limits below. |
-| AI-47 | Complete the [browser role and channel matrix](governed-workflow-browser-verification.md). | Partial Chrome role, department, denial, pending/history and Hebrew mobile evidence recorded 2026-11-21; three guidance defects fixed. Firefox explicitly deferred; remaining full-matrix/localization/keyboard coverage is open. |
-| AI-49 | Verify exact identity and callback binding, durable trigger deduplication and expiry, and transport diagnostics. Verify authorized Telegram and Slack test journeys, including Slack Socket Mode, and test relevance classification and dry-run behavior. | Real Telegram gate passed: one linked independent approver, one callback/vote, one completed continuation, edited message49, zero inference. Slack/Socket Mode, trigger, negative/restart and model relevance acceptance remain open. |
-| AI-48 | Review module instructions, release notes and operational guides against the final implementation. Add CI, browser, provider and independent review evidence. | Checklist and guide index assembled. Sign-off pending. |
+| AI-47 | Complete the approved Chrome role/channel matrix; record the user-deferred Firefox scope separately. | Core Chrome role, department, member preview/create/revocation, identity UI, sequential/PR history, keyboard and EN/HE/narrow observations are recorded through PR67. Combined live Telegram acceptance remains open. |
+| AI-49 | Verified identity/callback binding, durable trigger admission/deduplication, expiry/recovery, transport diagnostics and bounded relevance sample. Slack remains separately deferred. | Direct contracts and historical card49 passed; eight real classifier smoke cases passed at recorded USD0. Current installation lacks proof/polling setup; combined active trigger→Telegram vote→continuation remains open. Temporary test state is cleaned. |
+| AI-48 | Synchronize current module contracts/index, operational guides and final evidence checklist. | Root/module guide links and retired authoring contracts audited against PR67 master. Final release sign-off remains pending AI-47/49. |
+
+## Current release scope — 2026-11-24
+
+Source baseline: master fe796b7b88d37ca9f4cdaebc470d94e7f17e3afd (PR67), CI45250585894 green. The user selected Chrome-only acceptance and deferred unavailable Slack. These are explicit scope limits, not Firefox/Slack passes. Model relevance no longer awaits permission: the authorized USD5 smoke test completed eight cases at recordedUSD0; it does not establish broad model accuracy. Historical sections below retain their test-date limits and do not override this current table.
+
+The active connector setup approval remains pending. No test workflow, temporary principal or Trigger grant is currently active from the latest attempt. Do not send an approval for that cleaned test.
 
 ## Administrator and operator guides
 
@@ -98,3 +104,7 @@ Additional actual Chrome observations cover trigger preview, member confirmation
 
 ## Active transport diagnosis — 2026-11-23
 Authenticated getUpdates returned the exact new group command under a user-approved bounded window. Current connector configuration lacked a valid identity proof configuration and polling mode; provider webhook was also absent. No trigger execution was admitted. A temporary polling-mode inspection under exclusive consumer lock restored its original mode in finally. Temporary principal/workflow were deactivated, Trigger binding disabled and connector configuration restored; cleanup checks all passed. Four unrelated ingress jobs were left untouched. Persistent connector setup requires the pending explicit user approval; do not claim operational Telegram acceptance yet. Internal exact-event claim support now enables scoped testing without advancing unrelated jobs.
+
+
+## Guide audit — 2026-11-24
+[AI-48 guide audit](governance-guide-audit-2026-11-24.md) records corrections to retired authoring contracts, the root index and classifier limits. All38 tracked module/root instruction files were inventoried and171 local Markdown targets resolve. Final sign-off remains pending the combined live channel journey; a link audit is not provider acceptance.

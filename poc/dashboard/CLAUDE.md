@@ -8,7 +8,7 @@ This document provides developer instructions, architectural invariants, and com
 
 * **Install Dependencies**: `npm install`
 * **Development Server**: `npm run dev` (starts on `http://localhost:5173`)
-* **Production Build**: `npm run build` (runs `vite build`, verifies TypeScript types & bundles)
+* **Production Build**: `npm run build` (runs `vite build` and bundles; run the separate TypeScript check for type validation)
 * **Preview Production**: `npm run preview`
 * **Type Checking**: `npx tsc --noEmit` (run ONLY if explicitly requested)
 
@@ -16,16 +16,16 @@ This document provides developer instructions, architectural invariants, and com
 
 ## 🏗️ Architecture & Technology Stack
 
-* **Framework**: React 18 with TypeScript (`strict: true`)
+* **Framework**: React 19 with TypeScript (`strict: true`)
 * **Bundler & Tooling**: Vite + Rolldown
-* **UI Component Library**: Ant Design (`antd` v5) with dark algorithm theme:
+* **UI Component Library**: Ant Design (`antd` v6) with dark algorithm theme:
   * Base Background: `#0a0d12`
   * Container Background: `#161b22`
   * Elevated Background: `#1c2128`
   * Primary Accent: Emerald `#10b981`
   * Borders: `#30363d` / `#21262d`
 * **Icons**: `@ant-design/icons`
-* **Routing**: `react-router-dom` v6 (`AppLayout` shell, route definitions in `src/App.tsx`)
+* **Routing**: `react-router-dom` v7 (`AppLayout` shell, route definitions in `src/App.tsx`)
 * **Multi-Tenant Authentication & Department Context**:
   * `src/context/AuthContext.tsx`: Manages JWT tokens, authenticated `user`, current `organization`, department roster, and `activeDepartmentId`.
   * Auto-injects bearer token into Axios headers and handles 401 session expiry.

@@ -111,3 +111,6 @@ capacity and post-reservation policy checks. No Telegram credentials or model ca
 Security CI additionally selects test_approval_modes.py: actual SQLite/FastAPI/engine
 checkpoint mode compatibility, authority and protected-write fencing without live
 Telegram, model credentials or application lifespan.
+
+
+Security CI selects test_scoped_ingress_claim.py to ensure exact-event claims and scoped maintenance/consumer processing never advance unrelated pending work. These contracts use actual temporary SQLite/FastAPI with no provider or model calls.

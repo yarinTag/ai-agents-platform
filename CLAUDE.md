@@ -83,7 +83,7 @@ Welcome to the **AI Agents Platform** monorepo. This platform is an enterprise-g
 * **Workflows Engine (`poc/workflows/`)**: Topological DAG execution, parallel stages, ephemeral/Docker sandboxing, budget caps. See [`poc/workflows/AGENTS.md`](poc/workflows/AGENTS.md).
 * **Runtime Abstraction (`poc/runtime/`)**: Provider-agnostic `RuntimeAdapter`, `ModelPolicyResolver`, and `MODEL_CATALOG`. See [`poc/runtime/AGENTS.md`](poc/runtime/AGENTS.md).
 * **Orchestration & Hierarchy (`poc/orchestration/`)**: Multi-agent task trees, hierarchy depth validation, `SupervisorResolver`. See [`poc/orchestration/AGENTS.md`](poc/orchestration/AGENTS.md).
-* **Frontend Dashboard (`poc/dashboard/`)**: React 18, Vite, Ant Design, TypeScript, Pixel Office Canvas. See [`poc/dashboard/CLAUDE.md`](poc/dashboard/CLAUDE.md) & [`poc/dashboard/AGENTS.md`](poc/dashboard/AGENTS.md).
+* **Frontend Dashboard (`poc/dashboard/`)**: React 19, Vite, Ant Design, TypeScript, Pixel Office Canvas. See [`poc/dashboard/CLAUDE.md`](poc/dashboard/CLAUDE.md) & [`poc/dashboard/AGENTS.md`](poc/dashboard/AGENTS.md).
 * **Data & Persistence (`poc/persistence.py`)**: SQLite schema migrations, self-healing connections, and orphaned record claiming.
 
 ---
@@ -109,14 +109,14 @@ Welcome to the **AI Agents Platform** monorepo. This platform is an enterprise-g
 | **Events** | [`poc/backend/events/AGENTS.md`](poc/backend/events/AGENTS.md) | EventBus pub/sub, SQLite event store, persistent SSE streaming |
 | **Approvals** | [`poc/backend/approvals/AGENTS.md`](poc/backend/approvals/AGENTS.md)| Human-in-the-loop permission requests and supervisor escalation |
 | **War Room** | [`poc/backend/war_room/AGENTS.md`](poc/backend/war_room/AGENTS.md)| Multi-agent deliberation councils, debate rounds, consensus synthesis|
-| **UI Dashboard** | [`poc/dashboard/AGENTS.md`](poc/dashboard/AGENTS.md) | Frontend architecture, React 18, AntD theme, state management |
+| **UI Dashboard** | [`poc/dashboard/AGENTS.md`](poc/dashboard/AGENTS.md) | Frontend architecture, React 19, AntD theme, state management |
 | **UI Dashboard** | [`poc/dashboard/CLAUDE.md`](poc/dashboard/CLAUDE.md) | Frontend guidelines, build rules, strict TypeScript validation |
 | **UI Components**| [`poc/dashboard/src/components/AGENTS.md`](poc/dashboard/src/components/AGENTS.md) | Reusable `Robotic` UI component library and layouts |
 | **UI Pages** | [`poc/dashboard/src/pages/AGENTS.md`](poc/dashboard/src/pages/AGENTS.md) | Route pages (Organization, Workflows, MCP, War Room, Office) |
 | **UI Context** | [`poc/dashboard/src/context/AGENTS.md`](poc/dashboard/src/context/AGENTS.md) | React context providers (AuthContext, OfficeContext, NotificationContext) |
 | **UI Hooks** | [`poc/dashboard/src/hooks/AGENTS.md`](poc/dashboard/src/hooks/AGENTS.md) | Custom React hooks (useOfficeEvents, usePermissions, useLocalStorage) |
 | **UI i18n** | [`poc/dashboard/src/i18n/AGENTS.md`](poc/dashboard/src/i18n/AGENTS.md) | English & Hebrew translations, RTL layout handling, terminology |
-| **Pixel Canvas** | [`poc/dashboard/src/canvas/AGENTS.md`](poc/dashboard/src/canvas/AGENTS.md) | Virtual office canvas rendering, desk coordinates, agent sprites |
+| **Pixel Canvas** | [`poc/dashboard/src/engine/AGENTS.md`](poc/dashboard/src/engine/AGENTS.md) | Virtual office canvas rendering, desk coordinates, agent sprites |
 
 ---
 
