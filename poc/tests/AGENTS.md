@@ -375,3 +375,7 @@ test_scoped_ingress_claim.py uses real SQLite/FastAPI to verify exact-event clai
 
 ## PostgreSQL acceptance CI
 PostgreSQL fixture supports RUNNER_TEST_REQUIRE_RLS=1: missing explicit DSN or psycopg2 is failure, and a superuser/BYPASSRLS role fails before schema creation. Non-required local runs retain explicit opt-in/skip behavior. Every test schema is uniquely named and dropped after the case. CI rejects any skipped test in these suites.
+
+
+## PostgreSQL operation-intent journal
+test_runner_postgres_operations.py is selected by real PostgreSQL CI. It covers concurrent operation claims, crash/lease takeover denial, late UID after UNKNOWN/recovery without revival, duplicate/replaced UID, owner-vs-operation tokens, tenant boundaries, definitive not-dispatched recovery and refusal to assert Ready/Running/Released.

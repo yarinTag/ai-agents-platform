@@ -28,3 +28,7 @@ replay denial. No DATABASE_URL auto-switch, active backend, database migration o
 runtime verification. Exact contracts: docs/architecture/ai-52-configuration-migration.md
 and docs/architecture/ai-52-execution-history-migration.md at repository root.
 Production dashboard build and typecheck passed; backend tests remain unexecuted.
+
+
+## PostgreSQL operation-intent journal
+The PostgreSQL source foundation now includes PostgresRunnerOperations (storage): durable Provision/Start intents and exact acknowledged resource UIDs with separate operation tokens. Ambiguous outcomes fence execution and retain late receipts. No concrete mutation transport, cleanup claim, readiness success or workflow activation is introduced.

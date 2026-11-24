@@ -169,6 +169,7 @@ jobs:
         run: >-
           uv run --no-sync python -m pytest --noconftest -q
           poc/tests/test_runner_postgres.py
+          poc/tests/test_runner_postgres_operations.py
           poc/tests/test_configuration_migration.py
           poc/tests/test_execution_migration.py
           --junitxml=reports/postgres.xml

@@ -118,3 +118,7 @@ Security CI selects test_scoped_ingress_claim.py to ensure exact-event claims an
 
 ## PostgreSQL acceptance CI
 PostgreSQL persistence contracts is a required CI job, using an isolated postgres:17 service and disposable runner_ci NOSUPERUSER/NOBYPASSRLS role with namespace-creation rights only in its test database. It installs the locked postgres extra and runs runner/configuration/execution migration suites with --noconftest. RUNNER_TEST_REQUIRE_RLS=1 forbids missing DSN/dependency or privileged-role evidence. Empty/skipped JUnit evidence fails; CI required includes this job. No production credentials, migrations, provider calls or application workers.
+
+
+## PostgreSQL operation-intent journal
+The required PostgreSQL job also selects test_runner_postgres_operations.py; no skip or privileged-role acceptance is allowed.
