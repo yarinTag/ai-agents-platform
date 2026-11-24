@@ -16,6 +16,8 @@ Its complete CI passed: [run45250585894](https://github.com/yarinTag/ai-agents-p
 - The release table now incorporates actual Chrome/model results through PR67,
   the user-deferred Firefox/Slack limits, and the current live connector blocker.
 
+- Frontend framework declarations now match package.json: React19, Ant Design6 and React Router7. Vite build is distinguished from the separate TypeScript check.
+
 ## Verification and limits
 
 All38 tracked AGENTS.md/CLAUDE.md files were inventoried; all171 local Markdown

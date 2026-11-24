@@ -7,16 +7,16 @@ The **AI Agents Platform Dashboard** (`poc/dashboard/`) is an enterprise-grade, 
 
 ## 2. Technology Stack & Design System
 
-* **Core Framework**: React 18 with TypeScript (`strict: true`)
+* **Core Framework**: React 19 with TypeScript (`strict: true`)
 * **Build Tooling**: Vite with Rolldown bundler
-* **Component Library**: Ant Design (`antd` v5) with dark algorithm theme:
+* **Component Library**: Ant Design (`antd` v6) with dark algorithm theme:
   * Base Background: `#0a0d12` (Deep Obsidian)
   * Container Background: `#161b22` (Graphite Navy)
   * Elevated Background: `#1c2128` (Card & Surface Layer)
   * Primary Accent: `#10b981` (Emerald Tech Green)
   * Secondary Borders: `#30363d` / `#21262d`
 * **Icons**: `@ant-design/icons`
-* **Routing**: `react-router-dom` v6 with layout wrapper pattern (`AppLayout` in `src/App.tsx`)
+* **Routing**: `react-router-dom` v7 with layout wrapper pattern (`AppLayout` in `src/App.tsx`)
 * **State Management**: React Context (`AuthContext`, `I18nContext`), custom hooks (`useOfficeEvents`), and local component state
 * **Networking**: Public compatibility facade (`src/services/api.ts`), domain endpoint clients (`src/services/*Api.ts`), and one Axios transport/interceptor owner (`src/services/httpClient.ts`). Domain clients depend on transport and types, not on one another. Existing consumers retain facade imports.
 * **Real-Time Layer**: Global Server-Sent Events (SSE) bus (`src/services/eventStream.ts`) streaming from `/api/v1/events/stream`

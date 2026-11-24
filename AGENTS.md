@@ -118,7 +118,7 @@ The **AI Agents Platform** is an enterprise multi-tenant autonomous agent orches
 * [**War Room Deliberation**](poc/backend/war_room/AGENTS.md): Multi-agent deliberation councils, debate rounds, consensus synthesis.
 
 ### Frontend & UI Guides
-* [**Frontend Core**](poc/dashboard/AGENTS.md): React 18, Vite, Ant Design, TypeScript, pixel canvas integration.
+* [**Frontend Core**](poc/dashboard/AGENTS.md): React 19, Vite, Ant Design, TypeScript, pixel canvas integration.
 * [**Frontend Guidelines**](poc/dashboard/CLAUDE.md): Build verification, component standards, strict TypeScript typing.
 * [**UI Component Library**](poc/dashboard/src/components/AGENTS.md): Standardized `Robotic` UI component kit and layouts.
 * [**UI Pages & Routes**](poc/dashboard/src/pages/AGENTS.md): Application route pages (Organization, Workflows, MCP, War Room, Office).
