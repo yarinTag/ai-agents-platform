@@ -282,7 +282,7 @@ AI-42: the planner separates desired outcomes from catalog authority. The Direct
 
 AI-49: Workflow Chat may propose a deterministic channel_trigger only using the manager-scoped channel_trigger_bindings catalog. The planner never selects an execution principal.
 
-Channel relevance inference has a dedicated strict classification prompt and uses the shared tool-free temporary subprocess. It takes one sanitized message, one criterion, a 96-token output cap and a 10-second deadline, and requires an organization Direct API selection. Dispatch and budget reservation belong to the caller.
+Channel relevance inference has a dedicated strict classification prompt and uses the shared tool-free temporary subprocess. It takes one sanitized message, one criterion, a 1,024-token output cap and a 10-second deadline, and requires an organization Direct API selection. Dispatch and budget reservation belong to the caller.
 
 PR batch completion optionally returns per_pull_findings with unique authorized PR numbers and a 500-character excerpt. The worker redacts excerpts before persisting them. Legacy report output remains supported.
 

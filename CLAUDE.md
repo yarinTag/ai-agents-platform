@@ -116,7 +116,7 @@ Welcome to the **AI Agents Platform** monorepo. This platform is an enterprise-g
 | **UI Context** | [`poc/dashboard/src/context/AGENTS.md`](poc/dashboard/src/context/AGENTS.md) | React context providers (AuthContext, OfficeContext, NotificationContext) |
 | **UI Hooks** | [`poc/dashboard/src/hooks/AGENTS.md`](poc/dashboard/src/hooks/AGENTS.md) | Custom React hooks (useOfficeEvents, usePermissions, useLocalStorage) |
 | **UI i18n** | [`poc/dashboard/src/i18n/AGENTS.md`](poc/dashboard/src/i18n/AGENTS.md) | English & Hebrew translations, RTL layout handling, terminology |
-| **Pixel Canvas** | [`poc/dashboard/src/canvas/AGENTS.md`](poc/dashboard/src/canvas/AGENTS.md) | Virtual office canvas rendering, desk coordinates, agent sprites |
+| **Pixel Canvas** | [`poc/dashboard/src/engine/AGENTS.md`](poc/dashboard/src/engine/AGENTS.md) | Virtual office canvas rendering, desk coordinates, agent sprites |
 
 ---
 
