@@ -18,6 +18,8 @@ Its complete CI passed: [run45250585894](https://github.com/yarinTag/ai-agents-p
 
 - Frontend framework declarations now match package.json: React19, Ant Design6 and React Router7. Vite build is distinguished from the separate TypeScript check.
 
+- Security CI explicitly selects the new scoped-ingress regression file; local passing tests are no longer omitted from the enumerated CI matrix. No job permissions or publishing policy changed.
+
 ## Verification and limits
 
 All38 tracked AGENTS.md/CLAUDE.md files were inventoried; all171 local Markdown
@@ -26,7 +28,7 @@ runtime, storage, worker and UI contracts were compared with their implementatio
 and the PR65–67 acceptance records. This is a documentation/index audit; structural
 link checks do not establish semantic correctness of every historical capability
 or runtime/provider readiness. No build, model, provider, migration, deployment or
-production mutation was run for these documentation-only corrections.
+production mutation was run for these documentation and CI selection corrections.
 
 The [release checklist](governed-workflow-release.md) remains the sign-off record.
 AI-46 migration/tenant evidence is complete. Core Chrome observations and eight

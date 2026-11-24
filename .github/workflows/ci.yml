@@ -61,6 +61,7 @@ jobs:
             files: >-
               poc/tests/test_workflow_pr_approvals.py
               poc/tests/test_channel_ingress_api.py
+              poc/tests/test_scoped_ingress_claim.py
               poc/tests/test_channel_trigger_relevance.py
               poc/tests/test_approval_modes.py
               poc/tests/test_telegram_acceptance.py
