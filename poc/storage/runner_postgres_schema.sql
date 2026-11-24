@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS sandbox_runner_attempts (
     operation TEXT CHECK (operation IN ('Provision','Start','Stop','Delete')),
     operation_state TEXT NOT NULL DEFAULT 'IDLE' CHECK
       (operation_state IN ('IDLE','STARTED','UNKNOWN')),
+    operation_token TEXT,
     resources_json TEXT NOT NULL DEFAULT '[]',
     reason TEXT NOT NULL DEFAULT 'CREATED',
     updated_at BIGINT NOT NULL,
@@ -59,6 +60,8 @@ CREATE TABLE IF NOT EXISTS sandbox_runner_history (
 );
 CREATE INDEX IF NOT EXISTS sandbox_runner_effect_attempt
     ON sandbox_runner_effects (organization_id, attempt_id, state);
+-- Explicit initialization also upgrades an existing inactive journal additively.
+ALTER TABLE sandbox_runner_attempts ADD COLUMN IF NOT EXISTS operation_token TEXT;
 
 -- Application role must not be superuser/BYPASSRLS. Migration role owns DDL.
 DO $$

@@ -308,3 +308,7 @@ channel_ingress.claim(db, now=None, *, event_id=None) optionally selects one exa
 
 ## PostgreSQL acceptance CI
 Existing Runner/configuration/execution-history PostgreSQL contracts are now selected by a dedicated required CI job using a real disposable server and non-BYPASSRLS role. This verifies implemented slices only; full platform migration/cutover, key recovery and active Runner wiring remain separate acceptance gates.
+
+
+## PostgreSQL operation-intent journal
+PostgresRunnerOperations is an opt-in journal for Provision/Start intents, separate from owner leases. begin requires exact revision/current owner and writes STARTED plus a distinct operation_token before any transport. Resources must match immutable plan kind/name; repeated UID is idempotent and replacements fail. UNKNOWN revokes, preserves token and late UID evidence, and blocks takeover. NOT_DISPATCHED is forbidden after relevant resource acknowledgments. No successful Ready/Running/Released transition or cleanup claim is supplied. Explicit initialize additively adds operation_token; existing in-flight rows without one remain fenced and require reconciliation. No startup/runner activation.
